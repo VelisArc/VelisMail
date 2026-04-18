@@ -4611,6 +4611,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "velismail-delivery-engine"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-nats",
+ "axum 0.7.9",
+ "chrono",
+ "lettre",
+ "redis",
+ "ring",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "tokio",
+ "tower-http",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
+ "velismail-common",
+ "velismail-database",
+]
+
+[[package]]
 name = "velismail-external-api"
 version = "0.1.0"
 dependencies = [
