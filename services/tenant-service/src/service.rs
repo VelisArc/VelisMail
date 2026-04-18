@@ -4,11 +4,10 @@ use anyhow::{Context, Result};
 use chrono::{Duration, Utc};
 use serde_json::json;
 use sqlx::{PgPool, QueryBuilder, Row};
-use tracing::{error, info, warn};
+use tracing::info;
 use uuid::Uuid;
 
 use crate::models::*;
-use crate::state::TenantState;
 
 /// Tenant service for managing tenant isolation and configuration
 pub struct TenantService {
@@ -509,6 +508,7 @@ impl TenantService {
     }
 
     /// Log audit event
+    #[allow(clippy::too_many_arguments)]
     pub async fn log_audit(
         &self,
         tenant_id: Uuid,
@@ -577,7 +577,7 @@ impl TenantService {
     /// **Property 5: Domain Validation Rules**
     pub fn validate_domain_format(domain: &str) -> bool {
         // Check total length (1-253 characters)
-        if domain.len() < 1 || domain.len() > 253 {
+        if domain.is_empty() || domain.len() > 253 {
             return false;
         }
 
@@ -597,7 +597,7 @@ impl TenantService {
         // Check each label
         for (i, label) in labels.iter().enumerate() {
             // Label length must be 1-63 characters
-            if label.len() < 1 || label.len() > 63 {
+            if label.is_empty() || label.len() > 63 {
                 return false;
             }
 
