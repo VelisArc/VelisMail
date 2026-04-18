@@ -151,36 +151,3 @@ jobs:
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-
-  # Deploy to Kubernetes
-  deploy:
-    name: Deploy to K8s
-    needs: docker
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
-    
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up kubectl
-        uses: azure/setup-kubectl@v3
-        with:
-          version: 'v1.28.0'
-
-      - name: Configure kubectl
-        run: |
-          echo "${{ secrets.KUBE_CONFIG }}" > kubeconfig.yml
-          export KUBECONFIG=kubeconfig.yml
-
-      - name: Deploy to Kubernetes
-        run: |
-          kubectl apply -f k8s/namespace.yml
-          kubectl apply -f k8s/
-        env:
-          KUBECONFIG: kubeconfig.yml
-
-      - name: Verify deployment
-        run: |
-          kubectl rollout status deployment/api-gateway -n velismail --timeout=300s
-          kubectl rollout status deployment/auth-service -n velismail --timeout=300s
-          kubectl rollout status deployment/mail-service -n velismail --timeout=300s
