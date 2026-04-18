@@ -306,6 +306,10 @@ export default function Home() {
               <h4>Legal</h4>
               <Link to="/privacy">Privacy Policy</Link>
               <Link to="/terms">Terms of Service</Link>
+              <Link to="/cookies">Cookie Policy</Link>
+              <Link to="/aup">Acceptable Use</Link>
+              <Link to="/security">Security</Link>
+              <Link to="/refund">Refund Policy</Link>
             </div>
             <div className="footer-col">
               <h4>Support</h4>

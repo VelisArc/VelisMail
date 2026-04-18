@@ -11,6 +11,8 @@ import Settings from './pages/Settings';
 import Setup from './pages/Setup';
 import Cookies from './pages/Cookies';
 import AcceptableUse from './pages/AcceptableUse';
+import SecurityPolicy from './pages/SecurityPolicy';
+import Refund from './pages/Refund';
 import Contacts from './pages/Contacts';
 import { theme } from './api/client';
 import './App.css';
@@ -35,6 +37,8 @@ function App() {
         <Route path="/terms" element={<Terms />} />
         <Route path="/cookies" element={<Cookies />} />
         <Route path="/aup" element={<AcceptableUse />} />
+        <Route path="/security" element={<SecurityPolicy />} />
+        <Route path="/refund" element={<Refund />} />
         <Route path="/about" element={<About />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

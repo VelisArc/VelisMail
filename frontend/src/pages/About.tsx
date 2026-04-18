@@ -182,6 +182,10 @@ export default function About() {
           <div className="about-footer-links">
             <Link to="/privacy">Privacy Policy</Link>
             <Link to="/terms">Terms of Service</Link>
+            <Link to="/cookies">Cookie Policy</Link>
+            <Link to="/aup">Acceptable Use</Link>
+            <Link to="/security">Security</Link>
+            <Link to="/refund">Refund Policy</Link>
             <Link to="/">Home</Link>
           </div>
         </div>
