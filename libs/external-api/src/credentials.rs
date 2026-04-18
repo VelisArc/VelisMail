@@ -5,7 +5,6 @@
 
 use serde::{Deserialize, Serialize};
 use base64::{Engine as _, engine::general_purpose::STANDARD};
-use thiserror::Error;
 use crate::error::ExternalApiError;
 
 /// API credentials for external providers

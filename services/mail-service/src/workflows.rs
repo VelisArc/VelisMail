@@ -9,7 +9,7 @@ use anyhow::Result;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
-use velismail_common::{FolderType, MessageStatus};
+use velismail_common::FolderType;
 
 /// Email workflow state
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -248,7 +248,7 @@ pub async fn process_batch_emails(
 mod tests {
     use super::*;
     use crate::attachments::AttachmentConfig;
-    use crate::rules::{EmailRule, RuleActions, RuleConditions};
+
 
     #[tokio::test]
     async fn test_outgoing_workflow() {

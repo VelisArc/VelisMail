@@ -9,7 +9,7 @@
 #[cfg(test)]
 mod property_tests {
     use proptest::prelude::*;
-    use crate::{ApiCredentials, ExternalApiError};
+    use crate::{ health::ProviderConnection, ApiCredentials, ExternalApiError};
     
     /// Property 2: Credential Validation Consistency
     ///
@@ -361,7 +361,7 @@ mod property_tests {
 #[test]
 fn property_3_external_api_operation_routing() {
     use proptest::prelude::*;
-    use crate::{
+    use crate::{ health::ProviderConnection,
         adapter::{EmailMessage, ProviderConnection, ConnectionDetails},
         provider::ProviderType,
     };
@@ -422,8 +422,8 @@ fn property_3_external_api_operation_routing() {
 #[test]
 fn property_3_routing_consistency() {
     use proptest::prelude::*;
-    use crate::{
-        adapter::{ProviderConnection, ConnectionDetails},
+    use crate::{ health::ProviderConnection,
+        adapter::{, ConnectionDetails},
         provider::ProviderType,
     };
     
@@ -489,8 +489,8 @@ fn property_3_routing_consistency() {
 #[test]
 fn property_3_provider_specific_routing() {
     use proptest::prelude::*;
-    use crate::{
-        adapter::{ProviderConnection, ConnectionDetails},
+    use crate::{ health::ProviderConnection,
+        adapter::{, ConnectionDetails},
         provider::ProviderType,
     };
     
@@ -552,8 +552,8 @@ fn property_3_provider_specific_routing() {
 #[test]
 fn property_3_routing_error_handling() {
     use proptest::prelude::*;
-    use crate::{
-        adapter::{ProviderConnection, ConnectionDetails},
+    use crate::{ health::ProviderConnection,
+        adapter::{, ConnectionDetails},
         provider::ProviderType,
     };
     
@@ -710,8 +710,8 @@ fn provider_mismatch_strategy() -> impl Strategy<Value = (ProviderType, Connecti
 #[test]
 fn property_26_provider_failover_reliability() {
     use proptest::prelude::*;
-    use crate::{
-        adapter::{ProviderConnection, ConnectionDetails, DefaultExternalApiAdapter},
+    use crate::{ health::ProviderConnection,
+        adapter::{, ConnectionDetails, DefaultExternalApiAdapter},
         provider::ProviderType,
         health::HealthStatus,
     };
@@ -781,8 +781,8 @@ fn property_26_provider_failover_reliability() {
 #[test]
 fn property_26_failover_priority_ordering() {
     use proptest::prelude::*;
-    use crate::{
-        adapter::{ProviderConnection, ConnectionDetails, DefaultExternalApiAdapter},
+    use crate::{ health::ProviderConnection,
+        adapter::{, ConnectionDetails, DefaultExternalApiAdapter},
         provider::ProviderType,
     };
     
@@ -840,10 +840,10 @@ fn property_26_failover_priority_ordering() {
 #[test]
 fn property_26_health_based_failover() {
     use proptest::prelude::*;
-    use crate::{
-        adapter::{ProviderConnection, ConnectionDetails, DefaultExternalApiAdapter},
+    use crate::{ health::ProviderConnection,
+        adapter::{, ConnectionDetails, DefaultExternalApiAdapter},
         provider::ProviderType,
-        health::{HealthStatus, ProviderStatus},
+        health::{HealthStatus}, provider::ProviderStatus,
     };
     
     proptest!(|(
@@ -885,8 +885,8 @@ fn property_26_health_based_failover() {
 #[test]
 fn property_26_exhaustive_failover() {
     use proptest::prelude::*;
-    use crate::{
-        adapter::{ProviderConnection, ConnectionDetails, DefaultExternalApiAdapter},
+    use crate::{ health::ProviderConnection,
+        adapter::{, ConnectionDetails, DefaultExternalApiAdapter},
         provider::ProviderType,
     };
     
@@ -919,8 +919,8 @@ fn property_26_exhaustive_failover() {
 #[test]
 fn property_26_failover_error_cases() {
     use proptest::prelude::*;
-    use crate::{
-        adapter::{ProviderConnection, ConnectionDetails, DefaultExternalApiAdapter},
+    use crate::{ health::ProviderConnection,
+        adapter::{, ConnectionDetails, DefaultExternalApiAdapter},
         provider::ProviderType,
     };
     

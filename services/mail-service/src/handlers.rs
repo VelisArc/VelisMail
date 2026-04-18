@@ -7,10 +7,8 @@ use axum::{
     http::StatusCode,
     Json,
 };
-use serde::Deserialize;
 use serde_json::json;
 use uuid::Uuid;
-use velismail_common::{FolderType, MessageStatus};
 
 /// Health check
 pub async fn health_check() -> Json<serde_json::Value> {
@@ -93,7 +91,7 @@ pub async fn get_email(
 /// Delete an email (move to trash)
 pub async fn delete_email(
     State(_state): State<MailState>,
-    Path(id): Path<Uuid>,
+    Path(_id): Path<Uuid>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
     // Would update status to trash
     Ok(Json(json!({

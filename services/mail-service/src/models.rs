@@ -3,7 +3,7 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
-use velismail_common::{EncryptionStatus, FolderType, MessageStatus};
+use velismail_common::{FolderType, MessageStatus};
 
 /// Email message
 #[derive(Debug, Clone, Serialize, Deserialize)]
