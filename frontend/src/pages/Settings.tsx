@@ -32,6 +32,12 @@ export default function SettingsPage() {
     if (!session) {
       navigate('/login');
       return;
+    } else if (session.accountType === 'business' && !session.isBusinessSetupComplete) {
+      navigate('/business-setup');
+      return;
+    } else if (session.accountType === 'personal' && !session.isSetupComplete) {
+      navigate('/setup');
+      return;
     }
     setUser(session);
     setProfileName(session.displayName || '');
@@ -152,7 +158,7 @@ export default function SettingsPage() {
     showToast(`Theme set to ${theme}`);
   };
 
-  if (!user) return null;
+  if (!user || (user.accountType === 'business' && !user.isBusinessSetupComplete) || (user.accountType === 'personal' && !user.isSetupComplete)) return null;
 
   const currentTheme = localStorage.getItem('velismail-theme') || 'system';
 

@@ -167,7 +167,7 @@ export default function BusinessDashboard() {
       navigate('/business-setup');
       return;
     }
-  }, [navigate, user]);
+  }, [navigate, user, storedDomainRecords.length]);
 
   const [activeBizTab, setActiveBizTab] = useState<BizTab>((navigation.activeTab as BizTab) || 'domains');
   const [activeFolder, setActiveFolder] = useState(navigation.activeFolder || 'inbox');
@@ -217,7 +217,9 @@ export default function BusinessDashboard() {
   useEffect(() => {
     if (!user) {
       navigate('/login');
-    } else if (!user.isBusinessSetupComplete) {
+    } else if (user.accountType === 'personal' && !user.isSetupComplete) {
+      navigate('/setup');
+    } else if (user.accountType === 'business' && !user.isBusinessSetupComplete) {
       navigate('/business-setup');
     }
   }, [navigate, user]);
@@ -474,7 +476,7 @@ export default function BusinessDashboard() {
     localStorage.setItem('velismail-theme', next);
   };
 
-  if (!user) return null;
+  if (!user || (user.accountType === 'business' && !user.isBusinessSetupComplete) || (user.accountType === 'personal' && !user.isSetupComplete)) return null;
 
   return (
     <div className="biz-dash">

@@ -29,7 +29,13 @@ export default function Dashboard() {
   const user = auth.getSession();
 
   useEffect(() => {
-    if (!user) navigate('/login');
+    if (!user) {
+      navigate('/login');
+    } else if (user.accountType === 'business' && !user.isBusinessSetupComplete) {
+      navigate('/business-setup');
+    } else if (user.accountType === 'personal' && !user.isSetupComplete) {
+      navigate('/setup');
+    }
   }, [navigate, user]);
 
   const routeFolder = params.folder && FOLDERS.some(f => f.id === params.folder) ? params.folder : null;
@@ -185,7 +191,7 @@ export default function Dashboard() {
     localStorage.setItem('velismail-theme', next);
   };
 
-  if (!user) return null;
+  if (!user || (user.accountType === 'business' && !user.isBusinessSetupComplete) || (user.accountType === 'personal' && !user.isSetupComplete)) return null;
 
   return (
     <div className="dash">
