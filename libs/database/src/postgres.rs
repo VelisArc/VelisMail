@@ -80,7 +80,7 @@ where
         .execute(&mut *tx)
         .await?;
 
-    let result = f(&pool).await?;
+    let result = f(pool).await?;
 
     tx.commit().await?;
     Ok(result)
