@@ -17,27 +17,26 @@
 //! - Requirement 2.4: IF an External_API_Provider becomes unavailable, THEN THE Platform SHALL queue operations and retry with exponential backoff
 //! - Requirement 2.5: WHERE multiple External_API_Providers are configured, THE Platform SHALL allow failover between providers
 
-mod provider;
-mod credentials;
-mod health;
 mod adapter;
+mod credentials;
 mod error;
-#[cfg(test)]
-mod tests;
+mod health;
 #[cfg(test)]
 mod property_tests;
+mod provider;
+#[cfg(test)]
+mod tests;
 
-pub use provider::*;
-pub use credentials::*;
-pub use health::*;
 pub use adapter::*;
+pub use credentials::*;
 pub use error::*;
+pub use health::*;
+pub use provider::*;
 
 /// Re-export common types for convenience
 pub mod prelude {
     pub use crate::{
-        ExternalApiAdapter, ExternalApiProvider, ProviderType, ApiCredentials,
-        ProviderConnection, HealthStatus, SendResult, EmailMessage,
-        ExternalApiError, ExternalApiResult,
+        ApiCredentials, EmailMessage, ExternalApiAdapter, ExternalApiError, ExternalApiProvider,
+        ExternalApiResult, HealthStatus, ProviderConnection, ProviderType, SendResult,
     };
 }

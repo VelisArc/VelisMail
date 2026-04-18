@@ -11,55 +11,55 @@ pub enum ExternalApiError {
     /// Credential validation error
     #[error("Validation error: {0}")]
     ValidationError(String),
-    
+
     /// Encryption/decryption error
     #[error("Encryption error: {0}")]
     EncryptionError(String),
-    
+
     /// Decryption error
     #[error("Decryption error: {0}")]
     DecryptionError(String),
-    
+
     /// Provider connection error
     #[error("Connection error: {0}")]
     ConnectionError(String),
-    
+
     /// Provider authentication error
     #[error("Authentication error: {0}")]
     AuthenticationError(String),
-    
+
     /// Provider rate limit exceeded
     #[error("Rate limit exceeded: {0}")]
     RateLimitExceeded(String),
-    
+
     /// Provider unavailable
     #[error("Provider unavailable: {0}")]
     ProviderUnavailable(String),
-    
+
     /// Unsupported provider type
     #[error("Unsupported provider: {0}")]
     UnsupportedProvider(String),
-    
+
     /// Unsupported operation for provider
     #[error("Unsupported operation: {0}")]
     UnsupportedOperation(String),
-    
+
     /// Network error
     #[error("Network error: {0}")]
     NetworkError(String),
-    
+
     /// Timeout error
     #[error("Timeout error: {0}")]
     TimeoutError(String),
-    
+
     /// Invalid response from provider
     #[error("Invalid response: {0}")]
     InvalidResponse(String),
-    
+
     /// Configuration error
     #[error("Configuration error: {0}")]
     ConfigurationError(String),
-    
+
     /// Internal error
     #[error("Internal error: {0}")]
     InternalError(String),
@@ -76,7 +76,7 @@ impl ExternalApiError {
             _ => false,
         }
     }
-    
+
     /// Get HTTP status code for the error
     pub fn http_status_code(&self) -> u16 {
         match self {

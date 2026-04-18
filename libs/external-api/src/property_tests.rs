@@ -1,16 +1,16 @@
 // Property-based tests for external API adapter component
 //
 // **Validates: Requirements 2.1**
-// 
+//
 // Property 2: Credential Validation Consistency
 // "For any credential string C, the validation function V(C) shall return the same result when called multiple times,
 // and for all valid credentials according to provider specifications, V(C) shall return true."
 
 #[cfg(test)]
 mod property_tests {
-    use proptest::prelude::*;
     use crate::{ApiCredentials, ExternalApiError};
-    
+    use proptest::prelude::*;
+
     /// Property 2: Credential Validation Consistency
     ///
     /// Tests that credential validation is consistent (same result when called multiple times)
@@ -22,30 +22,30 @@ mod property_tests {
             // Test consistency: same credentials should always produce same validation result
             let result1 = credential.validate();
             let result2 = credential.validate();
-            
+
             // Consistency check: validation should return same result when called multiple times
             prop_assert_eq!(
-                result1.is_ok(), 
+                result1.is_ok(),
                 result2.is_ok(),
                 "Validation result should be consistent for the same credentials"
             );
-            
+
             // If both results are Ok, they should be exactly equal (both Ok(()))
             if result1.is_ok() && result2.is_ok() {
                 // Both are Ok(()), so they're equal
                 prop_assert!(true, "Both results are Ok(())");
             }
-            
+
             // If both results are Err, they should have the same error type
             if result1.is_err() && result2.is_err() {
                 let err1 = result1.unwrap_err();
                 let err2 = result2.unwrap_err();
-                
+
                 // Compare error types by checking if they're both ValidationError
                 // (other error types shouldn't occur in credential validation)
                 let is_validation_err1 = matches!(err1, ExternalApiError::ValidationError(_));
                 let is_validation_err2 = matches!(err2, ExternalApiError::ValidationError(_));
-                
+
                 prop_assert_eq!(
                     is_validation_err1,
                     is_validation_err2,
@@ -54,7 +54,7 @@ mod property_tests {
             }
         });
     }
-    
+
     /// Property test for valid credentials according to provider specifications
     ///
     /// Tests that credentials that meet provider specifications pass validation.
@@ -69,7 +69,7 @@ mod property_tests {
             );
         });
     }
-    
+
     /// Property test for credential validation edge cases
     ///
     /// Tests edge cases like empty strings, whitespace-only strings, etc.
@@ -78,7 +78,7 @@ mod property_tests {
         proptest!(|(edge_case_credential in edge_case_credential_strategy())| {
             // Edge case credentials should have predictable validation results
             let result = edge_case_credential.validate();
-            
+
             // For edge cases, we just want to ensure validation doesn't panic
             // and returns either Ok or Err consistently
             prop_assert!(
@@ -87,44 +87,43 @@ mod property_tests {
             );
         });
     }
-    
+
     /// Strategy for generating arbitrary credentials for testing
     fn credential_strategy() -> impl Strategy<Value = ApiCredentials> {
         prop_oneof![
             // Gmail credentials
-            (any::<String>(), any::<String>(), any::<String>())
-                .prop_map(|(client_id, client_secret, refresh_token)| {
+            (any::<String>(), any::<String>(), any::<String>()).prop_map(
+                |(client_id, client_secret, refresh_token)| {
                     ApiCredentials::Gmail {
                         client_id,
                         client_secret,
                         refresh_token,
                     }
-                }),
+                }
+            ),
             // SendGrid credentials
-            any::<String>()
-                .prop_map(|api_key| {
-                    ApiCredentials::SendGrid { api_key }
-                }),
+            any::<String>().prop_map(|api_key| { ApiCredentials::SendGrid { api_key } }),
             // Amazon SES credentials
-            (any::<String>(), any::<String>(), any::<String>())
-                .prop_map(|(access_key_id, secret_access_key, region)| {
+            (any::<String>(), any::<String>(), any::<String>()).prop_map(
+                |(access_key_id, secret_access_key, region)| {
                     ApiCredentials::AmazonSes {
                         access_key_id,
                         secret_access_key,
                         region,
                     }
-                }),
+                }
+            ),
         ]
     }
-    
+
     /// Strategy for generating valid credentials according to provider specifications
     fn valid_credential_strategy() -> impl Strategy<Value = ApiCredentials> {
         prop_oneof![
             // Valid Gmail credentials (non-empty strings after trimming)
             (
-                "[a-zA-Z0-9._%+-]{1,100}",  // client_id pattern - at least 1 non-whitespace char
-                "[a-zA-Z0-9._%+-]{1,100}",  // client_secret pattern - at least 1 non-whitespace char  
-                "[a-zA-Z0-9._%+-]{1,100}",  // refresh_token pattern - at least 1 non-whitespace char
+                "[a-zA-Z0-9._%+-]{1,100}", // client_id pattern - at least 1 non-whitespace char
+                "[a-zA-Z0-9._%+-]{1,100}", // client_secret pattern - at least 1 non-whitespace char
+                "[a-zA-Z0-9._%+-]{1,100}", // refresh_token pattern - at least 1 non-whitespace char
             )
                 .prop_map(|(client_id, client_secret, refresh_token)| {
                     ApiCredentials::Gmail {
@@ -136,17 +135,21 @@ mod property_tests {
             // Valid SendGrid credentials (starts with SG. or SENDGRID_API_KEY=, non-empty after trim)
             prop_oneof![
                 "SG\\.[a-zA-Z0-9._-]{1,100}".prop_map(|api_key| {
-                    ApiCredentials::SendGrid { api_key: api_key.to_string() }
+                    ApiCredentials::SendGrid {
+                        api_key: api_key.to_string(),
+                    }
                 }),
                 "SENDGRID_API_KEY=[a-zA-Z0-9._-]{1,100}".prop_map(|api_key| {
-                    ApiCredentials::SendGrid { api_key: api_key.to_string() }
+                    ApiCredentials::SendGrid {
+                        api_key: api_key.to_string(),
+                    }
                 }),
             ],
             // Valid Amazon SES credentials (20-char access key, non-empty secret, non-empty region)
             (
-                "[A-Z0-9]{20}",  // Exactly 20 characters for access_key_id
-                "[a-zA-Z0-9+/]{1,100}",  // secret_access_key pattern - at least 1 char
-                "[a-z]{2,}-[a-z]{2,}-[0-9]{1,}",  // region pattern like us-east-1
+                "[A-Z0-9]{20}",                  // Exactly 20 characters for access_key_id
+                "[a-zA-Z0-9+/]{1,100}",          // secret_access_key pattern - at least 1 char
+                "[a-z]{2,}-[a-z]{2,}-[0-9]{1,}", // region pattern like us-east-1
             )
                 .prop_map(|(access_key_id, secret_access_key, region)| {
                     ApiCredentials::AmazonSes {
@@ -157,7 +160,7 @@ mod property_tests {
                 }),
         ]
     }
-    
+
     /// Strategy for generating edge case credentials
     fn edge_case_credential_strategy() -> impl Strategy<Value = ApiCredentials> {
         prop_oneof![
@@ -193,25 +196,27 @@ mod property_tests {
                     !api_key.starts_with("SG.") && !api_key.starts_with("SENDGRID_API_KEY=")
                 })
                 .prop_map(|api_key| {
-                    ApiCredentials::SendGrid { api_key: api_key.to_string() }
+                    ApiCredentials::SendGrid {
+                        api_key: api_key.to_string(),
+                    }
                 }),
             // Amazon SES with wrong length access key (should fail validation)
             prop_oneof![
                 "[A-Z0-9]{1,19}",  // Too short
-                "[A-Z0-9]{21,30}",  // Too long
+                "[A-Z0-9]{21,30}", // Too long
             ]
-                .prop_map(|access_key_id| {
-                    ApiCredentials::AmazonSes {
-                        access_key_id: access_key_id.to_string(),
-                        secret_access_key: "test_secret".to_string(),
-                        region: "us-east-1".to_string(),
-                    }
-                }),
+            .prop_map(|access_key_id| {
+                ApiCredentials::AmazonSes {
+                    access_key_id: access_key_id.to_string(),
+                    secret_access_key: "test_secret".to_string(),
+                    region: "us-east-1".to_string(),
+                }
+            }),
             // Amazon SES with empty secret or region (should fail validation)
             (
-                "[A-Z0-9]{20}",  // Valid access_key_id
+                "[A-Z0-9]{20}",                  // Valid access_key_id
                 "".prop_map(|s| s.to_string()),  // Empty secret_access_key
-                "[a-z]{2,}-[a-z]{2,}-[0-9]{1,}",  // Valid region
+                "[a-z]{2,}-[a-z]{2,}-[0-9]{1,}", // Valid region
             )
                 .prop_map(|(access_key_id, secret_access_key, region)| {
                     ApiCredentials::AmazonSes {
@@ -222,7 +227,7 @@ mod property_tests {
                 }),
         ]
     }
-    
+
     /// Additional property test for validation of trimmed strings
     ///
     /// Tests that validation handles whitespace correctly (trimming).
@@ -239,10 +244,10 @@ mod property_tests {
                 client_secret: format!("{}{}{}", prefix, content, suffix),
                 refresh_token: format!("{}{}{}", prefix, content, suffix),
             };
-            
+
             // Validation should handle whitespace (trimming happens in validate())
             let result = credential.validate();
-            
+
             // If content is empty after trimming whitespace, should error
             if content.trim().is_empty() {
                 prop_assert!(
@@ -257,7 +262,7 @@ mod property_tests {
             }
         });
     }
-    
+
     /// Property test for specific validation rules
     ///
     /// Tests that validation follows the specific rules for each provider type.
@@ -266,7 +271,7 @@ mod property_tests {
         proptest!(|(test_case in validation_rule_strategy())| {
             let (credential, should_pass) = test_case;
             let result = credential.validate();
-            
+
             if should_pass {
                 prop_assert!(
                     result.is_ok(),
@@ -280,7 +285,7 @@ mod property_tests {
                     "Credential should fail validation but passed: {:?}",
                     credential
                 );
-                
+
                 // Should be a ValidationError
                 if let Err(err) = result {
                     prop_assert!(
@@ -292,45 +297,39 @@ mod property_tests {
             }
         });
     }
-    
+
     /// Strategy for testing specific validation rules
     fn validation_rule_strategy() -> impl Strategy<Value = (ApiCredentials, bool)> {
         prop_oneof![
             // Gmail test cases
-            (
-                any::<String>(),
-                any::<String>(),
-                any::<String>(),
-            )
-                .prop_map(|(client_id, client_secret, refresh_token)| {
+            (any::<String>(), any::<String>(), any::<String>(),).prop_map(
+                |(client_id, client_secret, refresh_token)| {
                     let credential = ApiCredentials::Gmail {
                         client_id: client_id.clone(),
                         client_secret: client_secret.clone(),
                         refresh_token: refresh_token.clone(),
                     };
                     // Should pass if all fields are non-empty after trimming
-                    let should_pass = !client_id.trim().is_empty() 
+                    let should_pass = !client_id.trim().is_empty()
                         && !client_secret.trim().is_empty()
                         && !refresh_token.trim().is_empty();
                     (credential, should_pass)
-                }),
+                }
+            ),
             // SendGrid test cases
-            any::<String>()
-                .prop_map(|api_key| {
-                    let credential = ApiCredentials::SendGrid { api_key: api_key.clone() };
-                    // Should pass if non-empty after trimming and starts with valid prefix
-                    let trimmed = api_key.trim();
-                    let should_pass = !trimmed.is_empty() 
-                        && (trimmed.starts_with("SG.") || trimmed.starts_with("SENDGRID_API_KEY="));
-                    (credential, should_pass)
-                }),
+            any::<String>().prop_map(|api_key| {
+                let credential = ApiCredentials::SendGrid {
+                    api_key: api_key.clone(),
+                };
+                // Should pass if non-empty after trimming and starts with valid prefix
+                let trimmed = api_key.trim();
+                let should_pass = !trimmed.is_empty()
+                    && (trimmed.starts_with("SG.") || trimmed.starts_with("SENDGRID_API_KEY="));
+                (credential, should_pass)
+            }),
             // Amazon SES test cases
-            (
-                any::<String>(),
-                any::<String>(),
-                any::<String>(),
-            )
-                .prop_map(|(access_key_id, secret_access_key, region)| {
+            (any::<String>(), any::<String>(), any::<String>(),).prop_map(
+                |(access_key_id, secret_access_key, region)| {
                     let credential = ApiCredentials::AmazonSes {
                         access_key_id: access_key_id.clone(),
                         secret_access_key: secret_access_key.clone(),
@@ -342,7 +341,8 @@ mod property_tests {
                         && !region.trim().is_empty()
                         && access_key_id.trim().len() == 20;
                     (credential, should_pass)
-                }),
+                }
+            ),
         ]
     }
 }
@@ -350,7 +350,7 @@ mod property_tests {
 // Property 3: External API Operation Routing
 //
 // **Validates: Requirements 2.3, 5.1**
-// 
+//
 // Property 3: External API Operation Routing
 // "For any email operation O and configured external API provider P, when O is processed for a user with provider P configured, the operation shall be routed through provider P."
 
@@ -360,12 +360,12 @@ mod property_tests {
 /// and that routing is consistent for the same provider configuration.
 #[test]
 fn property_3_external_api_operation_routing() {
-    use proptest::prelude::*;
     use crate::{
-        adapter::{EmailMessage, ProviderConnection, ConnectionDetails},
+        adapter::{ConnectionDetails, EmailMessage, ProviderConnection},
         provider::ProviderType,
     };
-    
+    use proptest::prelude::*;
+
     // Run the property test
     proptest!(|(
         provider_type in provider_type_strategy(),
@@ -374,14 +374,14 @@ fn property_3_external_api_operation_routing() {
     )| {
         // Create provider connection with the specified type and details
         let provider = ProviderConnection::new(provider_type.clone(), connection_details);
-        
+
         // Test that the provider type matches what was configured
         prop_assert_eq!(
             provider.provider_type,
             provider_type,
             "Provider connection should have the configured provider type"
         );
-        
+
         // Test that provider-specific routing would occur based on provider type
         // (This is a property test, not an integration test, so we're testing the logic,
         // not actually making API calls)
@@ -421,12 +421,12 @@ fn property_3_external_api_operation_routing() {
 /// Tests that the same provider configuration always routes through the same provider type.
 #[test]
 fn property_3_routing_consistency() {
-    use proptest::prelude::*;
     use crate::{
-        adapter::{ProviderConnection, ConnectionDetails},
+        adapter::{ConnectionDetails, ProviderConnection},
         provider::ProviderType,
     };
-    
+    use proptest::prelude::*;
+
     proptest!(|(
         provider_type in provider_type_strategy(),
         connection_details1 in connection_details_strategy(&provider_type),
@@ -435,14 +435,14 @@ fn property_3_routing_consistency() {
         // Create two provider connections with the same type but potentially different details
         let provider1 = ProviderConnection::new(provider_type.clone(), connection_details1);
         let provider2 = ProviderConnection::new(provider_type.clone(), connection_details2);
-        
+
         // Both should have the same provider type
         prop_assert_eq!(
             provider1.provider_type,
             provider2.provider_type,
             "Providers with same configured type should have same provider type"
         );
-        
+
         // Both should route through the same provider type
         match (&provider1.provider_type, &provider2.provider_type) {
             (ProviderType::GmailApi, ProviderType::GmailApi) => {
@@ -488,22 +488,22 @@ fn property_3_routing_consistency() {
 /// Tests that each provider type routes to the correct provider implementation.
 #[test]
 fn property_3_provider_specific_routing() {
-    use proptest::prelude::*;
     use crate::{
-        adapter::{ProviderConnection, ConnectionDetails},
+        adapter::{ConnectionDetails, ProviderConnection},
         provider::ProviderType,
     };
-    
+    use proptest::prelude::*;
+
     proptest!(|(
         test_case in provider_routing_test_case_strategy(),
     )| {
         let (provider_type, expected_connection_type) = test_case;
-        
+
         // Skip custom providers for this test since we can't create specific connection details
         if matches!(provider_type, ProviderType::Other(_)) {
             return Ok(());
         }
-        
+
         let connection_details = match &provider_type {
             ProviderType::GmailApi => ConnectionDetails::Gmail {
                 access_token: "test_token".to_string(),
@@ -519,9 +519,9 @@ fn property_3_provider_specific_routing() {
             },
             ProviderType::Other(_) => unreachable!(), // Handled above
         };
-        
+
         let provider = ProviderConnection::new(provider_type, connection_details);
-        
+
         // Verify the connection details match the expected type
         match expected_connection_type {
             ExpectedConnectionType::Gmail => {
@@ -551,22 +551,22 @@ fn property_3_provider_specific_routing() {
 /// Tests that invalid provider configurations are handled appropriately.
 #[test]
 fn property_3_routing_error_handling() {
-    use proptest::prelude::*;
     use crate::{
-        adapter::{ProviderConnection, ConnectionDetails},
+        adapter::{ConnectionDetails, ProviderConnection},
         provider::ProviderType,
     };
-    
+    use proptest::prelude::*;
+
     proptest!(|(
         mismatch_case in provider_mismatch_strategy(),
     )| {
         let (provider_type, mismatched_details) = mismatch_case;
-        
+
         // Creating a provider with mismatched type and details should still work
         // (type system ensures they match, but we test the property that routing
         // is based on provider_type field)
         let provider = ProviderConnection::new(provider_type.clone(), mismatched_details);
-        
+
         // The routing should still be based on provider_type field
         // (even if details don't match in reality, for property test we check the field)
         prop_assert_eq!(
@@ -588,57 +588,67 @@ fn provider_type_strategy() -> impl Strategy<Value = ProviderType> {
 }
 
 /// Strategy for generating connection details for a specific provider type
-fn connection_details_strategy(provider_type: &ProviderType) -> impl Strategy<Value = ConnectionDetails> {
+fn connection_details_strategy(
+    provider_type: &ProviderType,
+) -> impl Strategy<Value = ConnectionDetails> {
     match provider_type {
         ProviderType::GmailApi => (
-            "[a-zA-Z0-9._-]{1,100}",  // access_token
-            "[a-zA-Z0-9._-]{1,50}",   // user_id
+            "[a-zA-Z0-9._-]{1,100}", // access_token
+            "[a-zA-Z0-9._-]{1,50}",  // user_id
         )
-            .prop_map(|(access_token, user_id)| {
-                ConnectionDetails::Gmail { access_token, user_id }
+            .prop_map(|(access_token, user_id)| ConnectionDetails::Gmail {
+                access_token,
+                user_id,
             }),
-        ProviderType::SendGrid => 
-            "[a-zA-Z0-9._-]{1,100}"
-                .prop_map(|api_key| {
-                    ConnectionDetails::SendGrid { api_key }
-                }),
+        ProviderType::SendGrid => {
+            "[a-zA-Z0-9._-]{1,100}".prop_map(|api_key| ConnectionDetails::SendGrid { api_key })
+        }
         ProviderType::AmazonSes => (
-            "[A-Z0-9]{20}",           // access_key_id (AWS format)
-            "[a-zA-Z0-9+/]{1,100}",   // secret_access_key
-            "[a-z]{2,}-[a-z]{2,}-[0-9]{1,}",  // region
+            "[A-Z0-9]{20}",                  // access_key_id (AWS format)
+            "[a-zA-Z0-9+/]{1,100}",          // secret_access_key
+            "[a-z]{2,}-[a-z]{2,}-[0-9]{1,}", // region
         )
-            .prop_map(|(access_key_id, secret_access_key, region)| {
-                ConnectionDetails::AmazonSes { access_key_id, secret_access_key, region }
-            }),
-        ProviderType::Other(_) => 
-            // For custom providers, generate a secure random token for the API key
-            Just(ConnectionDetails::SendGrid { api_key: crate::random_token(32).unwrap_or_else(|_| "invalid_token".to_string()) })
-                .prop_map(|cd| cd),
+            .prop_map(
+                |(access_key_id, secret_access_key, region)| ConnectionDetails::AmazonSes {
+                    access_key_id,
+                    secret_access_key,
+                    region,
+                },
+            ),
+        ProviderType::Other(_) =>
+        // For custom providers, generate a secure random token for the API key
+        {
+            Just(ConnectionDetails::SendGrid {
+                api_key: crate::random_token(32).unwrap_or_else(|_| "invalid_token".to_string()),
+            })
+            .prop_map(|cd| cd)
+        }
     }
 }
 
 /// Strategy for generating email messages
 fn email_message_strategy() -> impl Strategy<Value = EmailMessage> {
     (
-        "[a-zA-Z0-9._%+-]{1,50}@[a-zA-Z0-9.-]{1,50}\\.[a-zA-Z]{2,}",  // from
-        prop::collection::vec("[a-zA-Z0-9._%+-]{1,50}@[a-zA-Z0-9.-]{1,50}\\.[a-zA-Z]{2,}", 1..5),  // to
-        "[a-zA-Z0-9 ]{1,100}",  // subject
-        "[a-zA-Z0-9 .,!?]{1,500}",  // body_plain
-        prop::option::of("[a-zA-Z0-9 .,!?<>/=]{1,500}"),  // body_html
+        "[a-zA-Z0-9._%+-]{1,50}@[a-zA-Z0-9.-]{1,50}\\.[a-zA-Z]{2,}", // from
+        prop::collection::vec(
+            "[a-zA-Z0-9._%+-]{1,50}@[a-zA-Z0-9.-]{1,50}\\.[a-zA-Z]{2,}",
+            1..5,
+        ), // to
+        "[a-zA-Z0-9 ]{1,100}",                                       // subject
+        "[a-zA-Z0-9 .,!?]{1,500}",                                   // body_plain
+        prop::option::of("[a-zA-Z0-9 .,!?<>/=]{1,500}"),             // body_html
     )
-        .prop_map(|(from, to, subject, body_plain, body_html)| {
-            EmailMessage {
-                id: uuid::Uuid::new_v4().to_string(),
-                from,
-                to,
-                cc: vec![],
-                bcc: vec![],
-                subject,
-                body_plain,
-                body_html,
-                attachments: vec![],
-                headers: vec![],
-            }
+        .prop_map(|(from, to, subject, body_plain, body_html)| EmailMessage {
+            id: uuid::Uuid::new_v4().to_string(),
+            from,
+            to,
+            cc: vec![],
+            bcc: vec![],
+            subject,
+            body_plain,
+            body_html,
+            attachments: vec![],
+            headers: vec![],
         })
 }
 
@@ -651,11 +661,21 @@ enum ExpectedConnectionType {
 }
 
 /// Strategy for provider routing test cases
-fn provider_routing_test_case_strategy() -> impl Strategy<Value = (ProviderType, ExpectedConnectionType)> {
+fn provider_routing_test_case_strategy(
+) -> impl Strategy<Value = (ProviderType, ExpectedConnectionType)> {
     prop_oneof![
-        (Just(ProviderType::GmailApi), Just(ExpectedConnectionType::Gmail)),
-        (Just(ProviderType::SendGrid), Just(ExpectedConnectionType::SendGrid)),
-        (Just(ProviderType::AmazonSes), Just(ExpectedConnectionType::AmazonSes)),
+        (
+            Just(ProviderType::GmailApi),
+            Just(ExpectedConnectionType::Gmail)
+        ),
+        (
+            Just(ProviderType::SendGrid),
+            Just(ExpectedConnectionType::SendGrid)
+        ),
+        (
+            Just(ProviderType::AmazonSes),
+            Just(ExpectedConnectionType::AmazonSes)
+        ),
     ]
 }
 
@@ -665,32 +685,36 @@ fn provider_mismatch_strategy() -> impl Strategy<Value = (ProviderType, Connecti
         // Gmail type with SendGrid details (mismatch)
         (
             Just(ProviderType::GmailApi),
-            "[a-zA-Z0-9._-]{1,100}"
-                .prop_map(|api_key| {
-                    ConnectionDetails::SendGrid { api_key }
-                })
+            "[a-zA-Z0-9._-]{1,100}".prop_map(|api_key| { ConnectionDetails::SendGrid { api_key } })
         ),
         // SendGrid type with SES details (mismatch)
         (
             Just(ProviderType::SendGrid),
             (
-                "[A-Z0-9]{20}",           // access_key_id
-                "[a-zA-Z0-9+/]{1,100}",   // secret_access_key
-                "[a-z]{2,}-[a-z]{2,}-[0-9]{1,}",  // region
+                "[A-Z0-9]{20}",                  // access_key_id
+                "[a-zA-Z0-9+/]{1,100}",          // secret_access_key
+                "[a-z]{2,}-[a-z]{2,}-[0-9]{1,}", // region
             )
                 .prop_map(|(access_key_id, secret_access_key, region)| {
-                    ConnectionDetails::AmazonSes { access_key_id, secret_access_key, region }
+                    ConnectionDetails::AmazonSes {
+                        access_key_id,
+                        secret_access_key,
+                        region,
+                    }
                 })
         ),
         // SES type with Gmail details (mismatch)
         (
             Just(ProviderType::AmazonSes),
             (
-                "[a-zA-Z0-9._-]{1,100}",  // access_token
-                "[a-zA-Z0-9._-]{1,50}",   // user_id
+                "[a-zA-Z0-9._-]{1,100}", // access_token
+                "[a-zA-Z0-9._-]{1,50}",  // user_id
             )
                 .prop_map(|(access_token, user_id)| {
-                    ConnectionDetails::Gmail { access_token, user_id }
+                    ConnectionDetails::Gmail {
+                        access_token,
+                        user_id,
+                    }
                 })
         ),
     ]
@@ -698,9 +722,9 @@ fn provider_mismatch_strategy() -> impl Strategy<Value = (ProviderType, Connecti
 // Property 26: Provider Failover Reliability
 //
 // **Validates: Requirements 2.5**
-// 
+//
 // Property 26: Provider Failover Reliability
-// "For any set of configured providers P and failure sequence F, when the primary provider fails, 
+// "For any set of configured providers P and failure sequence F, when the primary provider fails,
 // the system shall fail over to the next available provider in P."
 
 /// Property 26: Provider Failover Reliability
@@ -709,13 +733,13 @@ fn provider_mismatch_strategy() -> impl Strategy<Value = (ProviderType, Connecti
 /// in the configured provider list, respecting priority order.
 #[test]
 fn property_26_provider_failover_reliability() {
-    use proptest::prelude::*;
     use crate::{
-        adapter::{ProviderConnection, ConnectionDetails, DefaultExternalApiAdapter},
-        provider::ProviderType,
+        adapter::{ConnectionDetails, DefaultExternalApiAdapter, ProviderConnection},
         health::HealthStatus,
+        provider::ProviderType,
     };
-    
+    use proptest::prelude::*;
+
     // Run the property test
     proptest!(|(
         providers in provider_list_strategy(1..5),  // 1-5 providers
@@ -726,20 +750,20 @@ fn property_26_provider_failover_reliability() {
             vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16], // dummy encryption key
             "test-key".to_string(),
         );
-        
+
         // Sort providers by priority (lower number = higher priority)
         let mut sorted_providers = providers.clone();
         // In a real implementation, providers would have priority field
         // For this test, we'll assume they're already in priority order
-        
+
         // Apply failure pattern to simulate provider failures
         let available_providers = apply_failure_pattern(&sorted_providers, &failure_pattern);
-        
+
         // Test failover_multiple method
         let result = tokio::runtime::Runtime::new().unwrap().block_on(
             adapter.failover_multiple(available_providers.clone())
         );
-        
+
         // Check the result based on failure pattern
         match result {
             Ok(selected_provider) => {
@@ -748,7 +772,7 @@ fn property_26_provider_failover_reliability() {
                     is_provider_healthy_in_pattern(&selected_provider, &failure_pattern),
                     "Selected provider should be healthy according to failure pattern"
                 );
-                
+
                 // Should have selected the highest priority healthy provider
                 if let Some(expected_index) = find_first_healthy_index(&sorted_providers, &failure_pattern) {
                     let expected_provider = &sorted_providers[expected_index];
@@ -780,12 +804,12 @@ fn property_26_provider_failover_reliability() {
 /// Tests that failover respects provider priority order (lower priority number = higher priority).
 #[test]
 fn property_26_failover_priority_ordering() {
-    use proptest::prelude::*;
     use crate::{
-        adapter::{ProviderConnection, ConnectionDetails, DefaultExternalApiAdapter},
+        adapter::{ConnectionDetails, DefaultExternalApiAdapter, ProviderConnection},
         provider::ProviderType,
     };
-    
+    use proptest::prelude::*;
+
     proptest!(|(
         providers in prioritized_provider_list_strategy(2..5),  // 2-5 providers with priorities
     )| {
@@ -794,7 +818,7 @@ fn property_26_failover_priority_ordering() {
             vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16], // dummy encryption key
             "test-key".to_string(),
         );
-        
+
         // Sort by priority (lower number = higher priority)
         let mut sorted_providers = providers.clone();
         sorted_providers.sort_by(|a, b| {
@@ -804,15 +828,15 @@ fn property_26_failover_priority_ordering() {
             let priority_b = extract_priority(b);
             priority_a.cmp(&priority_b)
         });
-        
+
         // Make first provider unhealthy, others healthy
         let mut available_providers = sorted_providers.clone();
-        
+
         // Test that failover selects the next highest priority provider
         let result = tokio::runtime::Runtime::new().unwrap().block_on(
             adapter.failover_multiple(available_providers.clone())
         );
-        
+
         match result {
             Ok(selected_provider) => {
                 // Should have selected the highest priority provider (index 0)
@@ -839,13 +863,13 @@ fn property_26_failover_priority_ordering() {
 /// Tests that failover only occurs when a provider is actually unavailable (not just temporarily slow).
 #[test]
 fn property_26_health_based_failover() {
-    use proptest::prelude::*;
     use crate::{
-        adapter::{ProviderConnection, ConnectionDetails, DefaultExternalApiAdapter},
-        provider::ProviderType,
+        adapter::{ConnectionDetails, DefaultExternalApiAdapter, ProviderConnection},
         health::{HealthStatus, ProviderStatus},
+        provider::ProviderType,
     };
-    
+    use proptest::prelude::*;
+
     proptest!(|(
         primary_provider in provider_strategy(),
         secondary_provider in provider_strategy(),
@@ -857,14 +881,14 @@ fn property_26_health_based_failover() {
             vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16], // dummy encryption key
             "test-key".to_string(),
         );
-        
+
         // Mock health check responses
         // In a real test, we would mock the health check method
         // For property test, we'll simulate the logic
-        
+
         let primary_available = primary_health.is_available();
         let secondary_available = secondary_health.is_available();
-        
+
         // Simulate failover logic
         if primary_available {
             // Should keep using primary
@@ -884,12 +908,12 @@ fn property_26_health_based_failover() {
 /// Tests that the system tries all providers before giving up.
 #[test]
 fn property_26_exhaustive_failover() {
-    use proptest::prelude::*;
     use crate::{
-        adapter::{ProviderConnection, ConnectionDetails, DefaultExternalApiAdapter},
+        adapter::{ConnectionDetails, DefaultExternalApiAdapter, ProviderConnection},
         provider::ProviderType,
     };
-    
+    use proptest::prelude::*;
+
     proptest!(|(
         providers in provider_list_strategy(3..6),  // 3-6 providers
         num_unhealthy in 0..=5usize,  // Number of unhealthy providers
@@ -899,10 +923,10 @@ fn property_26_exhaustive_failover() {
             vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16], // dummy encryption key
             "test-key".to_string(),
         );
-        
+
         // Mark first 'num_unhealthy' providers as unhealthy, rest as healthy
         // In real test, would mock health checks
-        
+
         if num_unhealthy >= providers.len() {
             // All providers unhealthy - should error
             prop_assert!(true, "All providers unhealthy, should return error");
@@ -918,12 +942,12 @@ fn property_26_exhaustive_failover() {
 /// Tests error cases: all providers unavailable, empty provider list.
 #[test]
 fn property_26_failover_error_cases() {
-    use proptest::prelude::*;
     use crate::{
-        adapter::{ProviderConnection, ConnectionDetails, DefaultExternalApiAdapter},
+        adapter::{ConnectionDetails, DefaultExternalApiAdapter, ProviderConnection},
         provider::ProviderType,
     };
-    
+    use proptest::prelude::*;
+
     proptest!(|(
         empty_list in prop::bool::ANY,  // Test empty list case
     )| {
@@ -932,13 +956,13 @@ fn property_26_failover_error_cases() {
             vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16], // dummy encryption key
             "test-key".to_string(),
         );
-        
+
         if empty_list {
             // Empty provider list - should error
             let result = tokio::runtime::Runtime::new().unwrap().block_on(
                 adapter.failover_multiple(vec![])
             );
-            
+
             prop_assert!(
                 result.is_err(),
                 "Empty provider list should return error"
@@ -953,7 +977,7 @@ fn property_26_failover_error_cases() {
                     user_id: "me".to_string(),
                 }
             );
-            
+
             // In real test, would mock as unhealthy
             // For property test, we assert the expected behavior
             prop_assert!(true, "All providers unhealthy should return error");
@@ -964,7 +988,9 @@ fn property_26_failover_error_cases() {
 // Helper functions and strategies
 
 /// Strategy for generating a list of providers
-fn provider_list_strategy(range: std::ops::Range<usize>) -> impl Strategy<Value = Vec<ProviderConnection>> {
+fn provider_list_strategy(
+    range: std::ops::Range<usize>,
+) -> impl Strategy<Value = Vec<ProviderConnection>> {
     prop::collection::vec(provider_strategy(), range)
 }
 
@@ -973,62 +999,66 @@ fn provider_strategy() -> impl Strategy<Value = ProviderConnection> {
     prop_oneof![
         // Gmail provider
         (
-            "[a-zA-Z0-9._-]{1,100}",  // access_token
-            "[a-zA-Z0-9._-]{1,50}",   // user_id
+            "[a-zA-Z0-9._-]{1,100}", // access_token
+            "[a-zA-Z0-9._-]{1,50}",  // user_id
         )
             .prop_map(|(access_token, user_id)| {
                 ProviderConnection::new(
                     ProviderType::GmailApi,
-                    ConnectionDetails::Gmail { access_token, user_id }
+                    ConnectionDetails::Gmail {
+                        access_token,
+                        user_id,
+                    },
                 )
             }),
         // SendGrid provider
-        "[a-zA-Z0-9._-]{1,100}"
-            .prop_map(|api_key| {
-                ProviderConnection::new(
-                    ProviderType::SendGrid,
-                    ConnectionDetails::SendGrid { api_key }
-                )
-            }),
+        "[a-zA-Z0-9._-]{1,100}".prop_map(|api_key| {
+            ProviderConnection::new(
+                ProviderType::SendGrid,
+                ConnectionDetails::SendGrid { api_key },
+            )
+        }),
         // Amazon SES provider
         (
-            "[A-Z0-9]{20}",           // access_key_id
-            "[a-zA-Z0-9+/]{1,100}",   // secret_access_key
-            "[a-z]{2,}-[a-z]{2,}-[0-9]{1,}",  // region
+            "[A-Z0-9]{20}",                  // access_key_id
+            "[a-zA-Z0-9+/]{1,100}",          // secret_access_key
+            "[a-z]{2,}-[a-z]{2,}-[0-9]{1,}", // region
         )
             .prop_map(|(access_key_id, secret_access_key, region)| {
                 ProviderConnection::new(
                     ProviderType::AmazonSes,
-                    ConnectionDetails::AmazonSes { access_key_id, secret_access_key, region }
+                    ConnectionDetails::AmazonSes {
+                        access_key_id,
+                        secret_access_key,
+                        region,
+                    },
                 )
             }),
     ]
 }
 
 /// Strategy for generating providers with priorities
-fn prioritized_provider_list_strategy(range: std::ops::Range<usize>) -> impl Strategy<Value = Vec<(ProviderConnection, u8)>> {
+fn prioritized_provider_list_strategy(
+    range: std::ops::Range<usize>,
+) -> impl Strategy<Value = Vec<(ProviderConnection, u8)>> {
     prop::collection::vec(
-        (provider_strategy(), 0u8..10),  // Provider with priority 0-9
-        range
+        (provider_strategy(), 0u8..10), // Provider with priority 0-9
+        range,
     )
 }
 
 /// Strategy for generating failure patterns
 fn failure_pattern_strategy() -> impl Strategy<Value = Vec<bool>> {
-    prop::collection::vec(prop::bool::ANY, 1..10)  // 1-10 boolean values
+    prop::collection::vec(prop::bool::ANY, 1..10) // 1-10 boolean values
 }
 
 /// Strategy for generating health status
 fn health_status_strategy() -> impl Strategy<Value = HealthStatus> {
     prop_oneof![
         // Healthy status
-        (100u64..5000u64).prop_map(|response_time_ms| {
-            HealthStatus::healthy(response_time_ms)
-        }),
+        (100u64..5000u64).prop_map(|response_time_ms| { HealthStatus::healthy(response_time_ms) }),
         // Unhealthy status
-        "[a-zA-Z0-9 ]{1,50}".prop_map(|error| {
-            HealthStatus::unhealthy(error)
-        }),
+        "[a-zA-Z0-9 ]{1,50}".prop_map(|error| { HealthStatus::unhealthy(error) }),
         // Rate limited status
         Just(HealthStatus::rate_limited(
             chrono::Utc::now() + chrono::Duration::minutes(1)
@@ -1037,13 +1067,17 @@ fn health_status_strategy() -> impl Strategy<Value = HealthStatus> {
 }
 
 /// Apply failure pattern to providers
-fn apply_failure_pattern(providers: &[ProviderConnection], pattern: &[bool]) -> Vec<ProviderConnection> {
-    providers.iter()
+fn apply_failure_pattern(
+    providers: &[ProviderConnection],
+    pattern: &[bool],
+) -> Vec<ProviderConnection> {
+    providers
+        .iter()
         .enumerate()
         .filter(|(i, _)| {
             // Use pattern cyclically if pattern is shorter than providers
             let pattern_index = i % pattern.len();
-            pattern[pattern_index]  // true = healthy, false = unhealthy
+            pattern[pattern_index] // true = healthy, false = unhealthy
         })
         .map(|(_, provider)| provider.clone())
         .collect()
@@ -1067,7 +1101,8 @@ fn is_provider_healthy_in_pattern_index(index: usize, pattern: &[bool]) -> bool 
 
 /// Find index of first healthy provider according to failure pattern
 fn find_first_healthy_index(providers: &[ProviderConnection], pattern: &[bool]) -> Option<usize> {
-    providers.iter()
+    providers
+        .iter()
         .enumerate()
         .find(|(i, _)| is_provider_healthy_in_pattern_index(*i, pattern))
         .map(|(i, _)| i)
