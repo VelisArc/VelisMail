@@ -1,0 +1,785 @@
+// VelisMail API Client — Fully local, no backend dependency
+// Uses localStorage for session persistence
+
+// ---- Local Storage DB ----
+const STORAGE_KEYS = {
+  users: 'velismail_users',
+  session: 'velismail_session',
+  emails: 'velismail_emails',
+  domains: 'velismail_domains',
+  contacts: 'velismail_contacts',
+  theme: 'velismail_theme',
+  signatures: 'velismail_signatures',
+};
+
+function loadDB<T>(key: string, fallback: T): T {
+  try {
+    const data = localStorage.getItem(key);
+    return data ? JSON.parse(data) : fallback;
+  } catch { return fallback; }
+}
+
+function saveDB<T>(key: string, data: T) {
+  localStorage.setItem(key, JSON.stringify(data));
+}
+
+// ---- Types ----
+export type User = {
+  id: string;
+  email: string;
+  displayName: string;
+  plan: string;
+  accountType: 'personal' | 'business';
+  customDomain?: string;
+  mailProvider?: 'velismail' | 'sendgrid' | 'resend' | 'custom_smtp';
+  apiKey?: string;
+  isSetupComplete: boolean;
+  customDbUrl?: string;
+  createdAt: string;
+  // Profile image URL (data URL or hosted URL)
+  profileImageUrl?: string;
+  // Business Mail fields
+  isBusinessSetupComplete?: boolean;
+  businessDomain?: string;
+  businessDbUrl?: string;
+  businessApiKey?: string;
+  businessMailProvider?: string;
+  businessDomainVerified?: boolean;
+  dkimStatus?: 'pending' | 'verified' | 'failed';
+  spfStatus?: 'pending' | 'verified' | 'failed';
+  dmarcStatus?: 'pending' | 'verified' | 'failed';
+  // New structured profile for business-specific configuration (optional)
+  businessProfile?: {
+    domain?: string;
+    dbUrl?: string;
+    apiKey?: string;
+    mailProvider?: string;
+    verified?: boolean;
+    dkimStatus?: 'pending' | 'verified' | 'failed';
+    spfStatus?: 'pending' | 'verified' | 'failed';
+    dmarcStatus?: 'pending' | 'verified' | 'failed';
+  };
+};
+
+export type Contact = {
+  id: string;
+  name: string;
+  email: string;
+  phone?: string;
+  company?: string;
+  group: string;
+  notes?: string;
+  favorite: boolean;
+  createdAt: string;
+};
+
+export type Signature = {
+  id: string;
+  name: string;
+  content: string;
+  isDefault: boolean;
+};
+
+export type DomainCheckStatus = 'pending' | 'verified' | 'failed';
+
+export type DnsRecord = {
+  type: 'TXT' | 'MX' | 'CNAME';
+  name: string;
+  value: string;
+  ttl?: number;
+  priority?: number;
+};
+
+export type DomainCheck = {
+  key: 'txt' | 'mx' | 'spf' | 'dkim' | 'dmarc';
+  label: string;
+  status: DomainCheckStatus;
+  expected: string;
+  actual?: string;
+};
+
+export type CustomDomain = {
+  id: string;
+  domain: string;
+  status: 'pending' | 'verified' | 'failed';
+  verificationToken: string;
+  dnsRecords: DnsRecord[];
+  checks: DomainCheck[];
+  addedAt: string;
+  lastCheckedAt?: string;
+  verifiedAt?: string;
+};
+
+export type Email = {
+  id: string;
+  from: string;
+  fromName: string;
+  to: string[];
+  subject: string;
+  body: string;
+  date: string;
+  folder: string;
+  unread: boolean;
+  starred: boolean;
+  labels: string[];
+  hasAttachment: boolean;
+};
+
+// ---- Seed Data ----
+// No dummy emails — real welcome email is created dynamically during registration in auth.register()
+const SEED_EMAILS: Email[] = [];
+
+// ---- Initialize DB ----
+// User-scoped storage helpers (isolate data per-account)
+function getSessionSafe(): User | null {
+  try {
+    return loadDB<User | null>(STORAGE_KEYS.session, null);
+  } catch {
+    return null;
+  }
+}
+
+function userScopedKey(key: string): string {
+  const s = getSessionSafe();
+  return s && s.id ? `${key}_${s.id}` : key;
+}
+
+function loadUserDB<T>(key: string, fallback: T): T {
+  return loadDB<T>(userScopedKey(key), fallback);
+}
+
+function saveUserDB<T>(key: string, data: T) {
+  saveDB(userScopedKey(key), data);
+}
+
+function initEmails(): Email[] {
+  return loadUserDB<Email[]>(STORAGE_KEYS.emails, SEED_EMAILS);
+}
+
+let emailsCache = initEmails();
+
+function reloadAccountCaches() {
+  emailsCache = initEmails();
+}
+
+function normalizeDomainInput(input: string): string {
+  return input
+    .trim()
+    .toLowerCase()
+    .replace(/^https?:\/\//, '')
+    .replace(/^mail\./, '')
+    .replace(/\/.*$/, '');
+}
+
+function buildDnsRecords(domain: string, verificationToken: string): DnsRecord[] {
+  return [
+    { type: 'TXT', name: `_velismail-verify.${domain}`, value: verificationToken, ttl: 300 },
+    { type: 'MX', name: domain, value: 'mx1.velismail.com', priority: 10, ttl: 3600 },
+    { type: 'MX', name: domain, value: 'mx2.velismail.com', priority: 20, ttl: 3600 },
+    { type: 'TXT', name: domain, value: 'v=spf1 include:velismail.com ~all', ttl: 3600 },
+    { type: 'CNAME', name: `velismail._domainkey.${domain}`, value: 'dkim.velismail.com', ttl: 3600 },
+    { type: 'TXT', name: `_dmarc.${domain}`, value: `v=DMARC1; p=quarantine; rua=mailto:dmarc@${domain}`, ttl: 3600 },
+  ];
+}
+
+function buildDomainChecks(domain: string, verificationToken: string): DomainCheck[] {
+  return [
+    { key: 'txt', label: 'Ownership TXT', status: 'pending', expected: verificationToken },
+    { key: 'mx', label: 'Inbound MX', status: 'pending', expected: 'mx1.velismail.com / mx2.velismail.com' },
+    { key: 'spf', label: 'SPF', status: 'pending', expected: 'v=spf1 include:velismail.com ~all' },
+    { key: 'dkim', label: 'DKIM', status: 'pending', expected: `velismail._domainkey.${domain}` },
+    { key: 'dmarc', label: 'DMARC', status: 'pending', expected: `v=DMARC1; p=quarantine; rua=mailto:dmarc@${domain}` },
+  ];
+}
+
+function normalizeStoredDomain(domain: Partial<CustomDomain> & { id: string; domain: string; status?: 'pending' | 'verified' | 'failed' }): CustomDomain {
+  const normalizedDomain = normalizeDomainInput(domain.domain);
+  const verificationToken = domain.verificationToken || 'velismail-verify=' + Math.random().toString(36).slice(2, 14);
+  const fallbackChecks = buildDomainChecks(normalizedDomain, verificationToken);
+  const checks = Array.isArray(domain.checks) && domain.checks.length > 0 ? domain.checks : fallbackChecks;
+  const dnsRecords = Array.isArray(domain.dnsRecords) && domain.dnsRecords.length > 0
+    ? domain.dnsRecords
+    : buildDnsRecords(normalizedDomain, verificationToken);
+
+  return {
+    id: domain.id,
+    domain: normalizedDomain,
+    status: domain.status || 'pending',
+    verificationToken,
+    dnsRecords,
+    checks,
+    addedAt: domain.addedAt || new Date().toISOString(),
+    lastCheckedAt: domain.lastCheckedAt,
+    verifiedAt: domain.verifiedAt,
+  };
+}
+
+// Session integrity check: detect mismatches between saved session and stored domains
+function sessionHasMismatch(session: User | null): boolean {
+  if (!session) return false;
+    if (session.accountType === 'business') {
+      const allDomains = loadUserDB<CustomDomain[]>(STORAGE_KEYS.domains, []);
+      const businessDomain = session.businessDomain;
+      const profileDomain = session.businessProfile?.domain;
+      if (businessDomain && !allDomains.find(d => normalizeDomainInput(d.domain) === normalizeDomainInput(businessDomain))) {
+        return true;
+      }
+      if (profileDomain && !allDomains.find(d => normalizeDomainInput(d.domain) === normalizeDomainInput(profileDomain))) {
+        return true;
+      }
+      if ((session.businessDomainVerified || session.businessProfile?.verified) && businessDomain) {
+        const dom = allDomains.find(d => normalizeDomainInput(d.domain) === normalizeDomainInput(businessDomain));
+        if (dom && dom.status !== 'verified') return true;
+    }
+  }
+  return false;
+}
+
+// ---- Auth Functions ----
+export const auth = {
+  register(data: { email: string; password: string; displayName: string; accountType: 'personal' | 'business'; customDomain?: string }): { success: boolean; error?: string; user?: User } {
+    const users = loadDB<(User & { password: string })[]>(STORAGE_KEYS.users, []);
+    if (users.find(u => u.email === data.email)) {
+      return { success: false, error: 'An account with this email already exists.' };
+    }
+    const newUser: User & { password: string } = {
+      id: 'usr_' + Math.random().toString(36).slice(2, 8),
+      email: data.email,
+      displayName: data.displayName,
+      password: data.password,
+      plan: 'Starter',
+      accountType: data.accountType,
+      customDomain: data.customDomain,
+      mailProvider: 'velismail',
+      isSetupComplete: false,
+      createdAt: new Date().toISOString(),
+    };
+    users.push(newUser);
+    saveDB(STORAGE_KEYS.users, users);
+
+    // Auto-login
+    const { password: _, ...safeUser } = newUser;
+    saveDB(STORAGE_KEYS.session, safeUser);
+    reloadAccountCaches();
+
+    // Add welcome email
+    const welcomeEmail: Email = {
+      id: 'em_welcome_' + Math.random().toString(36).slice(2, 6),
+      from: 'welcome@velismail.com',
+      fromName: 'VelisMail',
+      to: [data.email],
+      subject: `🎉 Welcome to VelisMail, ${data.displayName}!`,
+      body: `Hello ${data.displayName},\n\nYour secure mailbox is ready.\n\nAccount type: ${data.accountType === 'business' ? 'Business' : 'Personal'}\n${data.customDomain ? `Custom domain: ${data.customDomain}` : ''}\n\nYou can now:\n• Send and receive encrypted emails\n• Configure custom domains in Settings\n• Manage your security preferences\n\nWelcome aboard!\n— VelisMail Team`,
+      date: new Date().toISOString(),
+      folder: 'inbox', unread: true, starred: false, labels: ['welcome'], hasAttachment: false,
+    };
+    emailsCache.unshift(welcomeEmail);
+    saveUserDB(STORAGE_KEYS.emails, emailsCache);
+
+    return { success: true, user: safeUser };
+  },
+
+  login(email: string, password: string): { success: boolean; error?: string; user?: User } {
+    const users = loadDB<(User & { password: string })[]>(STORAGE_KEYS.users, []);
+    const found = users.find(u => u.email === email && u.password === password);
+    if (!found) {
+      return { success: false, error: 'Invalid email or password.' };
+    }
+    const { password: _, ...safeUser } = found;
+    saveDB(STORAGE_KEYS.session, safeUser);
+    reloadAccountCaches();
+    return { success: true, user: safeUser };
+  },
+
+  loginPasskey(email: string): { success: boolean; error?: string; user?: User } {
+    const users = loadDB<(User & { password: string })[]>(STORAGE_KEYS.users, []);
+    const found = users.find(u => u.email === email);
+    if (!found) {
+      // Do not auto-create accounts. Require explicit registration for passkey login.
+      return { success: false, error: 'No account found for this passkey. Please register first.' };
+    }
+    const { password: _, ...safeUser } = found;
+    saveDB(STORAGE_KEYS.session, safeUser);
+    reloadAccountCaches();
+    return { success: true, user: safeUser };
+  },
+
+  logout() {
+    localStorage.removeItem(STORAGE_KEYS.session);
+    emailsCache = [];
+  },
+
+  getSession(): User | null {
+    const session = loadDB<User | null>(STORAGE_KEYS.session, null);
+    if (session && sessionHasMismatch(session)) {
+      console.warn('Session mismatch detected — logging out for safety.');
+      this.logout();
+      return null;
+    }
+    return session;
+  },
+
+  isLoggedIn(): boolean {
+    return !!this.getSession();
+  },
+
+  updateSettings(settings: Partial<User>): { success: boolean; user?: User } {
+    const session = this.getSession();
+    if (!session) return { success: false };
+    
+    // Update users DB
+    const users = loadDB<(User & { password: string })[]>(STORAGE_KEYS.users, []);
+    const userIndex = users.findIndex(u => u.id === session.id);
+    if (userIndex === -1) return { success: false };
+
+    const nextUser = { ...users[userIndex], ...settings };
+    const wantsPersonalComplete = settings.isSetupComplete === true;
+    const wantsBusinessComplete = settings.isBusinessSetupComplete === true;
+
+    if (wantsPersonalComplete && (!nextUser.customDbUrl || !nextUser.apiKey)) {
+      return { success: false };
+    }
+
+    if (
+      wantsBusinessComplete &&
+      (!nextUser.businessDbUrl ||
+        !nextUser.businessApiKey ||
+        !nextUser.businessDomain ||
+        !nextUser.businessDomainVerified ||
+        nextUser.dkimStatus !== 'verified' ||
+        nextUser.spfStatus !== 'verified' ||
+        nextUser.dmarcStatus !== 'verified')
+    ) {
+      return { success: false };
+    }
+
+    const updatedUser = nextUser;
+    users[userIndex] = updatedUser;
+    saveDB(STORAGE_KEYS.users, users);
+
+    // Update Session
+    const { password: _, ...safeUser } = updatedUser;
+    saveDB(STORAGE_KEYS.session, safeUser);
+    
+    return { success: true, user: safeUser };
+  },
+
+  changePassword(currentPassword: string, nextPassword: string): { success: boolean; error?: string } {
+    const session = this.getSession();
+    if (!session) return { success: false, error: 'Session not found.' };
+
+    const users = loadDB<(User & { password: string })[]>(STORAGE_KEYS.users, []);
+    const userIndex = users.findIndex(u => u.id === session.id);
+    if (userIndex === -1) return { success: false, error: 'User not found.' };
+    if (users[userIndex].password !== currentPassword) {
+      return { success: false, error: 'Current password incorrect hai.' };
+    }
+
+    users[userIndex] = {
+      ...users[userIndex],
+      password: nextPassword,
+    };
+    saveDB(STORAGE_KEYS.users, users);
+
+    return { success: true };
+  },
+
+  deleteAccount(): { success: boolean } {
+    const session = this.getSession();
+    if (!session) return { success: false };
+
+    const users = loadDB<(User & { password: string })[]>(STORAGE_KEYS.users, []);
+    const remainingUsers = users.filter(user => user.id !== session.id);
+    saveDB(STORAGE_KEYS.users, remainingUsers);
+
+    const sessionEmail = session.email.toLowerCase();
+    const remainingEmails = loadUserDB<Email[]>(STORAGE_KEYS.emails, SEED_EMAILS).filter(email => {
+      const fromMatch = (email.from || '').toLowerCase() === sessionEmail;
+      const toMatch = (email.to || []).some(recipient => recipient.toLowerCase() === sessionEmail);
+      return !fromMatch && !toMatch;
+    });
+    emailsCache = remainingEmails;
+    saveUserDB(STORAGE_KEYS.emails, remainingEmails);
+
+    const currentDomains = loadUserDB<CustomDomain[]>(STORAGE_KEYS.domains, []).filter(domain => domain.domain !== session.businessDomain);
+    saveUserDB(STORAGE_KEYS.domains, currentDomains);
+
+    this.logout();
+    return { success: true };
+  },
+};
+
+// ---- Email Functions ----
+export const mail = {
+  getByFolder(folder: string): Email[] {
+    emailsCache = loadUserDB<Email[]>(STORAGE_KEYS.emails, SEED_EMAILS);
+    if (folder === 'starred') return emailsCache.filter(e => e.starred && e.folder !== 'trash');
+    if (folder === 'spam') return emailsCache.filter(e => (e.folder === 'spam' || isScamEmail(e)) && e.folder !== 'trash');
+    return emailsCache.filter(e => e.folder === folder);
+  },
+
+  // Business-specific helpers — operate on emails related to a business domain
+  getBusinessByFolder(domain: string, folder: string): Email[] {
+    emailsCache = loadUserDB<Email[]>(STORAGE_KEYS.emails, SEED_EMAILS);
+    const normalizeDomain = (addr: string) => (addr && addr.includes('@')) ? addr.split('@')[1].toLowerCase() : '';
+    return emailsCache.filter(e => {
+      const folderMatches = folder === 'spam'
+        ? (e.folder === 'spam' || isScamEmail(e)) && e.folder !== 'trash'
+        : e.folder === folder;
+      if (!folderMatches) return false;
+      const fromDomain = normalizeDomain(e.from || '');
+      const toDomains = (e.to || []).map(t => normalizeDomain(t));
+      return fromDomain === domain.toLowerCase() || toDomains.includes(domain.toLowerCase());
+    });
+  },
+
+  sendBusiness(domain: string, to: string[], subject: string, body: string): Email {
+    const session = auth.getSession();
+    const fromAddr = `admin@${domain}`;
+    const email: Email = {
+      id: 'bem_' + Math.random().toString(36).slice(2, 8),
+      from: fromAddr,
+      fromName: session?.displayName || 'Business',
+      to, subject, body,
+      date: new Date().toISOString(),
+      folder: 'sent', unread: false, starred: false, labels: [], hasAttachment: false,
+    };
+    emailsCache.unshift(email);
+    saveUserDB(STORAGE_KEYS.emails, emailsCache);
+    return email;
+  },
+
+  getBusinessUnreadCount(domain: string): number {
+    return this.getBusinessByFolder(domain, 'inbox').filter(e => e.unread).length;
+  },
+
+  send(to: string[], subject: string, body: string): Email {
+    const session = auth.getSession();
+    const email: Email = {
+      id: 'em_' + Math.random().toString(36).slice(2, 8),
+      from: session?.email || 'you@velismail.com',
+      fromName: session?.displayName || 'You',
+      to, subject, body,
+      date: new Date().toISOString(),
+      folder: 'sent', unread: false, starred: false, labels: [], hasAttachment: false,
+    };
+    emailsCache.unshift(email);
+    saveUserDB(STORAGE_KEYS.emails, emailsCache);
+    return email;
+  },
+
+  delete(id: string) {
+    const e = emailsCache.find(e => e.id === id);
+    if (e) e.folder = 'trash';
+    saveUserDB(STORAGE_KEYS.emails, emailsCache);
+  },
+
+  toggleStar(id: string): boolean {
+    const e = emailsCache.find(e => e.id === id);
+    if (e) e.starred = !e.starred;
+    saveUserDB(STORAGE_KEYS.emails, emailsCache);
+    return e?.starred ?? false;
+  },
+
+  markRead(id: string) {
+    const e = emailsCache.find(e => e.id === id);
+    if (e) e.unread = false;
+    saveUserDB(STORAGE_KEYS.emails, emailsCache);
+  },
+
+  markUnread(id: string) {
+    const e = emailsCache.find(e => e.id === id);
+    if (e) e.unread = true;
+    saveUserDB(STORAGE_KEYS.emails, emailsCache);
+  },
+
+  archive(id: string) {
+    const e = emailsCache.find(e => e.id === id);
+    if (e) e.folder = 'archive';
+    saveUserDB(STORAGE_KEYS.emails, emailsCache);
+  },
+
+  moveFolder(id: string, folder: string) {
+    const e = emailsCache.find(e => e.id === id);
+    if (e) e.folder = folder;
+    saveUserDB(STORAGE_KEYS.emails, emailsCache);
+  },
+
+  permanentDelete(id: string) {
+    emailsCache = emailsCache.filter(e => e.id !== id);
+    saveUserDB(STORAGE_KEYS.emails, emailsCache);
+  },
+
+  markAllRead(folder: string) {
+    emailsCache.forEach(e => {
+      if (e.folder === folder) e.unread = false;
+    });
+    saveUserDB(STORAGE_KEYS.emails, emailsCache);
+  },
+
+  getUnreadCount(): number {
+    return emailsCache.filter(e => e.unread).length;
+  },
+
+};
+
+// Basic heuristic scam detection. This is a client-side heuristic and should
+// be complemented with backend spam-scoring in production.
+export function isScamEmail(email: Email): boolean {
+  const text = `${email.subject} ${email.body}`.toLowerCase();
+  const suspicious = ['win', 'winner', 'prize', 'congrat', 'urgent', 'password', 'account', 'verify', 'click', 'bank', 'transaction', 'limited time', 'claim', 'invoice', 'payment'];
+  if (suspicious.some(w => text.includes(w))) return true;
+
+  const urlRegex = /https?:\/\/[^\s]+/gi;
+  const urls = (email.body || '').match(urlRegex) || [];
+  if (urls.length >= 2) return true;
+
+  // If sender looks like a generic no-reply with suspicious subject patterns
+  if ((email.from || '').toLowerCase().includes('no-reply') && /verify|confirm|activate/.test(text)) return true;
+
+  return false;
+}
+
+// ---- Domain Functions ----
+export const domains = {
+  getAll(): CustomDomain[] {
+    const storedDomains = loadUserDB<(Partial<CustomDomain> & { id: string; domain: string; status?: 'pending' | 'verified' | 'failed' })[]>(STORAGE_KEYS.domains, []);
+    const normalizedDomains = storedDomains.map(normalizeStoredDomain);
+
+    if (JSON.stringify(storedDomains) !== JSON.stringify(normalizedDomains)) {
+      saveUserDB(STORAGE_KEYS.domains, normalizedDomains);
+    }
+
+    return normalizedDomains;
+  },
+
+  getById(id: string): CustomDomain | null {
+    return this.getAll().find(domain => domain.id === id) || null;
+  },
+
+  getByDomain(domain: string): CustomDomain | null {
+    const normalizedDomain = normalizeDomainInput(domain);
+    return this.getAll().find(entry => entry.domain === normalizedDomain) || null;
+  },
+
+  addDomain(domain: string): CustomDomain {
+    const allDomains = this.getAll();
+    const normalizedDomain = normalizeDomainInput(domain);
+    const existing = allDomains.find(entry => entry.domain === normalizedDomain);
+    if (existing) {
+      return existing;
+    }
+
+    const verificationToken = 'velismail-verify=' + Math.random().toString(36).slice(2, 14);
+    const newDomain: CustomDomain = {
+      id: 'dom_' + Math.random().toString(36).slice(2, 8),
+      domain: normalizedDomain,
+      status: 'pending',
+      verificationToken,
+      dnsRecords: buildDnsRecords(normalizedDomain, verificationToken),
+      checks: buildDomainChecks(normalizedDomain, verificationToken),
+      addedAt: new Date().toISOString(),
+    };
+    allDomains.push(newDomain);
+    saveUserDB(STORAGE_KEYS.domains, allDomains);
+    return newDomain;
+  },
+
+  runVerification(id: string): CustomDomain | null {
+    const allDomains = this.getAll();
+    const domain = allDomains.find(entry => entry.id === id);
+    if (!domain) return null;
+
+    const now = new Date().toISOString();
+    domain.checks = domain.checks.map(check => ({
+      ...check,
+      status: 'verified',
+      actual: check.expected,
+    }));
+    domain.status = 'verified';
+    domain.lastCheckedAt = now;
+    domain.verifiedAt = now;
+
+    saveUserDB(STORAGE_KEYS.domains, allDomains);
+    return domain;
+  },
+
+  verifyDomain(id: string): CustomDomain | null {
+    return this.runVerification(id);
+  },
+
+  setPrimary(id: string): CustomDomain | null {
+    const domain = this.getById(id);
+    if (!domain) return null;
+    const session = auth.getSession();
+    const dkimStatus = domain.checks.find(check => check.key === 'dkim')?.status === 'verified' ? 'verified' : 'pending';
+    const spfStatus = domain.checks.find(check => check.key === 'spf')?.status === 'verified' ? 'verified' : 'pending';
+    const dmarcStatus = domain.checks.find(check => check.key === 'dmarc')?.status === 'verified' ? 'verified' : 'pending';
+
+    auth.updateSettings({
+      businessDomain: domain.domain,
+      businessDomainVerified: domain.status === 'verified',
+      dkimStatus,
+      spfStatus,
+      dmarcStatus,
+      businessProfile: {
+        ...session?.businessProfile,
+        domain: domain.domain,
+        verified: domain.status === 'verified',
+        dkimStatus,
+        spfStatus,
+        dmarcStatus,
+      },
+    });
+
+    return domain;
+  },
+
+  deleteDomain(id: string) {
+    const domainToDelete = this.getById(id);
+    let allDomains = this.getAll();
+    allDomains = allDomains.filter(d => d.id !== id);
+    saveUserDB(STORAGE_KEYS.domains, allDomains);
+
+    const session = auth.getSession();
+    if (session?.businessDomain && domainToDelete?.domain === session.businessDomain) {
+      auth.updateSettings({
+        businessDomain: undefined,
+        businessDomainVerified: false,
+        isBusinessSetupComplete: false,
+        dkimStatus: 'pending',
+        spfStatus: 'pending',
+        dmarcStatus: 'pending',
+        businessProfile: {
+          ...session.businessProfile,
+          domain: undefined,
+          verified: false,
+          dkimStatus: 'pending',
+          spfStatus: 'pending',
+          dmarcStatus: 'pending',
+        },
+      });
+    }
+  },
+};
+
+// ---- Contacts Functions ----
+export const contacts = {
+  getAll(): Contact[] {
+    return loadUserDB<Contact[]>(STORAGE_KEYS.contacts, []);
+  },
+
+  add(data: Omit<Contact, 'id' | 'favorite' | 'createdAt'>): Contact {
+    const all = this.getAll();
+    const c: Contact = {
+      id: 'ct_' + Math.random().toString(36).slice(2, 8),
+      ...data,
+      group: data.group || 'General',
+      favorite: false,
+      createdAt: new Date().toISOString(),
+    };
+    all.push(c);
+    saveUserDB(STORAGE_KEYS.contacts, all);
+    return c;
+  },
+
+  update(id: string, data: Partial<Contact>) {
+    const all = this.getAll();
+    const idx = all.findIndex(c => c.id === id);
+    if (idx !== -1) {
+      all[idx] = { ...all[idx], ...data };
+      saveUserDB(STORAGE_KEYS.contacts, all);
+    }
+  },
+
+  remove(id: string) {
+    let all = this.getAll();
+    all = all.filter(c => c.id !== id);
+    saveUserDB(STORAGE_KEYS.contacts, all);
+  },
+
+  toggleFavorite(id: string): boolean {
+    const all = this.getAll();
+    const c = all.find(c => c.id === id);
+    if (c) c.favorite = !c.favorite;
+    saveUserDB(STORAGE_KEYS.contacts, all);
+    return c?.favorite ?? false;
+  },
+
+  search(query: string): Contact[] {
+    const q = query.toLowerCase();
+    return this.getAll().filter(c =>
+      c.name.toLowerCase().includes(q) ||
+      c.email.toLowerCase().includes(q) ||
+      (c.company || '').toLowerCase().includes(q)
+    );
+  },
+};
+
+// ---- Signature Functions ----
+export const signatures = {
+  getAll(): Signature[] {
+    return loadUserDB<Signature[]>(STORAGE_KEYS.signatures, []);
+  },
+
+  add(name: string, content: string): Signature {
+    const all = this.getAll();
+    const sig: Signature = {
+      id: 'sig_' + Math.random().toString(36).slice(2, 8),
+      name, content,
+      isDefault: all.length === 0,
+    };
+    all.push(sig);
+    saveUserDB(STORAGE_KEYS.signatures, all);
+    return sig;
+  },
+
+  update(id: string, data: Partial<Signature>) {
+    const all = this.getAll();
+    const idx = all.findIndex(s => s.id === id);
+    if (idx !== -1) {
+      all[idx] = { ...all[idx], ...data };
+      saveUserDB(STORAGE_KEYS.signatures, all);
+    }
+  },
+
+  remove(id: string) {
+    let all = this.getAll();
+    all = all.filter(s => s.id !== id);
+    saveUserDB(STORAGE_KEYS.signatures, all);
+  },
+
+  getDefault(): Signature | null {
+    return this.getAll().find(s => s.isDefault) || null;
+  },
+
+  setDefault(id: string) {
+    const all = this.getAll();
+    all.forEach(s => s.isDefault = s.id === id);
+    saveUserDB(STORAGE_KEYS.signatures, all);
+  },
+};
+
+// ---- Theme Functions ----
+export const theme = {
+  get(): 'light' | 'dark' {
+    return loadUserDB<'light' | 'dark'>(STORAGE_KEYS.theme, 'light');
+  },
+
+  set(mode: 'light' | 'dark') {
+    saveUserDB(STORAGE_KEYS.theme, mode);
+    document.documentElement.setAttribute('data-theme', mode);
+  },
+
+  toggle(): 'light' | 'dark' {
+    const current = this.get();
+    const next = current === 'light' ? 'dark' : 'light';
+    this.set(next);
+    return next;
+  },
+
+  init() {
+    const mode = this.get();
+    document.documentElement.setAttribute('data-theme', mode);
+  },
+};
