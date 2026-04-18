@@ -72,7 +72,7 @@ export default function SetupPage() {
         return;
       }
       const payload = { dbUrl: finalDbUrl, apiProvider: finalApiProvider, apiKey: apiKey };
-      const proxyTest = await fetch('/api/verify', {
+      const proxyTest = await fetch((import.meta.env.VITE_API_URL || '') + '/api/verify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)

@@ -150,7 +150,7 @@ export default function BusinessSetup() {
 
     try {
       const verificationStartedAt = performance.now();
-      const response = await fetch('/api/business/verify-domain', {
+      const response = await fetch((import.meta.env.VITE_API_URL || '') + '/api/business/verify-domain', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

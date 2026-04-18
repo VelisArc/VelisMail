@@ -331,7 +331,7 @@ impl TenantService {
         amount: i64,
     ) -> Result<()> {
         let now = Utc::now();
-        let period_start = now.date().and_hms_opt(0, 0, 0).unwrap();
+        let period_start = now.date_naive().and_hms_opt(0, 0, 0).unwrap();
         let period_end = period_start + Duration::days(1);
         
         // Set tenant context for RLS
@@ -395,7 +395,7 @@ impl TenantService {
         
         // Get current usage for today
         let now = Utc::now();
-        let period_start = now.date().and_hms_opt(0, 0, 0).unwrap();
+        let period_start = now.date_naive().and_hms_opt(0, 0, 0).unwrap();
         
         let usage = sqlx::query_as::<_, ResourceUsage>(
             "SELECT * FROM resource_usage WHERE tenant_id = $1 AND period_start = $2"
@@ -439,7 +439,7 @@ impl TenantService {
             .context("Failed to set tenant context")?;
         
         let now = Utc::now();
-        let period_start = now.date().and_hms_opt(0, 0, 0).unwrap();
+        let period_start = now.date_naive().and_hms_opt(0, 0, 0).unwrap();
         
         // Get resource usage for today
         let usage = sqlx::query_as::<_, ResourceUsage>(
@@ -468,8 +468,8 @@ impl TenantService {
         
         // Get user counts (this would need user service integration)
         // TODO: Integrate with user service to get real user counts
-        let total_users = self.fetch_total_users(tenant_id).await.unwrap_or(0);
-        let active_users = self.fetch_active_users(tenant_id).await.unwrap_or(0);
+        let total_users = 0; // TODO: Implement fetch_total_users
+        let active_users = 0; // TODO: Implement fetch_active_users
         
         let stats = TenantStats {
             total_users,
