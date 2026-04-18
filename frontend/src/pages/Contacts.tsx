@@ -12,7 +12,13 @@ export default function Contacts() {
   const user = auth.getSession();
 
   useEffect(() => {
-    if (!user) navigate('/login');
+    if (!user) {
+      navigate('/login');
+    } else if (user.accountType === 'business' && !user.isBusinessSetupComplete) {
+      navigate('/business-setup');
+    } else if (user.accountType === 'personal' && !user.isSetupComplete) {
+      navigate('/setup');
+    }
   }, [navigate, user]);
 
   const [contactList, setContactList] = useState<Contact[]>([]);
@@ -108,7 +114,7 @@ export default function Contacts() {
     return matchSearch && matchGroup;
   });
 
-  if (!user) return null;
+  if (!user || (user.accountType === 'business' && !user.isBusinessSetupComplete) || (user.accountType === 'personal' && !user.isSetupComplete)) return null;
 
   return (
     <div className="contacts-page">
