@@ -1,21 +1,21 @@
 //! Database migrations
 
-use sqlx::PgPool;
 use anyhow::Result;
+use sqlx::PgPool;
 use tracing::info;
 
 /// Run all migrations
 pub async fn run_migrations(pool: &PgPool) -> Result<()> {
     info!("Running database migrations...");
-    
+
     sqlx::migrate!("./migrations").run(pool).await?;
-    
+
     info!("Database migrations completed");
     Ok(())
 }
 
 /// Migration SQL files will be placed in ./migrations directory
-/// 
+///
 /// Migration 001: initial_schema
 /// Migration 002: add_tenant_rls
 /// Migration 003: add_email_tables

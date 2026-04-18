@@ -1,53 +1,53 @@
 //! Error types for VelisMail services
 
-use thiserror::Error;
 use serde::{Deserialize, Serialize};
+use thiserror::Error;
 
 /// Application error enum
 #[derive(Debug, Error)]
 pub enum AppError {
     #[error("Database error: {0}")]
     Database(#[from] sqlx::Error),
-    
+
     #[error("Redis error: {0}")]
     Redis(#[from] redis::RedisError),
-    
+
     #[error("Authentication error: {0}")]
     Auth(#[from] AuthError),
-    
+
     #[error("Validation error: {0}")]
     Validation(#[from] ValidationError),
-    
+
     #[error("Not found: {0}")]
     NotFound(String),
-    
+
     #[error("Unauthorized: {0}")]
     Unauthorized(String),
-    
+
     #[error("Forbidden: {0}")]
     Forbidden(String),
-    
+
     #[error("Rate limit exceeded")]
     RateLimitExceeded,
-    
+
     #[error("Internal server error")]
     Internal,
-    
+
     #[error("Service unavailable")]
     ServiceUnavailable,
-    
+
     #[error("Bad request: {0}")]
     BadRequest(String),
-    
+
     #[error("Conflict: {0}")]
     Conflict(String),
-    
+
     #[error("Encryption error: {0}")]
     Encryption(String),
-    
+
     #[error("Mail delivery failed: {0}")]
     MailDelivery(String),
-    
+
     #[error("AI engine error: {0}")]
     AIEngine(String),
 }
@@ -57,25 +57,25 @@ pub enum AppError {
 pub enum AuthError {
     #[error("Invalid credentials")]
     InvalidCredentials,
-    
+
     #[error("Token expired")]
     TokenExpired,
-    
+
     #[error("Invalid token")]
     InvalidToken,
-    
+
     #[error("Passkey verification failed")]
     PasskeyFailed,
-    
+
     #[error("ZKP verification failed")]
     ZKPFailed,
-    
+
     #[error("Account locked")]
     AccountLocked,
-    
+
     #[error("MFA required")]
     MFARequired,
-    
+
     #[error("Device not trusted")]
     DeviceNotTrusted,
 }
@@ -120,7 +120,7 @@ impl ErrorResponse {
             request_id: None,
         }
     }
-    
+
     pub fn with_details(code: &str, message: &str, details: serde_json::Value) -> Self {
         Self {
             success: false,
@@ -170,7 +170,7 @@ impl axum::response::IntoResponse for AppError {
                 ErrorResponse::new("INTERNAL_ERROR", "Internal server error"),
             ),
         };
-        
+
         (status, axum::Json(error_response)).into_response()
     }
 }

@@ -1,15 +1,15 @@
 //! VelisMail Common Types and Utilities
-//! 
+//!
 //! Shared types used across all VelisMail services.
 
-pub mod types;
+pub mod auth;
 pub mod error;
 pub mod response;
-pub mod auth;
 pub mod tenant;
+pub mod types;
 
-pub use types::*;
+pub use auth::*;
 pub use error::*;
 pub use response::*;
-pub use auth::*;
 pub use tenant::*;
+pub use types::*;

@@ -55,8 +55,9 @@ impl AuthConfig {
                 .unwrap_or_else(|_| "velismail.com".to_string()),
             passkey_origin: std::env::var("PASSKEY_ORIGIN")
                 .unwrap_or_else(|_| "https://velismail.com".to_string()),
-            db_url: std::env::var("DATABASE_URL")
-                .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:5432/velismail_auth".to_string()),
+            db_url: std::env::var("DATABASE_URL").unwrap_or_else(|_| {
+                "postgres://postgres:postgres@localhost:5432/velismail_auth".to_string()
+            }),
             redis_url: std::env::var("REDIS_URL")
                 .unwrap_or_else(|_| "redis://localhost:6379".to_string()),
             max_failed_attempts: std::env::var("MAX_FAILED_ATTEMPTS")

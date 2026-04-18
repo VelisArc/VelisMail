@@ -1,10 +1,10 @@
-//! Property-based tests for external API adapter component
-//!
-//! **Validates: Requirements 2.1**
-//! 
-//! Property 2: Credential Validation Consistency
-//! "For any credential string C, the validation function V(C) shall return the same result when called multiple times,
-//! and for all valid credentials according to provider specifications, V(C) shall return true."
+// Property-based tests for external API adapter component
+//
+// **Validates: Requirements 2.1**
+// 
+// Property 2: Credential Validation Consistency
+// "For any credential string C, the validation function V(C) shall return the same result when called multiple times,
+// and for all valid credentials according to provider specifications, V(C) shall return true."
 
 #[cfg(test)]
 mod property_tests {
@@ -347,12 +347,12 @@ mod property_tests {
     }
 }
 
-//! Property 3: External API Operation Routing
-//!
-//! **Validates: Requirements 2.3, 5.1**
-//! 
-//! Property 3: External API Operation Routing
-//! "For any email operation O and configured external API provider P, when O is processed for a user with provider P configured, the operation shall be routed through provider P."
+// Property 3: External API Operation Routing
+//
+// **Validates: Requirements 2.3, 5.1**
+// 
+// Property 3: External API Operation Routing
+// "For any email operation O and configured external API provider P, when O is processed for a user with provider P configured, the operation shall be routed through provider P."
 
 /// Property 3: External API Operation Routing
 ///
@@ -695,13 +695,13 @@ fn provider_mismatch_strategy() -> impl Strategy<Value = (ProviderType, Connecti
         ),
     ]
 }
-//! Property 26: Provider Failover Reliability
-//!
-//! **Validates: Requirements 2.5**
-//! 
-//! Property 26: Provider Failover Reliability
-//! "For any set of configured providers P and failure sequence F, when the primary provider fails, 
-//! the system shall fail over to the next available provider in P."
+// Property 26: Provider Failover Reliability
+//
+// **Validates: Requirements 2.5**
+// 
+// Property 26: Provider Failover Reliability
+// "For any set of configured providers P and failure sequence F, when the primary provider fails, 
+// the system shall fail over to the next available provider in P."
 
 /// Property 26: Provider Failover Reliability
 ///

@@ -1,12 +1,11 @@
 //! SMTP client for sending emails
 
-use lettre::{
-    Message,
-    message::{header::ContentType, Mailbox},
-    SmtpTransport, Transport,
-    transport::smtp::authentication::Credentials,
-};
 use anyhow::Result;
+use lettre::{
+    message::{header::ContentType, Mailbox},
+    transport::smtp::authentication::Credentials,
+    Message, SmtpTransport, Transport,
+};
 
 /// SMTP client wrapper
 pub struct SmtpClient {
@@ -56,13 +55,9 @@ impl SmtpClient {
         // Build message with plain text body
         let email = if let Some(_html) = html_body {
             // In production, build multipart message with both plain and HTML
-            builder
-                .header(ContentType::TEXT_PLAIN)
-                .body(body)?
+            builder.header(ContentType::TEXT_PLAIN).body(body)?
         } else {
-            builder
-                .header(ContentType::TEXT_PLAIN)
-                .body(body)?
+            builder.header(ContentType::TEXT_PLAIN).body(body)?
         };
 
         // Send email (note: lettre 0.11 uses sync transport)

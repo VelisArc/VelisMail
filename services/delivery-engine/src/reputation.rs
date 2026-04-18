@@ -1,8 +1,8 @@
 //! IP reputation tracking
 
-use sqlx::PgPool;
-use chrono::{DateTime, Utc};
 use anyhow::Result;
+use chrono::{DateTime, Utc};
+use sqlx::PgPool;
 
 pub struct ReputationTracker {
     db: PgPool,

@@ -1,8 +1,8 @@
 //! Core data types for VelisMail
 
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
-use chrono::{DateTime, Utc};
 use validator::Validate;
 
 /// Email address type with validation
@@ -89,9 +89,13 @@ pub struct Pagination {
 
 impl Pagination {
     pub fn new(page: u32, per_page: u32, total: u64) -> Self {
-        Self { page, per_page, total }
+        Self {
+            page,
+            per_page,
+            total,
+        }
     }
-    
+
     pub fn offset(&self) -> u32 {
         (self.page - 1) * self.per_page
     }

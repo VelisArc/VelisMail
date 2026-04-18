@@ -1,9 +1,9 @@
 //! Multi-tenant system types
 
+use crate::types::TenantId;
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
-use chrono::{DateTime, Utc};
-use crate::types::TenantId;
 
 /// Tenant information
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -18,8 +18,9 @@ impl TenantConfig {
                 .ok()
                 .and_then(|p| p.parse().ok())
                 .unwrap_or(3004),
-            db_url: std::env::var("DATABASE_URL")
-                .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:5432/velismail_tenant".to_string()),
+            db_url: std::env::var("DATABASE_URL").unwrap_or_else(|_| {
+                "postgres://postgres:postgres@localhost:5432/velismail_tenant".to_string()
+            }),
             redis_url: std::env::var("REDIS_URL")
                 .unwrap_or_else(|_| "redis://localhost:6379".to_string()),
         })

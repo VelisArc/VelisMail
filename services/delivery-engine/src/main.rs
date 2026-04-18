@@ -11,15 +11,15 @@ use tokio::net::TcpListener;
 use tracing::info;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
-mod handlers;
-mod dkim;
-mod spf;
-mod dmarc;
-mod reputation;
 mod bounce;
 mod config;
-mod state;
+mod dkim;
+mod dmarc;
+mod handlers;
 mod middleware;
+mod reputation;
+mod spf;
+mod state;
 
 use config::DeliveryConfig;
 use state::DeliveryState;

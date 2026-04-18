@@ -1,7 +1,7 @@
 //! Storage encryption (AES-256-GCM)
 
-use velismail_crypto::aes::EncryptionKey;
 use anyhow::Result;
+use velismail_crypto::aes::EncryptionKey;
 
 /// Storage encryption manager
 pub struct StorageEncryption {

@@ -1,10 +1,10 @@
 //! Tenant service database models
 
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use sqlx::FromRow;
 use uuid::Uuid;
-use chrono::{DateTime, Utc};
-use serde_json::Value;
 
 /// Tenant entity
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]

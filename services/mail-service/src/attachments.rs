@@ -2,10 +2,10 @@
 //!
 //! Implements attachment validation, size limiting, and storage management.
 
+use anyhow::{anyhow, Result};
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
-use chrono::{DateTime, Utc};
-use anyhow::{anyhow, Result};
 
 /// Attachment metadata
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -38,10 +38,10 @@ pub struct AttachmentConfig {
 impl Default for AttachmentConfig {
     fn default() -> Self {
         Self {
-            max_file_size: 25 * 1024 * 1024,                // 25 MB
+            max_file_size: 25 * 1024 * 1024, // 25 MB
             max_attachments_per_email: 10,
-            max_total_size_per_email: 100 * 1024 * 1024,    // 100 MB
-            allowed_mime_types: vec![],                      // All allowed by default
+            max_total_size_per_email: 100 * 1024 * 1024, // 100 MB
+            allowed_mime_types: vec![],                  // All allowed by default
             blocked_extensions: vec![
                 "exe".to_string(),
                 "bat".to_string(),
@@ -72,7 +72,7 @@ impl AttachmentHandler {
     pub fn new(config: AttachmentConfig) -> Self {
         Self { config }
     }
-    
+
     /// Validate a single attachment
     pub fn validate_attachment(
         &self,
@@ -81,7 +81,7 @@ impl AttachmentHandler {
         size_bytes: i64,
     ) -> Result<()> {
         let mut errors = Vec::new();
-        
+
         // Check file size
         if size_bytes > self.config.max_file_size {
             errors.push(format!(
@@ -89,41 +89,42 @@ impl AttachmentHandler {
                 size_bytes, self.config.max_file_size
             ));
         }
-        
+
         // Check file extension
         if let Some(ext) = get_file_extension(filename) {
             if self.config.blocked_extensions.contains(&ext.to_lowercase()) {
-                errors.push(format!(
-                    "File extension .{} is not allowed",
-                    ext
-                ));
+                errors.push(format!("File extension .{} is not allowed", ext));
             }
         }
-        
+
         // Check MIME type
         if !self.config.allowed_mime_types.is_empty() {
-            if !self.config.allowed_mime_types.contains(&content_type.to_string()) {
-                errors.push(format!(
-                    "MIME type {} is not allowed",
-                    content_type
-                ));
+            if !self
+                .config
+                .allowed_mime_types
+                .contains(&content_type.to_string())
+            {
+                errors.push(format!("MIME type {} is not allowed", content_type));
             }
         }
-        
+
         if !errors.is_empty() {
-            return Err(anyhow!("Attachment validation failed: {}", errors.join("; ")));
+            return Err(anyhow!(
+                "Attachment validation failed: {}",
+                errors.join("; ")
+            ));
         }
-        
+
         Ok(())
     }
-    
+
     /// Validate multiple attachments for an email
     pub fn validate_attachments(
         &self,
         attachments: &[(String, String, i64)], // (filename, content_type, size_bytes)
     ) -> AttachmentValidationResult {
         let mut errors = Vec::new();
-        
+
         // Check attachment count
         if attachments.len() > self.config.max_attachments_per_email {
             errors.push(format!(
@@ -132,7 +133,7 @@ impl AttachmentHandler {
                 self.config.max_attachments_per_email
             ));
         }
-        
+
         // Check total size
         let total_size: i64 = attachments.iter().map(|(_, _, size)| size).sum();
         if total_size > self.config.max_total_size_per_email {
@@ -141,20 +142,20 @@ impl AttachmentHandler {
                 total_size, self.config.max_total_size_per_email
             ));
         }
-        
+
         // Validate each attachment
         for (filename, content_type, size) in attachments {
             if let Err(e) = self.validate_attachment(filename, content_type, *size) {
                 errors.push(e.to_string());
             }
         }
-        
+
         AttachmentValidationResult {
             valid: errors.is_empty(),
             errors,
         }
     }
-    
+
     /// Generate a storage key for an attachment
     pub fn generate_storage_key(&self, email_id: &Uuid, filename: &str) -> String {
         let timestamp = Utc::now().timestamp_millis();
@@ -169,21 +170,16 @@ impl AttachmentHandler {
 
 /// Get file extension from filename
 fn get_file_extension(filename: &str) -> Option<String> {
-    filename
-        .split('.')
-        .last()
-        .map(|s| s.to_string())
+    filename.split('.').last().map(|s| s.to_string())
 }
 
 /// Sanitize filename for safe storage
 fn sanitize_filename(filename: &str) -> String {
     filename
         .chars()
-        .map(|c| {
-            match c {
-                '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|' => '_',
-                _ => c,
-            }
+        .map(|c| match c {
+            '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|' => '_',
+            _ => c,
         })
         .collect::<String>()
         .trim()
@@ -193,75 +189,82 @@ fn sanitize_filename(filename: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_file_extension_extraction() {
         assert_eq!(get_file_extension("document.pdf"), Some("pdf".to_string()));
         assert_eq!(get_file_extension("image.jpg"), Some("jpg".to_string()));
         assert_eq!(get_file_extension("noextension"), None);
     }
-    
+
     #[test]
     fn test_filename_sanitization() {
         assert_eq!(sanitize_filename("file/name.txt"), "file_name.txt");
         assert_eq!(sanitize_filename("file:name.txt"), "file_name.txt");
         assert_eq!(sanitize_filename("normal.txt"), "normal.txt");
     }
-    
+
     #[test]
     fn test_attachment_validation() {
         let config = AttachmentConfig::default();
         let handler = AttachmentHandler::new(config);
-        
+
         // Valid attachment
         assert!(handler
             .validate_attachment("document.pdf", "application/pdf", 1024 * 1024)
             .is_ok());
-        
+
         // File too large
         assert!(handler
-            .validate_attachment(
-                "large.zip",
-                "application/zip",
-                30 * 1024 * 1024
-            )
+            .validate_attachment("large.zip", "application/zip", 30 * 1024 * 1024)
             .is_err());
-        
+
         // Blocked extension
         assert!(handler
             .validate_attachment("malware.exe", "application/octet-stream", 1024)
             .is_err());
     }
-    
+
     #[test]
     fn test_multiple_attachments_validation() {
         let config = AttachmentConfig::default();
         let handler = AttachmentHandler::new(config);
-        
+
         let attachments = vec![
-            ("file1.pdf".to_string(), "application/pdf".to_string(), 1024 * 1024),
-            ("file2.pdf".to_string(), "application/pdf".to_string(), 2 * 1024 * 1024),
+            (
+                "file1.pdf".to_string(),
+                "application/pdf".to_string(),
+                1024 * 1024,
+            ),
+            (
+                "file2.pdf".to_string(),
+                "application/pdf".to_string(),
+                2 * 1024 * 1024,
+            ),
         ];
-        
+
         let result = handler.validate_attachments(&attachments);
         assert!(result.valid);
     }
-    
+
     #[test]
     fn test_attachments_count_limit() {
         let mut config = AttachmentConfig::default();
         config.max_attachments_per_email = 2;
-        
+
         let handler = AttachmentHandler::new(config);
-        
+
         let attachments = vec![
             ("file1.pdf".to_string(), "application/pdf".to_string(), 1024),
             ("file2.pdf".to_string(), "application/pdf".to_string(), 1024),
             ("file3.pdf".to_string(), "application/pdf".to_string(), 1024),
         ];
-        
+
         let result = handler.validate_attachments(&attachments);
         assert!(!result.valid);
-        assert!(result.errors.iter().any(|e| e.contains("Too many attachments")));
+        assert!(result
+            .errors
+            .iter()
+            .any(|e| e.contains("Too many attachments")));
     }
 }

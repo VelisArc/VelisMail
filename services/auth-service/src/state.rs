@@ -1,11 +1,11 @@
 //! Auth service state
 
+use crate::config::AuthConfig;
+use crate::jwt::JwtManager;
+use anyhow::Result;
 use axum::extract::FromRef;
 use sqlx::PgPool;
 use std::sync::Arc;
-use anyhow::Result;
-use crate::config::AuthConfig;
-use crate::jwt::JwtManager;
 
 #[derive(Clone, FromRef)]
 pub struct AuthState {
@@ -24,7 +24,10 @@ impl AuthState {
         let redis = Arc::new(redis::Client::open(config.redis_url.clone())?);
 
         // Create JWT manager
-        let jwt_manager = Arc::new(JwtManager::new(&config.jwt_secret, config.jwt_expiry_seconds)?);
+        let jwt_manager = Arc::new(JwtManager::new(
+            &config.jwt_secret,
+            config.jwt_expiry_seconds,
+        )?);
 
         // Run migrations
         sqlx::migrate!("./migrations").run(&db).await?;

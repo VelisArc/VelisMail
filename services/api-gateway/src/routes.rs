@@ -1,13 +1,12 @@
 //! API routes
 
+use crate::state::AppState;
 use axum::{
-    routing::{get, post, put, delete},
-    Router,
-    Json,
     extract::State,
+    routing::{delete, get, post, put},
+    Json, Router,
 };
 use serde_json::json;
-use crate::state::AppState;
 
 /// Build API v1 routes
 pub fn api_v1_routes(_state: &AppState) -> Router<AppState> {
@@ -122,18 +121,14 @@ pub async fn refresh_token(
     }))
 }
 
-pub async fn logout(
-    State(_state): State<AppState>,
-) -> Json<serde_json::Value> {
+pub async fn logout(State(_state): State<AppState>) -> Json<serde_json::Value> {
     Json(json!({
         "success": true,
         "message": "Logged out successfully"
     }))
 }
 
-pub async fn get_current_user(
-    State(_state): State<AppState>,
-) -> Json<serde_json::Value> {
+pub async fn get_current_user(State(_state): State<AppState>) -> Json<serde_json::Value> {
     Json(json!({
         "success": true,
         "user": {
@@ -155,9 +150,7 @@ pub async fn send_email(
     }))
 }
 
-pub async fn get_inbox(
-    State(_state): State<AppState>,
-) -> Json<serde_json::Value> {
+pub async fn get_inbox(State(_state): State<AppState>) -> Json<serde_json::Value> {
     Json(json!({
         "success": true,
         "emails": [],
@@ -169,9 +162,7 @@ pub async fn get_inbox(
     }))
 }
 
-pub async fn get_sent(
-    State(_state): State<AppState>,
-) -> Json<serde_json::Value> {
+pub async fn get_sent(State(_state): State<AppState>) -> Json<serde_json::Value> {
     Json(json!({
         "success": true,
         "emails": [],
@@ -183,9 +174,7 @@ pub async fn get_sent(
     }))
 }
 
-pub async fn get_drafts(
-    State(_state): State<AppState>,
-) -> Json<serde_json::Value> {
+pub async fn get_drafts(State(_state): State<AppState>) -> Json<serde_json::Value> {
     Json(json!({
         "success": true,
         "drafts": [],
@@ -197,9 +186,7 @@ pub async fn get_drafts(
     }))
 }
 
-pub async fn get_email(
-    State(_state): State<AppState>,
-) -> Json<serde_json::Value> {
+pub async fn get_email(State(_state): State<AppState>) -> Json<serde_json::Value> {
     Json(json!({
         "success": true,
         "email": {
@@ -212,9 +199,7 @@ pub async fn get_email(
     }))
 }
 
-pub async fn delete_email(
-    State(_state): State<AppState>,
-) -> Json<serde_json::Value> {
+pub async fn delete_email(State(_state): State<AppState>) -> Json<serde_json::Value> {
     Json(json!({
         "success": true,
         "message": "Email deleted"
@@ -253,9 +238,7 @@ pub async fn create_tenant(
     }))
 }
 
-pub async fn get_my_tenant(
-    State(_state): State<AppState>,
-) -> Json<serde_json::Value> {
+pub async fn get_my_tenant(State(_state): State<AppState>) -> Json<serde_json::Value> {
     Json(json!({
         "success": true,
         "tenant": {
@@ -286,9 +269,7 @@ pub async fn verify_domain(
     }))
 }
 
-pub async fn list_users(
-    State(_state): State<AppState>,
-) -> Json<serde_json::Value> {
+pub async fn list_users(State(_state): State<AppState>) -> Json<serde_json::Value> {
     Json(json!({
         "success": true,
         "users": [],
@@ -310,9 +291,7 @@ pub async fn update_settings(
     }))
 }
 
-pub async fn upload_attachment(
-    State(_state): State<AppState>,
-) -> Json<serde_json::Value> {
+pub async fn upload_attachment(State(_state): State<AppState>) -> Json<serde_json::Value> {
     Json(json!({
         "success": true,
         "attachment_id": uuid::Uuid::new_v4().to_string(),
@@ -320,9 +299,7 @@ pub async fn upload_attachment(
     }))
 }
 
-pub async fn download_attachment(
-    State(_state): State<AppState>,
-) -> Json<serde_json::Value> {
+pub async fn download_attachment(State(_state): State<AppState>) -> Json<serde_json::Value> {
     Json(json!({
         "success": true,
         "url": "https://storage.velismail.com/attachments/file123",
@@ -330,18 +307,14 @@ pub async fn download_attachment(
     }))
 }
 
-pub async fn delete_attachment(
-    State(_state): State<AppState>,
-) -> Json<serde_json::Value> {
+pub async fn delete_attachment(State(_state): State<AppState>) -> Json<serde_json::Value> {
     Json(json!({
         "success": true,
         "message": "Attachment deleted"
     }))
 }
 
-pub async fn search_emails(
-    State(_state): State<AppState>,
-) -> Json<serde_json::Value> {
+pub async fn search_emails(State(_state): State<AppState>) -> Json<serde_json::Value> {
     Json(json!({
         "success": true,
         "results": [],

@@ -9,7 +9,7 @@ impl DmarcChecker {
     pub async fn check(domain: &str, spf_pass: bool, dkim_pass: bool) -> Result<DmarcResult> {
         // In production, query DNS for _dmarc.domain
         let _ = (domain, spf_pass, dkim_pass);
-        
+
         Ok(DmarcResult {
             pass: true,
             policy: "reject".to_string(),

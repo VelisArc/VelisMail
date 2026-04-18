@@ -1,7 +1,7 @@
 //! API response wrappers
 
-use serde::{Deserialize, Serialize};
 use crate::Pagination;
+use serde::{Deserialize, Serialize};
 
 /// Standard API response
 #[derive(Debug, Serialize, Deserialize)]
@@ -21,7 +21,7 @@ impl<T> ApiResponse<T> {
             meta: None,
         }
     }
-    
+
     pub fn with_pagination(data: T, pagination: Pagination) -> Self {
         Self {
             success: true,
@@ -30,7 +30,7 @@ impl<T> ApiResponse<T> {
             meta: None,
         }
     }
-    
+
     pub fn with_meta(data: T, meta: serde_json::Value) -> Self {
         Self {
             success: true,

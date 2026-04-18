@@ -4,24 +4,24 @@
 //! threading, and real-time sync.
 
 use axum::{
-    routing::{get, post, put, delete},
+    routing::{delete, get, post, put},
     Router,
 };
 use tokio::net::TcpListener;
 use tracing::info;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
-mod handlers;
-mod smtp;
-mod models;
-mod threading;
-mod config;
-mod state;
-mod middleware;
-mod rules;
 mod attachments;
-mod workflows;
+mod config;
+mod handlers;
 mod http_delivery;
+mod middleware;
+mod models;
+mod rules;
+mod smtp;
+mod state;
+mod threading;
+mod workflows;
 
 use config::MailConfig;
 use state::MailState;

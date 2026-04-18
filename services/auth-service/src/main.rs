@@ -4,22 +4,22 @@
 //! and session management with zero-trust architecture.
 
 use axum::{
-    routing::{get, post, delete},
+    routing::{delete, get, post},
     Router,
 };
 use tokio::net::TcpListener;
 use tracing::info;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
+mod account_lock;
+mod config;
 mod handlers;
 mod jwt;
-mod passkey;
-mod session;
-mod routes;
-mod config;
-mod state;
 mod middleware;
-mod account_lock;
+mod passkey;
+mod routes;
+mod session;
+mod state;
 
 use config::AuthConfig;
 use state::AuthState;

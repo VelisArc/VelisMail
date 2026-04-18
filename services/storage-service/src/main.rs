@@ -4,19 +4,19 @@
 //! for email bodies and attachments.
 
 use axum::{
-    routing::{get, post, delete},
+    routing::{delete, get, post},
     Router,
 };
 use tokio::net::TcpListener;
 use tracing::info;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
-mod handlers;
-mod s3_client;
-mod encryption;
 mod config;
-mod state;
+mod encryption;
+mod handlers;
 mod middleware;
+mod s3_client;
+mod state;
 
 use config::StorageConfig;
 use state::StorageState;

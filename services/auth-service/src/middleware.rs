@@ -1,15 +1,8 @@
 //! Auth service middleware
 
-use axum::{
-    extract::Request,
-    http::StatusCode,
-    middleware::Next,
-    response::Response,
-};
+use axum::{extract::Request, http::StatusCode, middleware::Next, response::Response};
 use std::time::Duration;
-use tower::{
-    limit::RateLimitLayer,
-};
+use tower::limit::RateLimitLayer;
 use tower_http::cors::CorsLayer;
 
 /// Rate limiting layer
@@ -23,18 +16,13 @@ pub fn cors_layer() -> CorsLayer {
 }
 
 /// Authentication middleware for protected routes
-pub async fn require_auth(
-    request: Request,
-    next: Next,
-) -> Result<Response, StatusCode> {
+pub async fn require_auth(request: Request, next: Next) -> Result<Response, StatusCode> {
     let auth_header = request
         .headers()
         .get(axum::http::header::AUTHORIZATION)
         .ok_or(StatusCode::UNAUTHORIZED)?;
 
-    let auth_str = auth_header
-        .to_str()
-        .map_err(|_| StatusCode::UNAUTHORIZED)?;
+    let auth_str = auth_header.to_str().map_err(|_| StatusCode::UNAUTHORIZED)?;
 
     if !auth_str.starts_with("Bearer ") {
         return Err(StatusCode::UNAUTHORIZED);

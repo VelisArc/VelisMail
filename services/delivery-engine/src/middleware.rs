@@ -1,12 +1,23 @@
-use axum::{http::{Request, StatusCode}, middleware::Next, response::Response, body::Body};
+use axum::{
+    body::Body,
+    http::{Request, StatusCode},
+    middleware::Next,
+    response::Response,
+};
 use tower_http::cors::CorsLayer;
 
 pub async fn auth_layer(request: Request<Body>, next: Next) -> Result<Response, StatusCode> {
-    let auth_header = request.headers().get(axum::http::header::AUTHORIZATION)
+    let auth_header = request
+        .headers()
+        .get(axum::http::header::AUTHORIZATION)
         .ok_or(StatusCode::UNAUTHORIZED)?;
     let auth_str = auth_header.to_str().map_err(|_| StatusCode::UNAUTHORIZED)?;
-    if !auth_str.starts_with("Bearer ") { return Err(StatusCode::UNAUTHORIZED); }
+    if !auth_str.starts_with("Bearer ") {
+        return Err(StatusCode::UNAUTHORIZED);
+    }
     Ok(next.run(request).await)
 }
 
-pub fn cors_layer() -> CorsLayer { CorsLayer::permissive() }
+pub fn cors_layer() -> CorsLayer {
+    CorsLayer::permissive()
+}

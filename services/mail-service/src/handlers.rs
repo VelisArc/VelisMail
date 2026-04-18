@@ -1,16 +1,16 @@
 //! Mail service route handlers
 
+use crate::models::{BatchLabelRequest, BatchMoveRequest, CreateEmailRequest};
+use crate::state::MailState;
 use axum::{
-    extract::{State, Path},
+    extract::{Path, State},
     http::StatusCode,
     Json,
 };
-use serde_json::json;
 use serde::Deserialize;
+use serde_json::json;
 use uuid::Uuid;
 use velismail_common::{FolderType, MessageStatus};
-use crate::state::MailState;
-use crate::models::{CreateEmailRequest, BatchMoveRequest, BatchLabelRequest};
 
 /// Health check
 pub async fn health_check() -> Json<serde_json::Value> {
@@ -54,7 +54,8 @@ pub async fn send_email(
     // sqlx::query!("INSERT INTO emails ...").execute(&state.db).await
 
     // Publish to NATS for async processing
-    let _ = state.nats
+    let _ = state
+        .nats
         .publish("mail.outgoing", message_id.to_string().into())
         .await;
 

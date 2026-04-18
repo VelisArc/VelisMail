@@ -1,9 +1,9 @@
 //! PostgreSQL connection pool with tenant isolation
 
-use sqlx::{PgPool, postgres::PgPoolOptions};
 use anyhow::Result;
-use tracing::info;
 use futures::future::BoxFuture;
+use sqlx::{postgres::PgPoolOptions, PgPool};
+use tracing::info;
 
 /// Database configuration
 #[derive(Clone, Debug)]
@@ -38,7 +38,7 @@ impl DbConfig {
                 .unwrap_or(5),
         })
     }
-    
+
     pub fn connection_string(&self) -> String {
         format!(
             "postgres://{}:{}@{}:{}/{}",
@@ -54,7 +54,7 @@ pub async fn create_pool(config: &DbConfig) -> Result<PgPool> {
         .min_connections(config.min_connections)
         .connect(&config.connection_string())
         .await?;
-    
+
     info!("Database pool created: {}", config.connection_string());
     Ok(pool)
 }
@@ -69,23 +69,19 @@ pub async fn set_tenant_context(pool: &PgPool, tenant_id: &str) -> Result<()> {
 }
 
 /// Execute a query with tenant isolation
-pub async fn with_tenant_context<'a, F, T>(
-    pool: &PgPool,
-    tenant_id: &str,
-    f: F,
-) -> Result<T>
+pub async fn with_tenant_context<'a, F, T>(pool: &PgPool, tenant_id: &str, f: F) -> Result<T>
 where
     F: FnOnce(&PgPool) -> BoxFuture<'a, Result<T>>,
 {
     let mut tx = pool.begin().await?;
-    
+
     sqlx::query("SET LOCAL velismail.tenant_id = $1")
         .bind(tenant_id)
         .execute(&mut *tx)
         .await?;
-    
+
     let result = f(&pool).await?;
-    
+
     tx.commit().await?;
     Ok(result)
 }
@@ -99,7 +95,7 @@ pub async fn check_health(pool: &PgPool) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_connection_string() {
         let config = DbConfig {
@@ -111,7 +107,7 @@ mod tests {
             max_connections: 10,
             min_connections: 2,
         };
-        
+
         assert_eq!(
             config.connection_string(),
             "postgres://user:pass@localhost:5432/test"

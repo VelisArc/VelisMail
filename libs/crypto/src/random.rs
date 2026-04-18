@@ -1,13 +1,14 @@
 //! Cryptographically secure random number generation
 
-use ring::rand::{SystemRandom, SecureRandom};
 use anyhow::Result;
+use ring::rand::{SecureRandom, SystemRandom};
 
 /// Generate cryptographically secure random bytes
 pub fn random_bytes(length: usize) -> Result<Vec<u8>> {
     let mut bytes = vec![0u8; length];
     let rng = SystemRandom::new();
-    rng.fill(&mut bytes).map_err(|_| anyhow::anyhow!("Random bytes generation failed"))?;
+    rng.fill(&mut bytes)
+        .map_err(|_| anyhow::anyhow!("Random bytes generation failed"))?;
     Ok(bytes)
 }
 
@@ -25,7 +26,7 @@ pub fn random_challenge(length: usize) -> Result<Vec<u8>> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_random_bytes() {
         let b1 = random_bytes(32).unwrap();
@@ -33,7 +34,7 @@ mod tests {
         assert_ne!(b1, b2);
         assert_eq!(b1.len(), 32);
     }
-    
+
     #[test]
     fn test_random_token() {
         let token = random_token(16).unwrap();

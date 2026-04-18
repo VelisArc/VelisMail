@@ -1,19 +1,19 @@
 //! Tenant handlers
 
+use anyhow::Context;
 use axum::{
-    extract::{State, Path},
+    extract::{Path, State},
     http::StatusCode,
     Json,
 };
 use serde_json::json;
-use uuid::Uuid;
-use anyhow::Context;
-use tracing::info;
 use sqlx::Row;
+use tracing::info;
+use uuid::Uuid;
 
-use crate::state::TenantState;
-use crate::models::{CreateTenantRequest, UpdateTenantRequest, AddDomainRequest};
+use crate::models::{AddDomainRequest, CreateTenantRequest, UpdateTenantRequest};
 use crate::service::TenantService;
+use crate::state::TenantState;
 
 pub async fn health_check() -> Json<serde_json::Value> {
     Json(json!({"status": "healthy", "service": "tenant-service"}))
@@ -24,7 +24,7 @@ pub async fn create_tenant(
     Json(request): Json<CreateTenantRequest>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
     let service = TenantService::new(state.db.clone());
-    
+
     match service.create_tenant(request).await {
         Ok(tenant) => Ok(Json(json!({
             "success": true,
@@ -53,7 +53,7 @@ pub async fn get_tenant(
         Ok(id) => id,
         Err(_) => return Err(StatusCode::BAD_REQUEST),
     };
-    
+
     match service.get_tenant(tenant_id).await {
         Ok(Some(tenant)) => Ok(Json(json!({
             "success": true,
@@ -87,7 +87,7 @@ pub async fn update_tenant(
         Ok(id) => id,
         Err(_) => return Err(StatusCode::BAD_REQUEST),
     };
-    
+
     match service.update_tenant(tenant_id, request).await {
         Ok(tenant) => Ok(Json(json!({
             "success": true,
@@ -127,16 +127,16 @@ pub async fn list_domains(
         Ok(id) => id,
         Err(_) => return Err(StatusCode::BAD_REQUEST),
     };
-    
+
     // Set tenant context
     if let Err(err) = service.set_tenant_context(tenant_id).await {
         info!("Failed to set tenant context: {}", err);
         return Err(StatusCode::INTERNAL_SERVER_ERROR);
     }
-    
+
     // Fetch domains
     let domains = sqlx::query_as::<_, crate::models::CustomDomain>(
-        "SELECT * FROM custom_domains WHERE tenant_id = $1 ORDER BY created_at DESC"
+        "SELECT * FROM custom_domains WHERE tenant_id = $1 ORDER BY created_at DESC",
     )
     .bind(tenant_id)
     .fetch_all(&state.db)
@@ -145,7 +145,7 @@ pub async fn list_domains(
         info!("Failed to fetch domains: {}", err);
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
-    
+
     Ok(Json(json!({
         "success": true,
         "domains": domains
@@ -162,7 +162,7 @@ pub async fn add_domain(
         Ok(id) => id,
         Err(_) => return Err(StatusCode::BAD_REQUEST),
     };
-    
+
     match service.add_domain(tenant_id, request).await {
         Ok(domain) => Ok(Json(json!({
             "success": true,
@@ -190,13 +190,13 @@ pub async fn verify_domain(
         Ok(id) => id,
         Err(_) => return Err(StatusCode::BAD_REQUEST),
     };
-    
+
     // Set tenant context
     if let Err(err) = service.set_tenant_context(tenant_id).await {
         info!("Failed to set tenant context: {}", err);
         return Err(StatusCode::INTERNAL_SERVER_ERROR);
     }
-    
+
     // Update domain verification status
     let result = sqlx::query(
         r#"
@@ -204,7 +204,7 @@ pub async fn verify_domain(
         SET verification_status = 'verified', verified_at = NOW()
         WHERE tenant_id = $1 AND domain_name = $2
         RETURNING id
-        "#
+        "#,
     )
     .bind(tenant_id)
     .bind(&domain)
@@ -214,23 +214,25 @@ pub async fn verify_domain(
         info!("Failed to verify domain: {}", err);
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
-    
+
     if result.is_none() {
         return Err(StatusCode::NOT_FOUND);
     }
-    
+
     // Log audit event
-    let _ = service.log_audit(
-        tenant_id,
-        None,
-        "domain_verified",
-        "domain",
-        result.map(|row| row.get("id")),
-        json!({"domain_name": domain}),
-        None,
-        None,
-    ).await;
-    
+    let _ = service
+        .log_audit(
+            tenant_id,
+            None,
+            "domain_verified",
+            "domain",
+            result.map(|row| row.get("id")),
+            json!({"domain_name": domain}),
+            None,
+            None,
+        )
+        .await;
+
     Ok(Json(json!({
         "success": true,
         "domain": domain,
@@ -247,7 +249,7 @@ pub async fn get_settings(
         Ok(id) => id,
         Err(_) => return Err(StatusCode::BAD_REQUEST),
     };
-    
+
     match service.get_tenant(tenant_id).await {
         Ok(Some(tenant)) => Ok(Json(json!({
             "success": true,
@@ -272,7 +274,7 @@ pub async fn update_settings(
         Ok(id) => id,
         Err(_) => return Err(StatusCode::BAD_REQUEST),
     };
-    
+
     let request = UpdateTenantRequest {
         organization_name: None,
         organization_email: None,
@@ -281,9 +283,11 @@ pub async fn update_settings(
         settings: Some(settings),
         limits: None,
     };
-    
+
     match service.update_tenant(tenant_id, request).await {
-        Ok(_) => Ok(Json(json!({"success": true, "message": "Settings updated"}))),
+        Ok(_) => Ok(Json(
+            json!({"success": true, "message": "Settings updated"}),
+        )),
         Err(err) => {
             info!("Failed to update settings: {}", err);
             Err(StatusCode::INTERNAL_SERVER_ERROR)
@@ -300,7 +304,7 @@ pub async fn get_billing(
         Ok(id) => id,
         Err(_) => return Err(StatusCode::BAD_REQUEST),
     };
-    
+
     match service.get_tenant(tenant_id).await {
         Ok(Some(tenant)) => Ok(Json(json!({
             "success": true,
@@ -323,16 +327,16 @@ pub async fn get_audit_logs(
         Ok(id) => id,
         Err(_) => return Err(StatusCode::BAD_REQUEST),
     };
-    
+
     // Set tenant context
     if let Err(err) = service.set_tenant_context(tenant_id).await {
         info!("Failed to set tenant context: {}", err);
         return Err(StatusCode::INTERNAL_SERVER_ERROR);
     }
-    
+
     // Fetch audit logs
     let logs = sqlx::query_as::<_, crate::models::AuditLog>(
-        "SELECT * FROM audit_logs WHERE tenant_id = $1 ORDER BY created_at DESC LIMIT 50"
+        "SELECT * FROM audit_logs WHERE tenant_id = $1 ORDER BY created_at DESC LIMIT 50",
     )
     .bind(tenant_id)
     .fetch_all(&state.db)
@@ -341,7 +345,7 @@ pub async fn get_audit_logs(
         info!("Failed to fetch audit logs: {}", err);
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
-    
+
     Ok(Json(json!({
         "success": true,
         "logs": logs,
@@ -358,7 +362,7 @@ pub async fn get_stats(
         Ok(id) => id,
         Err(_) => return Err(StatusCode::BAD_REQUEST),
     };
-    
+
     match service.get_tenant_stats(tenant_id).await {
         Ok(stats) => Ok(Json(json!({
             "success": true,
@@ -380,7 +384,7 @@ pub async fn check_limits(
         Ok(id) => id,
         Err(_) => return Err(StatusCode::BAD_REQUEST),
     };
-    
+
     match service.check_resource_limits(tenant_id).await {
         Ok(Some(warning)) => Ok(Json(json!({
             "success": true,

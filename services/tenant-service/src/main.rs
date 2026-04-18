@@ -10,12 +10,7 @@ use tokio::net::TcpListener;
 use tracing::info;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
-use velismail_tenant_service::{
-    config::TenantConfig,
-    state::TenantState,
-    handlers,
-    middleware,
-};
+use velismail_tenant_service::{config::TenantConfig, handlers, middleware, state::TenantState};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -40,7 +35,10 @@ async fn main() -> anyhow::Result<()> {
         .route("/tenants/:id/users", get(handlers::list_users))
         .route("/tenants/:id/domains", get(handlers::list_domains))
         .route("/tenants/:id/domains", post(handlers::add_domain))
-        .route("/tenants/:id/domains/:domain/verify", post(handlers::verify_domain))
+        .route(
+            "/tenants/:id/domains/:domain/verify",
+            post(handlers::verify_domain),
+        )
         .route("/tenants/:id/settings", get(handlers::get_settings))
         .route("/tenants/:id/settings", put(handlers::update_settings))
         .route("/tenants/:id/billing", get(handlers::get_billing))

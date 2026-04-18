@@ -1,13 +1,13 @@
 //! Gateway middleware
 
+use crate::state::AppState;
 use axum::{
+    body::Body,
     extract::{Request, State},
     http::StatusCode,
     middleware::Next,
     response::Response,
-    body::Body,
 };
-use crate::state::AppState;
 
 /// Authentication middleware
 /// Verifies JWT tokens and extracts user context
@@ -32,9 +32,7 @@ pub async fn authentication(
         .get(axum::http::header::AUTHORIZATION)
         .ok_or(StatusCode::UNAUTHORIZED)?;
 
-    let auth_str = auth_header
-        .to_str()
-        .map_err(|_| StatusCode::UNAUTHORIZED)?;
+    let auth_str = auth_header.to_str().map_err(|_| StatusCode::UNAUTHORIZED)?;
 
     // Verify Bearer token
     if !auth_str.starts_with("Bearer ") {
@@ -55,7 +53,11 @@ pub async fn authentication(
 }
 
 /// Rate limiting layer
-pub async fn rate_limit(State(state): State<AppState>, request: Request<Body>, next: Next) -> Result<Response, StatusCode> {
+pub async fn rate_limit(
+    State(state): State<AppState>,
+    request: Request<Body>,
+    next: Next,
+) -> Result<Response, StatusCode> {
     // Try immediate acquisition; if unavailable, reject with 429
     match state.rate_limiter.clone().try_acquire_owned() {
         Ok(_permit) => Ok(next.run(request).await),

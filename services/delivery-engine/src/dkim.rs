@@ -1,8 +1,8 @@
 //! DKIM signing implementation
 
-use ring::signature::{Ed25519KeyPair, KeyPair};
-use ring::digest::{digest, SHA256};
 use anyhow::Result;
+use ring::digest::{digest, SHA256};
+use ring::signature::{Ed25519KeyPair, KeyPair};
 
 /// DKIM signature generator
 pub struct DkimSigner {
@@ -15,7 +15,7 @@ impl DkimSigner {
     pub fn new(private_key_pem: &str, selector: &str, domain: &str) -> Result<Self> {
         // In production, parse PEM and extract private key
         let _ = private_key_pem;
-        
+
         Ok(Self {
             private_key: vec![],
             selector: selector.to_string(),
@@ -39,9 +39,7 @@ impl DkimSigner {
              h=From:To:Subject:Date:Message-ID;\r\n\
              bh={};\r\n\
              b=",
-            self.domain,
-            self.selector,
-            body_hash_b64
+            self.domain, self.selector, body_hash_b64
         );
 
         // In production, sign with RSA/Ed25519 private key

@@ -1,10 +1,10 @@
 //! Tenant service state
 
+use crate::config::TenantConfig;
+use anyhow::Result;
 use axum::extract::FromRef;
 use sqlx::PgPool;
 use std::sync::Arc;
-use anyhow::Result;
-use crate::config::TenantConfig;
 
 #[derive(Clone, FromRef)]
 pub struct TenantState {
@@ -21,10 +21,6 @@ impl TenantState {
 
         sqlx::migrate!("./migrations").run(&db).await?;
 
-        Ok(Self {
-            config,
-            db,
-            redis,
-        })
+        Ok(Self { config, db, redis })
     }
 }

@@ -1,9 +1,9 @@
 //! Account locking for failed authentication attempts
 
-use chrono::{DateTime, Utc, Duration};
+use anyhow::Result;
+use chrono::{DateTime, Duration, Utc};
 use sqlx::PgPool;
 use std::sync::Arc;
-use anyhow::Result;
 use uuid::Uuid;
 use velismail_common::UserId;
 
@@ -108,13 +108,11 @@ impl AccountLockManager {
 
         // Also clean up old database records
         let cutoff = Utc::now() - Duration::minutes(self.window_duration_minutes);
-        sqlx::query(
-            "DELETE FROM failed_login_attempts WHERE email = $1 AND attempted_at < $2",
-        )
-        .bind(email)
-        .bind(cutoff)
-        .execute(&self.db)
-        .await?;
+        sqlx::query("DELETE FROM failed_login_attempts WHERE email = $1 AND attempted_at < $2")
+            .bind(email)
+            .bind(cutoff)
+            .execute(&self.db)
+            .await?;
 
         Ok(())
     }
@@ -139,8 +137,8 @@ impl AccountLockManager {
 
         // Get the timestamp of the last (max_failed_attempts)th attempt
         if let Some(last_score) = scores.last() {
-            let lockout_start = DateTime::<Utc>::from_timestamp(*last_score, 0)
-                .unwrap_or_else(|| Utc::now());
+            let lockout_start =
+                DateTime::<Utc>::from_timestamp(*last_score, 0).unwrap_or_else(|| Utc::now());
             let lockout_end = lockout_start + Duration::minutes(self.lockout_duration_minutes);
             Ok(Some(lockout_end))
         } else {
@@ -189,13 +187,7 @@ mod tests {
         // Provide minimal stubs or mocks for required dependencies
         let dummy_dep1 = Default::default();
         let dummy_dep2 = Default::default();
-        let manager = AccountLockManager::new(
-            dummy_dep1,
-            dummy_dep2,
-            5,
-            15,
-            15,
-        );
+        let manager = AccountLockManager::new(dummy_dep1, dummy_dep2, 5, 15, 15);
 
         let key = manager.failed_attempts_key("user@example.com");
         assert_eq!(key, "failed_attempts:user@example.com");

@@ -1,11 +1,11 @@
 //! Mail service state
 
+use crate::config::MailConfig;
+use anyhow::Result;
+use async_nats::Client as NatsClient;
 use axum::extract::FromRef;
 use sqlx::PgPool;
 use std::sync::Arc;
-use async_nats::Client as NatsClient;
-use anyhow::Result;
-use crate::config::MailConfig;
 
 #[derive(Clone, FromRef)]
 pub struct MailState {

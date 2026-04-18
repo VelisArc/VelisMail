@@ -1,9 +1,9 @@
 //! Authentication types and claims
 
+use crate::types::UserId;
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
-use chrono::{DateTime, Utc};
-use crate::types::UserId;
 
 /// JWT Claims
 #[derive(Debug, Clone, Serialize, Deserialize)]

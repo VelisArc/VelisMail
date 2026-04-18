@@ -1,9 +1,9 @@
+use crate::config::DeliveryConfig;
+use anyhow::Result;
+use async_nats::Client as NatsClient;
 use axum::extract::FromRef;
 use sqlx::PgPool;
 use std::sync::Arc;
-use async_nats::Client as NatsClient;
-use anyhow::Result;
-use crate::config::DeliveryConfig;
 
 #[derive(Clone, FromRef)]
 pub struct DeliveryState {
@@ -21,6 +21,11 @@ impl DeliveryState {
 
         sqlx::migrate!("./migrations").run(&db).await?;
 
-        Ok(Self { config, db, redis, nats })
+        Ok(Self {
+            config,
+            db,
+            redis,
+            nats,
+        })
     }
 }

@@ -1,9 +1,9 @@
 //! S3 client wrapper
 
-use aws_sdk_s3::{Client, Error as S3Error};
+use anyhow::Result;
 use aws_config::BehaviorVersion;
 use aws_sdk_s3::primitives::ByteStream;
-use anyhow::Result;
+use aws_sdk_s3::{Client, Error as S3Error};
 
 /// S3 client for object storage
 pub struct S3Client {
@@ -34,12 +34,7 @@ impl S3Client {
     }
 
     /// Upload an object
-    pub async fn upload_object(
-        &self,
-        key: &str,
-        data: Vec<u8>,
-        content_type: &str,
-    ) -> Result<()> {
+    pub async fn upload_object(&self, key: &str, data: Vec<u8>, content_type: &str) -> Result<()> {
         self.client
             .put_object()
             .bucket(&self.bucket)
@@ -54,7 +49,8 @@ impl S3Client {
 
     /// Download an object
     pub async fn download_object(&self, key: &str) -> Result<Vec<u8>> {
-        let resp = self.client
+        let resp = self
+            .client
             .get_object()
             .bucket(&self.bucket)
             .key(key)
@@ -81,12 +77,16 @@ impl S3Client {
     pub async fn presigned_url(&self, key: &str, expires_in_secs: u64) -> Result<String> {
         // In production, use presigning
         let _ = expires_in_secs;
-        Ok(format!("{}/{}/{}", "https://storage.velismail.com", self.bucket, key))
+        Ok(format!(
+            "{}/{}/{}",
+            "https://storage.velismail.com", self.bucket, key
+        ))
     }
 
     /// Get object metadata
     pub async fn get_object_size(&self, key: &str) -> Result<i64> {
-        let resp = self.client
+        let resp = self
+            .client
             .head_object()
             .bucket(&self.bucket)
             .key(key)
@@ -96,5 +96,3 @@ impl S3Client {
         Ok(resp.content_length.unwrap_or(0))
     }
 }
-
-

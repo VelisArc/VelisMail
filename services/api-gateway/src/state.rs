@@ -1,12 +1,12 @@
 //! Application state
 
+use crate::config::GatewayConfig;
+use anyhow::Result;
 use axum::extract::FromRef;
 use reqwest::Client;
-use anyhow::Result;
-use crate::config::GatewayConfig;
 use std::sync::Arc;
-use tokio::sync::Semaphore;
 use std::time::Duration;
+use tokio::sync::Semaphore;
 
 #[derive(Clone, FromRef)]
 pub struct AppState {

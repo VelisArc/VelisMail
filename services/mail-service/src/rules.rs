@@ -3,10 +3,10 @@
 //! Implements organization-specific rules for automatic email processing,
 //! including auto-labels, auto-archive, and auto-reply rules.
 
-use serde::{Deserialize, Serialize};
-use uuid::Uuid;
 use chrono::{DateTime, Utc};
 use regex::Regex;
+use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 use velismail_common::FolderType;
 
 /// Email processing rule
@@ -84,12 +84,12 @@ impl RulesEngine {
         // Sort rules by priority
         let mut sorted_rules = rules;
         sorted_rules.sort_by(|a, b| a.priority.cmp(&b.priority));
-        
+
         Self {
             rules: sorted_rules,
         }
     }
-    
+
     /// Evaluate all rules against an email
     pub fn evaluate_email(
         &self,
@@ -101,28 +101,21 @@ impl RulesEngine {
         has_attachments: bool,
     ) -> Vec<RuleEvaluationResult> {
         let mut results = Vec::new();
-        
+
         for rule in &self.rules {
             if !rule.enabled {
                 continue;
             }
-            
-            let matched = self.check_conditions(
-                rule,
-                from,
-                to,
-                subject,
-                body,
-                size_bytes,
-                has_attachments,
-            );
-            
+
+            let matched =
+                self.check_conditions(rule, from, to, subject, body, size_bytes, has_attachments);
+
             let actions_executed = if matched {
                 self.get_actions(&rule.actions)
             } else {
                 Vec::new()
             };
-            
+
             results.push(RuleEvaluationResult {
                 rule_id: rule.id,
                 matched,
@@ -130,10 +123,10 @@ impl RulesEngine {
                 errors: Vec::new(),
             });
         }
-        
+
         results
     }
-    
+
     /// Check if email matches rule conditions
     fn check_conditions(
         &self,
@@ -146,19 +139,20 @@ impl RulesEngine {
         has_attachments: bool,
     ) -> bool {
         let conditions = &rule.conditions;
-        
+
         // Check individual conditions
         let from_match = self.check_from_condition(&conditions.from, from);
         let to_match = self.check_to_condition(&conditions.to, to);
         let subject_match = self.check_subject_condition(&conditions.subject_contains, subject);
         let body_match = self.check_body_condition(&conditions.body_contains, body);
-        let attachments_match = self.check_attachments_condition(conditions.has_attachments, has_attachments);
+        let attachments_match =
+            self.check_attachments_condition(conditions.has_attachments, has_attachments);
         let size_match = self.check_size_condition(
             conditions.size_greater_than,
             conditions.size_less_than,
             size_bytes,
         );
-        
+
         // Combine results based on match_all flag
         if conditions.match_all {
             // All conditions must match
@@ -168,64 +162,64 @@ impl RulesEngine {
             from_match || to_match || subject_match || body_match || attachments_match || size_match
         }
     }
-    
+
     fn check_from_condition(&self, from_patterns: &Option<Vec<String>>, from: &str) -> bool {
         match from_patterns {
             None => false,
-            Some(patterns) => {
-                patterns.iter().any(|pattern| self.matches_pattern(pattern, from))
-            }
+            Some(patterns) => patterns
+                .iter()
+                .any(|pattern| self.matches_pattern(pattern, from)),
         }
     }
-    
+
     fn check_to_condition(&self, to_patterns: &Option<Vec<String>>, to: &[String]) -> bool {
         match to_patterns {
             None => false,
-            Some(patterns) => {
-                to.iter().any(|addr| {
-                    patterns.iter().any(|pattern| self.matches_pattern(pattern, addr))
-                })
-            }
+            Some(patterns) => to.iter().any(|addr| {
+                patterns
+                    .iter()
+                    .any(|pattern| self.matches_pattern(pattern, addr))
+            }),
         }
     }
-    
-    fn check_subject_condition(&self, subject_patterns: &Option<Vec<String>>, subject: &str) -> bool {
+
+    fn check_subject_condition(
+        &self,
+        subject_patterns: &Option<Vec<String>>,
+        subject: &str,
+    ) -> bool {
         match subject_patterns {
             None => false,
-            Some(patterns) => {
-                patterns.iter().any(|pattern| {
-                    if let Ok(re) = Regex::new(pattern) {
-                        re.is_match(subject)
-                    } else {
-                        subject.contains(pattern)
-                    }
-                })
-            }
+            Some(patterns) => patterns.iter().any(|pattern| {
+                if let Ok(re) = Regex::new(pattern) {
+                    re.is_match(subject)
+                } else {
+                    subject.contains(pattern)
+                }
+            }),
         }
     }
-    
+
     fn check_body_condition(&self, body_patterns: &Option<Vec<String>>, body: &str) -> bool {
         match body_patterns {
             None => false,
-            Some(patterns) => {
-                patterns.iter().any(|pattern| {
-                    if let Ok(re) = Regex::new(pattern) {
-                        re.is_match(body)
-                    } else {
-                        body.contains(pattern)
-                    }
-                })
-            }
+            Some(patterns) => patterns.iter().any(|pattern| {
+                if let Ok(re) = Regex::new(pattern) {
+                    re.is_match(body)
+                } else {
+                    body.contains(pattern)
+                }
+            }),
         }
     }
-    
+
     fn check_attachments_condition(&self, condition: Option<bool>, has_attachments: bool) -> bool {
         match condition {
             None => false,
             Some(expected) => expected == has_attachments,
         }
     }
-    
+
     fn check_size_condition(
         &self,
         greater_than: Option<i64>,
@@ -236,15 +230,15 @@ impl RulesEngine {
             None => false,
             Some(threshold) => size > threshold,
         };
-        
+
         let less_check = match less_than {
             None => false,
             Some(threshold) => size < threshold,
         };
-        
+
         greater_check || less_check
     }
-    
+
     fn matches_pattern(&self, pattern: &str, value: &str) -> bool {
         // Simple wildcard matching (* matches any characters)
         if pattern.contains('*') {
@@ -267,10 +261,10 @@ impl RulesEngine {
             pattern == value
         }
     }
-    
+
     fn get_actions(&self, actions: &RuleActions) -> Vec<String> {
         let mut action_list = Vec::new();
-        
+
         if actions.apply_labels.is_some() {
             action_list.push("apply_labels".to_string());
         }
@@ -295,7 +289,7 @@ impl RulesEngine {
         if actions.forward_to.is_some() {
             action_list.push("forward_to".to_string());
         }
-        
+
         action_list
     }
 }
@@ -303,7 +297,7 @@ impl RulesEngine {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_from_pattern_matching() {
         let engine = RulesEngine::new(vec![]);
@@ -311,7 +305,7 @@ mod tests {
         assert!(engine.matches_pattern("test@*", "test@example.com"));
         assert!(!engine.matches_pattern("*@example.com", "user@other.com"));
     }
-    
+
     #[test]
     fn test_rule_conditions_matching() {
         let conditions = RuleConditions {
@@ -324,7 +318,7 @@ mod tests {
             size_less_than: None,
             match_all: false,
         };
-        
+
         let rule = EmailRule {
             id: Uuid::new_v4(),
             organization_id: Uuid::new_v4(),
@@ -345,7 +339,7 @@ mod tests {
             created_at: Utc::now(),
             updated_at: Utc::now(),
         };
-        
+
         let engine = RulesEngine::new(vec![rule]);
         let results = engine.evaluate_email(
             "test@example.com",
@@ -355,7 +349,7 @@ mod tests {
             1024,
             false,
         );
-        
+
         assert!(!results.is_empty());
         assert!(results[0].matched);
     }

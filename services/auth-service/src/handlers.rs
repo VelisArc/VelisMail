@@ -1,20 +1,16 @@
 //! Auth route handlers
 
-use axum::{
-    extract::State,
-    http::StatusCode,
-    Json,
-};
-use serde_json::json;
+use crate::account_lock::AccountLockManager;
+use crate::jwt::TokenPairResponse;
+use crate::passkey::{generate_challenge, PasskeyRegistrationRequest, PasskeyVerificationRequest};
+use crate::state::AuthState;
+use axum::{extract::State, http::StatusCode, Json};
+use chrono::{DateTime, Utc};
 use serde::Deserialize;
+use serde_json::json;
 use uuid::Uuid;
 use validator::Validate;
-use chrono::{Utc, DateTime};
 use velismail_common::{UserId, UserRole};
-use crate::state::AuthState;
-use crate::jwt::TokenPairResponse;
-use crate::passkey::{PasskeyRegistrationRequest, PasskeyVerificationRequest, generate_challenge};
-use crate::account_lock::AccountLockManager;
 
 /// Health check
 pub async fn health_check() -> Json<serde_json::Value> {
@@ -42,13 +38,11 @@ pub async fn register(
     request.validate().map_err(|_| StatusCode::BAD_REQUEST)?;
 
     // Check if user already exists
-    let existing: Option<i64> = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM users WHERE email = $1",
-    )
-    .bind(&request.email)
-    .fetch_optional(&state.db)
-    .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let existing: Option<i64> = sqlx::query_scalar("SELECT COUNT(*) FROM users WHERE email = $1")
+        .bind(&request.email)
+        .fetch_optional(&state.db)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     if existing.unwrap_or(0) > 0 {
         return Err(StatusCode::CONFLICT);
@@ -100,8 +94,7 @@ pub async fn login_passkey(
     Json(request): Json<PasskeyLoginRequest>,
 ) -> Result<Json<TokenPairResponse>, StatusCode> {
     // Decode credential ID from base64
-    let credential_id = base64_decode(&request.credential_id)
-        .ok_or(StatusCode::BAD_REQUEST)?;
+    let credential_id = base64_decode(&request.credential_id).ok_or(StatusCode::BAD_REQUEST)?;
 
     // Fetch stored passkey
     let passkey: Option<(Uuid, Vec<u8>, Vec<u8>, i64)> = sqlx::query_as(
@@ -113,17 +106,15 @@ pub async fn login_passkey(
     .await
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    let (user_id, stored_pubkey, stored_cred_id, _counter) = passkey
-        .ok_or(StatusCode::UNAUTHORIZED)?;
+    let (user_id, stored_pubkey, stored_cred_id, _counter) =
+        passkey.ok_or(StatusCode::UNAUTHORIZED)?;
 
     // Get user email for account lock checking
-    let user_email: Option<String> = sqlx::query_scalar(
-        "SELECT email FROM users WHERE id = $1",
-    )
-    .bind(user_id)
-    .fetch_optional(&state.db)
-    .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let user_email: Option<String> = sqlx::query_scalar("SELECT email FROM users WHERE id = $1")
+        .bind(user_id)
+        .fetch_optional(&state.db)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     let email = user_email.ok_or(StatusCode::INTERNAL_SERVER_ERROR)?;
 
@@ -136,8 +127,11 @@ pub async fn login_passkey(
         state.config.failed_attempt_window_minutes,
     );
 
-    if account_lock_manager.is_account_locked(&email).await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)? {
+    if account_lock_manager
+        .is_account_locked(&email)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+    {
         return Err(StatusCode::FORBIDDEN);
     }
 
@@ -147,8 +141,7 @@ pub async fn login_passkey(
         authenticator_data: base64_decode(&request.authenticator_data)
             .ok_or(StatusCode::BAD_REQUEST)?,
         client_data_json: request.client_data_json.clone(),
-        signature: base64_decode(&request.signature)
-            .ok_or(StatusCode::BAD_REQUEST)?,
+        signature: base64_decode(&request.signature).ok_or(StatusCode::BAD_REQUEST)?,
         user_handle: None,
     };
 
@@ -169,40 +162,45 @@ pub async fn login_passkey(
 
     if !valid {
         // Record failed attempt
-        let _ = account_lock_manager.record_failed_attempt(
-            Some(UserId(user_id)),
-            &email,
-            "0.0.0.0", // Would get from request
-        ).await;
+        let _ = account_lock_manager
+            .record_failed_attempt(
+                Some(UserId(user_id)),
+                &email,
+                "0.0.0.0", // Would get from request
+            )
+            .await;
         return Err(StatusCode::UNAUTHORIZED);
     }
 
     // Clear failed attempts on successful login
-    account_lock_manager.clear_failed_attempts(&email).await
+    account_lock_manager
+        .clear_failed_attempts(&email)
+        .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     // Get user info
-    let user: Option<(String, String)> = sqlx::query_as(
-        "SELECT email, display_name FROM users WHERE id = $1",
-    )
-    .bind(user_id)
-    .fetch_optional(&state.db)
-    .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let user: Option<(String, String)> =
+        sqlx::query_as("SELECT email, display_name FROM users WHERE id = $1")
+            .bind(user_id)
+            .fetch_optional(&state.db)
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     let (email, _display_name) = user.ok_or(StatusCode::INTERNAL_SERVER_ERROR)?;
 
     // Prepare device id and generate tokens
     let device_id = request.device_id.clone().unwrap_or_default();
-    let access_token = state.jwt_manager.generate_access_token(
-        UserId(user_id),
-        "", // Would get from user record
-        &email,
-        UserRole::User,
-        &device_id,
-        true,
-    )
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let access_token = state
+        .jwt_manager
+        .generate_access_token(
+            UserId(user_id),
+            "", // Would get from user record
+            &email,
+            UserRole::User,
+            &device_id,
+            true,
+        )
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     let refresh_token = crate::jwt::JwtManager::generate_refresh_token()
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
@@ -215,15 +213,16 @@ pub async fn login_passkey(
         state.config.jwt_expiry_seconds / 3600,
     );
 
-    let _session_id = session_manager.create_session(
-        UserId(user_id),
-        "", // tenant_id
-        &device_id,
-        "0.0.0.0", // Would get from request
-        None,
-    )
-    .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let _session_id = session_manager
+        .create_session(
+            UserId(user_id),
+            "", // tenant_id
+            &device_id,
+            "0.0.0.0", // Would get from request
+            None,
+        )
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     Ok(Json(TokenPairResponse {
         access_token,
@@ -280,26 +279,27 @@ pub async fn refresh_token(
     let (user_id, _expires_at) = token_record.ok_or(StatusCode::UNAUTHORIZED)?;
 
     // Get user info
-    let user: Option<(String, String)> = sqlx::query_as(
-        "SELECT email, display_name FROM users WHERE id = $1",
-    )
-    .bind(user_id)
-    .fetch_optional(&state.db)
-    .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let user: Option<(String, String)> =
+        sqlx::query_as("SELECT email, display_name FROM users WHERE id = $1")
+            .bind(user_id)
+            .fetch_optional(&state.db)
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     let (email, _display_name) = user.ok_or(StatusCode::INTERNAL_SERVER_ERROR)?;
 
     // Generate new tokens
-    let access_token = state.jwt_manager.generate_access_token(
-        UserId(user_id),
-        "",
-        &email,
-        UserRole::User,
-        &request.device_id,
-        true,
-    )
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let access_token = state
+        .jwt_manager
+        .generate_access_token(
+            UserId(user_id),
+            "",
+            &email,
+            UserRole::User,
+            &request.device_id,
+            true,
+        )
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     let refresh_token = crate::jwt::JwtManager::generate_refresh_token()
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;

@@ -1,13 +1,13 @@
 //! Storage handlers
 
+use crate::state::StorageState;
 use axum::{
-    extract::{State, Path},
+    extract::{Path, State},
     http::StatusCode,
     Json,
 };
 use serde_json::json;
 use uuid::Uuid;
-use crate::state::StorageState;
 
 /// Health check
 pub async fn health_check() -> Json<serde_json::Value> {
@@ -39,7 +39,9 @@ pub async fn download(
     Path(key): Path<String>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
     // Download from S3 and decrypt
-    let _data = state.s3.download_object(&key)
+    let _data = state
+        .s3
+        .download_object(&key)
         .await
         .map_err(|_| StatusCode::NOT_FOUND)?;
 
@@ -54,7 +56,9 @@ pub async fn delete(
     State(state): State<StorageState>,
     Path(key): Path<String>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
-    state.s3.delete_object(&key)
+    state
+        .s3
+        .delete_object(&key)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
@@ -69,7 +73,9 @@ pub async fn presigned_url(
     State(state): State<StorageState>,
     Path(key): Path<String>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
-    let url = state.s3.presigned_url(&key, 3600)
+    let url = state
+        .s3
+        .presigned_url(&key, 3600)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 

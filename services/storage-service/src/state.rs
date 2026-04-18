@@ -1,12 +1,12 @@
 //! Storage state
 
+use crate::config::StorageConfig;
+use crate::encryption::StorageEncryption;
+use crate::s3_client::S3Client;
+use anyhow::Result;
 use axum::extract::FromRef;
 use sqlx::PgPool;
 use std::sync::Arc;
-use anyhow::Result;
-use crate::config::StorageConfig;
-use crate::s3_client::S3Client;
-use crate::encryption::StorageEncryption;
 
 #[derive(Clone, FromRef)]
 pub struct StorageState {
@@ -28,7 +28,8 @@ impl StorageState {
             &config.s3_access_key,
             &config.s3_secret_key,
             &config.s3_bucket,
-        ).await?;
+        )
+        .await?;
 
         let encryption = StorageEncryption::new(&config.encryption_key)?;
 

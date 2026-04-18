@@ -1,5 +1,5 @@
 //! VelisMail Cryptographic Library
-//! 
+//!
 //! Provides encryption, decryption, and cryptographic operations
 //! with post-quantum cryptography readiness.
 

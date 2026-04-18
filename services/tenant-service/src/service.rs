@@ -1,11 +1,11 @@
 //! Tenant service business logic
 
-use anyhow::{Result, Context};
-use sqlx::{PgPool, Row, QueryBuilder};
-use uuid::Uuid;
-use chrono::{Utc, Duration};
+use anyhow::{Context, Result};
+use chrono::{Duration, Utc};
 use serde_json::json;
-use tracing::{info, warn, error};
+use sqlx::{PgPool, QueryBuilder, Row};
+use tracing::{error, info, warn};
+use uuid::Uuid;
 
 use crate::models::*;
 use crate::state::TenantState;
@@ -23,11 +23,14 @@ impl TenantService {
 
     /// Create a new tenant with isolation mechanisms
     pub async fn create_tenant(&self, request: CreateTenantRequest) -> Result<Tenant> {
-        info!("Creating new tenant for organization: {}", request.organization_name);
-        
+        info!(
+            "Creating new tenant for organization: {}",
+            request.organization_name
+        );
+
         let tenant_id = Uuid::new_v4();
         let now = Utc::now();
-        
+
         // Default settings if not provided
         let settings = request.initial_settings.unwrap_or_else(|| {
             json!({
@@ -37,7 +40,7 @@ impl TenantService {
                 "session_timeout_minutes": 60
             })
         });
-        
+
         // Default limits based on plan tier
         let plan_tier = request.plan_tier.unwrap_or_else(|| "starter".to_string());
         let limits = match plan_tier.as_str() {
@@ -77,14 +80,14 @@ impl TenantService {
                 "api_rate_limit_per_minute": 60
             }),
         };
-        
+
         // Default billing info
         let billing_info = json!({
             "plan": plan_tier,
             "billing_cycle": "monthly",
             "next_billing_date": now + Duration::days(30)
         });
-        
+
         // Insert tenant with RLS context
         let tenant = sqlx::query_as::<_, Tenant>(
             r#"
@@ -94,7 +97,7 @@ impl TenantService {
             )
             VALUES ($1, $2, $3, $4, 'pending_verification', $5, $6, $7, $8, $8)
             RETURNING *
-            "#
+            "#,
         )
         .bind(tenant_id)
         .bind(&request.organization_name)
@@ -107,7 +110,7 @@ impl TenantService {
         .fetch_one(&self.pool)
         .await
         .context("Failed to create tenant")?;
-        
+
         // Create initial resource usage record
         sqlx::query(
             r#"
@@ -117,7 +120,7 @@ impl TenantService {
                 api_requests, active_users
             )
             VALUES ($1, $2, $3, 0, 0, 0, 0, 0)
-            "#
+            "#,
         )
         .bind(tenant_id)
         .bind(now)
@@ -125,7 +128,7 @@ impl TenantService {
         .execute(&self.pool)
         .await
         .context("Failed to create initial resource usage record")?;
-        
+
         // Log the creation
         self.log_audit(
             tenant_id,
@@ -139,8 +142,9 @@ impl TenantService {
             }),
             None,
             None,
-        ).await?;
-        
+        )
+        .await?;
+
         info!("Tenant created successfully: {}", tenant_id);
         Ok(tenant)
     }
@@ -153,27 +157,31 @@ impl TenantService {
             .execute(&self.pool)
             .await
             .context("Failed to set tenant context")?;
-        
+
         let tenant = sqlx::query_as::<_, Tenant>(
-            "SELECT * FROM tenants WHERE id = $1 AND deleted_at IS NULL"
+            "SELECT * FROM tenants WHERE id = $1 AND deleted_at IS NULL",
         )
         .bind(tenant_id)
         .fetch_optional(&self.pool)
         .await
         .context("Failed to fetch tenant")?;
-        
+
         Ok(tenant)
     }
 
     /// Update tenant configuration
-    pub async fn update_tenant(&self, tenant_id: Uuid, request: UpdateTenantRequest) -> Result<Tenant> {
+    pub async fn update_tenant(
+        &self,
+        tenant_id: Uuid,
+        request: UpdateTenantRequest,
+    ) -> Result<Tenant> {
         // Set tenant context for RLS
         sqlx::query("SELECT set_tenant_context($1)")
             .bind(tenant_id)
             .execute(&self.pool)
             .await
             .context("Failed to set tenant context")?;
-        
+
         // Build dynamic update query using QueryBuilder to allow dynamic binds
         let mut qb = QueryBuilder::<sqlx::Postgres>::new("UPDATE tenants SET ");
         let mut separated = qb.separated(", ");
@@ -210,7 +218,8 @@ impl TenantService {
         }
 
         if updated_fields == 0 {
-            return self.get_tenant(tenant_id)
+            return self
+                .get_tenant(tenant_id)
                 .await?
                 .context("Tenant not found");
         }
@@ -226,7 +235,7 @@ impl TenantService {
             .fetch_one(&self.pool)
             .await
             .context("Failed to update tenant")?;
-        
+
         // Log the update
         self.log_audit(
             tenant_id,
@@ -240,20 +249,25 @@ impl TenantService {
             }),
             None,
             None,
-        ).await?;
-        
+        )
+        .await?;
+
         Ok(tenant)
     }
 
     /// Add custom domain to tenant
-    pub async fn add_domain(&self, tenant_id: Uuid, request: AddDomainRequest) -> Result<CustomDomain> {
+    pub async fn add_domain(
+        &self,
+        tenant_id: Uuid,
+        request: AddDomainRequest,
+    ) -> Result<CustomDomain> {
         // Set tenant context for RLS
         sqlx::query("SELECT set_tenant_context($1)")
             .bind(tenant_id)
             .execute(&self.pool)
             .await
             .context("Failed to set tenant context")?;
-        
+
         // Validate domain format according to RFC standards
         if !Self::validate_domain_format(&request.domain_name) {
             return Err(anyhow::anyhow!(
@@ -261,13 +275,13 @@ impl TenantService {
                 request.domain_name
             ));
         }
-        
+
         let domain_id = Uuid::new_v4();
         let now = Utc::now();
-        
+
         // Generate verification token
         let verification_token = Uuid::new_v4().to_string();
-        
+
         // Create DNS records for verification
         let dns_records = json!([
             {
@@ -284,7 +298,7 @@ impl TenantService {
                 "ttl": 3600
             }
         ]);
-        
+
         let domain = sqlx::query_as::<_, CustomDomain>(
             r#"
             INSERT INTO custom_domains (
@@ -293,7 +307,7 @@ impl TenantService {
             )
             VALUES ($1, $2, $3, 'pending', $4, $5, $6)
             RETURNING *
-            "#
+            "#,
         )
         .bind(domain_id)
         .bind(tenant_id)
@@ -304,7 +318,7 @@ impl TenantService {
         .fetch_one(&self.pool)
         .await
         .context("Failed to add custom domain")?;
-        
+
         // Log the domain addition
         self.log_audit(
             tenant_id,
@@ -318,8 +332,9 @@ impl TenantService {
             }),
             None,
             None,
-        ).await?;
-        
+        )
+        .await?;
+
         Ok(domain)
     }
 
@@ -333,14 +348,14 @@ impl TenantService {
         let now = Utc::now();
         let period_start = now.date_naive().and_hms_opt(0, 0, 0).unwrap();
         let period_end = period_start + Duration::days(1);
-        
+
         // Set tenant context for RLS
         sqlx::query("SELECT set_tenant_context($1)")
             .bind(tenant_id)
             .execute(&self.pool)
             .await
             .context("Failed to set tenant context")?;
-        
+
         // Update resource usage with conflict handling
         let update_field = match resource_type {
             "emails_sent" => "emails_sent = resource_usage.emails_sent + $3",
@@ -350,7 +365,7 @@ impl TenantService {
             "active_users" => "active_users = $3", // Set, not increment
             _ => return Err(anyhow::anyhow!("Invalid resource type: {}", resource_type)),
         };
-        
+
         sqlx::query(&format!(
             r#"
             INSERT INTO resource_usage (
@@ -372,7 +387,7 @@ impl TenantService {
         .execute(&self.pool)
         .await
         .context("Failed to track resource usage")?;
-        
+
         Ok(())
     }
 
@@ -384,37 +399,39 @@ impl TenantService {
             .execute(&self.pool)
             .await
             .context("Failed to set tenant context")?;
-        
+
         // Get tenant limits
-        let tenant = self.get_tenant(tenant_id)
+        let tenant = self
+            .get_tenant(tenant_id)
             .await?
             .context("Tenant not found")?;
-        
-        let limits: ResourceLimits = serde_json::from_value(tenant.limits)
-            .context("Failed to parse tenant limits")?;
-        
+
+        let limits: ResourceLimits =
+            serde_json::from_value(tenant.limits).context("Failed to parse tenant limits")?;
+
         // Get current usage for today
         let now = Utc::now();
         let period_start = now.date_naive().and_hms_opt(0, 0, 0).unwrap();
-        
+
         let usage = sqlx::query_as::<_, ResourceUsage>(
-            "SELECT * FROM resource_usage WHERE tenant_id = $1 AND period_start = $2"
+            "SELECT * FROM resource_usage WHERE tenant_id = $1 AND period_start = $2",
         )
         .bind(tenant_id)
         .bind(period_start)
         .fetch_optional(&self.pool)
         .await
         .context("Failed to fetch resource usage")?;
-        
+
         if let Some(usage) = usage {
             // Check each limit
-            if limits.max_emails_per_day > 0 && usage.emails_sent as u32 > limits.max_emails_per_day {
+            if limits.max_emails_per_day > 0 && usage.emails_sent as u32 > limits.max_emails_per_day
+            {
                 return Ok(Some(format!(
                     "Email limit exceeded: {}/{} emails sent today",
                     usage.emails_sent, limits.max_emails_per_day
                 )));
             }
-            
+
             if limits.max_storage_gb > 0 {
                 let storage_used_gb = usage.storage_used_bytes as f64 / (1024.0 * 1024.0 * 1024.0);
                 if storage_used_gb > limits.max_storage_gb as f64 {
@@ -425,7 +442,7 @@ impl TenantService {
                 }
             }
         }
-        
+
         Ok(None)
     }
 
@@ -437,20 +454,20 @@ impl TenantService {
             .execute(&self.pool)
             .await
             .context("Failed to set tenant context")?;
-        
+
         let now = Utc::now();
         let period_start = now.date_naive().and_hms_opt(0, 0, 0).unwrap();
-        
+
         // Get resource usage for today
         let usage = sqlx::query_as::<_, ResourceUsage>(
-            "SELECT * FROM resource_usage WHERE tenant_id = $1 AND period_start = $2"
+            "SELECT * FROM resource_usage WHERE tenant_id = $1 AND period_start = $2",
         )
         .bind(tenant_id)
         .bind(period_start)
         .fetch_optional(&self.pool)
         .await
         .context("Failed to fetch resource usage")?;
-        
+
         // Get domain counts
         let domain_counts = sqlx::query(
             r#"
@@ -459,29 +476,35 @@ impl TenantService {
                 COUNT(CASE WHEN verification_status = 'verified' THEN 1 END) as verified
             FROM custom_domains 
             WHERE tenant_id = $1
-            "#
+            "#,
         )
         .bind(tenant_id)
         .fetch_one(&self.pool)
         .await
         .context("Failed to fetch domain counts")?;
-        
+
         // Get user counts (this would need user service integration)
         // TODO: Integrate with user service to get real user counts
         let total_users = 0; // TODO: Implement fetch_total_users
         let active_users = 0; // TODO: Implement fetch_active_users
-        
+
         let stats = TenantStats {
             total_users,
             active_users,
-            storage_used_gb: usage.as_ref().map(|u| u.storage_used_bytes as f64 / (1024.0 * 1024.0 * 1024.0)).unwrap_or(0.0),
+            storage_used_gb: usage
+                .as_ref()
+                .map(|u| u.storage_used_bytes as f64 / (1024.0 * 1024.0 * 1024.0))
+                .unwrap_or(0.0),
             emails_sent_today: usage.as_ref().map(|u| u.emails_sent as u32).unwrap_or(0),
-            emails_received_today: usage.as_ref().map(|u| u.emails_received as u32).unwrap_or(0),
+            emails_received_today: usage
+                .as_ref()
+                .map(|u| u.emails_received as u32)
+                .unwrap_or(0),
             api_requests_today: usage.as_ref().map(|u| u.api_requests as u32).unwrap_or(0),
             domains_count: domain_counts.get::<i64, _>("total") as u32,
             verified_domains_count: domain_counts.get::<i64, _>("verified") as u32,
         };
-        
+
         Ok(stats)
     }
 
@@ -504,7 +527,7 @@ impl TenantService {
                 resource_id, details, ip_address, user_agent
             )
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-            "#
+            "#,
         )
         .bind(tenant_id)
         .bind(user_id)
@@ -517,7 +540,7 @@ impl TenantService {
         .execute(&self.pool)
         .await
         .context("Failed to log audit event")?;
-        
+
         Ok(())
     }
 
@@ -541,7 +564,7 @@ impl TenantService {
     }
 
     /// Validate domain format according to RFC standards
-    /// 
+    ///
     /// This function validates domain names according to RFC 1035 and RFC 1123:
     /// - Labels (parts separated by dots) must be 1-63 characters
     /// - Total length must be 1-253 characters
@@ -549,7 +572,7 @@ impl TenantService {
     /// - Labels cannot start or end with hyphens
     /// - Top-level domain must be at least 2 characters
     /// - Domain must contain at least one dot
-    /// 
+    ///
     /// **Validates: Requirements 4.1**
     /// **Property 5: Domain Validation Rules**
     pub fn validate_domain_format(domain: &str) -> bool {
@@ -565,7 +588,7 @@ impl TenantService {
 
         // Split into labels
         let labels: Vec<&str> = domain.split('.').collect();
-        
+
         // Must have at least 2 labels (domain and TLD)
         if labels.len() < 2 {
             return false;

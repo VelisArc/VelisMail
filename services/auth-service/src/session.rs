@@ -1,9 +1,9 @@
 //! Session management
 
+use anyhow::Result;
+use chrono::{DateTime, Duration, Utc};
 use sqlx::PgPool;
 use std::sync::Arc;
-use anyhow::Result;
-use chrono::{DateTime, Utc, Duration};
 use uuid::Uuid;
 use velismail_common::UserId;
 
@@ -194,14 +194,16 @@ impl SessionManager {
 
         let sessions = rows
             .into_iter()
-            .map(|(id, tenant_id, device_fingerprint, ip_address, expires_at)| SessionInfo {
-                session_id: id,
-                user_id: UserId(Uuid::new_v4()), // Would be populated from join
-                tenant_id,
-                device_fingerprint,
-                ip_address,
-                expires_at,
-            })
+            .map(
+                |(id, tenant_id, device_fingerprint, ip_address, expires_at)| SessionInfo {
+                    session_id: id,
+                    user_id: UserId(Uuid::new_v4()), // Would be populated from join
+                    tenant_id,
+                    device_fingerprint,
+                    ip_address,
+                    expires_at,
+                },
+            )
             .collect();
 
         Ok(sessions)

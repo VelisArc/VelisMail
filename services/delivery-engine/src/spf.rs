@@ -10,7 +10,7 @@ impl SpfVerifier {
     pub async fn verify(domain: &str, ip: &str) -> Result<SpfResult> {
         // In production, query DNS for SPF record
         let _ = (domain, ip);
-        
+
         Ok(SpfResult {
             pass: true,
             record: "v=spf1 include:velismail.com ~all".to_string(),

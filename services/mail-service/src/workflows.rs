@@ -3,13 +3,13 @@
 //! Implements email sending and receiving workflows with rules processing,
 //! attachment handling, and status tracking.
 
-use uuid::Uuid;
+use crate::attachments::{Attachment, AttachmentHandler};
+use crate::rules::{RuleEvaluationResult, RulesEngine};
+use anyhow::Result;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use anyhow::Result;
-use velismail_common::{MessageStatus, FolderType};
-use crate::rules::{RulesEngine, RuleEvaluationResult};
-use crate::attachments::{AttachmentHandler, Attachment};
+use uuid::Uuid;
+use velismail_common::{FolderType, MessageStatus};
 
 /// Email workflow state
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -100,45 +100,44 @@ impl EmailWorkflowProcessor {
             attachment_handler,
         }
     }
-    
+
     /// Process outgoing email workflow
-    pub async fn process_outgoing(
-        &self,
-        workflow: &mut OutgoingEmailWorkflow,
-    ) -> Result<()> {
+    pub async fn process_outgoing(&self, workflow: &mut OutgoingEmailWorkflow) -> Result<()> {
         // Validate attachments
         let attachment_data: Vec<_> = workflow
             .attachments
             .iter()
             .map(|a| (a.filename.clone(), a.content_type.clone(), a.size_bytes))
             .collect();
-        
-        let validation = self.attachment_handler.validate_attachments(&attachment_data);
+
+        let validation = self
+            .attachment_handler
+            .validate_attachments(&attachment_data);
         if !validation.valid {
             workflow.state = EmailWorkflowState::Failed;
             workflow.error_message = Some(validation.errors.join("; "));
-            return Err(anyhow::anyhow!("Attachment validation failed: {}", validation.errors.join("; ")));
+            return Err(anyhow::anyhow!(
+                "Attachment validation failed: {}",
+                validation.errors.join("; ")
+            ));
         }
-        
+
         // Update state to Sending
         workflow.state = EmailWorkflowState::Sending;
-        
+
         // Simulate sending (in production, would call external API provider)
         // For now, mark as sent
         workflow.state = EmailWorkflowState::Sent;
         workflow.sent_at = Some(Utc::now());
-        
+
         Ok(())
     }
-    
+
     /// Process incoming email workflow with rules
-    pub async fn process_incoming(
-        &self,
-        workflow: &mut IncomingEmailWorkflow,
-    ) -> Result<()> {
+    pub async fn process_incoming(&self, workflow: &mut IncomingEmailWorkflow) -> Result<()> {
         // Mark as processing
         workflow.state = EmailWorkflowState::Processing;
-        
+
         // Evaluate rules
         let rule_results = self.rules_engine.evaluate_email(
             &workflow.from,
@@ -148,14 +147,14 @@ impl EmailWorkflowProcessor {
             workflow.attachments.iter().map(|a| a.size_bytes).sum(),
             !workflow.attachments.is_empty(),
         );
-        
+
         workflow.rule_results = rule_results;
-        
+
         // Apply rules (simplified - in production would apply all matched rules)
         let mut labels = Vec::new();
         let mut target_folder = FolderType::Inbox;
         let mut should_mark_read = false;
-        
+
         for result in &workflow.rule_results {
             if result.matched {
                 // In production, would apply all actions from matched rules
@@ -169,38 +168,35 @@ impl EmailWorkflowProcessor {
                 }
             }
         }
-        
+
         workflow.final_folder = target_folder;
         workflow.labels = labels;
         workflow.is_read = should_mark_read;
-        
+
         // Mark as delivered
         workflow.state = EmailWorkflowState::Delivered;
         workflow.processed_at = Some(Utc::now());
-        
+
         Ok(())
     }
-    
+
     /// Retry outgoing email
-    pub async fn retry_outgoing(
-        &self,
-        workflow: &mut OutgoingEmailWorkflow,
-    ) -> Result<()> {
+    pub async fn retry_outgoing(&self, workflow: &mut OutgoingEmailWorkflow) -> Result<()> {
         if workflow.retry_count >= workflow.max_retries {
             workflow.state = EmailWorkflowState::Failed;
             workflow.error_message = Some("Maximum retry attempts exceeded".to_string());
             return Err(anyhow::anyhow!("Max retries exceeded"));
         }
-        
+
         workflow.retry_count += 1;
         workflow.state = EmailWorkflowState::Pending;
-        
+
         // Process again
         self.process_outgoing(workflow).await?;
-        
+
         Ok(())
     }
-    
+
     /// Schedule email for later sending
     pub fn schedule_outgoing(
         &self,
@@ -229,7 +225,7 @@ pub async fn process_batch_emails(
     let mut successful = 0;
     let mut failed = 0;
     let mut errors = Vec::new();
-    
+
     for workflow in workflows.iter_mut() {
         match processor.process_outgoing(workflow).await {
             Ok(()) => successful += 1,
@@ -239,7 +235,7 @@ pub async fn process_batch_emails(
             }
         }
     }
-    
+
     BatchProcessingResult {
         total: workflows.len(),
         successful,
@@ -251,15 +247,15 @@ pub async fn process_batch_emails(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::rules::{EmailRule, RuleConditions, RuleActions};
     use crate::attachments::AttachmentConfig;
-    
+    use crate::rules::{EmailRule, RuleActions, RuleConditions};
+
     #[tokio::test]
     async fn test_outgoing_workflow() {
         let rules_engine = RulesEngine::new(vec![]);
         let attachment_handler = AttachmentHandler::new(AttachmentConfig::default());
         let processor = EmailWorkflowProcessor::new(rules_engine, attachment_handler);
-        
+
         let mut workflow = OutgoingEmailWorkflow {
             email_id: Uuid::new_v4(),
             tenant_id: Uuid::new_v4(),
@@ -280,7 +276,7 @@ mod tests {
             max_retries: 3,
             error_message: None,
         };
-        
+
         let result = processor.process_outgoing(&mut workflow).await;
         assert!(result.is_ok());
         assert!(matches!(workflow.state, EmailWorkflowState::Sent));

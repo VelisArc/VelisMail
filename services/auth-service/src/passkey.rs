@@ -1,7 +1,7 @@
 //! Passkey (WebAuthn) authentication
 
-use ring::digest::{digest, SHA256};
 use anyhow::Result;
+use ring::digest::{digest, SHA256};
 use serde::{Deserialize, Serialize};
 
 /// Passkey verification request
@@ -118,8 +118,10 @@ pub fn generate_challenge() -> Result<String> {
 mod base64 {
     use std::fmt::Write;
 
-    const STANDARD_CHARS: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    const URL_SAFE_CHARS: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+    const STANDARD_CHARS: &[u8; 64] =
+        b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    const URL_SAFE_CHARS: &[u8; 64] =
+        b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
 
     pub fn encode_config(bytes: &[u8], _config: Encoding) -> String {
         let mut result = String::new();
@@ -130,13 +132,29 @@ mod base64 {
 
             let triple = (b0 << 16) | (b1 << 8) | b2;
 
-            let _ = write!(result, "{}", URL_SAFE_CHARS[((triple >> 18) & 0x3F) as usize] as char);
-            let _ = write!(result, "{}", URL_SAFE_CHARS[((triple >> 12) & 0x3F) as usize] as char);
+            let _ = write!(
+                result,
+                "{}",
+                URL_SAFE_CHARS[((triple >> 18) & 0x3F) as usize] as char
+            );
+            let _ = write!(
+                result,
+                "{}",
+                URL_SAFE_CHARS[((triple >> 12) & 0x3F) as usize] as char
+            );
             if chunk.len() > 1 {
-                let _ = write!(result, "{}", URL_SAFE_CHARS[((triple >> 6) & 0x3F) as usize] as char);
+                let _ = write!(
+                    result,
+                    "{}",
+                    URL_SAFE_CHARS[((triple >> 6) & 0x3F) as usize] as char
+                );
             }
             if chunk.len() > 2 {
-                let _ = write!(result, "{}", URL_SAFE_CHARS[(triple & 0x3F) as usize] as char);
+                let _ = write!(
+                    result,
+                    "{}",
+                    URL_SAFE_CHARS[(triple & 0x3F) as usize] as char
+                );
             }
         }
         result

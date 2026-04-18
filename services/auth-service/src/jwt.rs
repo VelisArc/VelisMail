@@ -1,10 +1,10 @@
 //! JWT token management
 
-use jsonwebtoken::{encode, decode, Header, Validation, EncodingKey, DecodingKey};
-use serde::{Deserialize, Serialize};
-use chrono::Utc;
 use anyhow::Result;
-use velismail_common::{Claims, UserId, UserRole, SecurityLevel};
+use chrono::Utc;
+use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, Validation};
+use serde::{Deserialize, Serialize};
+use velismail_common::{Claims, SecurityLevel, UserId, UserRole};
 
 /// JWT token manager
 pub struct JwtManager {
@@ -57,11 +57,7 @@ impl JwtManager {
 
     /// Validate and decode access token
     pub fn validate_token(&self, token: &str) -> Result<Claims> {
-        let token_data = decode::<Claims>(
-            token,
-            &self.decoding_key,
-            &Validation::default(),
-        )?;
+        let token_data = decode::<Claims>(token, &self.decoding_key, &Validation::default())?;
 
         Ok(token_data.claims)
     }
@@ -105,14 +101,16 @@ mod tests {
         let manager = JwtManager::new("test-secret", 3600).unwrap();
         let user_id = UserId(uuid::Uuid::new_v4());
 
-        let token = manager.generate_access_token(
-            user_id,
-            "tenant-123",
-            "user@example.com",
-            UserRole::User,
-            "device-123",
-            true,
-        ).unwrap();
+        let token = manager
+            .generate_access_token(
+                user_id,
+                "tenant-123",
+                "user@example.com",
+                UserRole::User,
+                "device-123",
+                true,
+            )
+            .unwrap();
 
         let claims = manager.validate_token(&token).unwrap();
         assert_eq!(claims.sub, user_id);

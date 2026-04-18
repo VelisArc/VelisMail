@@ -1,9 +1,9 @@
 //! Mail models
 
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
-use chrono::{DateTime, Utc};
-use velismail_common::{MessageStatus, FolderType, EncryptionStatus};
+use velismail_common::{EncryptionStatus, FolderType, MessageStatus};
 
 /// Email message
 #[derive(Debug, Clone, Serialize, Deserialize)]

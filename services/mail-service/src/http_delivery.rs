@@ -1,8 +1,8 @@
-use serde::{Deserialize, Serialize};
+use anyhow::{anyhow, Result};
 use reqwest::Client;
+use serde::{Deserialize, Serialize};
 use std::time::Duration;
-use anyhow::{Result, anyhow};
-use tracing::{info, error};
+use tracing::{error, info};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum MailProvider {
@@ -23,7 +23,7 @@ pub struct DispatchPayload {
     pub to: String,
     pub from: String,
     pub subject: String,
-    pub body: String,       // Encrypted or plaintext based on logic
+    pub body: String, // Encrypted or plaintext based on logic
     pub is_html: bool,
 }
 
@@ -47,24 +47,24 @@ impl HttpDeliveryAdapter {
             MailProvider::VelisMail => {
                 // In BYOK setup, picking VelisMail could default to a generic internal cluster router
                 // or just error out if the central SMTP was removed.
-                Err(anyhow!("VelisMail central delivery is disabled in BYOK mode."))
+                Err(anyhow!(
+                    "VelisMail central delivery is disabled in BYOK mode."
+                ))
             }
-            MailProvider::SendGrid => {
-                self.send_via_sendgrid(payload, config.api_key).await
-            }
-            MailProvider::Resend => {
-                self.send_via_resend(payload, config.api_key).await
-            }
+            MailProvider::SendGrid => self.send_via_sendgrid(payload, config.api_key).await,
+            MailProvider::Resend => self.send_via_resend(payload, config.api_key).await,
             MailProvider::CustomSmtp => {
                 // Here we would implement lettre based custom SMTP dispatch
-                Err(anyhow!("Custom SMTP mapping not yet implemented in HTTP Adapter"))
+                Err(anyhow!(
+                    "Custom SMTP mapping not yet implemented in HTTP Adapter"
+                ))
             }
         }
     }
 
     async fn send_via_resend(&self, payload: DispatchPayload, api_key: String) -> Result<()> {
         info!("Dispatching to {} via Resend", payload.to);
-        
+
         let req_body = serde_json::json!({
             "from": payload.from,
             "to": [payload.to],
@@ -73,7 +73,9 @@ impl HttpDeliveryAdapter {
             "text": if !payload.is_html { payload.body } else { "".to_string() }
         });
 
-        let res = self.client.post("https://api.resend.com/emails")
+        let res = self
+            .client
+            .post("https://api.resend.com/emails")
             .bearer_auth(api_key)
             .json(&req_body)
             .send()
@@ -91,7 +93,7 @@ impl HttpDeliveryAdapter {
 
     async fn send_via_sendgrid(&self, payload: DispatchPayload, api_key: String) -> Result<()> {
         info!("Dispatching to {} via SendGrid", payload.to);
-        
+
         // SendGrid payload mapping
         let req_body = serde_json::json!({
             "personalizations": [{
@@ -105,7 +107,9 @@ impl HttpDeliveryAdapter {
             }]
         });
 
-        let res = self.client.post("https://api.sendgrid.com/v3/mail/send")
+        let res = self
+            .client
+            .post("https://api.sendgrid.com/v3/mail/send")
             .bearer_auth(api_key)
             .json(&req_body)
             .send()
