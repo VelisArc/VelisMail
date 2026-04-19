@@ -33,7 +33,7 @@ impl DeliveryConfig {
             dkim_selector: std::env::var("DKIM_SELECTOR")
                 .unwrap_or_else(|_| "velismail".to_string()),
             spf_record: std::env::var("SPF_RECORD")
-                .unwrap_or_else(|_| "v=spf1 include:velismail.com ~all".to_string()),
+                .unwrap_or_else(|_| "v=spf1 include:velismail.online ~all".to_string()),
         })
     }
 }

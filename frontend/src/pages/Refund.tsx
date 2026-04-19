@@ -33,7 +33,7 @@ export default function Refund() {
           <section>
             <h2>2. Refund Eligibility</h2>
             <p>
-              We offer a 14-day money-back guarantee for all new premium subscriptions. If you are not satisfied with VelisMail within the first 14 days of your initial purchase, please contact our support team at <a href="mailto:support@velismail.com">support@velismail.com</a> to request a full refund.
+              We offer a 14-day money-back guarantee for all new premium subscriptions. If you are not satisfied with VelisMail within the first 14 days of your initial purchase, please contact our support team at <a href="mailto:support@velismail.online">support@velismail.online</a> to request a full refund.
             </p>
             <p>
               Refunds are not generally available for renewal payments. We send reminders prior to annual subscription renewals so you can manage your billing preferences.
@@ -57,7 +57,7 @@ export default function Refund() {
           <section>
             <h2>5. Contact Us</h2>
             <p>
-              For any questions regarding billing or to request a refund, please contact us at: <a href="mailto:support@velismail.com">support@velismail.com</a>.
+              For any questions regarding billing or to request a refund, please contact us at: <a href="mailto:support@velismail.online">support@velismail.online</a>.
             </p>
           </section>
         </div>

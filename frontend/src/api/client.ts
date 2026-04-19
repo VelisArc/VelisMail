@@ -174,10 +174,10 @@ function normalizeDomainInput(input: string): string {
 function buildDnsRecords(domain: string, verificationToken: string): DnsRecord[] {
   return [
     { type: 'TXT', name: `_velismail-verify.${domain}`, value: verificationToken, ttl: 300 },
-    { type: 'MX', name: domain, value: 'mx1.velismail.com', priority: 10, ttl: 3600 },
-    { type: 'MX', name: domain, value: 'mx2.velismail.com', priority: 20, ttl: 3600 },
-    { type: 'TXT', name: domain, value: 'v=spf1 include:velismail.com ~all', ttl: 3600 },
-    { type: 'CNAME', name: `velismail._domainkey.${domain}`, value: 'dkim.velismail.com', ttl: 3600 },
+    { type: 'MX', name: domain, value: 'mx1.velismail.online', priority: 10, ttl: 3600 },
+    { type: 'MX', name: domain, value: 'mx2.velismail.online', priority: 20, ttl: 3600 },
+    { type: 'TXT', name: domain, value: 'v=spf1 include:velismail.online ~all', ttl: 3600 },
+    { type: 'CNAME', name: `velismail._domainkey.${domain}`, value: 'dkim.velismail.online', ttl: 3600 },
     { type: 'TXT', name: `_dmarc.${domain}`, value: `v=DMARC1; p=quarantine; rua=mailto:dmarc@${domain}`, ttl: 3600 },
   ];
 }
@@ -185,8 +185,8 @@ function buildDnsRecords(domain: string, verificationToken: string): DnsRecord[]
 function buildDomainChecks(domain: string, verificationToken: string): DomainCheck[] {
   return [
     { key: 'txt', label: 'Ownership TXT', status: 'pending', expected: verificationToken },
-    { key: 'mx', label: 'Inbound MX', status: 'pending', expected: 'mx1.velismail.com / mx2.velismail.com' },
-    { key: 'spf', label: 'SPF', status: 'pending', expected: 'v=spf1 include:velismail.com ~all' },
+    { key: 'mx', label: 'Inbound MX', status: 'pending', expected: 'mx1.velismail.online / mx2.velismail.online' },
+    { key: 'spf', label: 'SPF', status: 'pending', expected: 'v=spf1 include:velismail.online ~all' },
     { key: 'dkim', label: 'DKIM', status: 'pending', expected: `velismail._domainkey.${domain}` },
     { key: 'dmarc', label: 'DMARC', status: 'pending', expected: `v=DMARC1; p=quarantine; rua=mailto:dmarc@${domain}` },
   ];
@@ -265,7 +265,7 @@ export const auth = {
     // Add welcome email
     const welcomeEmail: Email = {
       id: 'em_welcome_' + Math.random().toString(36).slice(2, 6),
-      from: 'welcome@velismail.com',
+      from: 'welcome@velismail.online',
       fromName: 'VelisMail',
       to: [data.email],
       subject: `🎉 Welcome to VelisMail, ${data.displayName}!`,
@@ -457,7 +457,7 @@ export const mail = {
     const session = auth.getSession();
     const email: Email = {
       id: 'em_' + Math.random().toString(36).slice(2, 8),
-      from: session?.email || 'you@velismail.com',
+      from: session?.email || 'you@velismail.online',
       fromName: session?.displayName || 'You',
       to, subject, body,
       date: new Date().toISOString(),

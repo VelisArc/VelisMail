@@ -13,7 +13,7 @@ impl SpfVerifier {
 
         Ok(SpfResult {
             pass: true,
-            record: "v=spf1 include:velismail.com ~all".to_string(),
+            record: "v=spf1 include:velismail.online ~all".to_string(),
             explanation: "SPF check passed".to_string(),
         })
     }
@@ -22,7 +22,7 @@ impl SpfVerifier {
     pub async fn get_spf_record(domain: &str) -> Result<String> {
         // Query DNS TXT record
         let _ = domain;
-        Ok("v=spf1 include:velismail.com ~all".to_string())
+        Ok("v=spf1 include:velismail.online ~all".to_string())
     }
 }
 

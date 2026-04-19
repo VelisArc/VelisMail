@@ -34,13 +34,13 @@ impl MailConfig {
             nats_url: std::env::var("NATS_URL")
                 .unwrap_or_else(|_| "nats://localhost:4222".to_string()),
             smtp_host: std::env::var("SMTP_HOST")
-                .unwrap_or_else(|_| "smtp.velismail.com".to_string()),
+                .unwrap_or_else(|_| "smtp.velismail.online".to_string()),
             smtp_port: std::env::var("SMTP_PORT")
                 .ok()
                 .and_then(|p| p.parse().ok())
                 .unwrap_or(587),
             smtp_username: std::env::var("SMTP_USERNAME")
-                .unwrap_or_else(|_| "noreply@velismail.com".to_string()),
+                .unwrap_or_else(|_| "noreply@velismail.online".to_string()),
             smtp_password: std::env::var("SMTP_PASSWORD")
                 .unwrap_or_else(|_| "change-me".to_string()),
             max_attachment_size_mb: std::env::var("MAX_ATTACHMENT_SIZE_MB")

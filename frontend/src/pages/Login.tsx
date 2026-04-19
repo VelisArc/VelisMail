@@ -166,7 +166,7 @@ export default function Login() {
                 >
                   <Mail size={28} color="var(--primary-400)" />
                   <h3>Personal</h3>
-                  <p>Free @velismail.com address. Perfect for individuals.</p>
+                  <p>Free @velismail.online address. Perfect for individuals.</p>
                   <span className="account-type-tag">Free</span>
                 </button>
 
@@ -206,7 +206,7 @@ export default function Login() {
                 <p className="login-card-desc">
                   {accountType === 'business'
                     ? 'Set up your organization email'
-                    : 'Create your free @velismail.com account'}
+                    : 'Create your free @velismail.online account'}
                 </p>
               </div>
 
@@ -220,7 +220,7 @@ export default function Login() {
                 <div className="form-group">
                   <label htmlFor="reg-email">Email Address</label>
                   <input id="reg-email" type="email" className="input"
-                    placeholder={accountType === 'business' ? 'you@yourdomain.com' : 'you@velismail.com'}
+                    placeholder={accountType === 'business' ? 'you@yourdomain.com' : 'you@velismail.online'}
                     required value={regEmail} onChange={e => setRegEmail(e.target.value)} />
                 </div>
 

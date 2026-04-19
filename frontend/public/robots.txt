@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://velismail.com/sitemap.xml
+Sitemap: https://velismail.online/sitemap.xml

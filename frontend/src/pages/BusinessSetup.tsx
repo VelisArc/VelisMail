@@ -138,8 +138,8 @@ export default function BusinessSetup() {
     const steps: VerifyStep[] = [
       { label: 'DNS Propagation Check', icon: Globe, status: 'pending', detail: domain },
       { label: 'TXT Record Verification', icon: Shield, status: 'pending', detail: '_velismail-verify.' + domain },
-      { label: 'MX Record Validation', icon: Mail, status: 'pending', detail: 'mx1.velismail.com' },
-      { label: 'SPF Policy Check', icon: Lock, status: 'pending', detail: 'v=spf1 include:velismail.com' },
+      { label: 'MX Record Validation', icon: Mail, status: 'pending', detail: 'mx1.velismail.online' },
+      { label: 'SPF Policy Check', icon: Lock, status: 'pending', detail: 'v=spf1 include:velismail.online' },
       { label: 'DKIM Key Exchange', icon: Zap, status: 'pending', detail: 'dkim._domainkey.' + domain },
       { label: 'DMARC Policy Enforcement', icon: Server, status: 'pending', detail: '_dmarc.' + domain },
       { label: 'Database Connectivity', icon: Database, status: 'pending', detail: user?.businessDbUrl?.split('@')[1]?.split('/')[0] || 'localhost' },

@@ -133,7 +133,7 @@ export default function Terms() {
             <h2>13. Contact</h2>
             <p>Questions about these Terms? Contact us:</p>
             <ul>
-              <li>Email: <a href="mailto:legal@velismail.com">legal@velismail.com</a></li>
+              <li>Email: <a href="mailto:legal@velismail.online">legal@velismail.online</a></li>
               <li>Address: VelisMail Legal, Bengaluru, India</li>
             </ul>
           </section>
