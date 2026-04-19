@@ -21,6 +21,8 @@ pub fn api_v1_routes(_state: &AppState) -> Router<AppState> {
         .nest("/storage", storage_routes())
         // Search routes
         .route("/search", get(search_emails))
+        // Infrastructure verification route
+        .route("/verify", post(verify_infrastructure))
 }
 
 /// Authentication routes
@@ -323,6 +325,16 @@ pub async fn search_emails(State(_state): State<AppState>) -> Json<serde_json::V
             "per_page": 50,
             "total": 0
         }
+    }))
+}
+
+pub async fn verify_infrastructure(
+    State(_state): State<AppState>,
+    Json(_payload): Json<serde_json::Value>,
+) -> Json<serde_json::Value> {
+    Json(json!({
+        "success": true,
+        "message": "Connection established"
     }))
 }
 
