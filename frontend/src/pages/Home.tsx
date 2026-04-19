@@ -84,6 +84,22 @@ const testimonials = [
 export default function Home() {
   const user = auth.getSession();
 
+  const getDashboardLink = () => {
+    if (!user) return '/login';
+    if (user.accountType === 'business') {
+      return user.isBusinessSetupComplete ? '/business' : '/business-setup';
+    }
+    return user.isSetupComplete ? '/dashboard' : '/setup';
+  };
+
+  const getDashboardText = () => {
+    if (!user) return '';
+    if (user.accountType === 'business') {
+      return user.isBusinessSetupComplete ? 'Dashboard' : 'Setup';
+    }
+    return user.isSetupComplete ? 'Dashboard' : 'Setup';
+  };
+
   return (
     <div className="home">
       {/* Navigation */}
@@ -98,7 +114,7 @@ export default function Home() {
             <a href="#pricing">Pricing</a>
             <Link to="/about">About</Link>
             {user ? (
-              <Link to={user.accountType === 'business' ? '/business' : '/dashboard'} className="btn btn-primary btn-sm">Dashboard</Link>
+              <Link to={getDashboardLink()} className="btn btn-primary btn-sm">{getDashboardText()}</Link>
             ) : (
               <>
                 <Link to="/login" className="btn btn-ghost btn-sm">Log In</Link>
@@ -130,8 +146,8 @@ export default function Home() {
           </p>
           <div className="hero-actions animate-slide-up stagger-3">
             {user ? (
-              <Link to={user.accountType === 'business' ? '/business' : '/dashboard'} className="btn btn-primary btn-lg">
-                Go to Dashboard <ArrowRight size={20} />
+              <Link to={getDashboardLink()} className="btn btn-primary btn-lg">
+                Go to {getDashboardText()} <ArrowRight size={20} />
               </Link>
             ) : (
               <Link to="/login" className="btn btn-primary btn-lg">
@@ -313,9 +329,9 @@ export default function Home() {
             </div>
             <div className="footer-col">
               <h4>Support</h4>
-              <a href="#">Documentation</a>
-              <a href="#">Contact Us</a>
-              <a href="#">Status Page</a>
+              <Link to="/docs">Documentation</Link>
+              <Link to="/contacts">Contact Us</Link>
+              <Link to="/status">Status Page</Link>
             </div>
           </div>
         </div>

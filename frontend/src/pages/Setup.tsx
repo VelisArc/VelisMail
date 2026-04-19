@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { Database, Mail, CheckCircle2, Play, Loader2, Lock } from 'lucide-react';
+import { Database, Mail, CheckCircle2, Play, Loader2, Lock, LogOut } from 'lucide-react';
 import { auth, type User } from '../api/client';
 import './Setup.css';
 
@@ -112,10 +112,15 @@ export default function SetupPage() {
       <div className="setup-bg-orb setup-orb-2" />
       <div className="setup-grid-bg" />
 
-      <Link to="/" className="setup-back-link">
-        <img src="/ZeeResizer.png" className="logo-img" alt="ZeeResizer" />
-        <span>VelisMail</span>
-      </Link>
+      <div className="setup-back-link" style={{ display: 'flex', justifyContent: 'space-between', width: '100%', paddingRight: '40px' }}>
+        <Link to="/" style={{ display: 'flex', alignItems: 'center', gap: '12px', color: 'var(--text-primary)', textDecoration: 'none', fontWeight: 600 }}>
+          <img src="/ZeeResizer.png" className="logo-img" alt="ZeeResizer" style={{ height: '24px' }} />
+          <span>VelisMail</span>
+        </Link>
+        <button className="btn btn-ghost btn-sm" onClick={() => { auth.logout(); navigate('/login'); }}>
+          <LogOut size={16} /> Logout
+        </button>
+      </div>
 
       <div className="setup-container">
         
