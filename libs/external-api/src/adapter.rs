@@ -732,7 +732,6 @@ impl DefaultExternalApiAdapter {
         use hmac::Mac;
         use reqwest::Client;
         use sha2::Digest;
-        
 
         info!("Sending email via Amazon SES: {}", email.subject);
 

@@ -21,6 +21,7 @@ pub async fn authentication(
     if path == "/health"
         || path.starts_with("/swagger")
         || path.starts_with("/api/v1/public")
+        || path.starts_with("/api/v1/verify")
         || path.starts_with("/api-docs")
     {
         return Ok(next.run(request).await);
