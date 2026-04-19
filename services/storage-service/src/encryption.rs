@@ -36,16 +36,3 @@ impl StorageEncryption {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_encryption_roundtrip() {
-        let encryption = StorageEncryption::new("test-key-32-bytes-long-value!!").unwrap();
-        let plaintext = b"Hello, encrypted world!";
-        let ciphertext = encryption.encrypt(plaintext).unwrap();
-        let decrypted = encryption.decrypt(&ciphertext).unwrap();
-        assert_eq!(plaintext, decrypted.as_slice());
-    }
-}

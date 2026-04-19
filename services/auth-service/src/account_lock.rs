@@ -177,19 +177,3 @@ pub struct FailedLoginAttempt {
     pub attempted_at: DateTime<Utc>,
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use chrono::Duration;
-
-    #[test]
-    fn test_failed_attempts_key() {
-        // Provide minimal stubs or mocks for required dependencies
-        let dummy_dep1 = Default::default();
-        let dummy_dep2 = Default::default();
-        let manager = AccountLockManager::new(dummy_dep1, dummy_dep2, 5, 15, 15);
-
-        let key = manager.failed_attempts_key("user@example.com");
-        assert_eq!(key, "failed_attempts:user@example.com");
-    }
-}

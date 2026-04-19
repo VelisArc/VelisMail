@@ -248,7 +248,7 @@ pub async fn process_batch_emails(
 mod tests {
     use super::*;
     use crate::attachments::AttachmentConfig;
-    use crate::rules::{EmailRule, RuleActions, RuleConditions};
+
 
     #[tokio::test]
     async fn test_outgoing_workflow() {

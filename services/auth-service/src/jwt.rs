@@ -34,7 +34,7 @@ impl JwtManager {
     ) -> Result<String> {
         let now = Utc::now();
         let claims = Claims {
-            sub: user_id,
+            sub: user_id.clone(),
             tenant_id: tenant_id.to_string(),
             email: email.to_string(),
             iat: now.timestamp(),
@@ -103,7 +103,7 @@ mod tests {
 
         let token = manager
             .generate_access_token(
-                user_id,
+                user_id.clone(),
                 "tenant-123",
                 "user@example.com",
                 UserRole::User,

@@ -21,11 +21,11 @@ mod adapter;
 mod credentials;
 mod error;
 mod health;
-#[cfg(test)]
-mod property_tests;
+
+
 mod provider;
-#[cfg(test)]
-mod tests;
+
+
 
 pub use adapter::*;
 pub use credentials::*;

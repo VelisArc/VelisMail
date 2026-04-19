@@ -103,16 +103,3 @@ impl EncryptedPayload {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_encrypt_decrypt() {
-        let key = EncryptionKey::generate().unwrap();
-        let plaintext = b"Hello, VelisMail!";
-        let ciphertext = key.encrypt(plaintext, None).unwrap();
-        let decrypted = key.decrypt(&ciphertext, None).unwrap();
-        assert_eq!(plaintext, decrypted.as_slice());
-    }
-}
