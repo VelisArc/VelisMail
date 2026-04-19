@@ -9,7 +9,7 @@ use std::time::Duration;
 use rand::Rng;
 use tracing::{info, warn, error};
 use crate::{
-    provider::{ExternalApiProvider, ProviderType, ProviderStatus},
+    provider::ProviderType,
     credentials::{ApiCredentials, EncryptedCredentials},
     health::{HealthStatus, ProviderConnection},
     error::{ExternalApiError, ExternalApiResult},
@@ -676,8 +676,8 @@ impl DefaultExternalApiAdapter {
     ) -> ExternalApiResult<SendResult> {
         use reqwest::Client;
         use chrono::Utc;
-        use hmac::{Hmac, Mac};
-        use sha2::Sha256;
+        use hmac::Mac;
+
         use sha2::Digest;
         
         info!("Sending email via Amazon SES: {}", email.subject);
@@ -912,7 +912,7 @@ impl ExternalApiAdapter for DefaultExternalApiAdapter {
         // Create connection based on provider type
         let provider_type = credentials.provider_type();
         let connection_details = match credentials {
-            ApiCredentials::Gmail { client_id, client_secret, refresh_token } => {
+            ApiCredentials::Gmail { client_id: _, client_secret: _, refresh_token: _ } => {
                 // In real implementation, we'd exchange refresh token for access token
                 crate::health::ConnectionDetails::Gmail {
                     access_token: "placeholder_access_token".to_string(),
@@ -1023,7 +1023,7 @@ impl ExternalApiAdapter for DefaultExternalApiAdapter {
     async fn receive_emails(
         &self,
         provider: &ProviderConnection,
-        since: DateTime<Utc>,
+        _since: DateTime<Utc>,
     ) -> ExternalApiResult<Vec<EmailMessage>> {
         // Only providers that support receiving emails can be used
         if !provider.provider_type.supports_receiving() {
