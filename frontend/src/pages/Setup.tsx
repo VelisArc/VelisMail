@@ -72,14 +72,25 @@ export default function SetupPage() {
         return;
       }
       const payload = { dbUrl: finalDbUrl, apiProvider: finalApiProvider, apiKey: apiKey };
-      const proxyTest = await fetch((import.meta.env.VITE_API_URL || '') + '/api/v1/verify', {
+      const proxyTest = await fetch((import.meta.env.VITE_API_URL || 'http://localhost:3000') + '/api/v1/verify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
 
-      if (!proxyTest.ok) {
-        throw new Error("Proxy connection refused. Check your database IP whitelist and port mapping.");
+      let responseData;
+      try {
+        responseData = await proxyTest.json();
+      } catch (e) {
+        // Fallback for non-JSON errors (like 502 Bad Gateway or CORS failures)
+        throw new Error("Proxy connection refused or network error. Ensure the backend gateway is running.");
+      }
+
+      if (!proxyTest.ok || !responseData.success) {
+        // Extract specific error message if available
+        const errorMsg = responseData.message || "Failed to verify infrastructure connection.";
+        const errorType = responseData.errorType ? `[${responseData.errorType}] ` : "";
+        throw new Error(`${errorType}${errorMsg}`);
       }
 
       // Successful verification

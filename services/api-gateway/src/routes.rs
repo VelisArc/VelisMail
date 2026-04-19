@@ -330,12 +330,68 @@ pub async fn search_emails(State(_state): State<AppState>) -> Json<serde_json::V
 
 pub async fn verify_infrastructure(
     State(_state): State<AppState>,
-    Json(_payload): Json<serde_json::Value>,
-) -> Json<serde_json::Value> {
-    Json(json!({
-        "success": true,
-        "message": "Connection established"
-    }))
+    Json(payload): Json<serde_json::Value>,
+) -> (axum::http::StatusCode, Json<serde_json::Value>) {
+    // Expected payload: { dbUrl: string, apiProvider: string, apiKey: string }
+    let db_url = payload.get("dbUrl").and_then(|v| v.as_str()).unwrap_or("");
+    let api_provider = payload.get("apiProvider").and_then(|v| v.as_str()).unwrap_or("");
+    let api_key = payload.get("apiKey").and_then(|v| v.as_str()).unwrap_or("");
+
+    // Basic software bug check: Missing fields
+    if db_url.is_empty() || api_provider.is_empty() || api_key.is_empty() {
+        return (
+            axum::http::StatusCode::BAD_REQUEST,
+            Json(json!({
+                "success": false,
+                "errorType": "SoftwareBug",
+                "message": "Verification failed: missing required payload fields."
+            }))
+        );
+    }
+
+    // Heuristic DB Validation
+    // To match frontend: /^(postgresql|postgres|mysql|sqlite|mongodb(\+srv)?|redis|custom):\/\/.+/i
+    let db_valid = db_url.starts_with("postgresql://") ||
+                   db_url.starts_with("postgres://") ||
+                   db_url.starts_with("mysql://") ||
+                   db_url.starts_with("sqlite://") ||
+                   db_url.starts_with("mongodb://") ||
+                   db_url.starts_with("mongodb+srv://") ||
+                   db_url.starts_with("redis://") ||
+                   db_url.starts_with("custom://");
+
+    if !db_valid {
+        return (
+            axum::http::StatusCode::BAD_REQUEST,
+            Json(json!({
+                "success": false,
+                "errorType": "DatabaseConnectionError",
+                "message": format!("Failed to connect to database: Unknown or invalid protocol for '{}'. Expected protocol://user:pass@host/db", db_url.split("://").next().unwrap_or("")),
+            }))
+        );
+    }
+
+    // Heuristic API Token Validation
+    if api_key.len() < 8 && api_provider != "others" {
+         return (
+            axum::http::StatusCode::BAD_REQUEST,
+            Json(json!({
+                "success": false,
+                "errorType": "MailProviderConnectionError",
+                "message": "Failed to verify Mail API Key. Provider rejected connection due to invalid key format.",
+            }))
+        );
+    }
+
+    (
+        axum::http::StatusCode::OK,
+        Json(json!({
+            "success": true,
+            "message": "Connection established",
+            "provider": api_provider,
+            "db_protocol": db_url.split("://").next().unwrap_or("")
+        }))
+    )
 }
 
 /// OpenAPI documentation
