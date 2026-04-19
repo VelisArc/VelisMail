@@ -3,17 +3,17 @@
 //! Main adapter interface for connecting to and using external API providers.
 //! Implements the ExternalApiAdapter trait from the design document.
 
+use crate::{
+    credentials::{ApiCredentials, EncryptedCredentials},
+    error::{ExternalApiError, ExternalApiResult},
+    health::{HealthStatus, ProviderConnection},
+    provider::{ExternalApiProvider, ProviderStatus, ProviderType},
+};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use std::time::Duration;
 use rand::Rng;
-use tracing::{info, warn, error};
-use crate::{
-    provider::{ExternalApiProvider, ProviderType, ProviderStatus},
-    credentials::{ApiCredentials, EncryptedCredentials},
-    health::{HealthStatus, ProviderConnection},
-    error::{ExternalApiError, ExternalApiResult},
-};
+use std::time::Duration;
+use tracing::{error, info, warn};
 
 /// Email message structure for sending/receiving
 #[derive(Debug, Clone)]
@@ -98,21 +98,23 @@ impl RetryPolicy {
         if attempt == 0 {
             return Duration::from_secs(0);
         }
-        
+
         // Exponential backoff: base_delay * 2^(attempt-1)
         let exponent = attempt - 1;
-        let mut delay = self.base_delay_seconds.saturating_mul(2_u64.saturating_pow(exponent));
-        
+        let mut delay = self
+            .base_delay_seconds
+            .saturating_mul(2_u64.saturating_pow(exponent));
+
         // Cap at maximum delay
         delay = delay.min(self.max_delay_seconds);
-        
+
         // Add jitter if enabled (up to 10% random variation)
         if self.jitter_enabled {
             let jitter_factor = 0.1; // 10% jitter
             let jitter = rand::thread_rng().gen_range(-jitter_factor..jitter_factor);
             delay = (delay as f64 * (1.0 + jitter)) as u64;
         }
-        
+
         Duration::from_secs(delay)
     }
 }
@@ -190,7 +192,7 @@ impl CircuitBreaker {
             success_count: 0,
         }
     }
-    
+
     /// Check if request should be allowed
     pub fn allow_request(&mut self) -> bool {
         match self.state {
@@ -218,11 +220,11 @@ impl CircuitBreaker {
             }
         }
     }
-    
+
     /// Record a successful request
     pub fn record_success(&mut self) -> Option<(CircuitState, CircuitState)> {
         let old_state = self.state.clone();
-        
+
         match self.state {
             CircuitState::Closed => {
                 self.success_count += 1;
@@ -241,23 +243,23 @@ impl CircuitBreaker {
                 // Shouldn't happen - success shouldn't be recorded when circuit is open
             }
         }
-        
+
         if old_state != self.state {
             Some((old_state, self.state.clone()))
         } else {
             None
         }
     }
-    
+
     /// Record a failed request
     pub fn record_failure(&mut self) -> Option<(CircuitState, CircuitState)> {
         let old_state = self.state.clone();
-        
+
         match self.state {
             CircuitState::Closed | CircuitState::HalfOpen => {
                 self.failure_count += 1;
                 self.success_count = 0;
-                
+
                 if self.failure_count >= self.failure_threshold {
                     // Open the circuit
                     self.state = CircuitState::Open;
@@ -269,14 +271,14 @@ impl CircuitBreaker {
                 self.last_opened = Some(Utc::now());
             }
         }
-        
+
         if old_state != self.state {
             Some((old_state, self.state.clone()))
         } else {
             None
         }
     }
-    
+
     /// Get current state
     pub fn state(&self) -> &CircuitState {
         &self.state
@@ -296,7 +298,7 @@ pub trait ExternalApiAdapter {
         &self,
         credentials: ApiCredentials,
     ) -> ExternalApiResult<ProviderConnection>;
-    
+
     /// Send an email through the configured provider
     ///
     /// Routes the email through the configured external API provider.
@@ -306,7 +308,7 @@ pub trait ExternalApiAdapter {
         provider: &ProviderConnection,
         email: EmailMessage,
     ) -> ExternalApiResult<SendResult>;
-    
+
     /// Receive emails from the configured provider
     ///
     /// Fetches emails from the provider since the specified timestamp.
@@ -316,16 +318,13 @@ pub trait ExternalApiAdapter {
         provider: &ProviderConnection,
         since: DateTime<Utc>,
     ) -> ExternalApiResult<Vec<EmailMessage>>;
-    
+
     /// Check health of a provider connection
     ///
     /// Performs health check and returns detailed status.
     /// Used for monitoring and failover decisions.
-    async fn check_health(
-        &self,
-        provider: &ProviderConnection,
-    ) -> ExternalApiResult<HealthStatus>;
-    
+    async fn check_health(&self, provider: &ProviderConnection) -> ExternalApiResult<HealthStatus>;
+
     /// Failover from primary to secondary provider
     ///
     /// Switches from a failing primary provider to a secondary provider.
@@ -359,9 +358,13 @@ impl DefaultExternalApiAdapter {
             circuit_breaker: std::sync::Arc::new(tokio::sync::Mutex::new(CircuitBreaker::new())),
         }
     }
-    
+
     /// Create a new adapter with custom retry policy
-    pub fn with_retry_policy(encryption_key: Vec<u8>, key_id: String, retry_policy: RetryPolicy) -> Self {
+    pub fn with_retry_policy(
+        encryption_key: Vec<u8>,
+        key_id: String,
+        retry_policy: RetryPolicy,
+    ) -> Self {
         Self {
             encryption_key,
             key_id,
@@ -369,7 +372,7 @@ impl DefaultExternalApiAdapter {
             circuit_breaker: std::sync::Arc::new(tokio::sync::Mutex::new(CircuitBreaker::new())),
         }
     }
-    
+
     /// Encrypt credentials for storage
     fn encrypt_credentials(
         &self,
@@ -378,7 +381,7 @@ impl DefaultExternalApiAdapter {
         EncryptedCredentials::encrypt(credentials, &self.key_id, &self.encryption_key)
             .map_err(|e| ExternalApiError::EncryptionError(e.to_string()))
     }
-    
+
     /// Send email via Gmail API
     async fn send_via_gmail(
         &self,
@@ -386,27 +389,34 @@ impl DefaultExternalApiAdapter {
         email: EmailMessage,
     ) -> ExternalApiResult<SendResult> {
         use reqwest::Client;
-        
+
         info!("Sending email via Gmail API: {}", email.subject);
-        
+
         // Extract Gmail connection details
-        let crate::health::ConnectionDetails::Gmail { access_token, user_id } = &connection.connection_details else {
+        let crate::health::ConnectionDetails::Gmail {
+            access_token,
+            user_id,
+        } = &connection.connection_details
+        else {
             return Err(ExternalApiError::ConnectionError(
-                "Invalid connection details for Gmail API".to_string()
+                "Invalid connection details for Gmail API".to_string(),
             ));
         };
-        
+
         // Build Gmail API request
         let client = Client::new();
-        let url = format!("https://gmail.googleapis.com/gmail/v1/users/{}/messages/send", user_id);
-        
+        let url = format!(
+            "https://gmail.googleapis.com/gmail/v1/users/{}/messages/send",
+            user_id
+        );
+
         // Convert email to Gmail API format
         let raw_message = self.build_gmail_raw_message(&email)?;
-        
+
         let request_body = serde_json::json!({
             "raw": raw_message,
         });
-        
+
         match client
             .post(&url)
             .header("Authorization", format!("Bearer {}", access_token))
@@ -418,16 +428,21 @@ impl DefaultExternalApiAdapter {
         {
             Ok(response) => {
                 if response.status().is_success() {
-                    let response_json: serde_json::Value = response.json().await
+                    let response_json: serde_json::Value = response
+                        .json()
+                        .await
                         .map_err(|e| ExternalApiError::InvalidResponse(e.to_string()))?;
-                    
+
                     let message_id = response_json["id"]
                         .as_str()
                         .map(|s| s.to_string())
                         .unwrap_or_else(|| format!("gmail_{}", uuid::Uuid::new_v4()));
-                    
-                    info!("Email sent successfully via Gmail API, message ID: {}", message_id);
-                    
+
+                    info!(
+                        "Email sent successfully via Gmail API, message ID: {}",
+                        message_id
+                    );
+
                     Ok(SendResult {
                         success: true,
                         provider_message_id: Some(message_id),
@@ -439,20 +454,25 @@ impl DefaultExternalApiAdapter {
                     // Rate limited
                     warn!("Gmail API rate limit exceeded");
                     Err(ExternalApiError::RateLimitExceeded(
-                        "Gmail API rate limit exceeded".to_string()
+                        "Gmail API rate limit exceeded".to_string(),
                     ))
                 } else if response.status() == 401 || response.status() == 403 {
                     // Authentication error
                     warn!("Gmail API authentication error: {}", response.status());
-                    Err(ExternalApiError::AuthenticationError(
-                        format!("Gmail API authentication error: {}", response.status())
-                    ))
+                    Err(ExternalApiError::AuthenticationError(format!(
+                        "Gmail API authentication error: {}",
+                        response.status()
+                    )))
                 } else {
-                    let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
+                    let error_text = response
+                        .text()
+                        .await
+                        .unwrap_or_else(|_| "Unknown error".to_string());
                     warn!("Gmail API error: {}", error_text);
-                    Err(ExternalApiError::ProviderUnavailable(
-                        format!("Gmail API error: {}", error_text)
-                    ))
+                    Err(ExternalApiError::ProviderUnavailable(format!(
+                        "Gmail API error: {}",
+                        error_text
+                    )))
                 }
             }
             Err(e) => {
@@ -461,14 +481,14 @@ impl DefaultExternalApiAdapter {
             }
         }
     }
-    
+
     /// Build raw message for Gmail API
     fn build_gmail_raw_message(&self, email: &EmailMessage) -> ExternalApiResult<String> {
-        use base64::{Engine as _, engine::general_purpose::STANDARD};
-        
+        use base64::{engine::general_purpose::STANDARD, Engine as _};
+
         // Build MIME message
         let mut message = String::new();
-        
+
         // Headers
         message.push_str(&format!("From: {}\r\n", email.from));
         message.push_str(&format!("To: {}\r\n", email.to.join(", ")));
@@ -477,20 +497,23 @@ impl DefaultExternalApiAdapter {
         }
         message.push_str(&format!("Subject: {}\r\n", email.subject));
         message.push_str("MIME-Version: 1.0\r\n");
-        
+
         // Determine content type
         if email.body_html.is_some() {
             // Multipart message
             let boundary = format!("boundary_{}", uuid::Uuid::new_v4());
-            message.push_str(&format!("Content-Type: multipart/alternative; boundary=\"{}\"\r\n\r\n", boundary));
-            
+            message.push_str(&format!(
+                "Content-Type: multipart/alternative; boundary=\"{}\"\r\n\r\n",
+                boundary
+            ));
+
             // Plain text part
             message.push_str(&format!("--{}\r\n", boundary));
             message.push_str("Content-Type: text/plain; charset=UTF-8\r\n");
             message.push_str("Content-Transfer-Encoding: 7bit\r\n\r\n");
             message.push_str(&email.body_plain);
             message.push_str("\r\n\r\n");
-            
+
             // HTML part
             if let Some(html) = &email.body_html {
                 message.push_str(&format!("--{}\r\n", boundary));
@@ -499,16 +522,22 @@ impl DefaultExternalApiAdapter {
                 message.push_str(html);
                 message.push_str("\r\n\r\n");
             }
-            
+
             // Attachments
             for attachment in &email.attachments {
                 message.push_str(&format!("--{}\r\n", boundary));
                 message.push_str(&format!("Content-Type: {}\r\n", attachment.content_type));
                 message.push_str("Content-Transfer-Encoding: base64\r\n");
-                message.push_str(&format!("Content-Disposition: {}; filename=\"{}\"\r\n\r\n",
-                    if attachment.inline { "inline" } else { "attachment" },
-                    attachment.filename));
-                
+                message.push_str(&format!(
+                    "Content-Disposition: {}; filename=\"{}\"\r\n\r\n",
+                    if attachment.inline {
+                        "inline"
+                    } else {
+                        "attachment"
+                    },
+                    attachment.filename
+                ));
+
                 let encoded = STANDARD.encode(&attachment.content);
                 // Split into lines of 76 characters (RFC 2045)
                 for chunk in encoded.as_bytes().chunks(76) {
@@ -517,7 +546,7 @@ impl DefaultExternalApiAdapter {
                 }
                 message.push_str("\r\n");
             }
-            
+
             message.push_str(&format!("--{}--\r\n", boundary));
         } else {
             // Simple plain text message
@@ -525,11 +554,11 @@ impl DefaultExternalApiAdapter {
             message.push_str("Content-Transfer-Encoding: 7bit\r\n\r\n");
             message.push_str(&email.body_plain);
         }
-        
+
         // Base64 encode the entire message
         Ok(STANDARD.encode(message))
     }
-    
+
     /// Send email via SendGrid
     async fn send_via_sendgrid(
         &self,
@@ -537,23 +566,24 @@ impl DefaultExternalApiAdapter {
         email: EmailMessage,
     ) -> ExternalApiResult<SendResult> {
         use reqwest::Client;
-        
+
         info!("Sending email via SendGrid: {}", email.subject);
-        
+
         // Extract SendGrid connection details
-        let crate::health::ConnectionDetails::SendGrid { api_key } = &connection.connection_details else {
+        let crate::health::ConnectionDetails::SendGrid { api_key } = &connection.connection_details
+        else {
             return Err(ExternalApiError::ConnectionError(
-                "Invalid connection details for SendGrid".to_string()
+                "Invalid connection details for SendGrid".to_string(),
             ));
         };
-        
+
         // Build SendGrid API request
         let client = Client::new();
         let url = "https://api.sendgrid.com/v3/mail/send";
-        
+
         // Convert email to SendGrid API format
         let request_body = self.build_sendgrid_request_body(&email)?;
-        
+
         match client
             .post(url)
             .header("Authorization", format!("Bearer {}", api_key))
@@ -566,14 +596,18 @@ impl DefaultExternalApiAdapter {
             Ok(response) => {
                 if response.status().is_success() {
                     // SendGrid returns message ID in X-Message-Id header
-                    let message_id = response.headers()
+                    let message_id = response
+                        .headers()
                         .get("X-Message-Id")
                         .and_then(|h| h.to_str().ok())
                         .map(|s| s.to_string())
                         .unwrap_or_else(|| format!("sendgrid_{}", uuid::Uuid::new_v4()));
-                    
-                    info!("Email sent successfully via SendGrid, message ID: {}", message_id);
-                    
+
+                    info!(
+                        "Email sent successfully via SendGrid, message ID: {}",
+                        message_id
+                    );
+
                     Ok(SendResult {
                         success: true,
                         provider_message_id: Some(message_id),
@@ -585,20 +619,25 @@ impl DefaultExternalApiAdapter {
                     // Rate limited
                     warn!("SendGrid rate limit exceeded");
                     Err(ExternalApiError::RateLimitExceeded(
-                        "SendGrid rate limit exceeded".to_string()
+                        "SendGrid rate limit exceeded".to_string(),
                     ))
                 } else if response.status() == 401 || response.status() == 403 {
                     // Authentication error
                     warn!("SendGrid authentication error: {}", response.status());
-                    Err(ExternalApiError::AuthenticationError(
-                        format!("SendGrid authentication error: {}", response.status())
-                    ))
+                    Err(ExternalApiError::AuthenticationError(format!(
+                        "SendGrid authentication error: {}",
+                        response.status()
+                    )))
                 } else {
-                    let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
+                    let error_text = response
+                        .text()
+                        .await
+                        .unwrap_or_else(|_| "Unknown error".to_string());
                     warn!("SendGrid error: {}", error_text);
-                    Err(ExternalApiError::ProviderUnavailable(
-                        format!("SendGrid error: {}", error_text)
-                    ))
+                    Err(ExternalApiError::ProviderUnavailable(format!(
+                        "SendGrid error: {}",
+                        error_text
+                    )))
                 }
             }
             Err(e) => {
@@ -607,39 +646,50 @@ impl DefaultExternalApiAdapter {
             }
         }
     }
-    
+
     /// Build SendGrid API request body
-    fn build_sendgrid_request_body(&self, email: &EmailMessage) -> ExternalApiResult<serde_json::Value> {
+    fn build_sendgrid_request_body(
+        &self,
+        email: &EmailMessage,
+    ) -> ExternalApiResult<serde_json::Value> {
         let mut personalizations = vec![serde_json::json!({
             "to": email.to.iter().map(|addr| serde_json::json!({
                 "email": addr
             })).collect::<Vec<_>>(),
         })];
-        
+
         if !email.cc.is_empty() {
-            personalizations[0]["cc"] = serde_json::json!(email.cc.iter().map(|addr| serde_json::json!({
-                "email": addr
-            })).collect::<Vec<_>>());
+            personalizations[0]["cc"] = serde_json::json!(email
+                .cc
+                .iter()
+                .map(|addr| serde_json::json!({
+                    "email": addr
+                }))
+                .collect::<Vec<_>>());
         }
-        
+
         if !email.bcc.is_empty() {
-            personalizations[0]["bcc"] = serde_json::json!(email.bcc.iter().map(|addr| serde_json::json!({
-                "email": addr
-            })).collect::<Vec<_>>());
+            personalizations[0]["bcc"] = serde_json::json!(email
+                .bcc
+                .iter()
+                .map(|addr| serde_json::json!({
+                    "email": addr
+                }))
+                .collect::<Vec<_>>());
         }
-        
+
         let mut content = vec![serde_json::json!({
             "type": "text/plain",
             "value": email.body_plain
         })];
-        
+
         if let Some(html) = &email.body_html {
             content.push(serde_json::json!({
                 "type": "text/html",
                 "value": html
             }));
         }
-        
+
         let mut request_body = serde_json::json!({
             "personalizations": personalizations,
             "from": {
@@ -648,78 +698,99 @@ impl DefaultExternalApiAdapter {
             "subject": email.subject,
             "content": content,
         });
-        
+
         // Add attachments if any
         if !email.attachments.is_empty() {
-            let attachments: Vec<serde_json::Value> = email.attachments.iter().map(|attachment| {
-                use base64::{Engine as _, engine::general_purpose::STANDARD};
-                
-                serde_json::json!({
-                    "content": STANDARD.encode(&attachment.content),
-                    "type": attachment.content_type,
-                    "filename": attachment.filename,
-                    "disposition": if attachment.inline { "inline" } else { "attachment" }
+            let attachments: Vec<serde_json::Value> = email
+                .attachments
+                .iter()
+                .map(|attachment| {
+                    use base64::{engine::general_purpose::STANDARD, Engine as _};
+
+                    serde_json::json!({
+                        "content": STANDARD.encode(&attachment.content),
+                        "type": attachment.content_type,
+                        "filename": attachment.filename,
+                        "disposition": if attachment.inline { "inline" } else { "attachment" }
+                    })
                 })
-            }).collect();
-            
+                .collect();
+
             request_body["attachments"] = serde_json::json!(attachments);
         }
-        
+
         Ok(request_body)
     }
-    
+
     /// Send email via Amazon SES
     async fn send_via_ses(
         &self,
         connection: &ProviderConnection,
         email: EmailMessage,
     ) -> ExternalApiResult<SendResult> {
-        use reqwest::Client;
         use chrono::Utc;
         use hmac::{Hmac, Mac};
-        use sha2::Sha256;
+        use reqwest::Client;
         use sha2::Digest;
-        
+        use sha2::Sha256;
+
         info!("Sending email via Amazon SES: {}", email.subject);
-        
+
         // Extract SES connection details
-        let crate::health::ConnectionDetails::AmazonSes { access_key_id, secret_access_key, region } = &connection.connection_details else {
+        let crate::health::ConnectionDetails::AmazonSes {
+            access_key_id,
+            secret_access_key,
+            region,
+        } = &connection.connection_details
+        else {
             return Err(ExternalApiError::ConnectionError(
-                "Invalid connection details for Amazon SES".to_string()
+                "Invalid connection details for Amazon SES".to_string(),
             ));
         };
-        
+
         // Build SES API request
         let client = Client::new();
         let service = "ses";
         let host = format!("email.{}.amazonaws.com", region);
         let url = format!("https://{}", host);
-        
+
         // Build SES API request body
         let request_body = self.build_ses_request_body(&email)?;
-        
+
         // Create AWS SigV4 signature
         let now = Utc::now();
         let date = now.format("%Y%m%dT%H%M%SZ").to_string();
         let date_short = now.format("%Y%m%d").to_string();
-        
+
         // For simplicity, we'll use a simplified approach
         // In production, you would use AWS SDK or proper SigV4 implementation
         let request_body_str = serde_json::to_string(&request_body).unwrap_or_default();
-        let canonical_request = format!("POST\n/\n\nhost:{}\nx-amz-date:{}\n\nhost;x-amz-date\n{}",
-            host, date, hex::encode(sha2::Sha256::digest(request_body_str.as_bytes())));
-        
-        let string_to_sign = format!("AWS4-HMAC-SHA256\n{}\n{}/{}/{}/aws4_request\n{}",
-            date, date_short, region, service,
-            hex::encode(sha2::Sha256::digest(canonical_request.as_bytes())));
-        
+        let canonical_request = format!(
+            "POST\n/\n\nhost:{}\nx-amz-date:{}\n\nhost;x-amz-date\n{}",
+            host,
+            date,
+            hex::encode(sha2::Sha256::digest(request_body_str.as_bytes()))
+        );
+
+        let string_to_sign = format!(
+            "AWS4-HMAC-SHA256\n{}\n{}/{}/{}/aws4_request\n{}",
+            date,
+            date_short,
+            region,
+            service,
+            hex::encode(sha2::Sha256::digest(canonical_request.as_bytes()))
+        );
+
         // Calculate signature
-        let k_date = Self::hmac_sha256(format!("AWS4{}", secret_access_key).as_bytes(), date_short.as_bytes());
+        let k_date = Self::hmac_sha256(
+            format!("AWS4{}", secret_access_key).as_bytes(),
+            date_short.as_bytes(),
+        );
         let k_region = Self::hmac_sha256(&k_date, region.as_bytes());
         let k_service = Self::hmac_sha256(&k_region, service.as_bytes());
         let k_signing = Self::hmac_sha256(&k_service, b"aws4_request");
         let signature = hex::encode(Self::hmac_sha256(&k_signing, string_to_sign.as_bytes()));
-        
+
         match client
             .post(&url)
             .header("Host", host)
@@ -735,13 +806,13 @@ impl DefaultExternalApiAdapter {
             Ok(response) => {
                 if response.status().is_success() {
                     let response_text = response.text().await.unwrap_or_default();
-                    
+
                     // Parse SES response to extract message ID
                     let message_id = Self::extract_ses_message_id(&response_text)
                         .unwrap_or_else(|| format!("ses_{}", uuid::Uuid::new_v4()));
-                    
+
                     info!("Email sent successfully via Amazon SES, message ID: {}", message_id);
-                    
+
                     Ok(SendResult {
                         success: true,
                         provider_message_id: Some(message_id),
@@ -775,19 +846,16 @@ impl DefaultExternalApiAdapter {
             }
         }
     }
-    
+
     /// Build SES API request body
     fn build_ses_request_body(&self, email: &EmailMessage) -> ExternalApiResult<String> {
-        use base64::{Engine as _, engine::general_purpose::STANDARD};
-        
-        let mut params = vec![
-            ("Action", "SendRawEmail"),
-            ("Version", "2010-12-01"),
-        ];
-        
+        use base64::{engine::general_purpose::STANDARD, Engine as _};
+
+        let mut params = vec![("Action", "SendRawEmail"), ("Version", "2010-12-01")];
+
         // Build MIME message similar to Gmail
         let mut message = String::new();
-        
+
         // Headers
         message.push_str(&format!("From: {}\r\n", email.from));
         message.push_str(&format!("To: {}\r\n", email.to.join(", ")));
@@ -796,26 +864,32 @@ impl DefaultExternalApiAdapter {
         }
         message.push_str(&format!("Subject: {}\r\n", email.subject));
         message.push_str("MIME-Version: 1.0\r\n");
-        
+
         // Determine content type
         if email.body_html.is_some() || !email.attachments.is_empty() {
             // Multipart message
             let boundary = format!("boundary_{}", uuid::Uuid::new_v4());
-            message.push_str(&format!("Content-Type: multipart/mixed; boundary=\"{}\"\r\n\r\n", boundary));
-            
+            message.push_str(&format!(
+                "Content-Type: multipart/mixed; boundary=\"{}\"\r\n\r\n",
+                boundary
+            ));
+
             // First part: alternative for text/html
             if email.body_html.is_some() {
                 let alt_boundary = format!("alt_{}", uuid::Uuid::new_v4());
                 message.push_str(&format!("--{}\r\n", boundary));
-                message.push_str(&format!("Content-Type: multipart/alternative; boundary=\"{}\"\r\n\r\n", alt_boundary));
-                
+                message.push_str(&format!(
+                    "Content-Type: multipart/alternative; boundary=\"{}\"\r\n\r\n",
+                    alt_boundary
+                ));
+
                 // Plain text part
                 message.push_str(&format!("--{}\r\n", alt_boundary));
                 message.push_str("Content-Type: text/plain; charset=UTF-8\r\n");
                 message.push_str("Content-Transfer-Encoding: 7bit\r\n\r\n");
                 message.push_str(&email.body_plain);
                 message.push_str("\r\n\r\n");
-                
+
                 // HTML part
                 if let Some(html) = &email.body_html {
                     message.push_str(&format!("--{}\r\n", alt_boundary));
@@ -824,7 +898,7 @@ impl DefaultExternalApiAdapter {
                     message.push_str(html);
                     message.push_str("\r\n\r\n");
                 }
-                
+
                 message.push_str(&format!("--{}--\r\n\r\n", alt_boundary));
             } else {
                 // Just plain text
@@ -834,16 +908,22 @@ impl DefaultExternalApiAdapter {
                 message.push_str(&email.body_plain);
                 message.push_str("\r\n\r\n");
             }
-            
+
             // Attachments
             for attachment in &email.attachments {
                 message.push_str(&format!("--{}\r\n", boundary));
                 message.push_str(&format!("Content-Type: {}\r\n", attachment.content_type));
                 message.push_str("Content-Transfer-Encoding: base64\r\n");
-                message.push_str(&format!("Content-Disposition: {}; filename=\"{}\"\r\n\r\n",
-                    if attachment.inline { "inline" } else { "attachment" },
-                    attachment.filename));
-                
+                message.push_str(&format!(
+                    "Content-Disposition: {}; filename=\"{}\"\r\n\r\n",
+                    if attachment.inline {
+                        "inline"
+                    } else {
+                        "attachment"
+                    },
+                    attachment.filename
+                ));
+
                 let encoded = STANDARD.encode(&attachment.content);
                 // Split into lines of 76 characters
                 for chunk in encoded.as_bytes().chunks(76) {
@@ -852,7 +932,7 @@ impl DefaultExternalApiAdapter {
                 }
                 message.push_str("\r\n");
             }
-            
+
             message.push_str(&format!("--{}--\r\n", boundary));
         } else {
             // Simple plain text message
@@ -860,33 +940,34 @@ impl DefaultExternalApiAdapter {
             message.push_str("Content-Transfer-Encoding: 7bit\r\n\r\n");
             message.push_str(&email.body_plain);
         }
-        
+
         // Base64 encode the entire message
         let raw_message = STANDARD.encode(message);
         params.push(("RawMessage.Data", &raw_message));
-        
+
         // Build URL-encoded parameters
-        let body = params.iter()
+        let body = params
+            .iter()
             .map(|(k, v)| format!("{}={}", k, urlencoding::encode(v)))
             .collect::<Vec<_>>()
             .join("&");
-        
+
         Ok(body)
     }
-    
+
     /// Helper function for HMAC-SHA256
     fn hmac_sha256(key: &[u8], data: &[u8]) -> Vec<u8> {
         use hmac::{Hmac, Mac};
         use sha2::Sha256;
-        
+
         type HmacSha256 = Hmac<Sha256>;
-        
-        let mut mac = HmacSha256::new_from_slice(key)
-            .expect("HMAC-SHA256 should accept any key length");
+
+        let mut mac =
+            HmacSha256::new_from_slice(key).expect("HMAC-SHA256 should accept any key length");
         mac.update(data);
         mac.finalize().into_bytes().to_vec()
     }
-    
+
     /// Extract message ID from SES response
     fn extract_ses_message_id(response_text: &str) -> Option<String> {
         // SES returns XML response, extract MessageId element
@@ -908,11 +989,15 @@ impl ExternalApiAdapter for DefaultExternalApiAdapter {
     ) -> ExternalApiResult<ProviderConnection> {
         // Validate credentials first
         credentials.validate()?;
-        
+
         // Create connection based on provider type
         let provider_type = credentials.provider_type();
         let connection_details = match credentials {
-            ApiCredentials::Gmail { client_id, client_secret, refresh_token } => {
+            ApiCredentials::Gmail {
+                client_id,
+                client_secret,
+                refresh_token,
+            } => {
                 // In real implementation, we'd exchange refresh token for access token
                 crate::health::ConnectionDetails::Gmail {
                     access_token: "placeholder_access_token".to_string(),
@@ -920,22 +1005,22 @@ impl ExternalApiAdapter for DefaultExternalApiAdapter {
                 }
             }
             ApiCredentials::SendGrid { api_key } => {
-                crate::health::ConnectionDetails::SendGrid {
-                    api_key,
-                }
+                crate::health::ConnectionDetails::SendGrid { api_key }
             }
-            ApiCredentials::AmazonSes { access_key_id, secret_access_key, region } => {
-                crate::health::ConnectionDetails::AmazonSes {
-                    access_key_id,
-                    secret_access_key,
-                    region,
-                }
-            }
+            ApiCredentials::AmazonSes {
+                access_key_id,
+                secret_access_key,
+                region,
+            } => crate::health::ConnectionDetails::AmazonSes {
+                access_key_id,
+                secret_access_key,
+                region,
+            },
         };
-        
+
         Ok(ProviderConnection::new(provider_type, connection_details))
     }
-    
+
     async fn send_email(
         &self,
         provider: &ProviderConnection,
@@ -945,31 +1030,34 @@ impl ExternalApiAdapter for DefaultExternalApiAdapter {
         let mut circuit_breaker = self.circuit_breaker.lock().await;
         if !circuit_breaker.allow_request() {
             return Err(ExternalApiError::ProviderUnavailable(
-                "Circuit breaker is open, provider temporarily unavailable".to_string()
+                "Circuit breaker is open, provider temporarily unavailable".to_string(),
             ));
         }
-        
+
         // Try with retry logic
         let mut last_error = None;
-        
+
         for attempt in 0..=self.retry_policy.max_retries {
             if attempt > 0 {
                 // Calculate delay for this retry attempt
                 let delay = self.retry_policy.calculate_delay(attempt);
-                info!("Retrying email send attempt {} after {:?} delay", attempt, delay);
+                info!(
+                    "Retrying email send attempt {} after {:?} delay",
+                    attempt, delay
+                );
                 tokio::time::sleep(delay).await;
             }
-            
+
             // Route through appropriate provider based on type
             let result = match provider.provider_type {
                 ProviderType::GmailApi => self.send_via_gmail(provider, email.clone()).await,
                 ProviderType::SendGrid => self.send_via_sendgrid(provider, email.clone()).await,
                 ProviderType::AmazonSes => self.send_via_ses(provider, email.clone()).await,
                 ProviderType::Other(_) => Err(ExternalApiError::UnsupportedProvider(
-                    "Custom provider type not implemented".to_string()
+                    "Custom provider type not implemented".to_string(),
                 )),
             };
-            
+
             match result {
                 Ok(mut send_result) => {
                     // Success - update circuit breaker and return result
@@ -979,14 +1067,15 @@ impl ExternalApiAdapter for DefaultExternalApiAdapter {
                             provider_type: provider.provider_type.clone(),
                             from_state: old_state,
                             to_state: new_state,
-                        }).await;
+                        })
+                        .await;
                     }
                     send_result.retry_attempts = attempt;
                     return Ok(send_result);
                 }
                 Err(err) => {
                     last_error = Some(err);
-                    
+
                     // Check if error is retryable
                     if let Some(ref error) = last_error {
                         if !error.is_retryable() {
@@ -995,7 +1084,7 @@ impl ExternalApiAdapter for DefaultExternalApiAdapter {
                             break;
                         }
                     }
-                    
+
                     // Record failure in circuit breaker
                     if let Some((old_state, new_state)) = circuit_breaker.record_failure() {
                         // Record circuit breaker state change
@@ -1003,9 +1092,10 @@ impl ExternalApiAdapter for DefaultExternalApiAdapter {
                             provider_type: provider.provider_type.clone(),
                             from_state: old_state,
                             to_state: new_state,
-                        }).await;
+                        })
+                        .await;
                     }
-                    
+
                     // If this was the last attempt, break
                     if attempt == self.retry_policy.max_retries {
                         break;
@@ -1013,13 +1103,13 @@ impl ExternalApiAdapter for DefaultExternalApiAdapter {
                 }
             }
         }
-        
+
         // All attempts failed
         Err(last_error.unwrap_or_else(|| {
             ExternalApiError::ProviderUnavailable("All retry attempts failed".to_string())
         }))
     }
-    
+
     async fn receive_emails(
         &self,
         provider: &ProviderConnection,
@@ -1028,22 +1118,19 @@ impl ExternalApiAdapter for DefaultExternalApiAdapter {
         // Only providers that support receiving emails can be used
         if !provider.provider_type.supports_receiving() {
             return Err(ExternalApiError::UnsupportedOperation(
-                "Provider does not support receiving emails".to_string()
+                "Provider does not support receiving emails".to_string(),
             ));
         }
-        
+
         // Placeholder implementation
         // In real implementation, would fetch emails from provider API
         Ok(vec![])
     }
-    
-    async fn check_health(
-        &self,
-        provider: &ProviderConnection,
-    ) -> ExternalApiResult<HealthStatus> {
+
+    async fn check_health(&self, provider: &ProviderConnection) -> ExternalApiResult<HealthStatus> {
         Ok(provider.check_health().await)
     }
-    
+
     async fn failover(
         &self,
         primary: ProviderConnection,
@@ -1052,30 +1139,30 @@ impl ExternalApiAdapter for DefaultExternalApiAdapter {
         // Enhanced failover that can work with multiple providers
         // For now, we maintain backward compatibility with primary/secondary
         // In a real implementation, this would take a list of providers
-        
+
         // Check health of both providers
         let primary_health = primary.check_health().await;
         let secondary_health = secondary.check_health().await;
-        
+
         // If primary is healthy, keep using it
         if primary_health.is_available() {
             info!("Primary provider is healthy, continuing to use it");
             return Ok(primary);
         }
-        
+
         // If secondary is healthy, failover to it
         if secondary_health.is_available() {
             info!("Primary provider unavailable, failing over to secondary");
             return Ok(secondary);
         }
-        
+
         // Both providers are unhealthy
         warn!("Both primary and secondary providers are unavailable");
         Err(ExternalApiError::ProviderUnavailable(
-            "Both primary and secondary providers are unavailable".to_string()
+            "Both primary and secondary providers are unavailable".to_string(),
         ))
     }
-    
+
     // Additional helper methods (failover_multiple, queueing, metrics, etc.)
     // have been moved to an inherent impl block below to avoid defining
     // non-trait methods inside the `impl ExternalApiAdapter for DefaultExternalApiAdapter` block.
@@ -1091,7 +1178,7 @@ impl DefaultExternalApiAdapter {
     ) -> ExternalApiResult<ProviderConnection> {
         if providers.is_empty() {
             return Err(ExternalApiError::ProviderUnavailable(
-                "No providers available for failover".to_string()
+                "No providers available for failover".to_string(),
             ));
         }
 
@@ -1109,9 +1196,10 @@ impl DefaultExternalApiAdapter {
         }
 
         warn!("All {} providers are unavailable", providers.len());
-        Err(ExternalApiError::ProviderUnavailable(
-            format!("All {} providers are unavailable", providers.len())
-        ))
+        Err(ExternalApiError::ProviderUnavailable(format!(
+            "All {} providers are unavailable",
+            providers.len()
+        )))
     }
 
     /// Queue email for later delivery when provider is unavailable
@@ -1143,7 +1231,10 @@ impl DefaultExternalApiAdapter {
         let mut queue = QUEUE.lock().await;
         queue.push_back(queued_email.clone());
 
-        info!("Queued email {} for retry later: {}", queued_email.id, queued_email.reason);
+        info!(
+            "Queued email {} for retry later: {}",
+            queued_email.id, queued_email.reason
+        );
 
         Ok(queued_email.id)
     }
@@ -1171,13 +1262,20 @@ impl DefaultExternalApiAdapter {
         while i < queue.len() {
             let queued_email = &mut queue[i];
 
-            if queued_email.next_retry_at <= now && queued_email.retry_count < queued_email.max_retries {
+            if queued_email.next_retry_at <= now
+                && queued_email.retry_count < queued_email.max_retries
+            {
                 // Try to send this email
-                info!("Processing queued email {} (attempt {}/{})",
-                    queued_email.id, queued_email.retry_count + 1, queued_email.max_retries);
+                info!(
+                    "Processing queued email {} (attempt {}/{})",
+                    queued_email.id,
+                    queued_email.retry_count + 1,
+                    queued_email.max_retries
+                );
 
                 // Find appropriate provider
-                let provider = providers.iter()
+                let provider = providers
+                    .iter()
                     .find(|p| p.provider_type == queued_email.provider_type)
                     .cloned();
 
@@ -1195,7 +1293,8 @@ impl DefaultExternalApiAdapter {
                             warn!("Failed to send queued email {}: {}", queued_email.id, e);
                             queued_email.retry_count += 1;
                             let backoff_minutes = 5_i64 * (2_i64).pow(queued_email.retry_count);
-                            queued_email.next_retry_at = now + chrono::Duration::minutes(backoff_minutes);
+                            queued_email.next_retry_at =
+                                now + chrono::Duration::minutes(backoff_minutes);
                             failed += 1;
                         }
                     }
@@ -1214,7 +1313,10 @@ impl DefaultExternalApiAdapter {
             i += 1;
         }
 
-        info!("Processed queue: {} processed, {} retried, {} still failed", processed, retried, failed);
+        info!(
+            "Processed queue: {} processed, {} retried, {} still failed",
+            processed, retried, failed
+        );
 
         // Update metrics
         self.record_metrics(MetricEvent::QueueProcessed {
@@ -1222,7 +1324,8 @@ impl DefaultExternalApiAdapter {
             failed,
             retried,
             remaining: queue.len(),
-        }).await;
+        })
+        .await;
 
         Ok(ProcessQueueResult {
             processed,
@@ -1237,30 +1340,64 @@ impl DefaultExternalApiAdapter {
         // In production, this would send metrics to a monitoring system
         // For now, we just log them
         match event {
-            MetricEvent::EmailSent { provider_type, success, retry_attempts, duration_ms } => {
+            MetricEvent::EmailSent {
+                provider_type,
+                success,
+                retry_attempts,
+                duration_ms,
+            } => {
                 if success {
-                    info!("Metrics: Email sent via {:?} (attempts: {}, duration: {}ms)",
-                        provider_type, retry_attempts, duration_ms);
+                    info!(
+                        "Metrics: Email sent via {:?} (attempts: {}, duration: {}ms)",
+                        provider_type, retry_attempts, duration_ms
+                    );
                 } else {
-                    warn!("Metrics: Email failed via {:?} (attempts: {}, duration: {}ms)",
-                        provider_type, retry_attempts, duration_ms);
+                    warn!(
+                        "Metrics: Email failed via {:?} (attempts: {}, duration: {}ms)",
+                        provider_type, retry_attempts, duration_ms
+                    );
                 }
             }
-            MetricEvent::ProviderHealthChanged { provider_type, from_status, to_status } => {
-                info!("Metrics: Provider {:?} health changed: {:?} -> {:?}",
-                    provider_type, from_status, to_status);
+            MetricEvent::ProviderHealthChanged {
+                provider_type,
+                from_status,
+                to_status,
+            } => {
+                info!(
+                    "Metrics: Provider {:?} health changed: {:?} -> {:?}",
+                    provider_type, from_status, to_status
+                );
             }
-            MetricEvent::CircuitBreakerStateChanged { provider_type, from_state, to_state } => {
-                info!("Metrics: Circuit breaker for {:?} changed: {:?} -> {:?}",
-                    provider_type, from_state, to_state);
+            MetricEvent::CircuitBreakerStateChanged {
+                provider_type,
+                from_state,
+                to_state,
+            } => {
+                info!(
+                    "Metrics: Circuit breaker for {:?} changed: {:?} -> {:?}",
+                    provider_type, from_state, to_state
+                );
             }
-            MetricEvent::QueueProcessed { processed, failed, retried, remaining } => {
-                info!("Metrics: Queue processed: {} success, {} failed, {} retried, {} remaining",
-                    processed, failed, retried, remaining);
+            MetricEvent::QueueProcessed {
+                processed,
+                failed,
+                retried,
+                remaining,
+            } => {
+                info!(
+                    "Metrics: Queue processed: {} success, {} failed, {} retried, {} remaining",
+                    processed, failed, retried, remaining
+                );
             }
-            MetricEvent::RetryAttempt { provider_type, attempt, delay_seconds } => {
-                info!("Metrics: Retry attempt {} for {:?} after {}s delay",
-                    attempt, provider_type, delay_seconds);
+            MetricEvent::RetryAttempt {
+                provider_type,
+                attempt,
+                delay_seconds,
+            } => {
+                info!(
+                    "Metrics: Retry attempt {} for {:?} after {}s delay",
+                    attempt, provider_type, delay_seconds
+                );
             }
         }
     }
@@ -1284,7 +1421,8 @@ impl DefaultExternalApiAdapter {
                     success: send_result.success,
                     retry_attempts: send_result.retry_attempts,
                     duration_ms,
-                }).await;
+                })
+                .await;
             }
             Err(_) => {
                 self.record_metrics(MetricEvent::EmailSent {
@@ -1292,7 +1430,8 @@ impl DefaultExternalApiAdapter {
                     success: false,
                     retry_attempts: 0,
                     duration_ms,
-                }).await;
+                })
+                .await;
             }
         }
 

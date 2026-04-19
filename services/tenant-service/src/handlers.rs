@@ -1,6 +1,5 @@
 //! Tenant handlers
 
-use anyhow::Context;
 use axum::{
     extract::{Path, State},
     http::StatusCode,

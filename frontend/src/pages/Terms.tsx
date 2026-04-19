@@ -148,6 +148,8 @@ export default function Terms() {
             <Link to="/terms">Terms of Service</Link>
             <Link to="/cookies">Cookie Policy</Link>
             <Link to="/aup">Acceptable Use</Link>
+            <Link to="/security">Security</Link>
+            <Link to="/refund">Refund Policy</Link>
             <Link to="/about">About</Link>
           </div>
         </div>

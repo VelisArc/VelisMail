@@ -3,10 +3,10 @@
 //! Defines the provider types (Gmail API, SendGrid, Amazon SES) and
 //! the provider entity with its fields.
 
+use crate::credentials::EncryptedCredentials;
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
-use chrono::{DateTime, Utc};
-use crate::credentials::EncryptedCredentials;
 
 /// External API Provider types supported by the platform
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -31,7 +31,7 @@ impl ProviderType {
             ProviderType::Other(name) => name,
         }
     }
-    
+
     /// Get the API base URL for the provider
     pub fn api_base_url(&self) -> &str {
         match self {
@@ -41,7 +41,7 @@ impl ProviderType {
             ProviderType::Other(_) => "",
         }
     }
-    
+
     /// Check if the provider supports receiving emails
     pub fn supports_receiving(&self) -> bool {
         match self {
@@ -51,13 +51,13 @@ impl ProviderType {
             ProviderType::Other(_) => false, // Unknown for custom providers
         }
     }
-    
+
     /// Check if the provider supports webhooks
     pub fn supports_webhooks(&self) -> bool {
         match self {
-            ProviderType::GmailApi => true, // Push notifications
+            ProviderType::GmailApi => true,  // Push notifications
             ProviderType::SendGrid => true,  // Event webhooks
-            ProviderType::AmazonSes => true,  // SNS notifications
+            ProviderType::AmazonSes => true, // SNS notifications
             ProviderType::Other(_) => false,
         }
     }
@@ -136,47 +136,52 @@ impl ExternalApiProvider {
             updated_at: Utc::now(),
         }
     }
-    
+
     /// Check if the provider has available capacity for today
     pub fn has_capacity(&self) -> bool {
         self.used_today < self.daily_limit
     }
-    
+
     /// Get remaining capacity for today
     pub fn remaining_capacity(&self) -> u32 {
         self.daily_limit.saturating_sub(self.used_today)
     }
-    
+
     /// Increment usage count and update last used timestamp
     pub fn record_usage(&mut self) {
         self.used_today = self.used_today.saturating_add(1);
         self.last_used = Some(Utc::now());
         self.updated_at = Utc::now();
     }
-    
+
     /// Record a failure and update status if needed
     pub fn record_failure(&mut self) {
         self.failure_count = self.failure_count.saturating_add(1);
         self.updated_at = Utc::now();
-        
+
         // If too many failures, mark as unavailable
         if self.failure_count >= 5 {
             self.status = ProviderStatus::Unavailable;
         }
     }
-    
+
     /// Reset failure count and restore status if needed
     pub fn reset_failures(&mut self) {
         self.failure_count = 0;
-        if matches!(self.status, ProviderStatus::Unavailable | ProviderStatus::RateLimited) {
+        if matches!(
+            self.status,
+            ProviderStatus::Unavailable | ProviderStatus::RateLimited
+        ) {
             self.status = ProviderStatus::Active;
         }
         self.updated_at = Utc::now();
     }
-    
+
     /// Check if the provider is currently usable
     pub fn is_usable(&self) -> bool {
-        matches!(self.status, ProviderStatus::Active | ProviderStatus::Testing) && 
-        self.has_capacity()
+        matches!(
+            self.status,
+            ProviderStatus::Active | ProviderStatus::Testing
+        ) && self.has_capacity()
     }
 }

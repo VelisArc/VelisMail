@@ -3,7 +3,6 @@
 use anyhow::Result;
 use redis::Client;
 use std::sync::Arc;
-use tokio::sync::Mutex;
 use tracing::info;
 
 /// Redis configuration
