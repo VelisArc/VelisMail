@@ -58,9 +58,13 @@ export default function Dashboard() {
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
+  const loadEmails = useCallback(() => {
+    setEmails(mail.getByFolder(activeFolder));
+  }, [activeFolder]);
+
   useEffect(() => {
     loadEmails();
-  }, [activeFolder]);
+  }, [loadEmails]);
 
   useEffect(() => {
     const selected = navigation.selectedEmailId
@@ -81,10 +85,6 @@ export default function Dashboard() {
   const showToast = (msg: string, type: 'success' | 'error' = 'success') => {
     setToast({ msg, type });
     setTimeout(() => setToast(null), 3000);
-  };
-
-  const loadEmails = () => {
-    setEmails(mail.getByFolder(activeFolder));
   };
 
   const handleLogout = () => {

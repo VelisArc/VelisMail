@@ -1,0 +1,30 @@
+<<<<<<< SEARCH
+  useEffect(() => {
+    loadEmails();
+  }, [activeFolder]);
+
+  useEffect(() => {
+=======
+  const loadEmails = () => {
+    setEmails(mail.getByFolder(activeFolder));
+  };
+
+  useEffect(() => {
+    loadEmails();
+  }, [activeFolder]);
+
+  useEffect(() => {
+>>>>>>> REPLACE
+<<<<<<< SEARCH
+  };
+
+  const loadEmails = () => {
+    setEmails(mail.getByFolder(activeFolder));
+  };
+
+  const getUnreadCount = () => {
+=======
+  };
+
+  const getUnreadCount = () => {
+>>>>>>> REPLACE
