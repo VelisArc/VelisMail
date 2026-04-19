@@ -5,7 +5,7 @@ import { auth } from '../api/client';
 import './Login.css';
 
 type Mode = 'login' | 'register';
-type RegisterStep = 'type' | 'form';
+type RegisterStep = 'type' | 'form' | 'otp';
 type AccountType = 'personal' | 'business';
 
 function nextRouteForUser(user: { accountType: AccountType; isSetupComplete: boolean; isBusinessSetupComplete?: boolean }) {
@@ -30,6 +30,10 @@ export default function Login() {
   const [regPassword, setRegPassword] = useState('');
   const [regDomain, setRegDomain] = useState('');
 
+  // OTP fields
+  const [otp, setOtp] = useState('');
+  const [generatedOtp, setGeneratedOtp] = useState('');
+
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const navigate = useNavigate();
@@ -53,10 +57,39 @@ export default function Login() {
     setLoading(false);
   };
 
-  const handleRegister = async (e: React.FormEvent) => {
+  const handleRegisterSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError('');
+
+    // Pre-check for existing user to avoid sending OTP if email is taken
+    const existingUsers = JSON.parse(localStorage.getItem('velismail_users') || '[]');
+    if (existingUsers.find((u: any) => u.email === regEmail)) {
+      setError('An account with this email already exists.');
+      setLoading(false);
+      return;
+    }
+
+    const newOtp = Math.floor(100000 + Math.random() * 900000).toString();
+    setGeneratedOtp(newOtp);
+    // Simulate sending OTP
+    alert(`[SIMULATION] Your Verification Code is: ${newOtp}`);
+
+    setRegisterStep('otp');
+    setLoading(false);
+  };
+
+  const handleOtpSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+
+    if (otp !== generatedOtp) {
+      setError('Invalid verification code.');
+      setLoading(false);
+      return;
+    }
+
     const res = auth.register({
       email: regEmail,
       password: regPassword,
@@ -210,7 +243,7 @@ export default function Login() {
                 </p>
               </div>
 
-              <form onSubmit={handleRegister} className="login-form">
+              <form onSubmit={handleRegisterSubmit} className="login-form">
                 <div className="form-group">
                   <label htmlFor="reg-name">Full Name</label>
                   <input id="reg-name" type="text" className="input" placeholder="Your full name"
@@ -252,6 +285,39 @@ export default function Login() {
               <div className="login-card-footer">
                 <span>Already have an account? </span>
                 <button className="login-link" onClick={() => switchMode('login')}>Sign In</button>
+              </div>
+            </>
+          )}
+
+          {/* -------- REGISTER - Step 3: OTP Verification -------- */}
+          {mode === 'register' && registerStep === 'otp' && (
+            <>
+              <div className="login-card-header">
+                <button className="back-step-btn" onClick={() => setRegisterStep('form')}>
+                  <ArrowLeft size={16} /> Back
+                </button>
+                <div className="login-icon-wrap"><Mail size={24} /></div>
+                <h2>Verify Email</h2>
+                <p className="login-card-desc">Enter the 6-digit code sent to {regEmail}</p>
+              </div>
+
+              <form onSubmit={handleOtpSubmit} className="login-form">
+                <div className="form-group">
+                  <label htmlFor="otp-code">Verification Code</label>
+                  <input id="otp-code" type="text" className="input" placeholder="000000"
+                    maxLength={6} required value={otp} onChange={e => setOtp(e.target.value)} autoFocus />
+                </div>
+
+                {error && <div className="form-error">{error}</div>}
+
+                <button type="submit" className="btn btn-primary w-full" disabled={loading}>
+                  {loading ? <Loader2 size={18} className="animate-spin" /> : <>Verify & Complete <ArrowRight size={18} /></>}
+                </button>
+              </form>
+
+              <div className="login-card-footer">
+                <span>Didn't receive the code? </span>
+                <button className="login-link" onClick={handleRegisterSubmit}>Resend OTP</button>
               </div>
             </>
           )}

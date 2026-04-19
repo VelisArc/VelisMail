@@ -14,6 +14,8 @@ import AcceptableUse from './pages/AcceptableUse';
 import SecurityPolicy from './pages/SecurityPolicy';
 import Refund from './pages/Refund';
 import Contacts from './pages/Contacts';
+import Documentation from './pages/Documentation';
+import Status from './pages/Status';
 import { theme } from './api/client';
 import './App.css';
 
@@ -40,6 +42,8 @@ function App() {
         <Route path="/security" element={<SecurityPolicy />} />
         <Route path="/refund" element={<Refund />} />
         <Route path="/about" element={<About />} />
+        <Route path="/docs" element={<Documentation />} />
+        <Route path="/status" element={<Status />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>

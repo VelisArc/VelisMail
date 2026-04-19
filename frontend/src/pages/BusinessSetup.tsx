@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import {
   Database, Mail, CheckCircle2, Server, Loader2, Lock, Globe,
-  Zap, Shield, ArrowLeft, ArrowRight, XCircle, Wifi
+  Zap, Shield, ArrowLeft, ArrowRight, XCircle, Wifi, LogOut
 } from 'lucide-react';
 import { auth, domains, type DnsRecord, type User } from '../api/client';
 import './BusinessSetup.css';
@@ -233,7 +233,12 @@ export default function BusinessSetup() {
             <span className="logo-text">VelisMail</span>
             <span className="badge badge-primary" style={{ marginLeft: 8 }}>Business</span>
           </Link>
-          <Link to="/dashboard" className="btn btn-ghost btn-sm"><ArrowLeft size={16} /> Back to Normal Mail</Link>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <Link to="/dashboard" className="btn btn-ghost btn-sm"><ArrowLeft size={16} /> Back to Normal Mail</Link>
+            <button className="btn btn-ghost btn-sm" onClick={() => { auth.logout(); navigate('/login'); }}>
+              <LogOut size={16} /> Logout
+            </button>
+          </div>
         </div>
       </nav>
 
