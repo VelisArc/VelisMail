@@ -292,7 +292,7 @@ impl TenantService {
             {
                 "type": "MX",
                 "name": "@",
-                "value": "mx.velismail.com",
+                "value": "mx.velismail.online",
                 "priority": 10,
                 "ttl": 3600
             }

@@ -33,7 +33,7 @@ pub async fn spf_verify(
     State(_state): State<DeliveryState>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
     Ok(Json(
-        json!({"success": true, "spf_pass": true, "record": "v=spf1 include:velismail.com ~all"}),
+        json!({"success": true, "spf_pass": true, "record": "v=spf1 include:velismail.online ~all"}),
     ))
 }
 

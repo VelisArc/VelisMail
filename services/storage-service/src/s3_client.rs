@@ -79,7 +79,7 @@ impl S3Client {
         let _ = expires_in_secs;
         Ok(format!(
             "{}/{}/{}",
-            "https://storage.velismail.com", self.bucket, key
+            "https://storage.velismail.online", self.bucket, key
         ))
     }
 

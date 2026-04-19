@@ -22,7 +22,7 @@ data:
   AUTH_PORT: "3001"
   JWT_EXPIRY_SECONDS: "3600"
   MAX_SESSIONS_PER_USER: "5"
-  PASSKEY_RELYING_PARTY: "velismail.com"
+  PASSKEY_RELYING_PARTY: "velismail.online"
   
   # Mail Service
   MAIL_HOST: "0.0.0.0"

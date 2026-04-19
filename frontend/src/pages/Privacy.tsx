@@ -138,7 +138,7 @@ export default function Privacy() {
               If you have any questions about this Privacy Policy, please contact us at:
             </p>
             <ul>
-              <li>Email: <a href="mailto:privacy@velismail.com">privacy@velismail.com</a></li>
+              <li>Email: <a href="mailto:privacy@velismail.online">privacy@velismail.online</a></li>
               <li>Address: VelisMail Privacy Team, Bengaluru, India</li>
             </ul>
           </section>

@@ -1,47 +1,47 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
-    <loc>https://velismail.com/</loc>
+    <loc>https://velismail.online/</loc>
     <priority>1.0</priority>
     <changefreq>weekly</changefreq>
   </url>
   <url>
-    <loc>https://velismail.com/about</loc>
+    <loc>https://velismail.online/about</loc>
     <priority>0.8</priority>
     <changefreq>monthly</changefreq>
   </url>
   <url>
-    <loc>https://velismail.com/login</loc>
+    <loc>https://velismail.online/login</loc>
     <priority>0.8</priority>
     <changefreq>monthly</changefreq>
   </url>
   <url>
-    <loc>https://velismail.com/privacy</loc>
+    <loc>https://velismail.online/privacy</loc>
     <priority>0.5</priority>
     <changefreq>yearly</changefreq>
   </url>
   <url>
-    <loc>https://velismail.com/terms</loc>
+    <loc>https://velismail.online/terms</loc>
     <priority>0.5</priority>
     <changefreq>yearly</changefreq>
   </url>
   <url>
-    <loc>https://velismail.com/cookies</loc>
+    <loc>https://velismail.online/cookies</loc>
     <priority>0.5</priority>
     <changefreq>yearly</changefreq>
   </url>
   <url>
-    <loc>https://velismail.com/aup</loc>
+    <loc>https://velismail.online/aup</loc>
     <priority>0.5</priority>
     <changefreq>yearly</changefreq>
   </url>
   <url>
-    <loc>https://velismail.com/security</loc>
+    <loc>https://velismail.online/security</loc>
     <priority>0.6</priority>
     <changefreq>monthly</changefreq>
   </url>
   <url>
-    <loc>https://velismail.com/refund</loc>
+    <loc>https://velismail.online/refund</loc>
     <priority>0.5</priority>
     <changefreq>yearly</changefreq>
   </url>

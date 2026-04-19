@@ -52,9 +52,9 @@ impl AuthConfig {
                 .and_then(|p| p.parse().ok())
                 .unwrap_or(false),
             passkey_relying_party: std::env::var("PASSKEY_RELYING_PARTY")
-                .unwrap_or_else(|_| "velismail.com".to_string()),
+                .unwrap_or_else(|_| "velismail.online".to_string()),
             passkey_origin: std::env::var("PASSKEY_ORIGIN")
-                .unwrap_or_else(|_| "https://velismail.com".to_string()),
+                .unwrap_or_else(|_| "https://velismail.online".to_string()),
             db_url: std::env::var("DATABASE_URL").unwrap_or_else(|_| {
                 "postgres://postgres:postgres@localhost:5432/velismail_auth".to_string()
             }),

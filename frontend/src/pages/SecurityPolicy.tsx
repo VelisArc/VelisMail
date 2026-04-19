@@ -54,7 +54,7 @@ export default function SecurityPolicy() {
           <section>
             <h2>5. Bug Bounty Program</h2>
             <p>
-              We believe in the power of the security community. If you discover a vulnerability in VelisMail, we encourage you to report it to us responsibly. Please contact our security team at <a href="mailto:security@velismail.com">security@velismail.com</a>. We offer rewards for verifiable bugs in accordance with our bug bounty guidelines.
+              We believe in the power of the security community. If you discover a vulnerability in VelisMail, we encourage you to report it to us responsibly. Please contact our security team at <a href="mailto:security@velismail.online">security@velismail.online</a>. We offer rewards for verifiable bugs in accordance with our bug bounty guidelines.
             </p>
           </section>
 

@@ -302,7 +302,7 @@ pub async fn upload_attachment(State(_state): State<AppState>) -> Json<serde_jso
 pub async fn download_attachment(State(_state): State<AppState>) -> Json<serde_json::Value> {
     Json(json!({
         "success": true,
-        "url": "https://storage.velismail.com/attachments/file123",
+        "url": "https://storage.velismail.online/attachments/file123",
         "expires_in": 3600
     }))
 }
