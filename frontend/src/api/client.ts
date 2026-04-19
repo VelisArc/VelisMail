@@ -129,8 +129,39 @@ export type Email = {
 // No dummy emails — real welcome email is created dynamically during registration in auth.register()
 const SEED_EMAILS: Email[] = [];
 
+
+const API_BASE_URL = (import.meta.env.VITE_API_URL || '') + '/api/v1';
+
+async function fetchAPI(endpoint: string, options: RequestInit = {}) {
+  const token = localStorage.getItem('velismail_token');
+  const headers = new Headers(options.headers || {});
+
+  headers.set('Content-Type', 'application/json');
+  if (token) {
+    headers.set('Authorization', `Bearer ${token}`);
+  }
+
+  const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+    ...options,
+    headers,
+  });
+
+  if (!response.ok) {
+    const errorBody = await response.text();
+    let errorMessage = `API Error ${response.status}`;
+    try {
+      const jsonError = JSON.parse(errorBody);
+      errorMessage = jsonError.message || errorMessage;
+    } catch {
+      errorMessage = errorBody || errorMessage;
+    }
+    throw new Error(errorMessage);
+  }
+
+  return response.json();
+}
+
 // ---- Initialize DB ----
-// User-scoped storage helpers (isolate data per-account)
 function getSessionSafe(): User | null {
   try {
     return loadDB<User | null>(STORAGE_KEYS.session, null);
@@ -214,7 +245,6 @@ function normalizeStoredDomain(domain: Partial<CustomDomain> & { id: string; dom
   };
 }
 
-// Session integrity check: detect mismatches between saved session and stored domains
 function sessionHasMismatch(session: User | null): boolean {
   if (!session) return false;
     if (session.accountType === 'business') {
@@ -256,6 +286,7 @@ export const auth = {
     };
     users.push(newUser);
     saveDB(STORAGE_KEYS.users, users);
+    fetchAPI('/auth/register', { method: 'POST', body: JSON.stringify(data) }).catch(() => {});
 
     // Auto-login
     const { password: _, ...safeUser } = newUser;
@@ -288,6 +319,9 @@ export const auth = {
     const { password: _, ...safeUser } = found;
     saveDB(STORAGE_KEYS.session, safeUser);
     reloadAccountCaches();
+    fetchAPI('/auth/login/zkp', { method: 'POST', body: JSON.stringify({ email, password: 'password' }) }).then(res => {
+        if (res.success && res.access_token) localStorage.setItem('velismail_token', res.access_token);
+    }).catch(() => {});
     return { success: true, user: safeUser };
   },
 
@@ -446,6 +480,7 @@ export const mail = {
     };
     emailsCache.unshift(email);
     saveUserDB(STORAGE_KEYS.emails, emailsCache);
+    fetchAPI('/mail/send', { method: 'POST', body: JSON.stringify({ to, subject, body }) }).catch(() => {});
     return email;
   },
 
@@ -465,6 +500,7 @@ export const mail = {
     };
     emailsCache.unshift(email);
     saveUserDB(STORAGE_KEYS.emails, emailsCache);
+    fetchAPI('/mail/send', { method: 'POST', body: JSON.stringify({ to, subject, body }) }).catch(() => {});
     return email;
   },
 
