@@ -19,7 +19,7 @@ pub async fn health_check() -> Json<serde_json::Value> {
 
 /// Upload a file
 pub async fn upload(
-    State(state): State<StorageState>,
+    State(_state): State<StorageState>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
     // In production: extract multipart form, encrypt, upload to S3
     let attachment_id = Uuid::new_v4();

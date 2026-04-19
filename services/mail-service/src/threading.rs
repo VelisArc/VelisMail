@@ -108,7 +108,7 @@ impl ThreadingEngine {
             .insert(metadata.message_id.clone(), thread_id);
         self.subject_to_threads
             .entry(normalized_subject)
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(thread_id);
 
         thread_id
@@ -334,7 +334,7 @@ impl LabelManager {
 
         self.message_labels
             .entry(message_id.to_string())
-            .or_insert_with(HashSet::new)
+            .or_default()
             .insert(label_id);
 
         Ok(())

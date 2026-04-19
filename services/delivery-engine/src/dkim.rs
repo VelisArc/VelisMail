@@ -2,7 +2,6 @@
 
 use anyhow::Result;
 use ring::digest::{digest, SHA256};
-use ring::signature::{Ed25519KeyPair, KeyPair};
 
 /// DKIM signature generator
 pub struct DkimSigner {
@@ -26,7 +25,7 @@ impl DkimSigner {
     /// Sign an email message
     pub fn sign(&self, headers: &str, body: &str) -> Result<String> {
         // Canonicalize headers and body (relaxed/relaxed)
-        let canonicalized_headers = self.canonicalize_headers(headers);
+        let _canonicalized_headers = self.canonicalize_headers(headers);
         let canonicalized_body = self.canonicalize_body(body);
 
         // Hash the body

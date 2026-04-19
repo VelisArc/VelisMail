@@ -9,7 +9,7 @@ use anyhow::Result;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
-use velismail_common::{FolderType, MessageStatus};
+use velismail_common::FolderType;
 
 /// Email workflow state
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -160,7 +160,7 @@ impl EmailWorkflowProcessor {
                 // In production, would apply all actions from matched rules
                 for action in &result.actions_executed {
                     match action.as_str() {
-                        "apply_labels" => labels.push(format!("auto-labeled")),
+                        "apply_labels" => labels.push("auto-labeled".to_string()),
                         "move_to_folder" => target_folder = FolderType::Archive, // Example
                         "mark_as_read" => should_mark_read = true,
                         _ => {}

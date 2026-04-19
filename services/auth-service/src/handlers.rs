@@ -2,10 +2,10 @@
 
 use crate::account_lock::AccountLockManager;
 use crate::jwt::TokenPairResponse;
-use crate::passkey::{generate_challenge, PasskeyRegistrationRequest, PasskeyVerificationRequest};
+use crate::passkey::{generate_challenge, PasskeyVerificationRequest};
 use crate::state::AuthState;
 use axum::{extract::State, http::StatusCode, Json};
-use chrono::{DateTime, Utc};
+use chrono::DateTime;
 use serde::Deserialize;
 use serde_json::json;
 use uuid::Uuid;

@@ -138,7 +138,7 @@ impl AccountLockManager {
         // Get the timestamp of the last (max_failed_attempts)th attempt
         if let Some(last_score) = scores.last() {
             let lockout_start =
-                DateTime::<Utc>::from_timestamp(*last_score, 0).unwrap_or_else(|| Utc::now());
+                DateTime::<Utc>::from_timestamp(*last_score, 0).unwrap_or_else(Utc::now);
             let lockout_end = lockout_start + Duration::minutes(self.lockout_duration_minutes);
             Ok(Some(lockout_end))
         } else {

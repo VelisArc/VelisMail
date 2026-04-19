@@ -264,17 +264,17 @@ impl ProviderConnection {
     /// Check Amazon SES health
     async fn check_ses_health(
         &self,
-        access_key_id: &str,
-        secret_access_key: &str,
-        region: &str,
+        _access_key_id: &str,
+        _secret_access_key: &str,
+        _region: &str,
     ) -> HealthStatus {
         use reqwest::Client;
 
-        let start_time = Utc::now();
+        let _start_time = Utc::now();
 
         // For SES, we'd typically use AWS SDK, but for simplicity we'll check with a simple request
         // In production, this would use AWS SDK to check SES service status
-        let client = Client::new();
+        let _client = Client::new();
 
         // Note: Actual SES health check would require AWS SigV4 signing
         // This is a simplified version

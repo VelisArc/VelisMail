@@ -98,15 +98,14 @@ impl AttachmentHandler {
         }
 
         // Check MIME type
-        if !self.config.allowed_mime_types.is_empty() {
-            if !self
+        if !self.config.allowed_mime_types.is_empty()
+            && !self
                 .config
                 .allowed_mime_types
                 .contains(&content_type.to_string())
             {
                 errors.push(format!("MIME type {} is not allowed", content_type));
             }
-        }
 
         if !errors.is_empty() {
             return Err(anyhow!(
@@ -170,7 +169,7 @@ impl AttachmentHandler {
 
 /// Get file extension from filename
 fn get_file_extension(filename: &str) -> Option<String> {
-    filename.split('.').last().map(|s| s.to_string())
+    filename.split('.').next_back().map(|s| s.to_string())
 }
 
 /// Sanitize filename for safe storage

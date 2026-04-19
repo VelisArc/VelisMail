@@ -39,7 +39,7 @@ pub fn verify_passkey_assertion(
     request: &PasskeyVerificationRequest,
     stored_passkey: &StoredPasskey,
     expected_origin: &str,
-    expected_rp_id: &str,
+    _expected_rp_id: &str,
 ) -> Result<bool> {
     // Verify client data JSON
     let client_data: ClientData = serde_json::from_str(&request.client_data_json)?;

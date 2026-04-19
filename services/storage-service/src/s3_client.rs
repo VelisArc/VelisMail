@@ -3,7 +3,7 @@
 use anyhow::Result;
 use aws_config::BehaviorVersion;
 use aws_sdk_s3::primitives::ByteStream;
-use aws_sdk_s3::{Client, Error as S3Error};
+use aws_sdk_s3::Client;
 
 /// S3 client for object storage
 pub struct S3Client {
@@ -13,10 +13,10 @@ pub struct S3Client {
 
 impl S3Client {
     pub async fn new(
-        endpoint: &str,
+        _endpoint: &str,
         region: &str,
-        access_key: &str,
-        secret_key: &str,
+        _access_key: &str,
+        _secret_key: &str,
         bucket: &str,
     ) -> Result<Self> {
         // Create SDK config

@@ -7,7 +7,7 @@ use crate::{
     credentials::{ApiCredentials, EncryptedCredentials},
     error::{ExternalApiError, ExternalApiResult},
     health::{HealthStatus, ProviderConnection},
-    provider::{ExternalApiProvider, ProviderStatus, ProviderType},
+    provider::ProviderType,
 };
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
@@ -729,10 +729,10 @@ impl DefaultExternalApiAdapter {
         email: EmailMessage,
     ) -> ExternalApiResult<SendResult> {
         use chrono::Utc;
-        use hmac::{Hmac, Mac};
+        use hmac::Mac;
         use reqwest::Client;
         use sha2::Digest;
-        use sha2::Sha256;
+        
 
         info!("Sending email via Amazon SES: {}", email.subject);
 
@@ -994,9 +994,9 @@ impl ExternalApiAdapter for DefaultExternalApiAdapter {
         let provider_type = credentials.provider_type();
         let connection_details = match credentials {
             ApiCredentials::Gmail {
-                client_id,
-                client_secret,
-                refresh_token,
+                client_id: _,
+                client_secret: _,
+                refresh_token: _,
             } => {
                 // In real implementation, we'd exchange refresh token for access token
                 crate::health::ConnectionDetails::Gmail {
@@ -1113,7 +1113,7 @@ impl ExternalApiAdapter for DefaultExternalApiAdapter {
     async fn receive_emails(
         &self,
         provider: &ProviderConnection,
-        since: DateTime<Utc>,
+        _since: DateTime<Utc>,
     ) -> ExternalApiResult<Vec<EmailMessage>> {
         // Only providers that support receiving emails can be used
         if !provider.provider_type.supports_receiving() {

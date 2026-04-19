@@ -4,7 +4,7 @@
 //! Routes to internal microservices with authentication and rate limiting.
 
 use axum::{
-    routing::{get, post},
+    routing::get,
     Router,
 };
 use tokio::net::TcpListener;
