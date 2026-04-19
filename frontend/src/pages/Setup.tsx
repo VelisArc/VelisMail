@@ -81,7 +81,7 @@ export default function SetupPage() {
       let responseData;
       try {
         responseData = await proxyTest.json();
-      } catch (e) {
+      } catch (_e) {
         // Fallback for non-JSON errors (like 502 Bad Gateway or CORS failures)
         throw new Error("Proxy connection refused or network error. Ensure the backend gateway is running.");
       }

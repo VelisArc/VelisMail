@@ -103,9 +103,9 @@ impl AttachmentHandler {
                 .config
                 .allowed_mime_types
                 .contains(&content_type.to_string())
-            {
-                errors.push(format!("MIME type {} is not allowed", content_type));
-            }
+        {
+            errors.push(format!("MIME type {} is not allowed", content_type));
+        }
 
         if !errors.is_empty() {
             return Err(anyhow!(

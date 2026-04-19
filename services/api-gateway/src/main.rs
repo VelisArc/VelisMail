@@ -3,10 +3,7 @@
 //! Central entry point for all API requests.
 //! Routes to internal microservices with authentication and rate limiting.
 
-use axum::{
-    routing::get,
-    Router,
-};
+use axum::{routing::get, Router};
 use tokio::net::TcpListener;
 use tower_http::{cors::CorsLayer, trace::TraceLayer};
 use tracing::info;
