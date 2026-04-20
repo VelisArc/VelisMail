@@ -1,3 +1,5 @@
+#![allow(clippy::too_many_arguments)]
+#![allow(dead_code)]
 //! Email processing rules engine
 //!
 //! Implements organization-specific rules for automatic email processing,

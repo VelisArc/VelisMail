@@ -141,7 +141,7 @@ type BizTab = 'mail' | 'domains' | 'team' | 'queue' | 'analytics' | 'audit' | 't
 export default function BusinessDashboard() {
   const navigate = useNavigate();
   const navigation = useNavigation();
-  const { updateNavigation } = useSessionActions();
+  const updateNavigation = useSessionActions().updateNavigation;
   const user = auth.getSession();
   const storedDomainRecords = domains.getAll().map(toDomainRecord);
   const initialDomainRecords = storedDomainRecords;

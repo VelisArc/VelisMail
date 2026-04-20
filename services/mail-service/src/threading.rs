@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 //! Email threading and organization logic
 //!
 //! Implements email threading algorithms, conversation grouping,

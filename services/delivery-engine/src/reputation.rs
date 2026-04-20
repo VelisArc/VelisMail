@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 //! IP reputation tracking
 
 use anyhow::Result;

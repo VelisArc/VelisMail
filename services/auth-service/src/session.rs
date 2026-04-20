@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 //! Session management
 
 use anyhow::Result;

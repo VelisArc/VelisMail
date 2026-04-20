@@ -26,6 +26,7 @@ pub fn cors_layer() -> CorsLayer {
 }
 
 /// Request body size limit (50MB)
+#[allow(dead_code)]
 pub fn body_limit_layer() -> RequestBodyLimitLayer {
     RequestBodyLimitLayer::new(50 * 1024 * 1024)
 }

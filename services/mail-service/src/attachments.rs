@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 //! Attachment handling for email service
 //!
 //! Implements attachment validation, size limiting, and storage management.

@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 //! Account locking for failed authentication attempts
 
 use anyhow::Result;

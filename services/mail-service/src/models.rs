@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 //! Mail models
 
 use chrono::{DateTime, Utc};

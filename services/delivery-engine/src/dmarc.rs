@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 //! DMARC policy checking
 
 use anyhow::Result;

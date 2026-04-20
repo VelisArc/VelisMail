@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 //! SMTP client for sending emails
 
 use anyhow::Result;
