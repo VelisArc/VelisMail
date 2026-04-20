@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 //! Auth route handlers
 
 use crate::account_lock::AccountLockManager;

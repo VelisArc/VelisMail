@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 //! Mail service middleware
 
 use axum::{extract::Request, http::StatusCode, middleware::Next, response::Response};

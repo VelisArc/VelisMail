@@ -48,8 +48,8 @@ pub fn create_mtls_config(cert: Vec<u8>, key: Vec<u8>, client_ca: Vec<u8>) -> Re
     Ok(config)
 }
 
-/// Note: TLS 1.3 is now the default and only supported version in rustls 0.22+
-/// Version enforcement is handled automatically by the library
+// Note: TLS 1.3 is now the default and only supported version in rustls 0.22+
+// Version enforcement is handled automatically by the library
 
 #[cfg(test)]
 mod tests {

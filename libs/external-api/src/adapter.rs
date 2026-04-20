@@ -148,6 +148,7 @@ struct QueuedEmail {
     /// Reason for queuing
     reason: String,
     /// When the email was queued
+    #[allow(dead_code)]
     queued_at: DateTime<Utc>,
     /// Number of retry attempts so far
     retry_count: u32,
@@ -182,6 +183,7 @@ pub enum CircuitState {
 
 impl CircuitBreaker {
     /// Create a new circuit breaker with default settings
+    #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
         Self {
             state: CircuitState::Closed,
@@ -339,8 +341,10 @@ pub trait ExternalApiAdapter {
 /// Default implementation of ExternalApiAdapter
 pub struct DefaultExternalApiAdapter {
     /// Encryption key for credential storage
+    #[allow(dead_code)]
     encryption_key: Vec<u8>,
     /// Key ID for encryption
+    #[allow(dead_code)]
     key_id: String,
     /// Retry policy for email sending
     retry_policy: RetryPolicy,
@@ -374,6 +378,7 @@ impl DefaultExternalApiAdapter {
     }
 
     /// Encrypt credentials for storage
+    #[allow(dead_code)]
     fn encrypt_credentials(
         &self,
         credentials: &ApiCredentials,
@@ -729,6 +734,7 @@ impl DefaultExternalApiAdapter {
         email: EmailMessage,
     ) -> ExternalApiResult<SendResult> {
         use chrono::Utc;
+        #[allow(unused_imports)]
         use hmac::Mac;
         use reqwest::Client;
         use sha2::Digest;
@@ -1449,6 +1455,7 @@ enum MetricEvent {
         duration_ms: u64,
     },
     /// Provider health status change
+    #[allow(dead_code)]
     ProviderHealthChanged {
         provider_type: crate::provider::ProviderType,
         from_status: crate::provider::ProviderStatus,
@@ -1468,6 +1475,7 @@ enum MetricEvent {
         remaining: usize,
     },
     /// Retry attempt
+    #[allow(dead_code)]
     RetryAttempt {
         provider_type: crate::provider::ProviderType,
         attempt: u32,

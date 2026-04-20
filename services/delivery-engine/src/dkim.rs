@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 //! DKIM signing implementation
 
 use anyhow::Result;

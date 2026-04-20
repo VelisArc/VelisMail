@@ -68,13 +68,10 @@ pub enum ExternalApiError {
 impl ExternalApiError {
     /// Check if error is retryable
     pub fn is_retryable(&self) -> bool {
-        match self {
-            ExternalApiError::NetworkError(_)
+        matches!(self, ExternalApiError::NetworkError(_)
             | ExternalApiError::TimeoutError(_)
             | ExternalApiError::RateLimitExceeded(_)
-            | ExternalApiError::ProviderUnavailable(_) => true,
-            _ => false,
-        }
+            | ExternalApiError::ProviderUnavailable(_))
     }
 
     /// Get HTTP status code for the error

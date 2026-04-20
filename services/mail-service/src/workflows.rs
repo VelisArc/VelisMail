@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 //! Email processing workflows
 //!
 //! Implements email sending and receiving workflows with rules processing,
