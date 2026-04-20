@@ -53,7 +53,6 @@ pub fn create_mtls_config(cert: Vec<u8>, key: Vec<u8>, client_ca: Vec<u8>) -> Re
 
 #[cfg(test)]
 mod tests {
-    use super::*;
 
     #[test]
     fn test_tls_config_creation() {

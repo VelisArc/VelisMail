@@ -199,14 +199,16 @@ export const useVerification = () => useSessionStore((state) => state.verificati
 /**
  * Hook to get session actions
  */
-export const useSessionActions = () => useSessionStore((state) => ({
-  setSession: state.setSession,
-  clearSession: state.clearSession,
-  setAccountType: state.setAccountType,
-  updateNavigation: state.updateNavigation,
-  updateVerification: state.updateVerification,
-  updateUser: state.updateUser,
-  touchActivity: state.touchActivity,
-}));
+export const useSessionActions = () => {
+  return {
+    setSession: useSessionStore((state) => state.setSession),
+    clearSession: useSessionStore((state) => state.clearSession),
+    setAccountType: useSessionStore((state) => state.setAccountType),
+    updateNavigation: useSessionStore((state) => state.updateNavigation),
+    updateVerification: useSessionStore((state) => state.updateVerification),
+    updateUser: useSessionStore((state) => state.updateUser),
+    touchActivity: useSessionStore((state) => state.touchActivity),
+  };
+};
 
 export default useSessionStore;

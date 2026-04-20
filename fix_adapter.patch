@@ -1,0 +1,20 @@
+--- a/libs/external-api/src/adapter.rs
++++ b/libs/external-api/src/adapter.rs
+@@ -171,7 +171,7 @@
+ }
+
+ #[derive(Debug, Clone, PartialEq)]
+-enum CircuitState {
++pub enum CircuitState {
+     /// Circuit is closed - requests flow normally
+     Closed,
+     /// Circuit is open - requests fail fast
+@@ -731,7 +731,6 @@
+         use aes_gcm::{
+             aead::{Aead, KeyInit},
+             Aes256Gcm, Nonce,
+         };
+-        use hmac::Mac;
+         use rand::Rng;
+
+         let key = self.get_encryption_key()?;
