@@ -1,0 +1,4 @@
+/* App-level minimal overrides */
+#root {
+  min-height: 100vh;
+}

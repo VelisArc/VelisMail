@@ -1,0 +1,25 @@
+[package]
+name = "velismail-api-gateway"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "api-gateway"
+path = "src/main.rs"
+
+[dependencies]
+tokio.workspace = true
+axum.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+anyhow.workspace = true
+reqwest.workspace = true
+tower-http = { version = "0.5", features = ["cors", "trace", "limit", "timeout"] }
+tower = { version = "0.5", features = ["limit"] }
+utoipa.workspace = true
+utoipa-swagger-ui.workspace = true
+chrono.workspace = true
+uuid.workspace = true
+velismail-common = { path = "../../libs/common" }

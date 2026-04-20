@@ -1,0 +1,12 @@
+[package]
+name = "velismail-crypto"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+ring.workspace = true
+rustls.workspace = true
+zeroize.workspace = true
+serde.workspace = true
+anyhow.workspace = true
+tokio.workspace = true
