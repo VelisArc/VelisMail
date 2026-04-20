@@ -171,7 +171,7 @@ pub struct ProcessQueueResult {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-enum CircuitState {
+pub enum CircuitState {
     /// Circuit is closed - requests flow normally
     Closed,
     /// Circuit is open - requests fail fast

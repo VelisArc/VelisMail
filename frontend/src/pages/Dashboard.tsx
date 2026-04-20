@@ -25,7 +25,7 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const params = useParams();
   const navigation = useNavigation();
-  const { updateNavigation } = useSessionActions();
+  const updateNavigation = useSessionActions().updateNavigation;
   const user = auth.getSession();
 
   useEffect(() => {
