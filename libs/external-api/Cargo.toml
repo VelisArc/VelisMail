@@ -1,0 +1,34 @@
+[package]
+name = "velismail-external-api"
+version = "0.1.0"
+edition = "2021"
+description = "External API adapter component for VelisMail"
+license = "MIT"
+authors = ["VelisMail Team"]
+repository = "https://github.com/velismail/platform"
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+uuid = { version = "1.0", features = ["v4", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+thiserror = "1.0"
+tracing = "0.1"
+async-trait = "0.1"
+reqwest = { version = "0.11", features = ["json", "stream"] }
+tokio = { version = "1.0", features = ["full"] }
+base64 = "0.21"
+ring = "0.17"
+aes-gcm = "0.10"
+hmac = "0.12"
+sha2 = "0.10"
+rand = "0.8"
+urlencoding = "2.1"
+velismail-common = { path = "../common" }
+velismail-crypto = { path = "../crypto" }
+
+hex = "0.4"
+
+[dev-dependencies]
+proptest = "1.0"
+test-log = "0.2"

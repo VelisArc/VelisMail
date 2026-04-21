@@ -1,0 +1,14 @@
+{
+  "name": "velismail-backend-worker",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "build": "node -e \"console.log('Cloudflare Worker build step: nothing to compile.')\"",
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy"
+  },
+  "devDependencies": {
+    "wrangler": "4.83.0"
+  }
+}

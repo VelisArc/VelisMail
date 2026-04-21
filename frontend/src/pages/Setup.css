@@ -1,0 +1,194 @@
+/* ===========================
+   Infrastructure Setup UI
+   =========================== */
+
+.setup-page {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  overflow: hidden;
+  padding: 40px 24px;
+}
+
+.setup-bg-orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(120px);
+  pointer-events: none;
+}
+
+.setup-orb-1 {
+  width: 500px; height: 500px;
+  background: rgba(99, 102, 241, 0.12);
+  top: -150px; right: -100px;
+}
+
+.setup-orb-2 {
+  width: 400px; height: 400px;
+  background: rgba(52, 211, 153, 0.08);
+  bottom: -100px; left: -100px;
+}
+
+.setup-grid-bg {
+  position: absolute; inset: 0;
+  background-image: radial-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+  background-size: 40px 40px;
+  pointer-events: none;
+}
+
+.setup-back-link {
+  position: absolute; top: 24px; left: 24px;
+  display: flex; align-items: center; gap: 12px;
+  font-weight: 700; font-size: 1rem; z-index: 10;
+}
+
+.setup-container {
+  display: flex; align-items: center; gap: 60px;
+  max-width: 960px; width: 100%; z-index: 1;
+}
+
+/* Brand */
+.setup-brand { flex: 1; }
+
+.setup-brand h1 {
+  font-size: 2.8rem; margin-bottom: 12px; letter-spacing: -0.04em;
+}
+
+.setup-brand > p {
+  color: var(--text-secondary); font-size: 1.05rem;
+  margin-bottom: 32px; line-height: 1.6;
+}
+
+.setup-features { display: flex; flex-direction: column; gap: 14px; }
+
+.setup-feature {
+  display: flex; align-items: center; gap: 12px;
+  color: var(--text-secondary); font-size: 0.9rem; font-weight: 500;
+}
+
+/* Card */
+.setup-card {
+  width: 420px; flex-shrink: 0; padding: 24px;
+}
+
+.setup-card-header { text-align: center; margin-bottom: 16px; }
+
+.setup-icon-wrap {
+  width: 48px; height: 48px; border-radius: 12px;
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.15), rgba(99, 102, 241, 0.05));
+  border: 1px solid rgba(99, 102, 241, 0.2);
+  display: flex; align-items: center; justify-content: center;
+  margin: 0 auto 12px; color: var(--primary-400);
+}
+
+.setup-card-header h2 { font-size: 1.4rem; margin-bottom: 6px; }
+.setup-card-desc { color: var(--text-muted); font-size: 0.9rem; }
+
+/* Form */
+.setup-form { display: flex; flex-direction: column; gap: 10px; }
+
+.form-group { display: flex; flex-direction: column; gap: 6px; }
+
+.form-group label {
+  font-size: 0.85rem; font-weight: 600; color: var(--text-secondary);
+}
+
+.setup-select {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 16px center;
+  padding-right: 40px;
+}
+
+.form-error {
+  padding: 10px 14px;
+  background: rgba(248, 113, 113, 0.1);
+  border: 1px solid rgba(248, 113, 113, 0.25);
+  border-radius: var(--radius-sm);
+  color: var(--danger);
+  font-size: 0.85rem;
+  font-weight: 500;
+  text-align: center;
+}
+
+.w-full { width: 100%; }
+
+/* Verification */
+.verification-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 32px 0;
+}
+
+.verify-icon {
+  margin-bottom: 24px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 64px;
+}
+
+.text-primary { color: var(--primary); }
+.text-accent { color: var(--accent); }
+
+.verification-state h3 {
+  font-size: 1.3rem;
+  margin-bottom: 12px;
+}
+
+.verification-state p {
+  color: var(--text-secondary);
+  font-size: 0.95rem;
+  margin-bottom: 32px;
+  max-width: 400px;
+}
+
+.verify-steps {
+  width: 100%;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  background: rgba(0, 0, 0, 0.02);
+  padding: 24px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--glass-border);
+}
+
+.v-step {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  transition: all 0.3s;
+}
+
+.v-step.complete {
+  color: var(--accent);
+}
+
+.v-step.pending {
+  color: var(--text-muted);
+  opacity: 0.5;
+}
+
+.v-step.pulse {
+  color: var(--primary);
+  animation: float 2s ease-in-out infinite;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .setup-container { flex-direction: column; gap: 32px; }
+  .setup-brand { text-align: center; }
+  .setup-brand h1 { font-size: 2rem; }
+  .setup-features { align-items: center; }
+  .setup-card { width: 100%; max-width: 440px; }
+}
