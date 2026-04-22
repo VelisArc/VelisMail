@@ -189,8 +189,8 @@ async fn proxy_delivery(
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct VerifyInfrastructurePayload {
-    db_provider: Option<String>,
+pub struct VerifyInfrastructurePayload {
+    pub db_provider: Option<String>,
     db_url: String,
     api_provider: String,
     api_endpoint: Option<String>,
@@ -249,8 +249,8 @@ pub async fn get_supported_providers() -> Json<serde_json::Value> {
             description: "Any RFC-style URI.", requires_endpoint: false },
     ];
     let mail: Vec<ProviderCatalogEntry> = MAIL_PROVIDER_IDS.iter().map(|id| ProviderCatalogEntry {
-        id: *id,
-        label: *id,
+        id,
+        label: id,
         placeholder: "api-key",
         description: "Mail relay provider.",
         requires_endpoint: *id == "custom_webhook",
@@ -267,6 +267,7 @@ pub async fn verify_infrastructure(
     State(_state): State<AppState>,
     Json(payload): Json<VerifyInfrastructurePayload>,
 ) -> (StatusCode, Json<serde_json::Value>) {
+    let _ = payload.db_provider;
     let db_url = payload.db_url.trim();
     let api_provider = payload.api_provider.trim();
     let api_key = payload.api_key.trim();
