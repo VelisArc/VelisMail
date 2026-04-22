@@ -509,15 +509,31 @@ export const auth = {
     };
     users.push(newUser);
     saveUsers(users);
+    // Register with the VM backend (best-effort; frontend also keeps a local
+    // copy so the app stays usable if the backend is down).
     fetchAPI('/auth/register', {
       method: 'POST',
       body: JSON.stringify({
-        ...data,
         email: primaryEmail,
-        recoveryEmail: normalizedRecoveryEmail || undefined,
-        customDomain: normalizedCustomDomain,
+        display_name: data.displayName,
+        password: data.password,
       }),
-    }).catch(() => {});
+    })
+      .then(() =>
+        fetchAPI('/auth/login', {
+          method: 'POST',
+          body: JSON.stringify({ email: primaryEmail, password: data.password }),
+        }),
+      )
+      .then((res) => {
+        if (res && typeof res.access_token === 'string') {
+          localStorage.setItem('velismail_token', res.access_token);
+          if (typeof res.refresh_token === 'string') {
+            localStorage.setItem('velismail_refresh', res.refresh_token);
+          }
+        }
+      })
+      .catch(() => {});
 
     // Auto-login
     const { password: _, ...safeUser } = newUser;
@@ -550,9 +566,27 @@ export const auth = {
     const { password: _, ...safeUser } = found;
     saveDB(STORAGE_KEYS.session, safeUser);
     reloadAccountCaches();
-    fetchAPI('/auth/login/zkp', { method: 'POST', body: JSON.stringify({ email: safeUser.businessMailboxAddress || safeUser.email, password: 'password' }) }).then(res => {
-        if (res.success && res.access_token) localStorage.setItem('velismail_token', res.access_token);
-    }).catch(() => {});
+    // Exchange credentials with the VM backend for a real JWT. The previous
+    // build sent a hard-coded "password" string which meant the backend
+    // never actually authenticated the user — only the local store did.
+    fetchAPI('/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({
+        email: safeUser.businessMailboxAddress || safeUser.email,
+        password,
+      }),
+    })
+      .then((res) => {
+        if (res && typeof res.access_token === 'string') {
+          localStorage.setItem('velismail_token', res.access_token);
+          if (typeof res.refresh_token === 'string') {
+            localStorage.setItem('velismail_refresh', res.refresh_token);
+          }
+        }
+      })
+      .catch(() => {
+        // Backend unreachable — frontend still works in offline/localStorage mode.
+      });
     return { success: true, user: safeUser };
   },
 
