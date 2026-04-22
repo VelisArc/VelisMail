@@ -11,6 +11,7 @@ use axum::{
 
 /// Authentication middleware
 /// Verifies JWT tokens and extracts user context
+#[allow(dead_code)]
 pub async fn authentication(
     _state: State<AppState>,
     request: Request<Body>,
