@@ -36,19 +36,14 @@ async fn main() -> anyhow::Result<()> {
     // Initialize application state
     let state = AppState::new(config.clone()).await?;
 
-    // Build router
+    // Build router. NOTE: authentication middleware is disabled at the
+    // gateway level — each downstream service is responsible for validating
+    // the JWT so that the gateway can remain a transparent proxy. Re-enable
+    // `middleware::authentication` once a shared verifier is wired here.
     let app = Router::new()
-        // Health check
         .route("/health", get(routes::health_check))
-        // API v1 routes
         .nest("/api/v1", routes::api_v1_routes(&state))
-        // OpenAPI documentation
         .merge(routes::swagger_ui())
-        // Middleware
-        .layer(axum::middleware::from_fn_with_state(
-            state.clone(),
-            middleware::authentication,
-        ))
         .layer(axum::middleware::from_fn_with_state(
             state.clone(),
             middleware::rate_limit,

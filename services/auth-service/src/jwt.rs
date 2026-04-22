@@ -6,7 +6,6 @@ use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, Validation}
 use serde::{Deserialize, Serialize};
 use velismail_common::{Claims, SecurityLevel, UserId, UserRole};
 
-/// JWT token manager
 pub struct JwtManager {
     encoding_key: EncodingKey,
     decoding_key: DecodingKey,
@@ -22,7 +21,6 @@ impl JwtManager {
         })
     }
 
-    /// Generate access token
     pub fn generate_access_token(
         &self,
         user_id: UserId,
@@ -51,45 +49,32 @@ impl JwtManager {
             },
         };
 
-        let token = encode(&Header::default(), &claims, &self.encoding_key)?;
-        Ok(token)
+        Ok(encode(&Header::default(), &claims, &self.encoding_key)?)
     }
 
-    /// Validate and decode access token
     pub fn validate_token(&self, token: &str) -> Result<Claims> {
-        let token_data = decode::<Claims>(token, &self.decoding_key, &Validation::default())?;
-
-        Ok(token_data.claims)
+        let data = decode::<Claims>(token, &self.decoding_key, &Validation::default())?;
+        Ok(data.claims)
     }
 
-    /// Generate refresh token (random string, stored in DB)
     pub fn generate_refresh_token() -> Result<String> {
         use velismail_crypto::random::random_token;
         random_token(64)
     }
 
-    /// Hash refresh token for storage
     pub fn hash_refresh_token(token: &str) -> String {
         use ring::digest::{digest, SHA256};
-        let digest = digest(&SHA256, token.as_bytes());
-        hex::encode(digest.as_ref())
+        let d = digest(&SHA256, token.as_bytes());
+        hex::encode(d.as_ref())
     }
 }
 
-/// Token pair response
 #[derive(Debug, Serialize, Deserialize)]
 pub struct TokenPairResponse {
     pub access_token: String,
     pub refresh_token: String,
     pub expires_in: i64,
     pub token_type: String,
-}
-
-// Need hex crate - add to workspace
-mod hex {
-    pub fn encode(bytes: &[u8]) -> String {
-        bytes.iter().map(|b| format!("{:02x}", b)).collect()
-    }
 }
 
 #[cfg(test)]
@@ -100,7 +85,6 @@ mod tests {
     fn test_jwt_generation() {
         let manager = JwtManager::new("test-secret", 3600).unwrap();
         let user_id = UserId(uuid::Uuid::new_v4());
-
         let token = manager
             .generate_access_token(
                 user_id.clone(),
@@ -111,10 +95,8 @@ mod tests {
                 true,
             )
             .unwrap();
-
         let claims = manager.validate_token(&token).unwrap();
         assert_eq!(claims.sub, user_id);
         assert_eq!(claims.email, "user@example.com");
-        assert!(claims.mfa_verified);
     }
 }

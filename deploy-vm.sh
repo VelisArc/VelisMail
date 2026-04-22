@@ -1,50 +1,41 @@
-#!/bin/bash
-# VelisMail VM Deployment Script
-# This script prepares the AWS EC2 instance and deploys the backend services.
+#!/usr/bin/env bash
+# VelisMail — one-shot VM deploy script (Linux VM / VPS).
+#
+# Prerequisites on the VM:
+#   - Docker + Docker Compose v2
+#   - Ports 80/443 free (if you terminate TLS here) or behind a reverse proxy
+#   - .env.production file present (copy from .env.production.example)
+#
+# Usage:  bash deploy-vm.sh            # build + start
+#         bash deploy-vm.sh pull       # pull latest git + rebuild
+#         bash deploy-vm.sh logs       # tail logs
+#         bash deploy-vm.sh down       # stop everything
 
-echo "======================================"
-echo " Starting VelisMail VM Deployment"
-echo "======================================"
+set -euo pipefail
+cd "$(dirname "$0")"
 
-# 1. Update the system
-echo "[1/4] Updating system packages..."
-sudo apt-get update && sudo apt-get upgrade -y
+ENV_FILE=".env.production"
+COMPOSE="docker compose --env-file ${ENV_FILE} -f docker-compose.prod.yml"
 
-# 2. Install Docker & Docker Compose if not present
-echo "[2/4] Checking Docker installation..."
-if ! command -v docker &> /dev/null; then
-    echo "Docker not found. Installing Docker..."
-    curl -fsSL https://get.docker.com -o get-docker.sh
-    sudo sh get-docker.sh
-    sudo usermod -aG docker $USER
-    rm get-docker.sh
-    echo "Docker installed successfully. Please log out and log back in for group changes to take effect if running manually."
-else
-    echo "Docker is already installed."
-fi
+cmd=${1:-up}
 
-# 3. Environment Variables
-echo "[3/4] Checking environment configuration..."
-if [ ! -f .env ]; then
-    if [ -f .env.example ]; then
-        cp .env.example .env
-        echo "Created .env from .env.example."
-        echo "IMPORTANT: Please edit .env with your production credentials (database password, JWT secret, etc.)"
-    else
-        echo "Warning: .env.example not found. Please ensure your environment variables are configured."
-    fi
-else
-    echo ".env file already exists."
-fi
-
-# 4. Build and run containers
-echo "[4/4] Building and starting VelisMail services..."
-# Using Docker Compose V2
-sudo docker compose up --build -d
-
-echo "======================================"
-echo " Deployment completed successfully!"
-echo " Services are starting in the background."
-echo " Use 'sudo docker compose ps' to check their status."
-echo " Use 'sudo docker compose logs -f' to view logs."
-echo "======================================"
+case "$cmd" in
+  up)
+    [[ -f "$ENV_FILE" ]] || { echo "Missing $ENV_FILE — copy from .env.production.example"; exit 1; }
+    $COMPOSE build
+    $COMPOSE up -d
+    echo
+    echo "✓ VelisMail backend running."
+    echo "  API Gateway: http://$(hostname -I | awk '{print $1}'):${GATEWAY_PORT:-3000}"
+    echo "  Point your Cloudflare Pages frontend's VITE_API_URL to this host (with TLS)."
+    ;;
+  pull)
+    git pull --ff-only
+    $COMPOSE build
+    $COMPOSE up -d
+    ;;
+  logs)  $COMPOSE logs -f --tail=200 ;;
+  down)  $COMPOSE down ;;
+  ps)    $COMPOSE ps ;;
+  *)     echo "Unknown command: $cmd"; exit 2 ;;
+esac

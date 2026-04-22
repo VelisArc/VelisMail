@@ -122,9 +122,9 @@ impl SessionManager {
             }
         }
 
-        // Fall back to database
-        let row: Option<(Uuid, i64, String, String, String, DateTime<Utc>)> = sqlx::query_as(
-            r#"SELECT id, user_id, tenant_id, device_fingerprint, ip_address, expires_at
+        // Fall back to database. user_id is UUID in the schema, not i64.
+        let row: Option<(Uuid, Uuid, String, String, String, DateTime<Utc>)> = sqlx::query_as(
+            r#"SELECT id, user_id, tenant_id, device_fingerprint, ip_address::text, expires_at
                FROM sessions
                WHERE id = $1 AND is_active = true"#,
         )
@@ -139,7 +139,7 @@ impl SessionManager {
 
             let session_info = SessionInfo {
                 session_id: id,
-                user_id: UserId(Uuid::from_u128(user_id as u128)),
+                user_id: UserId(user_id),
                 tenant_id,
                 device_fingerprint,
                 ip_address,
@@ -184,7 +184,7 @@ impl SessionManager {
     /// List all active sessions for a user
     pub async fn list_user_sessions(&self, user_id: UserId) -> Result<Vec<SessionInfo>> {
         let rows: Vec<(Uuid, String, String, String, DateTime<Utc>)> = sqlx::query_as(
-            r#"SELECT id, tenant_id, device_fingerprint, ip_address, expires_at
+            r#"SELECT id, tenant_id, device_fingerprint, ip_address::text, expires_at
                FROM sessions
                WHERE user_id = $1 AND is_active = true
                ORDER BY last_active DESC"#,
@@ -193,12 +193,13 @@ impl SessionManager {
         .fetch_all(&self.db)
         .await?;
 
+        let owner = user_id.clone();
         let sessions = rows
             .into_iter()
             .map(
                 |(id, tenant_id, device_fingerprint, ip_address, expires_at)| SessionInfo {
                     session_id: id,
-                    user_id: UserId(Uuid::new_v4()), // Would be populated from join
+                    user_id: owner.clone(),
                     tenant_id,
                     device_fingerprint,
                     ip_address,
