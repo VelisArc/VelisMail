@@ -8,7 +8,6 @@ Thumbs.db
 # Environment and secrets
 .env
 .env.*
-!/.env
 !/frontend/.env
 *.pem
 *.key
