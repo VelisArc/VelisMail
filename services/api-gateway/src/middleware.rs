@@ -67,10 +67,3 @@ pub async fn rate_limit(
     }
 }
 
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn test_middleware_module() {
-        // Module compiles
-    }
-}

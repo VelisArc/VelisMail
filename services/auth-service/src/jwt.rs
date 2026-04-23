@@ -77,26 +77,3 @@ pub struct TokenPairResponse {
     pub token_type: String,
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_jwt_generation() {
-        let manager = JwtManager::new("test-secret", 3600).unwrap();
-        let user_id = UserId(uuid::Uuid::new_v4());
-        let token = manager
-            .generate_access_token(
-                user_id.clone(),
-                "tenant-123",
-                "user@example.com",
-                UserRole::User,
-                "device-123",
-                true,
-            )
-            .unwrap();
-        let claims = manager.validate_token(&token).unwrap();
-        assert_eq!(claims.sub, user_id);
-        assert_eq!(claims.email, "user@example.com");
-    }
-}

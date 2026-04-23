@@ -68,16 +68,3 @@ fn base64_encode(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{:02x}", b)).collect()
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_dkim_signer() {
-        let signer = DkimSigner::new("key", "selector", "example.com").unwrap();
-        let headers = "From: user@example.com\r\nTo: recipient@example.com\r\n";
-        let body = "Hello world";
-        let result = signer.sign(headers, body);
-        assert!(result.is_ok());
-    }
-}

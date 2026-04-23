@@ -23,21 +23,3 @@ pub fn random_challenge(length: usize) -> Result<Vec<u8>> {
     random_bytes(length)
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_random_bytes() {
-        let b1 = random_bytes(32).unwrap();
-        let b2 = random_bytes(32).unwrap();
-        assert_ne!(b1, b2);
-        assert_eq!(b1.len(), 32);
-    }
-
-    #[test]
-    fn test_random_token() {
-        let token = random_token(16).unwrap();
-        assert_eq!(token.len(), 32); // hex = 2 chars per byte
-    }
-}

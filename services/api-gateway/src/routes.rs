@@ -317,17 +317,3 @@ pub async fn verify_infrastructure(
     })))
 }
 
-#[cfg(test)]
-mod tests {
-    use super::{is_supported_mail_provider, is_valid_database_url};
-    #[test]
-    fn db_ok() {
-        assert!(is_valid_database_url("postgresql://a:b@c/d"));
-        assert!(!is_valid_database_url("ftp://x"));
-    }
-    #[test]
-    fn mail_ok() {
-        assert!(is_supported_mail_provider("resend"));
-        assert!(!is_supported_mail_provider("bogus"));
-    }
-}

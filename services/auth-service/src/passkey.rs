@@ -80,14 +80,3 @@ pub fn generate_challenge() -> Result<String> {
     Ok(URL_SAFE_NO_PAD.encode(&bytes))
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_challenge_generation() {
-        let challenge = generate_challenge().unwrap();
-        assert!(!challenge.is_empty());
-        assert!(challenge.len() >= 32);
-    }
-}

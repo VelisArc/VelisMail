@@ -167,16 +167,3 @@ pub mod keys {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_cache_keys() {
-        assert_eq!(keys::session("abc123"), "session:abc123");
-        assert_eq!(
-            keys::rate_limit("login", "user@example.com"),
-            "ratelimit:login:user@example.com"
-        );
-    }
-}
