@@ -1,7 +1,7 @@
 # Multi-stage Rust build — one image per service, selected via SERVICE build arg.
 # Build: docker build --build-arg SERVICE=auth-service -t velismail/auth .
 
-FROM rust:1.86-slim-bookworm AS builder
+FROM rust:1.91.1-slim-bookworm AS builder
 ARG SERVICE=api-gateway
 ENV SERVICE=${SERVICE}
 
