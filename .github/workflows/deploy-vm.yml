@@ -1,0 +1,34 @@
+name: Deploy to VM
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.HOST }}
+          username: ${{ secrets.USERNAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            if [ ! -d "VelisMail" ]; then
+              git clone https://github.com/${{ github.repository }} VelisMail
+            fi
+            cd VelisMail
+            git fetch --all
+            git reset --hard origin/main
+            if [ ! -f ".env.production" ]; then
+              cp .env.example .env.production
+              sed -i "s/POSTGRES_PASSWORD=.*/POSTGRES_PASSWORD=$(openssl rand -hex 16)/" .env.production
+              sed -i "s/REDIS_PASSWORD=.*/REDIS_PASSWORD=$(openssl rand -hex 16)/" .env.production
+              echo "JWT_SECRET=$(openssl rand -hex 32)" >> .env.production
+              echo "SMTP_HOST=smtp.example.com" >> .env.production
+              echo "SMTP_USERNAME=example" >> .env.production
+              echo "SMTP_PASSWORD=example" >> .env.production
+            fi
+            bash deploy-vm.sh up
