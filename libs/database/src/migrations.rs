@@ -23,10 +23,3 @@ pub async fn run_migrations(pool: &PgPool) -> Result<()> {
 // Migration 005: add_audit_log
 // etc.
 
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn test_migrations_module() {
-        // Module compiles
-    }
-}

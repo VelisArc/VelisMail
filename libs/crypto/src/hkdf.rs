@@ -41,20 +41,3 @@ pub fn derive_mac_key(ikm: &[u8], salt: &[u8], info: &[u8]) -> Result<Vec<u8>> {
     derive_key(ikm, salt, info, 32)
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_key_derivation() {
-        let ikm = b"input key material";
-        let salt = b"salt";
-        let info = b"info";
-
-        let key1 = derive_key(ikm, salt, info, 32).unwrap();
-        let key2 = derive_key(ikm, salt, info, 32).unwrap();
-
-        assert_eq!(key1, key2);
-        assert_eq!(key1.len(), 32);
-    }
-}

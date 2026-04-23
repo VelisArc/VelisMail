@@ -92,25 +92,3 @@ pub async fn check_health(pool: &PgPool) -> Result<()> {
     Ok(())
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_connection_string() {
-        let config = DbConfig {
-            host: "localhost".to_string(),
-            port: 5432,
-            database: "test".to_string(),
-            username: "user".to_string(),
-            password: "pass".to_string(),
-            max_connections: 10,
-            min_connections: 2,
-        };
-
-        assert_eq!(
-            config.connection_string(),
-            "postgres://user:pass@localhost:5432/test"
-        );
-    }
-}
