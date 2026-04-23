@@ -1,7 +1,7 @@
 # Multi-stage Rust build — one image per service, selected via SERVICE build arg.
 # Build: docker build --build-arg SERVICE=auth-service -t velismail/auth .
 
-FROM rust:1.81-slim-bookworm AS builder
+FROM rust:1.86-slim-bookworm AS builder
 ARG SERVICE=api-gateway
 ENV SERVICE=${SERVICE}
 
@@ -28,8 +28,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 COPY --from=builder /src/target/release/${SERVICE} /app/service
-# Copy migrations for services that bundle them
-COPY --from=builder /src/services/${SERVICE}/migrations /app/migrations 2>/dev/null || true
+COPY --from=builder /src/services/${SERVICE} /tmp/service-src
+RUN if [ -d /tmp/service-src/migrations ]; then cp -r /tmp/service-src/migrations /app/migrations; fi \
+ && rm -rf /tmp/service-src
 
 USER appuser
 EXPOSE 3000
