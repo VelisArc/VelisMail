@@ -8,7 +8,9 @@ Thumbs.db
 # Environment and secrets
 .env
 .env.*
+!/.env.example
 !/frontend/.env
+!/frontend/.env.example
 *.pem
 *.key
 *.crt

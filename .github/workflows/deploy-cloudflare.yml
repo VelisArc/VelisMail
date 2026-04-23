@@ -16,6 +16,21 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Validate Cloudflare secrets
+        run: |
+          if [ -z "${{ secrets.CF_API_TOKEN }}" ]; then
+            echo "Missing GitHub secret: CF_API_TOKEN"
+            exit 1
+          fi
+          if [ -z "${{ secrets.CF_ACCOUNT_ID }}" ]; then
+            echo "Missing GitHub secret: CF_ACCOUNT_ID"
+            exit 1
+          fi
+          if [ -z "${{ secrets.VITE_API_URL }}" ]; then
+            echo "Missing GitHub secret: VITE_API_URL"
+            exit 1
+          fi
+
       - name: Setup Node
         uses: actions/setup-node@v4
         with:

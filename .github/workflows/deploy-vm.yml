@@ -38,7 +38,8 @@ jobs:
 
             echo "Checking environment file..."
             if [ ! -f ".env" ]; then
-              echo "ERROR: .env file missing!"
+              echo "ERROR: .env file missing in ~/VelisMail on the VM."
+              echo "Create it from .env.example and fill the required values before deploying."
               exit 1
             fi
 
