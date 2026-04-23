@@ -1,0 +1,36 @@
+# OS/editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+
+# Environment and secrets
+.env
+.env.*
+!/.env
+!/frontend/.env
+*.pem
+*.key
+*.crt
+k8s/secrets.yml
+!k8s/secrets.example.yml
+
+# Rust
+/target/
+**/*.rs.bk
+rustup-init.exe
+
+# Node/Vite
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+frontend/coverage/
+node_modules/
+.wrangler/
+
+# Logs and temporary output
+*.log
+*.tmp
+tmp/
+temp/

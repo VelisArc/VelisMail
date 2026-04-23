@@ -1,0 +1,190 @@
+/* Business Setup Page */
+.bsetup-page {
+  min-height: 100vh;
+  background: var(--bg-primary);
+}
+
+.bsetup-nav {
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--glass-border);
+  padding: 12px 0;
+}
+
+.bsetup-nav-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.bsetup-container {
+  max-width: 680px;
+  margin: 0 auto;
+  padding: 40px 20px;
+}
+
+/* Progress Bar */
+.bsetup-progress {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 36px;
+  position: relative;
+}
+
+.bsetup-progress::before {
+  content: '';
+  position: absolute;
+  top: 15px;
+  left: 40px;
+  right: 40px;
+  height: 2px;
+  background: var(--glass-border);
+  z-index: 0;
+}
+
+.bsetup-progress-step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  position: relative;
+  z-index: 1;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.bsetup-step-num {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-surface);
+  border: 2px solid var(--glass-border);
+  font-weight: 700;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  transition: all 0.3s;
+}
+
+.bsetup-progress-step.active .bsetup-step-num {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #fff;
+  box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.15);
+}
+
+.bsetup-progress-step.active {
+  color: var(--primary);
+  font-weight: 600;
+}
+
+.bsetup-progress-step.done .bsetup-step-num {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.bsetup-progress-step.done {
+  color: var(--accent);
+}
+
+/* Card */
+.bsetup-card {
+  padding: 36px;
+  border-radius: var(--radius-lg);
+}
+
+.bsetup-card h2 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 1.35rem;
+  margin-bottom: 8px;
+}
+
+.bsetup-desc {
+  color: var(--text-secondary);
+  font-size: 0.92rem;
+  margin-bottom: 24px;
+  line-height: 1.6;
+}
+
+.bsetup-form {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.bsetup-form .divider {
+  margin: 8px 0;
+}
+
+.bsetup-form .btn-primary {
+  margin-top: 8px;
+  align-self: flex-start;
+}
+
+/* DNS Section */
+.bsetup-dns {
+  margin-top: 8px;
+}
+
+.dns-instruction-text {
+  font-size: 0.88rem;
+  color: var(--text-secondary);
+  margin-bottom: 16px;
+}
+
+.bsetup-dns .dns-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+}
+
+.bsetup-dns .dns-table th {
+  text-align: left;
+  padding: 8px 10px;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--glass-border);
+}
+
+.bsetup-dns .dns-table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid rgba(0,0,0,0.04);
+  word-break: break-all;
+}
+
+.bsetup-dns .dns-type {
+  background: rgba(99, 102, 241, 0.08);
+  color: var(--primary);
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-weight: 600;
+  font-size: 0.72rem;
+}
+
+/* Success */
+.bsetup-success-icon {
+  width: 88px;
+  height: 88px;
+  margin: 0 auto 20px;
+  border-radius: 50%;
+  background: rgba(34, 197, 94, 0.08);
+  border: 2px solid rgba(34, 197, 94, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Reuse diag styles from Dashboard */
+.bsetup-card .diag-header,
+.bsetup-card .diag-steps,
+.bsetup-card .diag-step {
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+}

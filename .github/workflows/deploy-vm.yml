@@ -1,0 +1,48 @@
+name: Deploy to VM
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.HOST }}
+          username: ubuntu
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: 22
+          script_stop: true
+          command_timeout: 20m
+          script: |
+            set -e
+
+            echo "Starting deployment..."
+            cd ~
+
+            if [ ! -d "VelisMail" ]; then
+              echo "Cloning repository..."
+              git clone git@github.com:VelisArc/VelisMail.git VelisMail
+            fi
+
+            cd VelisMail
+
+            echo "Pulling latest code..."
+            git fetch --all
+            git reset --hard origin/main
+
+            echo "Checking environment file..."
+            if [ ! -f ".env" ]; then
+              echo "ERROR: .env file missing!"
+              exit 1
+            fi
+
+            echo "Running deploy script..."
+            bash deploy-vm.sh up
+
+            echo "Deployment completed successfully!"

@@ -1,0 +1,165 @@
+# VelisMail Docker Compose - Development Environment
+
+version: '3.9'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: velismail
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # NATS Message Queue
+  nats:
+    image: nats:2-alpine
+    ports:
+      - "4222:4222"
+      - "8222:8222"  # Monitoring
+    command: --jetstream
+    volumes:
+      - nats_data:/var/lib/nats/jetstream
+
+  # MinIO (S3-compatible storage)
+  minio:
+    image: minio/minio:latest
+    ports:
+      - "9000:9000"
+      - "9001:9001"  # Console
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    volumes:
+      - minio_data:/data
+    command: server /data --console-address ":9001"
+
+  # API Gateway
+  api-gateway:
+    build:
+      context: .
+      dockerfile: services/api-gateway/Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - GATEWAY_HOST=0.0.0.0
+      - GATEWAY_PORT=3000
+      - AUTH_SERVICE_URL=http://auth-service:3001
+      - MAIL_SERVICE_URL=http://mail-service:3002
+      - STORAGE_SERVICE_URL=http://storage-service:3003
+      - TENANT_SERVICE_URL=http://tenant-service:3004
+      - DELIVERY_SERVICE_URL=http://delivery-engine:3005
+    depends_on:
+      - auth-service
+      - mail-service
+      - storage-service
+
+  # Auth Service
+  auth-service:
+    build:
+      context: .
+      dockerfile: services/auth-service/Dockerfile
+    ports:
+      - "3001:3001"
+    environment:
+      - AUTH_HOST=0.0.0.0
+      - AUTH_PORT=3001
+      - DATABASE_URL=postgres://postgres:postgres@postgres:5432/velismail_auth
+      - REDIS_URL=redis://redis:6379
+      - JWT_SECRET=${JWT_SECRET}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # Mail Service
+  mail-service:
+    build:
+      context: .
+      dockerfile: services/mail-service/Dockerfile
+    ports:
+      - "3002:3002"
+    environment:
+      - MAIL_HOST=0.0.0.0
+      - MAIL_PORT=3002
+      - DATABASE_URL=postgres://postgres:postgres@postgres:5432/velismail_mail
+      - REDIS_URL=redis://redis:6379
+      - NATS_URL=nats://nats:4222
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      nats:
+        condition: service_started
+
+  # Storage Service
+  storage-service:
+    build:
+      context: .
+      dockerfile: services/storage-service/Dockerfile
+    ports:
+      - "3003:3003"
+    environment:
+      - STORAGE_HOST=0.0.0.0
+      - STORAGE_PORT=3003
+      - S3_ENDPOINT=http://minio:9000
+      - S3_ACCESS_KEY=minioadmin
+      - S3_SECRET_KEY=minioadmin
+      - DATABASE_URL=postgres://postgres:postgres@postgres:5432/velismail_storage
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_started
+
+  # Tenant Service
+  tenant-service:
+    build:
+      context: .
+      dockerfile: services/tenant-service/Dockerfile
+    ports:
+      - "3004:3004"
+    environment:
+      - TENANT_HOST=0.0.0.0
+      - TENANT_PORT=3004
+      - DATABASE_URL=postgres://postgres:postgres@postgres:5432/velismail_tenant
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+  redis_data:
+  nats_data:
+  minio_data:
