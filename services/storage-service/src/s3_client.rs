@@ -2,6 +2,7 @@
 
 use anyhow::Result;
 use aws_config::BehaviorVersion;
+use aws_sdk_s3::config::{Credentials, Region};
 use aws_sdk_s3::primitives::ByteStream;
 use aws_sdk_s3::Client;
 
@@ -9,27 +10,50 @@ use aws_sdk_s3::Client;
 pub struct S3Client {
     client: Client,
     bucket: String,
+    public_base_url: String,
 }
 
 impl S3Client {
     pub async fn new(
-        _endpoint: &str,
+        endpoint: &str,
         region: &str,
-        _access_key: &str,
-        _secret_key: &str,
+        access_key: &str,
+        secret_key: &str,
         bucket: &str,
     ) -> Result<Self> {
-        // Create SDK config
-        let sdk_config = aws_config::defaults(BehaviorVersion::latest())
-            .region(aws_sdk_s3::config::Region::new(region.to_string()))
-            .load()
-            .await;
+        let region = Region::new(region.to_string());
+        let mut loader = aws_config::defaults(BehaviorVersion::latest()).region(region.clone());
 
-        let client = Client::new(&sdk_config);
+        if !access_key.trim().is_empty() && !secret_key.trim().is_empty() {
+            loader = loader.credentials_provider(Credentials::new(
+                access_key.trim(),
+                secret_key.trim(),
+                None,
+                None,
+                "velismail-storage",
+            ));
+        }
+
+        let shared_config = loader.load().await;
+        let mut config_builder = aws_sdk_s3::config::Builder::from(&shared_config).region(region);
+
+        if !endpoint.trim().is_empty() {
+            config_builder = config_builder
+                .endpoint_url(endpoint.trim())
+                .force_path_style(true);
+        }
+
+        let client = Client::from_conf(config_builder.build());
+        let public_base_url = if endpoint.trim().is_empty() {
+            "https://storage.velismail.online".to_string()
+        } else {
+            endpoint.trim_end_matches('/').to_string()
+        };
 
         Ok(Self {
             client,
             bucket: bucket.to_string(),
+            public_base_url,
         })
     }
 
@@ -79,7 +103,7 @@ impl S3Client {
         let _ = expires_in_secs;
         Ok(format!(
             "{}/{}/{}",
-            "https://storage.velismail.online", self.bucket, key
+            self.public_base_url, self.bucket, key
         ))
     }
 
