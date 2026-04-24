@@ -25,4 +25,4 @@ aws-config.workspace = true
 velismail-common = { path = "../../libs/common" }
 velismail-database = { path = "../../libs/database" }
 velismail-crypto = { path = "../../libs/crypto" }
-tower-http = { version = "0.5", features = ["cors", "trace"] }
+tower-http = { version = "0.5", features = ["limit", "cors", "trace"] }

@@ -4639,6 +4639,7 @@ dependencies = [
  "chrono",
  "hex",
  "jsonwebtoken",
+ "lettre",
  "redis",
  "reqwest 0.12.28",
  "ring",
