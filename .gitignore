@@ -9,8 +9,8 @@ Thumbs.db
 .env
 .env.*
 !/.env.example
-!/frontend/.env
 !/frontend/.env.example
+frontend/.env
 *.pem
 *.key
 *.crt

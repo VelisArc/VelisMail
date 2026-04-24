@@ -11,6 +11,10 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use tokio::{
+    net::{lookup_host, TcpStream},
+    time::{timeout, Duration},
+};
 
 pub fn api_v1_routes(_state: &AppState) -> Router<AppState> {
     Router::new()
@@ -194,6 +198,9 @@ pub struct SendMailPayload {
     body: String,
     from: Option<String>,
     from_name: Option<String>,
+    provider: Option<String>,
+    api_key: Option<String>,
+    provider_endpoint: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -212,6 +219,14 @@ struct DomainCheckResult {
     status: &'static str,
     expected: String,
     actual: String,
+}
+
+#[derive(Debug, Serialize)]
+struct RuntimeCheckResult {
+    key: &'static str,
+    label: &'static str,
+    status: &'static str,
+    detail: String,
 }
 
 const DATABASE_SCHEMES: &[&str] = &[
@@ -235,17 +250,8 @@ const DATABASE_SCHEMES: &[&str] = &[
 const MAIL_PROVIDER_IDS: &[&str] = &[
     "sendgrid",
     "resend",
-    "mailgun",
     "postmark",
-    "ses",
     "brevo",
-    "mailersend",
-    "sparkpost",
-    "mailjet",
-    "zeptomail",
-    "smtp2go",
-    "elastic_email",
-    "courier",
     "custom_webhook",
 ];
 
@@ -266,6 +272,335 @@ fn requires_custom_endpoint(provider: &str) -> bool {
 
 fn is_valid_http_url(value: &str) -> bool {
     value.starts_with("http://") || value.starts_with("https://")
+}
+
+fn default_port_for_scheme(scheme: &str) -> Option<u16> {
+    match scheme {
+        "postgresql" | "postgres" => Some(5432),
+        "mysql" | "mysql2" | "mariadb" => Some(3306),
+        "mongodb" | "mongodb+srv" => Some(27017),
+        "redis" | "rediss" => Some(6379),
+        "libsql" => Some(443),
+        "sqlserver" | "mssql" => Some(1433),
+        "clickhouse" => Some(8443),
+        "http" => Some(80),
+        "https" => Some(443),
+        _ => None,
+    }
+}
+
+async fn verify_database_runtime(db_url: &str) -> RuntimeCheckResult {
+    let parsed = match reqwest::Url::parse(db_url.trim()) {
+        Ok(url) => url,
+        Err(err) => {
+            return RuntimeCheckResult {
+                key: "database",
+                label: "Database Runtime Check",
+                status: "failed",
+                detail: format!("Invalid database URL: {err}"),
+            }
+        }
+    };
+
+    if parsed.scheme() == "sqlite" {
+        let path = parsed.path().trim();
+        return RuntimeCheckResult {
+            key: "database",
+            label: "Database Runtime Check",
+            status: if path.is_empty() { "failed" } else { "verified" },
+            detail: if path.is_empty() {
+                "SQLite path is empty.".to_string()
+            } else {
+                format!("SQLite path accepted: {path}")
+            },
+        };
+    }
+
+    let host = match parsed.host_str() {
+        Some(value) if !value.trim().is_empty() => value.to_string(),
+        _ => {
+            return RuntimeCheckResult {
+                key: "database",
+                label: "Database Runtime Check",
+                status: "failed",
+                detail: "Database host is missing from the connection string.".to_string(),
+            }
+        }
+    };
+    let port = parsed
+        .port()
+        .or_else(|| default_port_for_scheme(parsed.scheme()))
+        .unwrap_or(0);
+
+    let resolved = timeout(Duration::from_secs(5), lookup_host((host.as_str(), port))).await;
+    let mut addresses = match resolved {
+        Ok(Ok(addrs)) => addrs,
+        Ok(Err(err)) => {
+            return RuntimeCheckResult {
+                key: "database",
+                label: "Database Runtime Check",
+                status: "failed",
+                detail: format!("Could not resolve database host {host}:{port}: {err}"),
+            }
+        }
+        Err(_) => {
+            return RuntimeCheckResult {
+                key: "database",
+                label: "Database Runtime Check",
+                status: "failed",
+                detail: format!("Timed out while resolving database host {host}:{port}."),
+            }
+        }
+    };
+
+    if parsed.scheme() == "mongodb+srv" {
+        return RuntimeCheckResult {
+            key: "database",
+            label: "Database Runtime Check",
+            status: "verified",
+            detail: format!("Resolved SRV host {host}."),
+        };
+    }
+
+    let target = match addresses.next() {
+        Some(addr) => addr,
+        None => {
+            return RuntimeCheckResult {
+                key: "database",
+                label: "Database Runtime Check",
+                status: "failed",
+                detail: format!("No addresses resolved for {host}:{port}."),
+            }
+        }
+    };
+
+    match timeout(Duration::from_secs(5), TcpStream::connect(target)).await {
+        Ok(Ok(_)) => RuntimeCheckResult {
+            key: "database",
+            label: "Database Runtime Check",
+            status: "verified",
+            detail: format!("Connected to {host}:{port}."),
+        },
+        Ok(Err(err)) => RuntimeCheckResult {
+            key: "database",
+            label: "Database Runtime Check",
+            status: "failed",
+            detail: format!("Network connection to {host}:{port} failed: {err}"),
+        },
+        Err(_) => RuntimeCheckResult {
+            key: "database",
+            label: "Database Runtime Check",
+            status: "failed",
+            detail: format!("Timed out while connecting to {host}:{port}."),
+        },
+    }
+}
+
+async fn validate_provider_credentials(
+    client: &reqwest::Client,
+    provider: &str,
+    api_key: &str,
+    endpoint: Option<&str>,
+) -> RuntimeCheckResult {
+    let provider = provider.trim().to_lowercase();
+
+    if requires_custom_endpoint(&provider) {
+        let Some(endpoint) = endpoint else {
+            return RuntimeCheckResult {
+                key: "mailProvider",
+                label: "Mail Provider Runtime Check",
+                status: "failed",
+                detail: "Custom webhook endpoint is required.".to_string(),
+            };
+        };
+
+        let request = client
+            .get(endpoint)
+            .header(axum::http::header::AUTHORIZATION, format!("Bearer {api_key}"));
+        return match timeout(Duration::from_secs(10), request.send()).await {
+            Ok(Ok(response)) if response.status().is_success() || response.status().as_u16() == 405 => RuntimeCheckResult {
+                key: "mailProvider",
+                label: "Mail Provider Runtime Check",
+                status: "verified",
+                detail: format!("Webhook endpoint responded with {}.", response.status()),
+            },
+            Ok(Ok(response)) => RuntimeCheckResult {
+                key: "mailProvider",
+                label: "Mail Provider Runtime Check",
+                status: "failed",
+                detail: format!("Webhook endpoint returned {}.", response.status()),
+            },
+            Ok(Err(err)) => RuntimeCheckResult {
+                key: "mailProvider",
+                label: "Mail Provider Runtime Check",
+                status: "failed",
+                detail: format!("Webhook check failed: {err}"),
+            },
+            Err(_) => RuntimeCheckResult {
+                key: "mailProvider",
+                label: "Mail Provider Runtime Check",
+                status: "failed",
+                detail: "Webhook check timed out.".to_string(),
+            },
+        };
+    }
+
+    let request = match provider.as_str() {
+        "sendgrid" => client
+            .get("https://api.sendgrid.com/v3/user/account")
+            .bearer_auth(api_key),
+        "resend" => client
+            .get("https://api.resend.com/domains")
+            .bearer_auth(api_key),
+        "postmark" => client
+            .get("https://api.postmarkapp.com/server")
+            .header("X-Postmark-Server-Token", api_key),
+        "brevo" => client
+            .get("https://api.brevo.com/v3/account")
+            .header("api-key", api_key),
+        _ => {
+            return RuntimeCheckResult {
+                key: "mailProvider",
+                label: "Mail Provider Runtime Check",
+                status: "failed",
+                detail: format!("Provider '{provider}' is not supported for live runtime validation."),
+            }
+        }
+    };
+
+    match timeout(Duration::from_secs(10), request.send()).await {
+        Ok(Ok(response)) if response.status().is_success() => RuntimeCheckResult {
+            key: "mailProvider",
+            label: "Mail Provider Runtime Check",
+            status: "verified",
+            detail: format!("{provider} credentials accepted."),
+        },
+        Ok(Ok(response)) => RuntimeCheckResult {
+            key: "mailProvider",
+            label: "Mail Provider Runtime Check",
+            status: "failed",
+            detail: format!("{provider} rejected the credentials with status {}.", response.status()),
+        },
+        Ok(Err(err)) => RuntimeCheckResult {
+            key: "mailProvider",
+            label: "Mail Provider Runtime Check",
+            status: "failed",
+            detail: format!("{provider} validation failed: {err}"),
+        },
+        Err(_) => RuntimeCheckResult {
+            key: "mailProvider",
+            label: "Mail Provider Runtime Check",
+            status: "failed",
+            detail: format!("{provider} validation timed out."),
+        },
+    }
+}
+
+async fn dispatch_via_provider(
+    client: &reqwest::Client,
+    provider: &str,
+    api_key: &str,
+    endpoint: Option<&str>,
+    payload: &SendMailPayload,
+) -> Result<Option<String>, String> {
+    let provider = provider.trim().to_lowercase();
+    let from_email = payload
+        .from
+        .clone()
+        .unwrap_or_else(|| "noreply@velismail.online".to_string());
+    let from_name = payload.from_name.clone().unwrap_or_else(|| "VelisMail".to_string());
+
+    let response = match provider.as_str() {
+        "sendgrid" => client
+            .post("https://api.sendgrid.com/v3/mail/send")
+            .bearer_auth(api_key)
+            .json(&json!({
+                "personalizations": [{
+                    "to": payload.to.iter().map(|email| json!({ "email": email })).collect::<Vec<_>>()
+                }],
+                "from": { "email": from_email, "name": from_name },
+                "subject": payload.subject.trim(),
+                "content": [{
+                    "type": "text/plain",
+                    "value": payload.body
+                }]
+            }))
+            .send()
+            .await
+            .map_err(|err| err.to_string())?,
+        "resend" => client
+            .post("https://api.resend.com/emails")
+            .bearer_auth(api_key)
+            .json(&json!({
+                "from": format!("{from_name} <{from_email}>"),
+                "to": payload.to,
+                "subject": payload.subject.trim(),
+                "text": payload.body,
+            }))
+            .send()
+            .await
+            .map_err(|err| err.to_string())?,
+        "postmark" => client
+            .post("https://api.postmarkapp.com/email")
+            .header("X-Postmark-Server-Token", api_key)
+            .json(&json!({
+                "From": format!("{from_name} <{from_email}>"),
+                "To": payload.to.join(","),
+                "Subject": payload.subject.trim(),
+                "TextBody": payload.body,
+            }))
+            .send()
+            .await
+            .map_err(|err| err.to_string())?,
+        "brevo" => client
+            .post("https://api.brevo.com/v3/smtp/email")
+            .header("api-key", api_key)
+            .json(&json!({
+                "sender": {
+                    "email": from_email,
+                    "name": from_name
+                },
+                "to": payload.to.iter().map(|email| json!({ "email": email })).collect::<Vec<_>>(),
+                "subject": payload.subject.trim(),
+                "textContent": payload.body,
+            }))
+            .send()
+            .await
+            .map_err(|err| err.to_string())?,
+        "custom_webhook" => {
+            let endpoint = endpoint.ok_or_else(|| "Custom webhook endpoint is missing.".to_string())?;
+            client
+                .post(endpoint)
+                .header(axum::http::header::AUTHORIZATION, format!("Bearer {api_key}"))
+                .json(&json!({
+                    "from": from_email,
+                    "fromName": from_name,
+                    "to": payload.to,
+                    "subject": payload.subject.trim(),
+                    "body": payload.body,
+                }))
+                .send()
+                .await
+                .map_err(|err| err.to_string())?
+        }
+        _ => return Err(format!("Provider '{provider}' is not supported for outbound delivery.")),
+    };
+
+    if !response.status().is_success() {
+        let status = response.status();
+        let body = response.text().await.unwrap_or_default();
+        return Err(format!("Provider rejected the message with status {status}: {body}"));
+    }
+
+    let response_body = response.json::<Value>().await.unwrap_or(Value::Null);
+    let external_id = response_body
+        .get("id")
+        .and_then(Value::as_str)
+        .or_else(|| response_body.get("messageId").and_then(Value::as_str))
+        .or_else(|| response_body.get("MessageID").and_then(Value::as_str))
+        .map(str::to_string);
+
+    Ok(external_id)
 }
 
 fn is_valid_domain(value: &str) -> bool {
@@ -391,7 +726,7 @@ pub async fn get_supported_providers() -> Json<serde_json::Value> {
 }
 
 pub async fn verify_infrastructure(
-    State(_state): State<AppState>,
+    State(state): State<AppState>,
     Json(payload): Json<VerifyInfrastructurePayload>,
 ) -> (StatusCode, Json<serde_json::Value>) {
     let _ = payload.db_provider;
@@ -454,13 +789,32 @@ pub async fn verify_infrastructure(
         );
     }
 
+    let database_check = verify_database_runtime(db_url).await;
+    let provider_check = validate_provider_credentials(
+        &state.http_client,
+        api_provider,
+        api_key,
+        api_endpoint,
+    )
+    .await;
+    let success = database_check.status == "verified" && provider_check.status == "verified";
+
     (
-        StatusCode::OK,
+        if success {
+            StatusCode::OK
+        } else {
+            StatusCode::BAD_REQUEST
+        },
         Json(json!({
-            "success": true,
-            "message": "Configuration accepted. Live connection checks happen at service runtime.",
+            "success": success,
+            "message": if success {
+                "Infrastructure validated successfully."
+            } else {
+                "Infrastructure validation failed. Review the runtime checks and fix the failing connection."
+            },
             "provider": api_provider,
-            "db_protocol": db_url.split("://").next().unwrap_or("")
+            "dbProtocol": db_url.split("://").next().unwrap_or(""),
+            "checks": [database_check, provider_check]
         })),
     )
 }
@@ -710,6 +1064,57 @@ pub async fn send_mail(
         );
     }
 
+    if let (Some(provider), Some(api_key)) = (payload.provider.as_deref(), payload.api_key.as_deref()) {
+        let provider_check = validate_provider_credentials(
+            &state.http_client,
+            provider,
+            api_key,
+            payload.provider_endpoint.as_deref(),
+        )
+        .await;
+        if provider_check.status != "verified" {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(json!({
+                    "success": false,
+                    "message": provider_check.detail,
+                    "provider": provider
+                })),
+            );
+        }
+
+        return match dispatch_via_provider(
+            &state.http_client,
+            provider,
+            api_key,
+            payload.provider_endpoint.as_deref(),
+            &payload,
+        )
+        .await
+        {
+            Ok(external_id) => (
+                StatusCode::OK,
+                Json(json!({
+                    "success": true,
+                    "message": "Mail delivered through the configured external provider.",
+                    "queued": false,
+                    "id": external_id.unwrap_or_default(),
+                    "provider": provider,
+                    "from": payload.from,
+                    "fromName": payload.from_name
+                })),
+            ),
+            Err(err) => (
+                StatusCode::BAD_GATEWAY,
+                Json(json!({
+                    "success": false,
+                    "message": err,
+                    "provider": provider
+                })),
+            ),
+        };
+    }
+
     let mut request = state
         .http_client
         .post(format!(
@@ -724,7 +1129,9 @@ pub async fn send_mail(
             "body": payload.body,
             "html_body": Value::Null,
             "attachment_ids": Value::Null,
-            "schedule_send_at": Value::Null
+            "schedule_send_at": Value::Null,
+            "from": payload.from,
+            "from_name": payload.from_name
         }));
 
     if let Some(auth_header) = headers.get(axum::http::header::AUTHORIZATION) {
@@ -753,7 +1160,7 @@ pub async fn send_mail(
     let response_json = if status.is_success() {
         json!({
             "success": true,
-            "message": "Mail delivered through backend.",
+            "message": "Mail delivered through the backend relay.",
             "queued": false,
             "id": body.get("message_id").and_then(Value::as_str).unwrap_or_default(),
             "upstream": body,

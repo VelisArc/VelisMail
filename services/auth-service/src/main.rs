@@ -50,6 +50,8 @@ async fn main() -> anyhow::Result<()> {
         .route("/login/zkp", post(handlers::login_zkp))
         .route("/send-otp", post(handlers::send_otp))
         .route("/verify-otp", post(handlers::verify_otp))
+        .route("/reset-password", post(handlers::reset_password))
+        .route("/change-password", post(handlers::change_password))
         .route("/token/refresh", post(handlers::refresh_token))
         .route("/logout", post(handlers::logout))
         .route("/me", get(handlers::get_current_user))

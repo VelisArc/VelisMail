@@ -105,6 +105,7 @@ export default function BusinessSetup() {
 
   const selectedDatabaseProvider = getDatabaseProvider(dbProvider);
   const selectedMailProvider = getMailProvider(apiProvider);
+  const normalizedApiBase = (import.meta.env.VITE_API_URL || '').trim().replace(/\/+$/, '').replace(/\/api\/v1$/, '').replace(/\/api$/, '');
 
   // Step 1 — Verify Infrastructure
   const handleInfraVerify = async (e: React.FormEvent) => {
@@ -130,43 +131,67 @@ export default function BusinessSetup() {
 
     const finalProvider = apiProvider;
     const finalProviderEndpoint = requiresCustomMailEndpoint(apiProvider) ? customApiUrl.trim() : undefined;
-    const result = auth.updateSettings({
-      businessDbUrl: customDbUrl.trim(),
-      businessApiKey: apiKey.trim(),
-      businessMailProvider: finalProvider,
-      businessMailProviderEndpoint: finalProviderEndpoint,
-      businessProfile: {
-        ...user?.businessProfile,
-        dbUrl: customDbUrl.trim(),
-        apiKey: apiKey.trim(),
-        mailProvider: finalProvider,
-        mailProviderEndpoint: finalProviderEndpoint,
-      },
-    });
+    try {
+      if (!normalizedApiBase) {
+        throw new Error('VITE_API_URL is missing. Set frontend/.env or the Cloudflare Pages variable before verifying business infrastructure.');
+      }
 
-    if (!result.success) {
+      const proxyTest = await fetch(`${normalizedApiBase}/api/v1/verify`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          dbProvider,
+          dbUrl: customDbUrl.trim(),
+          apiProvider: finalProvider,
+          apiEndpoint: finalProviderEndpoint,
+          apiKey: apiKey.trim(),
+        }),
+      });
+
+      const responseData = await proxyTest.json().catch(() => null);
+      if (!proxyTest.ok || !responseData?.success) {
+        throw new Error(responseData?.message || 'Business infrastructure validation failed.');
+      }
+
+      const result = auth.updateSettings({
+        businessDbUrl: customDbUrl.trim(),
+        businessApiKey: apiKey.trim(),
+        businessMailProvider: finalProvider,
+        businessMailProviderEndpoint: finalProviderEndpoint,
+        businessProfile: {
+          ...user?.businessProfile,
+          dbUrl: customDbUrl.trim(),
+          apiKey: apiKey.trim(),
+          mailProvider: finalProvider,
+          mailProviderEndpoint: finalProviderEndpoint,
+        },
+      });
+
+      if (!result.success) {
+        throw new Error(result.error || 'Unable to save infrastructure configuration.');
+      }
+
+      setUser((prev) => prev ? ({
+        ...prev,
+        businessDbUrl: customDbUrl.trim(),
+        businessApiKey: apiKey.trim(),
+        businessMailProvider: finalProvider,
+        businessMailProviderEndpoint: finalProviderEndpoint,
+        businessProfile: {
+          ...prev.businessProfile,
+          dbUrl: customDbUrl.trim(),
+          apiKey: apiKey.trim(),
+          mailProvider: finalProvider,
+          mailProviderEndpoint: finalProviderEndpoint,
+        },
+      }) : prev);
+
+      setStep(2);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unable to verify business infrastructure.');
+    } finally {
       setLoading(false);
-      setError('Unable to save infrastructure configuration.');
-      return;
     }
-
-    setUser((prev) => prev ? ({
-      ...prev,
-      businessDbUrl: customDbUrl.trim(),
-      businessApiKey: apiKey.trim(),
-      businessMailProvider: finalProvider,
-      businessMailProviderEndpoint: finalProviderEndpoint,
-      businessProfile: {
-        ...prev.businessProfile,
-        dbUrl: customDbUrl.trim(),
-        apiKey: apiKey.trim(),
-        mailProvider: finalProvider,
-        mailProviderEndpoint: finalProviderEndpoint,
-      },
-    }) : prev);
-
-    setLoading(false);
-    setStep(2);
   };
 
   // Step 2 — Add domain and generate DNS records
@@ -234,7 +259,7 @@ export default function BusinessSetup() {
       }
 
       const verificationStartedAt = performance.now();
-      const response = await fetch((import.meta.env.VITE_API_URL || '') + '/api/v1/tenants/verify-domain', {
+      const response = await fetch(`${normalizedApiBase}/api/v1/tenants/verify-domain`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -348,7 +373,7 @@ export default function BusinessSetup() {
         {step === 1 && (
           <div className="bsetup-card glass animate-fade">
             <h2><Database size={22} /> Business Infrastructure</h2>
-            <p className="bsetup-desc">Configure your private database and mail relay for your business domain.</p>
+            <p className="bsetup-desc">Configure your business database and outbound provider. Access stays blocked until the live runtime checks succeed.</p>
             {error && <div className="form-error">{error}</div>}
             <form onSubmit={handleInfraVerify} className="bsetup-form">
               <div className="form-group">

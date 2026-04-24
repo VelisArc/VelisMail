@@ -106,7 +106,7 @@ export default function SettingsPage() {
     }
   };
 
-  const handlePasswordUpdate = (e: React.FormEvent) => {
+  const handlePasswordUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!currentPassword || !newPassword || !confirmPassword) {
       setSecurityError('Saare password fields bharna zaroori hai.');
@@ -122,19 +122,17 @@ export default function SettingsPage() {
     }
     setPasswordSaving(true);
     setSecurityError(null);
-    setTimeout(() => {
-      const result = auth.changePassword(currentPassword, newPassword);
-      setPasswordSaving(false);
-      if (!result.success) {
-        setSecurityError(result.error || 'Password update fail ho gaya.');
-        showToast(result.error || 'Password update failed', 'error');
-        return;
-      }
-      setCurrentPassword('');
-      setNewPassword('');
-      setConfirmPassword('');
-      showToast('Password updated successfully');
-    }, 400);
+    const result = await auth.changePassword(currentPassword, newPassword);
+    setPasswordSaving(false);
+    if (!result.success) {
+      setSecurityError(result.error || 'Password update fail ho gaya.');
+      showToast(result.error || 'Password update failed', 'error');
+      return;
+    }
+    setCurrentPassword('');
+    setNewPassword('');
+    setConfirmPassword('');
+    showToast('Password updated successfully');
   };
 
   const handleDeleteAccount = () => {

@@ -14,6 +14,13 @@ VelisMail now uses a clean split deployment:
 
 Only these two env files are required now.
 
+Important:
+
+- Do not commit `.env` or `frontend/.env`.
+- `frontend/.env` should only contain `VITE_API_URL=https://your-api-domain`.
+- OTP and password-reset mail uses the backend SMTP credentials from `.env`.
+- Live BYO mail-provider validation and direct outbound delivery currently supports `sendgrid`, `resend`, `postmark`, `brevo`, and `custom_webhook`.
+
 ## Backend deploy
 
 1. Copy `.env.example` to `.env`.
@@ -35,6 +42,7 @@ The API gateway will serve the backend on `GATEWAY_PORT`.
 
 1. Copy `frontend/.env.example` to `frontend/.env`.
 2. Set `VITE_API_URL` in `frontend/.env` to your public backend URL.
+   Example: `https://api.velismail.online`
 3. In GitHub repo secrets, add:
    - `CF_API_TOKEN`
    - `CF_ACCOUNT_ID`
@@ -53,3 +61,17 @@ npx wrangler pages deploy dist --project-name velismail
 - `.github/workflows/ci.yml` checks backend and frontend builds.
 - `.github/workflows/deploy-vm.yml` deploys the VM backend.
 - `.github/workflows/deploy-cloudflare.yml` deploys Cloudflare Pages.
+
+## Required backend keys
+
+- `POSTGRES_PASSWORD`: password for the local VM Postgres container.
+- `REDIS_PASSWORD`: password for the local VM Redis container.
+- `JWT_SECRET`: long random secret for auth tokens.
+- `OTP_SIGNING_SECRET`: long random secret for OTP challenge signing.
+- `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`: your transactional SMTP provider. For Brevo, use `smtp-relay.brevo.com`, port `587`, and the SMTP credentials from the Brevo SMTP settings page.
+- `OTP_FROM_EMAIL`: sender address used for OTP and password-reset mail. This mailbox must be allowed by your SMTP provider.
+- `PASSKEY_RELYING_PARTY`: your production frontend domain, for example `velismail.online`.
+- `PASSKEY_ORIGIN`: full HTTPS frontend origin, for example `https://velismail.online`.
+- `ENCRYPTION_KEY`: base64-encoded 32-byte key for storage-service encryption.
+- `S3_ENDPOINT`, `S3_BUCKET`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `S3_REGION`: object storage credentials if you want attachments/storage enabled.
+- `DKIM_PRIVATE_KEY`, `DKIM_SELECTOR`, `SPF_RECORD`: DNS/mail-auth values if you want DKIM/SPF signing and verification fully enabled.

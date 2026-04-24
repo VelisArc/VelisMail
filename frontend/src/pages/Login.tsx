@@ -28,9 +28,16 @@ export default function Login() {
   const [mode, setMode] = useState<Mode>('login');
   const [registerStep, setRegisterStep] = useState<RegisterStep>('type');
   const [accountType, setAccountType] = useState<AccountType>('personal');
+  const [forgotMode, setForgotMode] = useState(false);
 
   const [loginIdentifier, setLoginIdentifier] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
+  const [resetIdentifier, setResetIdentifier] = useState('');
+  const [resetOtp, setResetOtp] = useState('');
+  const [resetChallengeToken, setResetChallengeToken] = useState('');
+  const [resetVerificationToken, setResetVerificationToken] = useState('');
+  const [resetPassword, setResetPassword] = useState('');
+  const [resetHint, setResetHint] = useState('');
 
   const [regName, setRegName] = useState('');
   const [regMailboxLocalPart, setRegMailboxLocalPart] = useState('');
@@ -86,6 +93,91 @@ export default function Login() {
     setOtpDeliveryHint(`Verification code sent to ${response.maskedEmail} via ${response.provider}.`);
     setVerificationToken('');
     setRegisterStep('otp');
+  };
+
+  const handlePasswordResetRequest = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+
+    try {
+      if (!resetIdentifier.trim()) {
+        throw new Error('Enter your mailbox or recovery email first.');
+      }
+
+      const response = await auth.requestPasswordReset(resetIdentifier.trim());
+      setResetChallengeToken(response.challengeToken);
+      setResetVerificationToken('');
+      setResetOtp('');
+      setResetPassword('');
+      setResetHint(`Verification code sent to ${response.maskedEmail} via ${response.provider}.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unable to start password reset.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handlePasswordResetVerify = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+
+    try {
+      if (!resetChallengeToken) {
+        throw new Error('Reset session missing. Request a new code.');
+      }
+      if (!resetOtp.trim()) {
+        throw new Error('Enter the verification code.');
+      }
+
+      const verification = await auth.verifyOtp({
+        email: resetIdentifier.trim().toLowerCase(),
+        otp: resetOtp.trim(),
+        challengeToken: resetChallengeToken,
+        purpose: 'password_reset',
+      });
+      setResetVerificationToken(verification.verificationToken);
+      setResetHint('Code verified. Set your new password now.');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Invalid reset code.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handlePasswordResetComplete = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+
+    try {
+      if (!resetVerificationToken) {
+        throw new Error('Verify your reset code before changing the password.');
+      }
+      if (resetPassword.trim().length < 8) {
+        throw new Error('New password must be at least 8 characters.');
+      }
+
+      await auth.resetPassword({
+        identifier: resetIdentifier.trim(),
+        verificationToken: resetVerificationToken,
+        newPassword: resetPassword,
+      });
+
+      setForgotMode(false);
+      setResetHint('');
+      setResetChallengeToken('');
+      setResetVerificationToken('');
+      setResetOtp('');
+      setResetPassword('');
+      setLoginIdentifier(resetIdentifier.trim());
+      setError('');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Password reset failed.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleRegisterSubmit = async (e: React.FormEvent) => {
@@ -154,6 +246,7 @@ export default function Login() {
 
   const switchMode = (m: Mode) => {
     setMode(m);
+    setForgotMode(false);
     setError('');
     setOtp('');
     setOtpChallengeToken('');
@@ -165,6 +258,12 @@ export default function Login() {
     setRegRecoveryEmail('');
     setRegDomain('');
     setRegPassword('');
+    setResetIdentifier('');
+    setResetOtp('');
+    setResetChallengeToken('');
+    setResetVerificationToken('');
+    setResetPassword('');
+    setResetHint('');
   };
 
   return (
@@ -205,33 +304,112 @@ export default function Login() {
             <>
               <div className="login-card-header">
                 <div className="login-icon-wrap"><Mail size={24} /></div>
-                <h2>Sign In</h2>
-                <p className="login-card-desc">Enter your credentials to continue</p>
+                <h2>{forgotMode ? 'Reset Password' : 'Sign In'}</h2>
+                <p className="login-card-desc">
+                  {forgotMode ? 'Verify your OTP and set a new password.' : 'Enter your credentials to continue'}
+                </p>
               </div>
 
-              <form onSubmit={handleLogin} className="login-form">
-                <div className="form-group">
-                  <label htmlFor="login-email">Email, username, or recovery email</label>
-                  <input id="login-email" type="text" className="input" placeholder="you / you@velismail.online / admin@yourdomain.com"
-                    required value={loginIdentifier} onChange={e => setLoginIdentifier(e.target.value)} autoFocus />
-                </div>
-                <div className="form-group">
-                  <label htmlFor="login-pass">Password</label>
-                  <input id="login-pass" type="password" className="input" placeholder="Enter password"
-                    required value={loginPassword} onChange={e => setLoginPassword(e.target.value)} />
-                </div>
+              {!forgotMode ? (
+                <>
+                  <form onSubmit={handleLogin} className="login-form">
+                    <div className="form-group">
+                      <label htmlFor="login-email">Email, username, or recovery email</label>
+                      <input id="login-email" type="text" className="input" placeholder="you / you@velismail.online / admin@yourdomain.com"
+                        required value={loginIdentifier} onChange={e => setLoginIdentifier(e.target.value)} autoFocus />
+                    </div>
+                    <div className="form-group">
+                      <label htmlFor="login-pass">Password</label>
+                      <input id="login-pass" type="password" className="input" placeholder="Enter password"
+                        required value={loginPassword} onChange={e => setLoginPassword(e.target.value)} />
+                    </div>
 
-                {error && <div className="form-error">{error}</div>}
+                    {error && <div className="form-error">{error}</div>}
 
-                <button type="submit" className="btn btn-primary w-full" disabled={loading}>
-                  {loading ? <Loader2 size={18} className="animate-spin" /> : <>Sign In <ArrowRight size={18} /></>}
-                </button>
-              </form>
+                    <button type="submit" className="btn btn-primary w-full" disabled={loading}>
+                      {loading ? <Loader2 size={18} className="animate-spin" /> : <>Sign In <ArrowRight size={18} /></>}
+                    </button>
+                  </form>
 
-              <div className="login-card-footer">
-                <span>Don't have an account? </span>
-                <button className="login-link" onClick={() => switchMode('register')}>Create Account</button>
-              </div>
+                  <div className="login-card-footer" style={{ justifyContent: 'space-between', gap: 12 }}>
+                    <button className="login-link" onClick={() => { setForgotMode(true); setError(''); setResetIdentifier(loginIdentifier); }}>
+                      Forgot Password?
+                    </button>
+                    <span>Don't have an account? <button className="login-link" onClick={() => switchMode('register')}>Create Account</button></span>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <form onSubmit={handlePasswordResetRequest} className="login-form">
+                    <div className="form-group">
+                      <label htmlFor="reset-identifier">Mailbox or Recovery Email</label>
+                      <input
+                        id="reset-identifier"
+                        type="text"
+                        className="input"
+                        placeholder="you@velismail.online / you@gmail.com"
+                        required
+                        value={resetIdentifier}
+                        onChange={e => setResetIdentifier(e.target.value)}
+                        autoFocus
+                      />
+                    </div>
+                    {resetHint && <div className="form-success">{resetHint}</div>}
+                    {error && <div className="form-error">{error}</div>}
+                    <button type="submit" className="btn btn-primary w-full" disabled={loading}>
+                      {loading ? <Loader2 size={18} className="animate-spin" /> : <>Send OTP <ArrowRight size={18} /></>}
+                    </button>
+                  </form>
+
+                  {resetChallengeToken && (
+                    <form onSubmit={handlePasswordResetVerify} className="login-form" style={{ marginTop: 12 }}>
+                      <div className="form-group">
+                        <label htmlFor="reset-otp">Verification Code</label>
+                        <input
+                          id="reset-otp"
+                          type="text"
+                          className="input"
+                          placeholder="000000"
+                          maxLength={6}
+                          required
+                          value={resetOtp}
+                          onChange={e => setResetOtp(e.target.value)}
+                        />
+                      </div>
+                      <button type="submit" className="btn btn-secondary w-full" disabled={loading || !!resetVerificationToken}>
+                        {loading ? <Loader2 size={18} className="animate-spin" /> : 'Verify OTP'}
+                      </button>
+                    </form>
+                  )}
+
+                  {resetVerificationToken && (
+                    <form onSubmit={handlePasswordResetComplete} className="login-form" style={{ marginTop: 12 }}>
+                      <div className="form-group">
+                        <label htmlFor="reset-password">New Password</label>
+                        <input
+                          id="reset-password"
+                          type="password"
+                          className="input"
+                          placeholder="Enter new password"
+                          minLength={8}
+                          required
+                          value={resetPassword}
+                          onChange={e => setResetPassword(e.target.value)}
+                        />
+                      </div>
+                      <button type="submit" className="btn btn-primary w-full" disabled={loading}>
+                        {loading ? <Loader2 size={18} className="animate-spin" /> : 'Update Password'}
+                      </button>
+                    </form>
+                  )}
+
+                  <div className="login-card-footer">
+                    <button className="login-link" onClick={() => { setForgotMode(false); setError(''); setResetHint(''); }}>
+                      Back to Sign In
+                    </button>
+                  </div>
+                </>
+              )}
             </>
           )}
 

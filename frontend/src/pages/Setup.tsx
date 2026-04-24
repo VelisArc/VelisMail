@@ -48,6 +48,7 @@ export default function SetupPage() {
 
   const selectedDatabaseProvider = getDatabaseProvider(dbProvider);
   const selectedMailProvider = getMailProvider(apiProvider);
+  const normalizedApiBase = (import.meta.env.VITE_API_URL || '').trim().replace(/\/+$/, '').replace(/\/api\/v1$/, '').replace(/\/api$/, '');
 
   const handleVerify = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -101,7 +102,7 @@ export default function SetupPage() {
         throw new Error('VITE_API_URL is missing. Set frontend/.env before running setup.');
       }
 
-      const proxyTest = await fetch((import.meta.env.VITE_API_URL || 'http://localhost:3000') + '/api/v1/verify', {
+      const proxyTest = await fetch(`${normalizedApiBase}/api/v1/verify`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -170,10 +171,10 @@ export default function SetupPage() {
             Connect your isolated Database and Outbound Mail engine.
           </p>
           <div className="setup-features">
-            <div className="setup-feature">
-              <Lock size={18} color="var(--primary-400)" />
-              <span>We store nothing on our servers</span>
-            </div>
+          <div className="setup-feature">
+            <Lock size={18} color="var(--primary-400)" />
+            <span>Setup is blocked until your runtime checks pass</span>
+          </div>
             <div className="setup-feature">
               <Database size={18} color="var(--accent)" />
               <span>Bring Your Own Database (BYOD)</span>
@@ -278,8 +279,8 @@ export default function SetupPage() {
               </h3>
               <p>
                 {verifying 
-                  ? "We are validating your database URL format and mail provider credentials before saving them." 
-                  : "Your infrastructure settings were accepted. Initializing your secure dashboard now."}
+                  ? "We are performing live database and provider runtime checks before saving your configuration."
+                  : "Your infrastructure settings passed live validation. Initializing your secure dashboard now."}
               </p>
               
               <div className="verify-steps">
@@ -288,11 +289,11 @@ export default function SetupPage() {
                 </div>
                 <div className={`v-step ${verifying ? 'pulse' : 'complete'}`}>
                   {verifying ? <Loader2 size={16} className="animate-spin" /> : <CheckCircle2 size={16} />} 
-                  Validating database URL
+                  Validating database connectivity
                 </div>
                 <div className={`v-step ${verifying ? 'pending' : 'complete'}`}>
                   {!verifying && <CheckCircle2 size={16} />}
-                  Validating outbound mail provider
+                  Validating outbound mail provider credentials
                 </div>
               </div>
             </div>

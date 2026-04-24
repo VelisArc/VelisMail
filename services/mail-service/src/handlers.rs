@@ -7,6 +7,11 @@ use axum::{
     http::StatusCode,
     Json,
 };
+use lettre::{
+    message::{header::ContentType, Mailbox},
+    transport::smtp::authentication::Credentials,
+    Message, SmtpTransport, Transport,
+};
 use serde_json::json;
 use uuid::Uuid;
 
@@ -44,6 +49,57 @@ pub async fn send_email(
         return Err(StatusCode::BAD_REQUEST);
     }
 
+    let from_email = request
+        .from
+        .clone()
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or_else(|| state.config.smtp_username.clone());
+    let from_name = request
+        .from_name
+        .clone()
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or_else(|| "VelisMail".to_string());
+
+    let from_mailbox = Mailbox::new(
+        Some(from_name),
+        from_email.parse().map_err(|_| StatusCode::BAD_REQUEST)?,
+    );
+    let mut builder = Message::builder().from(from_mailbox).subject(request.subject.trim());
+
+    for email in &request.to {
+        builder = builder.to(email.parse().map_err(|_| StatusCode::BAD_REQUEST)?);
+    }
+
+    if let Some(cc) = &request.cc {
+        for email in cc {
+            builder = builder.cc(email.parse().map_err(|_| StatusCode::BAD_REQUEST)?);
+        }
+    }
+
+    if let Some(bcc) = &request.bcc {
+        for email in bcc {
+            builder = builder.bcc(email.parse().map_err(|_| StatusCode::BAD_REQUEST)?);
+        }
+    }
+
+    let message = builder
+        .header(ContentType::TEXT_PLAIN)
+        .body(request.body.clone())
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let transport = SmtpTransport::builder_dangerous(&state.config.smtp_host)
+        .port(state.config.smtp_port)
+        .credentials(Credentials::new(
+            state.config.smtp_username.clone(),
+            state.config.smtp_password.clone(),
+        ))
+        .build();
+
+    transport.send(&message).map_err(|err| {
+        tracing::error!("smtp send failed: {}", err);
+        StatusCode::BAD_GATEWAY
+    })?;
+
     // Create message
     let message_id = Uuid::new_v4();
     let thread_id = Uuid::new_v4(); // Generate or find in real db
@@ -65,6 +121,7 @@ pub async fn send_email(
         "message_id": message_id.to_string(),
         "thread_id": thread_id.to_string(),
         "status": "sent",
+        "delivered_via": state.config.smtp_host,
         "undo_send_window": state.config.undo_send_window_seconds
     })))
 }

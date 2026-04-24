@@ -155,9 +155,27 @@ export type OtpVerifyResponse = {
 const SEED_EMAILS: Email[] = [];
 
 
-const API_BASE_URL = (import.meta.env.VITE_API_URL || '') + '/api/v1';
+function resolveApiBaseUrl(): string {
+  const configured = String(import.meta.env.VITE_API_URL || '').trim().replace(/\/+$/, '');
+  if (!configured) {
+    return '';
+  }
+  if (configured.endsWith('/api/v1')) {
+    return configured;
+  }
+  if (configured.endsWith('/api')) {
+    return `${configured}/v1`;
+  }
+  return `${configured}/api/v1`;
+}
+
+const API_BASE_URL = resolveApiBaseUrl();
 
 async function fetchAPI(endpoint: string, options: RequestInit = {}) {
+  if (!API_BASE_URL) {
+    throw new Error('VITE_API_URL is missing. Point the frontend to your deployed VM API before using auth, setup, or mail actions.');
+  }
+
   const token = localStorage.getItem('velismail_token');
   const headers = new Headers(options.headers || {});
 
@@ -412,9 +430,10 @@ function sessionHasMismatch(session: User | null): boolean {
 // ---- Auth Functions ----
 export const auth = {
   async sendOtp(data: {
-    email: string;
-    displayName: string;
-    purpose?: 'register' | 'recovery_email';
+    email?: string;
+    identifier?: string;
+    displayName?: string;
+    purpose?: 'register' | 'recovery_email' | 'password_reset';
   }): Promise<OtpSendResponse> {
     return fetchAPI('/auth/send-otp', {
       method: 'POST',
@@ -429,7 +448,7 @@ export const auth = {
     email: string;
     otp: string;
     challengeToken: string;
-    purpose?: 'register' | 'recovery_email';
+    purpose?: 'register' | 'recovery_email' | 'password_reset';
   }): Promise<OtpVerifyResponse> {
     return fetchAPI('/auth/verify-otp', {
       method: 'POST',
@@ -514,6 +533,7 @@ export const auth = {
           email: primaryEmail,
           display_name: data.displayName,
           password: data.password,
+          recovery_email: normalizedRecoveryEmail || undefined,
         }),
       });
 
@@ -569,7 +589,7 @@ export const auth = {
       const res = await fetchAPI('/auth/login', {
         method: 'POST',
         body: JSON.stringify({
-          email: found.businessMailboxAddress || found.email,
+          email: found.recoveryEmail || found.email,
           password,
         }),
       });
@@ -616,6 +636,45 @@ export const auth = {
 
   loginPasskey(_email: string): { success: boolean; error?: string; user?: User } {
     return { success: false, error: 'Passkey login is not enabled on this deployment yet.' };
+  },
+
+  async requestPasswordReset(identifier: string): Promise<OtpSendResponse> {
+    const matchedUser = findUserByLogin(loadUsers(), identifier);
+    return this.sendOtp({
+      identifier: matchedUser?.recoveryEmail || matchedUser?.email || identifier,
+      purpose: 'password_reset',
+    });
+  },
+
+  async resetPassword(data: {
+    identifier: string;
+    verificationToken: string;
+    newPassword: string;
+  }): Promise<{ success: boolean; message?: string; error?: string }> {
+    const normalizedIdentifier = normalizeMailbox(data.identifier);
+    const matchedUser = findUserByLogin(loadUsers(), normalizedIdentifier);
+    const backendIdentifier = matchedUser?.recoveryEmail || matchedUser?.email || normalizedIdentifier;
+
+    await fetchAPI('/auth/reset-password', {
+      method: 'POST',
+      body: JSON.stringify({
+        identifier: backendIdentifier,
+        verificationToken: data.verificationToken,
+        newPassword: data.newPassword,
+      }),
+    });
+
+    const users = loadUsers();
+    const userToUpdate = findUserByLogin(users, normalizedIdentifier);
+    if (userToUpdate) {
+      userToUpdate.password = data.newPassword;
+      saveUsers(users);
+    }
+
+    return {
+      success: true,
+      message: 'Password updated successfully.',
+    };
   },
 
   logout() {
@@ -715,7 +774,7 @@ export const auth = {
     return { success: true, user: safeUser };
   },
 
-  changePassword(currentPassword: string, nextPassword: string): { success: boolean; error?: string } {
+  async changePassword(currentPassword: string, nextPassword: string): Promise<{ success: boolean; error?: string }> {
     const session = this.getSession();
     if (!session) return { success: false, error: 'Session not found.' };
 
@@ -724,6 +783,19 @@ export const auth = {
     if (userIndex === -1) return { success: false, error: 'User not found.' };
     if (users[userIndex].password !== currentPassword) {
       return { success: false, error: 'Current password incorrect hai.' };
+    }
+
+    try {
+      await fetchAPI('/auth/change-password', {
+        method: 'POST',
+        body: JSON.stringify({
+          identifier: session.recoveryEmail || session.email,
+          currentPassword,
+          newPassword: nextPassword,
+        }),
+      });
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Password update failed.' };
     }
 
     users[userIndex] = {
@@ -795,6 +867,9 @@ export const mail = {
         body,
         from: fromAddr,
         fromName: session?.displayName || 'Business',
+        provider: session?.businessMailProvider,
+        apiKey: session?.businessApiKey,
+        providerEndpoint: session?.businessMailProviderEndpoint,
       }),
     });
     const email: Email = {
@@ -824,6 +899,9 @@ export const mail = {
         body,
         from: session?.email || 'you@velismail.online',
         fromName: session?.displayName || 'You',
+        provider: session?.mailProvider,
+        apiKey: session?.apiKey,
+        providerEndpoint: session?.mailProviderEndpoint,
       }),
     });
     const email: Email = {

@@ -152,10 +152,9 @@ struct OtpVerificationClaims {
 #[derive(Debug, Deserialize, Validate)]
 #[serde(rename_all = "camelCase")]
 pub struct SendOtpRequest {
-    #[validate(email)]
-    pub email: String,
-    #[validate(length(min = 2, max = 100))]
-    pub display_name: String,
+    pub email: Option<String>,
+    pub identifier: Option<String>,
+    pub display_name: Option<String>,
     pub purpose: Option<String>,
 }
 
@@ -180,7 +179,29 @@ pub struct RegisterRequest {
     pub display_name: String,
     #[validate(length(min = 8, max = 256))]
     pub password: String,
+    #[validate(email)]
+    pub recovery_email: Option<String>,
     pub tenant_id: Option<Uuid>,
+}
+
+#[derive(Debug, Deserialize, Validate)]
+#[serde(rename_all = "camelCase")]
+pub struct ResetPasswordRequest {
+    pub identifier: String,
+    #[validate(length(min = 32))]
+    pub verification_token: String,
+    #[validate(length(min = 8, max = 256))]
+    pub new_password: String,
+}
+
+#[derive(Debug, Deserialize, Validate)]
+#[serde(rename_all = "camelCase")]
+pub struct ChangePasswordRequest {
+    pub identifier: String,
+    #[validate(length(min = 1))]
+    pub current_password: String,
+    #[validate(length(min = 8, max = 256))]
+    pub new_password: String,
 }
 
 /// Register a new user with a password. Returns a WebAuthn-style challenge so
@@ -192,9 +213,17 @@ pub async fn register(
     request.validate().map_err(|_| StatusCode::BAD_REQUEST)?;
 
     let email = request.email.trim().to_lowercase();
+    let recovery_email = request
+        .recovery_email
+        .as_deref()
+        .map(|value| value.trim().to_lowercase())
+        .filter(|value| !value.is_empty());
 
-    let existing: Option<i64> = sqlx::query_scalar("SELECT COUNT(*) FROM users WHERE email = $1")
+    let existing: Option<i64> = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM users WHERE email = $1 OR ($2::text IS NOT NULL AND recovery_email = $2)",
+    )
         .bind(&email)
+        .bind(recovery_email.as_deref())
         .fetch_optional(&state.db)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
@@ -208,12 +237,23 @@ pub async fn register(
     let tenant_id = request.tenant_id.unwrap_or_else(Uuid::nil);
 
     sqlx::query(
-        r#"INSERT INTO users (id, tenant_id, email, display_name, password_hash, status)
-           VALUES ($1, $2, $3, $4, $5, 'active')"#,
+        r#"INSERT INTO users (
+               id,
+               tenant_id,
+               email,
+               recovery_email,
+               recovery_email_verified,
+               display_name,
+               password_hash,
+               status
+           )
+           VALUES ($1, $2, $3, $4, $5, $6, $7, 'active')"#,
     )
     .bind(user_id)
     .bind(tenant_id)
     .bind(&email)
+    .bind(recovery_email.as_deref())
+    .bind(recovery_email.is_some())
     .bind(&request.display_name)
     .bind(&password_hash)
     .execute(&state.db)
@@ -230,6 +270,7 @@ pub async fn register(
         "user": {
             "id": user_id.to_string(),
             "email": email,
+            "recovery_email": recovery_email,
             "display_name": request.display_name,
         },
         "passkey_registration_options": {
@@ -274,12 +315,16 @@ pub async fn login_password(
     State(state): State<AuthState>,
     Json(request): Json<PasswordLoginRequest>,
 ) -> Result<Json<TokenPairResponse>, StatusCode> {
-    let email = request.email.trim().to_lowercase();
+    let identifier = request.email.trim().to_lowercase();
 
     let row = sqlx::query(
-        "SELECT id, tenant_id, password_hash FROM users WHERE email = $1 AND status = 'active'",
+        "SELECT id, tenant_id, email, password_hash
+         FROM users
+         WHERE (email = $1 OR recovery_email = $1) AND status = 'active'
+         ORDER BY CASE WHEN email = $1 THEN 0 ELSE 1 END
+         LIMIT 1",
     )
-    .bind(&email)
+    .bind(&identifier)
     .fetch_optional(&state.db)
     .await
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
@@ -289,6 +334,7 @@ pub async fn login_password(
     let tenant_id: Uuid = row
         .try_get("tenant_id")
         .unwrap_or_else(|_| Uuid::nil());
+    let email: String = row.try_get("email").map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     let password_hash: Option<String> = row.try_get("password_hash").ok();
 
     let stored = password_hash.ok_or(StatusCode::UNAUTHORIZED)?;
@@ -369,13 +415,56 @@ pub async fn send_otp(
     State(state): State<AuthState>,
     Json(request): Json<SendOtpRequest>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
-    request.validate().map_err(|_| StatusCode::BAD_REQUEST)?;
-
-    let normalized_email = request.email.trim().to_lowercase();
     let purpose = request
         .purpose
         .clone()
         .unwrap_or_else(|| "register".to_string());
+    let requested_email = request
+        .email
+        .as_deref()
+        .map(|value| value.trim().to_lowercase())
+        .filter(|value| !value.is_empty());
+    let requested_identifier = request
+        .identifier
+        .as_deref()
+        .map(|value| value.trim().to_lowercase())
+        .filter(|value| !value.is_empty());
+
+    let (normalized_email, display_name) = if purpose == "password_reset" {
+        let identifier = requested_identifier
+            .or(requested_email.clone())
+            .ok_or(StatusCode::BAD_REQUEST)?;
+        let row = sqlx::query(
+            "SELECT email, recovery_email, display_name
+             FROM users
+             WHERE (email = $1 OR recovery_email = $1) AND status = 'active'
+             ORDER BY CASE WHEN email = $1 THEN 0 ELSE 1 END
+             LIMIT 1",
+        )
+        .bind(&identifier)
+        .fetch_optional(&state.db)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .ok_or(StatusCode::NOT_FOUND)?;
+
+        let recovery_email: Option<String> = row.try_get("recovery_email").ok();
+        let recovery_email = recovery_email
+            .map(|value| value.trim().to_lowercase())
+            .filter(|value| !value.is_empty())
+            .ok_or(StatusCode::BAD_REQUEST)?;
+        let display_name: String = row.try_get("display_name").map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        (recovery_email, display_name)
+    } else {
+        let normalized_email = requested_email.ok_or(StatusCode::BAD_REQUEST)?;
+        let display_name = request
+            .display_name
+            .clone()
+            .unwrap_or_else(|| "VelisMail user".to_string());
+        if display_name.trim().len() < 2 || display_name.trim().len() > 100 {
+            return Err(StatusCode::BAD_REQUEST);
+        }
+        (normalized_email, display_name)
+    };
 
     let otp = format!("{:06}", (uuid::Uuid::new_v4().as_u128() % 900_000) + 100_000);
     let salt = Uuid::new_v4().to_string();
@@ -389,7 +478,7 @@ pub async fn send_otp(
         &purpose,
     );
 
-    send_otp_email(&state, &normalized_email, &request.display_name, &otp)?;
+    send_otp_email(&state, &normalized_email, &display_name, &otp)?;
 
     let challenge_token = encode(
         &Header::default(),
@@ -410,7 +499,11 @@ pub async fn send_otp(
         "challengeToken": challenge_token,
         "expiresIn": state.config.otp_ttl_seconds,
         "maskedEmail": mask_email(&normalized_email),
-        "provider": "smtp"
+        "provider": if state.config.smtp_host.to_lowercase().contains("brevo") {
+            "brevo-smtp"
+        } else {
+            "smtp"
+        }
     })))
 }
 
@@ -433,13 +526,43 @@ pub async fn verify_otp(
     )
     .map_err(|_| StatusCode::UNAUTHORIZED)?;
 
-    if token.claims.sub != normalized_email || token.claims.purpose != purpose {
+    if token.claims.purpose != purpose {
         return Err(StatusCode::UNAUTHORIZED);
     }
 
+    let verification_email = if purpose == "password_reset" && token.claims.sub != normalized_email {
+        let row = sqlx::query(
+            "SELECT recovery_email
+             FROM users
+             WHERE (email = $1 OR recovery_email = $1) AND status = 'active'
+             ORDER BY CASE WHEN email = $1 THEN 0 ELSE 1 END
+             LIMIT 1",
+        )
+        .bind(&normalized_email)
+        .fetch_optional(&state.db)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .ok_or(StatusCode::UNAUTHORIZED)?;
+
+        let recovery_email: Option<String> = row.try_get("recovery_email").ok();
+        let recovery_email = recovery_email
+            .map(|value| value.trim().to_lowercase())
+            .filter(|value| !value.is_empty())
+            .ok_or(StatusCode::UNAUTHORIZED)?;
+        if recovery_email != token.claims.sub {
+            return Err(StatusCode::UNAUTHORIZED);
+        }
+        recovery_email
+    } else {
+        if token.claims.sub != normalized_email {
+            return Err(StatusCode::UNAUTHORIZED);
+        }
+        normalized_email.clone()
+    };
+
     let expected_hash = hash_otp_value(
         &state.config.otp_signing_secret,
-        &normalized_email,
+        &verification_email,
         &request.otp,
         &token.claims.salt,
         &purpose,
@@ -452,7 +575,7 @@ pub async fn verify_otp(
     let verification_token = encode(
         &Header::default(),
         &OtpVerificationClaims {
-            sub: normalized_email,
+            sub: verification_email,
             purpose,
             verified_at: chrono::Utc::now().timestamp(),
             exp: chrono::Utc::now().timestamp() + 900,
@@ -465,6 +588,103 @@ pub async fn verify_otp(
         "success": true,
         "verificationToken": verification_token,
         "expiresIn": 900
+    })))
+}
+
+pub async fn reset_password(
+    State(state): State<AuthState>,
+    Json(request): Json<ResetPasswordRequest>,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    request.validate().map_err(|_| StatusCode::BAD_REQUEST)?;
+
+    let identifier = request.identifier.trim().to_lowercase();
+    let token = decode::<OtpVerificationClaims>(
+        &request.verification_token,
+        &DecodingKey::from_secret(state.config.otp_signing_secret.as_bytes()),
+        &Validation::default(),
+    )
+    .map_err(|_| StatusCode::UNAUTHORIZED)?;
+
+    if token.claims.purpose != "password_reset" {
+        return Err(StatusCode::UNAUTHORIZED);
+    }
+
+    let row = sqlx::query(
+        "SELECT id, recovery_email
+         FROM users
+         WHERE (email = $1 OR recovery_email = $1) AND status = 'active'
+         ORDER BY CASE WHEN email = $1 THEN 0 ELSE 1 END
+         LIMIT 1",
+    )
+    .bind(&identifier)
+    .fetch_optional(&state.db)
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+    .ok_or(StatusCode::NOT_FOUND)?;
+
+    let user_id: Uuid = row.try_get("id").map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let recovery_email: Option<String> = row.try_get("recovery_email").ok();
+    let normalized_recovery_email = recovery_email
+        .map(|value| value.trim().to_lowercase())
+        .filter(|value| !value.is_empty())
+        .ok_or(StatusCode::BAD_REQUEST)?;
+
+    if token.claims.sub != normalized_recovery_email {
+        return Err(StatusCode::UNAUTHORIZED);
+    }
+
+    let password_hash = hash_password(&request.new_password)?;
+    sqlx::query("UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2")
+        .bind(&password_hash)
+        .bind(user_id)
+        .execute(&state.db)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    Ok(Json(json!({
+        "success": true,
+        "message": "Password updated successfully."
+    })))
+}
+
+pub async fn change_password(
+    State(state): State<AuthState>,
+    Json(request): Json<ChangePasswordRequest>,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    request.validate().map_err(|_| StatusCode::BAD_REQUEST)?;
+
+    let identifier = request.identifier.trim().to_lowercase();
+    let row = sqlx::query(
+        "SELECT id, password_hash
+         FROM users
+         WHERE (email = $1 OR recovery_email = $1) AND status = 'active'
+         ORDER BY CASE WHEN email = $1 THEN 0 ELSE 1 END
+         LIMIT 1",
+    )
+    .bind(&identifier)
+    .fetch_optional(&state.db)
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+    .ok_or(StatusCode::NOT_FOUND)?;
+
+    let user_id: Uuid = row.try_get("id").map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let stored_hash: Option<String> = row.try_get("password_hash").ok();
+    let stored_hash = stored_hash.ok_or(StatusCode::UNAUTHORIZED)?;
+    if !verify_password(&request.current_password, &stored_hash) {
+        return Err(StatusCode::UNAUTHORIZED);
+    }
+
+    let password_hash = hash_password(&request.new_password)?;
+    sqlx::query("UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2")
+        .bind(&password_hash)
+        .bind(user_id)
+        .execute(&state.db)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    Ok(Json(json!({
+        "success": true,
+        "message": "Password updated successfully."
     })))
 }
 

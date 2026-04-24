@@ -38,6 +38,8 @@ pub struct CreateEmailRequest {
     pub bcc: Option<Vec<String>>,
     pub subject: String,
     pub body: String,
+    pub from: Option<String>,
+    pub from_name: Option<String>,
     pub html_body: Option<String>,
     pub attachment_ids: Option<Vec<Uuid>>,
     pub schedule_send_at: Option<DateTime<Utc>>,
