@@ -35,7 +35,7 @@ impl DkimSigner {
         let body_hash_b64 = base64_encode(body_hash.as_ref());
 
         // Build the signed headers
-        let dkim_header = format!(
+        let _dkim_header = format!(
             "DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d={}; s={};\r\n\
              h=From:To:Subject:Date:Message-ID;\r\n\
              bh={};\r\n\
