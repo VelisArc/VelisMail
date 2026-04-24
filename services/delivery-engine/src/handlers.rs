@@ -22,26 +22,50 @@ pub async fn queue_status(
 }
 
 pub async fn dkim_sign(
-    State(_state): State<DeliveryState>,
+    State(state): State<DeliveryState>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
-    Ok(Json(
-        json!({"success": true, "dkim_signature": "v=1; a=rsa-sha256; ..."}),
-    ))
+    Ok(Json(json!({
+        "success": false,
+        "message": "DKIM signing is not fully implemented in this build yet.",
+        "selector": state.config.dkim_selector,
+        "privateKeyLoaded": !state.config.dkim_private_key.trim().is_empty(),
+        "publicKeyPlacement": "Publish the contents of dkim-public.pem as a DNS TXT record at <selector>._domainkey.<your-domain>.",
+    })))
+}
+
+pub async fn dkim_info(
+    State(state): State<DeliveryState>,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    Ok(Json(json!({
+        "success": true,
+        "selector": state.config.dkim_selector,
+        "dnsHostPattern": format!("{}._domainkey.<your-domain>", state.config.dkim_selector),
+        "envKey": "DKIM_PRIVATE_KEY",
+        "publicKeyStorage": "Do not store dkim-public.pem in this repo or .env. Publish its public key in DNS as a TXT record.",
+        "privateKeyLoaded": !state.config.dkim_private_key.trim().is_empty(),
+    })))
 }
 
 pub async fn spf_verify(
-    State(_state): State<DeliveryState>,
+    State(state): State<DeliveryState>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
     Ok(Json(
-        json!({"success": true, "spf_pass": true, "record": "v=spf1 include:velismail.online ~all"}),
+        json!({"success": true, "spfConfigured": !state.config.spf_record.trim().is_empty(), "record": state.config.spf_record}),
     ))
 }
 
 pub async fn dmarc_check(
-    State(_state): State<DeliveryState>,
+    State(state): State<DeliveryState>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
     Ok(Json(
-        json!({"success": true, "dmarc_pass": true, "policy": "reject"}),
+        json!({
+            "success": false,
+            "message": "DMARC evaluation is not fully implemented in this build yet.",
+            "dependsOn": {
+                "spfRecordConfigured": !state.config.spf_record.trim().is_empty(),
+                "dkimPrivateKeyLoaded": !state.config.dkim_private_key.trim().is_empty()
+            }
+        }),
     ))
 }
 

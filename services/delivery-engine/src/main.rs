@@ -46,6 +46,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/queue/status/:id", get(handlers::queue_status))
         // DKIM signing
         .route("/dkim/sign", post(handlers::dkim_sign))
+        .route("/dkim/info", get(handlers::dkim_info))
         // SPF verification
         .route("/spf/verify", post(handlers::spf_verify))
         // DMARC

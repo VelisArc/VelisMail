@@ -75,3 +75,26 @@ npx wrangler pages deploy dist --project-name velismail
 - `ENCRYPTION_KEY`: base64-encoded 32-byte key for storage-service encryption.
 - `S3_ENDPOINT`, `S3_BUCKET`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `S3_REGION`: object storage credentials if you want attachments/storage enabled.
 - `DKIM_PRIVATE_KEY`, `DKIM_SELECTOR`, `SPF_RECORD`: DNS/mail-auth values if you want DKIM/SPF signing and verification fully enabled.
+
+## DKIM public key placement
+
+`dkim-public.pem` does not go into this repository, Kubernetes manifests, or `.env`.
+
+Use it like this:
+
+1. Keep `dkim-private.pem` on the machine where you generated it.
+2. Put the private key contents into `DKIM_PRIVATE_KEY` in backend `.env`.
+3. Keep `DKIM_SELECTOR=velismail` unless you want a different selector.
+4. Publish the public key from `dkim-public.pem` in DNS as a TXT record at:
+   `velismail._domainkey.yourdomain.com`
+5. In Cloudflare DNS, the record name is:
+   `velismail._domainkey`
+   if the zone is already `yourdomain.com`.
+6. The TXT value should be the DKIM public key record, usually:
+   `v=DKIM1; k=rsa; p=...`
+
+Important:
+
+- Do not paste the whole `dkim-public.pem` file with `-----BEGIN PUBLIC KEY-----` into `.env`.
+- Do not commit `dkim-private.pem` or `dkim-public.pem` to GitHub.
+- The public key belongs in DNS, not in application code.
