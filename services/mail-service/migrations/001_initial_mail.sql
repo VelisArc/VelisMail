@@ -113,10 +113,30 @@ CREATE POLICY email_messages_tenant_isolation ON email_messages
     USING (tenant_id::text = current_setting('velismail.tenant_id', true));
 
 CREATE POLICY attachments_tenant_isolation ON attachments
-    USING (user_id IN (SELECT id FROM users WHERE tenant_id::text = current_setting('velismail.tenant_id', true)));
+    USING (
+        EXISTS (
+            SELECT 1
+            FROM email_messages
+            WHERE email_messages.id = attachments.message_id
+              AND email_messages.tenant_id::text = current_setting('velismail.tenant_id', true)
+        )
+    );
 
 CREATE POLICY folders_tenant_isolation ON mailbox_folders
-    USING (user_id IN (SELECT id FROM users WHERE tenant_id::text = current_setting('velismail.tenant_id', true)));
+    USING (user_id::text = current_setting('velismail.user_id', true));
 
 CREATE POLICY labels_tenant_isolation ON labels
-    USING (user_id IN (SELECT id FROM users WHERE tenant_id::text = current_setting('velismail.tenant_id', true)));
+    USING (user_id::text = current_setting('velismail.user_id', true));
+
+CREATE POLICY email_labels_tenant_isolation ON email_labels
+    USING (
+        EXISTS (
+            SELECT 1
+            FROM email_messages
+            WHERE email_messages.id = email_labels.message_id
+              AND email_messages.tenant_id::text = current_setting('velismail.tenant_id', true)
+        )
+    );
+
+CREATE POLICY undo_send_queue_tenant_isolation ON undo_send_queue
+    USING (user_id::text = current_setting('velismail.user_id', true));
