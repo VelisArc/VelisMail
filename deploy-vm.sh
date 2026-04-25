@@ -61,17 +61,22 @@ ensure_service_databases() {
 }
 
 prepare_build_space() {
+  local available_mb
+  available_mb=$(df -Pm . | awk 'NR==2 {print $4}')
+
   echo "Inspecting Docker disk usage..."
   docker system df || true
 
-  echo "Pruning stale Docker builder cache..."
-  docker builder prune -af >/dev/null 2>&1 || true
-
-  echo "Pruning unused Docker images..."
-  docker image prune -af >/dev/null 2>&1 || true
-
-  echo "Pruning stopped Docker containers..."
-  docker container prune -f >/dev/null 2>&1 || true
+  if [[ "${available_mb}" -lt 6144 ]]; then
+    echo "Low disk detected (${available_mb}MB free). Running aggressive Docker cleanup..."
+    docker builder prune -af >/dev/null 2>&1 || true
+    docker image prune -af >/dev/null 2>&1 || true
+    docker container prune -f >/dev/null 2>&1 || true
+  else
+    echo "Sufficient disk detected (${available_mb}MB free). Keeping build cache for faster deploys."
+    docker builder prune -f --filter until=240h >/dev/null 2>&1 || true
+    docker image prune -f >/dev/null 2>&1 || true
+  fi
 
   echo "Docker disk usage after cleanup:"
   docker system df || true

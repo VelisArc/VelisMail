@@ -24,6 +24,15 @@ function normalizeMailboxLocalPart(value: string) {
     .replace(/[^a-z0-9._-]/g, '');
 }
 
+function normalizeDomain(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/^https?:\/\//, '')
+    .replace(/^mail\./, '')
+    .replace(/\/.*$/, '');
+}
+
 export default function Login() {
   const [mode, setMode] = useState<Mode>('login');
   const [registerStep, setRegisterStep] = useState<RegisterStep>('type');
@@ -54,6 +63,8 @@ export default function Login() {
   const [error, setError] = useState('');
   const navigate = useNavigate();
   const personalMailboxAddress = `${normalizeMailboxLocalPart(regMailboxLocalPart) || 'yourname'}@velismail.online`;
+  const businessDomainValue = normalizeDomain(regDomain);
+  const defaultBusinessMailboxAddress = businessDomainValue ? `admin@${businessDomainValue}` : '';
   const otpTargetEmail = regRecoveryEmail.trim().toLowerCase();
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -76,7 +87,9 @@ export default function Login() {
 
   const sendRegistrationOtp = async () => {
     const existingUsers = JSON.parse(localStorage.getItem('velismail_users') || '[]');
-    const expectedMailbox = accountType === 'personal' ? personalMailboxAddress : regRecoveryEmail.trim().toLowerCase();
+    const expectedMailbox = accountType === 'personal'
+      ? personalMailboxAddress
+      : (regRecoveryEmail.trim().toLowerCase() || defaultBusinessMailboxAddress);
     if (existingUsers.find((u: { email: string; recoveryEmail?: string; businessMailboxAddress?: string }) =>
       [u.email, u.recoveryEmail, u.businessMailboxAddress].filter(Boolean).includes(expectedMailbox),
     )) {
@@ -93,6 +106,25 @@ export default function Login() {
     setOtpDeliveryHint(`Verification code sent to ${response.maskedEmail} via ${response.provider}.`);
     setVerificationToken('');
     setRegisterStep('otp');
+  };
+
+  const completeRegistration = async () => {
+    const res = await auth.register({
+      email: accountType === 'personal'
+        ? personalMailboxAddress
+        : (defaultBusinessMailboxAddress || otpTargetEmail),
+      password: regPassword,
+      displayName: regName,
+      accountType,
+      customDomain: accountType === 'business' ? businessDomainValue : undefined,
+      recoveryEmail: otpTargetEmail || undefined,
+      personalMailboxLocalPart: accountType === 'personal' ? regMailboxLocalPart : undefined,
+    });
+    if (res.success && res.user) {
+      navigate(nextRouteForUser(res.user));
+    } else {
+      throw new Error(res.error || 'Registration failed');
+    }
   };
 
   const handlePasswordResetRequest = async (e: React.FormEvent) => {
@@ -192,15 +224,16 @@ export default function Login() {
       if (accountType === 'personal' && !normalizeMailboxLocalPart(regMailboxLocalPart)) {
         throw new Error('Choose a mailbox name for your @velismail.online account.');
       }
-      if (!otpTargetEmail) {
-        throw new Error('Recovery email is required so we can send your verification code.');
-      }
-      if (accountType === 'business' && !regDomain.trim()) {
+      if (accountType === 'business' && !businessDomainValue) {
         throw new Error('Business domain is required.');
       }
-      await sendRegistrationOtp();
+      if (otpTargetEmail) {
+        await sendRegistrationOtp();
+      } else {
+        await completeRegistration();
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unable to send verification code.');
+      setError(err instanceof Error ? err.message : 'Unable to create your account.');
     } finally {
       setLoading(false);
     }
@@ -223,20 +256,7 @@ export default function Login() {
       });
       setVerificationToken(verification.verificationToken);
 
-      const res = await auth.register({
-        email: accountType === 'personal' ? personalMailboxAddress : otpTargetEmail,
-        password: regPassword,
-        displayName: regName,
-        accountType,
-        customDomain: accountType === 'business' ? regDomain : undefined,
-        recoveryEmail: otpTargetEmail,
-        personalMailboxLocalPart: accountType === 'personal' ? regMailboxLocalPart : undefined,
-      });
-      if (res.success && res.user) {
-        navigate(nextRouteForUser(res.user));
-      } else {
-        setError(res.error || 'Registration failed');
-      }
+      await completeRegistration();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Invalid verification code.');
     } finally {
@@ -507,11 +527,11 @@ export default function Login() {
                   <label htmlFor="reg-recovery">{accountType === 'business' ? 'Recovery Email' : 'Recovery Email for OTP'}</label>
                   <input id="reg-recovery" type="email" className="input"
                     placeholder="you@gmail.com"
-                    required value={regRecoveryEmail} onChange={e => setRegRecoveryEmail(e.target.value)} />
+                    value={regRecoveryEmail} onChange={e => setRegRecoveryEmail(e.target.value)} />
                   <span className="form-hint">
                     {accountType === 'business'
-                      ? 'This email is used for login recovery until your company mailbox is activated.'
-                      : 'We send signup verification and account recovery codes here.'}
+                      ? 'Optional. If added, OTP and recovery codes go here until your business mailbox is active.'
+                      : 'Optional. If added, signup OTP and recovery codes go here.'}
                   </span>
                 </div>
 
@@ -524,7 +544,7 @@ export default function Login() {
                 {error && <div className="form-error">{error}</div>}
 
                 <button type="submit" className="btn btn-primary w-full" disabled={loading}>
-                  {loading ? <Loader2 size={18} className="animate-spin" /> : <>Send Verification Code <ArrowRight size={18} /></>}
+                  {loading ? <Loader2 size={18} className="animate-spin" /> : <>{otpTargetEmail ? 'Send Verification Code' : 'Create Account'} <ArrowRight size={18} /></>}
                 </button>
               </form>
 

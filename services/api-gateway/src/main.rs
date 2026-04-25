@@ -44,6 +44,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/", get(routes::root))
         .route("/health", get(routes::health_check))
         .nest("/api/v1", routes::api_v1_routes(&state))
+        .nest("/v1", routes::api_v1_routes(&state))
         .merge(routes::swagger_ui())
         .layer(axum::middleware::from_fn_with_state(
             state.clone(),

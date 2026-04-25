@@ -553,10 +553,6 @@ export const auth = {
       return { success: false, error: `Personal mailboxes must use @${PERSONAL_MAIL_DOMAIN}.` };
     }
 
-    if (data.accountType === 'business' && !normalizedRecoveryEmail) {
-      return { success: false, error: 'Business signup requires a recovery email for verification.' };
-    }
-
     const conflict = hasLoginConflict(users, undefined, [primaryEmail, normalizedRecoveryEmail]);
     if (conflict) {
       return { success: false, error: 'An account with this email already exists.' };
@@ -577,6 +573,7 @@ export const auth = {
       personalMailboxLocalPart: data.accountType === 'personal'
         ? normalizeLocalPart(data.personalMailboxLocalPart || data.email)
         : undefined,
+      businessMailboxAddress: data.accountType === 'business' ? primaryEmail : undefined,
       createdAt: new Date().toISOString(),
     };
     try {
