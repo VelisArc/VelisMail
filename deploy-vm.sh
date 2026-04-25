@@ -16,6 +16,14 @@ cd "$(dirname "$0")"
 
 ENV_FILE=".env"
 COMPOSE="docker compose --env-file ${ENV_FILE} -f docker-compose.prod.yml"
+APP_SERVICES=(
+  api-gateway
+  auth-service
+  mail-service
+  storage-service
+  tenant-service
+  delivery-engine
+)
 
 dotenv_get() {
   local key="$1"
@@ -52,12 +60,37 @@ ensure_service_databases() {
   done
 }
 
+prepare_build_space() {
+  echo "Inspecting Docker disk usage..."
+  docker system df || true
+
+  echo "Pruning stale Docker builder cache..."
+  docker builder prune -af >/dev/null 2>&1 || true
+
+  echo "Pruning unused Docker images..."
+  docker image prune -af >/dev/null 2>&1 || true
+
+  echo "Pruning stopped Docker containers..."
+  docker container prune -f >/dev/null 2>&1 || true
+
+  echo "Docker disk usage after cleanup:"
+  docker system df || true
+}
+
+build_services_sequentially() {
+  for service in "${APP_SERVICES[@]}"; do
+    echo "Building ${service}..."
+    $COMPOSE build "$service"
+  done
+}
+
 cmd=${1:-up}
 
 case "$cmd" in
   up)
     [[ -f "$ENV_FILE" ]] || { echo "Missing $ENV_FILE"; exit 1; }
-    $COMPOSE build
+    prepare_build_space
+    build_services_sequentially
     $COMPOSE up -d postgres redis nats
     ensure_service_databases
     $COMPOSE up -d
@@ -68,7 +101,8 @@ case "$cmd" in
     ;;
   pull)
     git pull --ff-only
-    $COMPOSE build
+    prepare_build_space
+    build_services_sequentially
     $COMPOSE up -d postgres redis nats
     ensure_service_databases
     $COMPOSE up -d

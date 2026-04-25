@@ -155,24 +155,57 @@ export type OtpVerifyResponse = {
 const SEED_EMAILS: Email[] = [];
 
 
-function resolveApiBaseUrl(): string {
-  const configured = String(import.meta.env.VITE_API_URL || '').trim().replace(/\/+$/, '');
-  if (!configured) {
+function normalizeConfiguredApiUrl(value: string): string {
+  const trimmed = String(value || '').trim();
+  if (!trimmed) {
     return '';
   }
-  if (configured.endsWith('/api/v1')) {
-    return configured;
+
+  try {
+    const url = new URL(trimmed);
+    url.hostname = url.hostname.replace(/\.+$/, '');
+    url.pathname = url.pathname.replace(/\/+$/, '');
+    return `${url.origin}${url.pathname}`.replace(/\/+$/, '');
+  } catch {
+    return trimmed.replace(/\/+$/, '').replace(/\.+$/, '');
   }
-  if (configured.endsWith('/api')) {
-    return `${configured}/v1`;
-  }
-  return `${configured}/api/v1`;
 }
 
-const API_BASE_URL = resolveApiBaseUrl();
+function resolveApiBaseCandidates(): string[] {
+  const configured = normalizeConfiguredApiUrl(String(import.meta.env.VITE_API_URL || ''));
+  if (!configured) {
+    return [];
+  }
+
+  const candidates: string[] = [];
+  const pushCandidate = (value: string) => {
+    const normalized = normalizeConfiguredApiUrl(value);
+    if (normalized && !candidates.includes(normalized)) {
+      candidates.push(normalized);
+    }
+  };
+
+  if (configured.endsWith('/api/v1')) {
+    pushCandidate(configured);
+    pushCandidate(configured.replace(/\/api\/v1$/, '/v1'));
+  } else if (configured.endsWith('/api')) {
+    pushCandidate(`${configured}/v1`);
+    pushCandidate(configured.replace(/\/api$/, '/v1'));
+  } else if (configured.endsWith('/v1')) {
+    pushCandidate(configured.replace(/\/v1$/, '/api/v1'));
+    pushCandidate(configured);
+  } else {
+    pushCandidate(`${configured}/api/v1`);
+    pushCandidate(`${configured}/v1`);
+  }
+
+  return candidates;
+}
+
+const API_BASE_CANDIDATES = resolveApiBaseCandidates();
 
 async function fetchAPI(endpoint: string, options: RequestInit = {}) {
-  if (!API_BASE_URL) {
+  if (API_BASE_CANDIDATES.length === 0) {
     throw new Error('VITE_API_URL is missing. Point the frontend to your deployed VM API before using auth, setup, or mail actions.');
   }
 
@@ -184,12 +217,26 @@ async function fetchAPI(endpoint: string, options: RequestInit = {}) {
     headers.set('Authorization', `Bearer ${token}`);
   }
 
-  const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-    ...options,
-    headers,
-  });
+  let lastError: Error | null = null;
 
-  if (!response.ok) {
+  for (let index = 0; index < API_BASE_CANDIDATES.length; index += 1) {
+    const baseUrl = API_BASE_CANDIDATES[index];
+    let response: Response;
+
+    try {
+      response = await fetch(`${baseUrl}${endpoint}`, {
+        ...options,
+        headers,
+      });
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error('Network request failed.');
+      continue;
+    }
+
+    if (response.ok) {
+      return response.json();
+    }
+
     const errorBody = await response.text();
     let errorMessage = `API Error ${response.status}`;
     try {
@@ -198,10 +245,16 @@ async function fetchAPI(endpoint: string, options: RequestInit = {}) {
     } catch {
       errorMessage = errorBody || errorMessage;
     }
+
+    if (response.status === 404 && index < API_BASE_CANDIDATES.length - 1) {
+      lastError = new Error(errorMessage);
+      continue;
+    }
+
     throw new Error(errorMessage);
   }
 
-  return response.json();
+  throw lastError || new Error('Unable to reach the VelisMail API.');
 }
 
 // ---- Initialize DB ----
