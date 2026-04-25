@@ -17,12 +17,49 @@ cd "$(dirname "$0")"
 ENV_FILE=".env"
 COMPOSE="docker compose --env-file ${ENV_FILE} -f docker-compose.prod.yml"
 
+dotenv_get() {
+  local key="$1"
+  local default_value="${2:-}"
+  local line
+  line=$(grep -E "^${key}=" "$ENV_FILE" 2>/dev/null | tail -n1 || true)
+  if [[ -n "$line" ]]; then
+    printf '%s' "${line#*=}"
+  else
+    printf '%s' "$default_value"
+  fi
+}
+
+ensure_service_databases() {
+  local postgres_user postgres_password auth_db mail_db storage_db tenant_db delivery_db
+  postgres_user=$(dotenv_get POSTGRES_USER "velismail")
+  postgres_password=$(dotenv_get POSTGRES_PASSWORD "")
+  auth_db=$(dotenv_get AUTH_POSTGRES_DB "velismail_auth")
+  mail_db=$(dotenv_get MAIL_POSTGRES_DB "velismail_mail")
+  storage_db=$(dotenv_get STORAGE_POSTGRES_DB "velismail_storage")
+  tenant_db=$(dotenv_get TENANT_POSTGRES_DB "velismail_tenant")
+  delivery_db=$(dotenv_get DELIVERY_POSTGRES_DB "velismail_delivery")
+
+  echo "Ensuring service PostgreSQL databases exist..."
+  for db_name in "$auth_db" "$mail_db" "$storage_db" "$tenant_db" "$delivery_db"; do
+    if ! $COMPOSE exec -T -e PGPASSWORD="$postgres_password" postgres \
+      psql -U "$postgres_user" -d postgres -tAc "SELECT 1 FROM pg_database WHERE datname='${db_name}'" | grep -q 1; then
+      $COMPOSE exec -T -e PGPASSWORD="$postgres_password" postgres \
+        psql -U "$postgres_user" -d postgres -v ON_ERROR_STOP=1 -c "CREATE DATABASE \"${db_name}\";"
+      echo "  Created database: ${db_name}"
+    else
+      echo "  Database already exists: ${db_name}"
+    fi
+  done
+}
+
 cmd=${1:-up}
 
 case "$cmd" in
   up)
     [[ -f "$ENV_FILE" ]] || { echo "Missing $ENV_FILE"; exit 1; }
     $COMPOSE build
+    $COMPOSE up -d postgres redis nats
+    ensure_service_databases
     $COMPOSE up -d
     echo
     echo "VelisMail backend running."
@@ -32,6 +69,8 @@ case "$cmd" in
   pull)
     git pull --ff-only
     $COMPOSE build
+    $COMPOSE up -d postgres redis nats
+    ensure_service_databases
     $COMPOSE up -d
     ;;
   logs)  $COMPOSE logs -f --tail=200 ;;

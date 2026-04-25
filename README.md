@@ -73,6 +73,7 @@ npx wrangler pages deploy dist --project-name velismail
 ## Required backend keys
 
 - `POSTGRES_PASSWORD`: password for the local VM Postgres container.
+- `AUTH_POSTGRES_DB`, `MAIL_POSTGRES_DB`, `STORAGE_POSTGRES_DB`, `TENANT_POSTGRES_DB`, `DELIVERY_POSTGRES_DB`: optional per-service database names. Defaults are already wired for isolated service migrations and are recommended over one shared database.
 - `REDIS_PASSWORD`: password for the local VM Redis container.
 - `JWT_SECRET`: long random secret for auth tokens.
 - `OTP_SIGNING_SECRET`: long random secret for OTP challenge signing.

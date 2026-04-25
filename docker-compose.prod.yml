@@ -88,7 +88,7 @@ services:
     environment:
       RUST_LOG: info
       PORT: 3001
-      DATABASE_URL: postgres://${POSTGRES_USER:-velismail}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-velismail}
+      DATABASE_URL: postgres://${POSTGRES_USER:-velismail}:${POSTGRES_PASSWORD}@postgres:5432/${AUTH_POSTGRES_DB:-velismail_auth}
       REDIS_URL: redis://default:${REDIS_PASSWORD}@redis:6379
       JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET (min 64 chars random)}
       JWT_EXPIRY_SECONDS: ${JWT_EXPIRY_SECONDS:-3600}
@@ -120,7 +120,7 @@ services:
     environment:
       RUST_LOG: info
       PORT: 3002
-      DATABASE_URL: postgres://${POSTGRES_USER:-velismail}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-velismail}
+      DATABASE_URL: postgres://${POSTGRES_USER:-velismail}:${POSTGRES_PASSWORD}@postgres:5432/${MAIL_POSTGRES_DB:-velismail_mail}
       REDIS_URL: redis://default:${REDIS_PASSWORD}@redis:6379
       NATS_URL: ${NATS_URL:-nats://nats:4222}
       NATS_CREDS: ${NATS_CREDS:-}
@@ -141,7 +141,7 @@ services:
     environment:
       RUST_LOG: info
       PORT: 3003
-      DATABASE_URL: postgres://${POSTGRES_USER:-velismail}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-velismail}
+      DATABASE_URL: postgres://${POSTGRES_USER:-velismail}:${POSTGRES_PASSWORD}@postgres:5432/${STORAGE_POSTGRES_DB:-velismail_storage}
       REDIS_URL: redis://default:${REDIS_PASSWORD}@redis:6379
       S3_ENDPOINT: ${S3_ENDPOINT:-}
       S3_BUCKET: ${S3_BUCKET:-velismail}
@@ -160,7 +160,7 @@ services:
     environment:
       RUST_LOG: info
       PORT: 3004
-      DATABASE_URL: postgres://${POSTGRES_USER:-velismail}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-velismail}
+      DATABASE_URL: postgres://${POSTGRES_USER:-velismail}:${POSTGRES_PASSWORD}@postgres:5432/${TENANT_POSTGRES_DB:-velismail_tenant}
       REDIS_URL: redis://default:${REDIS_PASSWORD}@redis:6379
 
   delivery-engine:
@@ -173,7 +173,7 @@ services:
     environment:
       RUST_LOG: info
       PORT: 3005
-      DATABASE_URL: postgres://${POSTGRES_USER:-velismail}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-velismail}
+      DATABASE_URL: postgres://${POSTGRES_USER:-velismail}:${POSTGRES_PASSWORD}@postgres:5432/${DELIVERY_POSTGRES_DB:-velismail_delivery}
       REDIS_URL: redis://default:${REDIS_PASSWORD}@redis:6379
       NATS_URL: ${NATS_URL:-nats://nats:4222}
       NATS_CREDS: ${NATS_CREDS:-}
