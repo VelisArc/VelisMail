@@ -27,16 +27,24 @@ Important:
 2. Fill the required values in `.env`.
 3. On your Linux VM, place that `.env` inside `~/VelisMail/.env`.
 4. Make sure Docker and Docker Compose v2 are installed on the VM.
-5. Make sure your GitHub Actions repo secrets include:
+5. Make sure ports `80` and `443` are open on the VM security group / firewall.
+6. `api.velismail.online` must point to the VM public IP.
+7. This repo now uses `Caddy` in Docker Compose to terminate TLS and reverse-proxy `https://api.velismail.online` to the internal `api-gateway:3000`.
+8. Make sure your GitHub Actions repo secrets include:
    - `HOST`
    - `SSH_PRIVATE_KEY`
-6. Push to `main`, or on the VM run:
+9. Push to `main`, or on the VM run:
 
 ```bash
 bash deploy-vm.sh up
 ```
 
-The API gateway will serve the backend on `GATEWAY_PORT`.
+After deploy, these should work:
+
+```bash
+curl http://127.0.0.1:3000/health
+curl https://api.velismail.online/health
+```
 
 ## Frontend deploy
 

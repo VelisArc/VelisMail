@@ -26,8 +26,8 @@ case "$cmd" in
     $COMPOSE up -d
     echo
     echo "VelisMail backend running."
-    echo "  API Gateway: http://$(hostname -I | awk '{print $1}'):${GATEWAY_PORT:-3000}"
-    echo "  Point Cloudflare Pages VITE_API_URL to this host over HTTPS."
+    echo "  Local API Gateway: http://127.0.0.1:${GATEWAY_PORT:-3000}"
+    echo "  Public API: https://api.velismail.online"
     ;;
   pull)
     git pull --ff-only

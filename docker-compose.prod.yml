@@ -64,7 +64,20 @@ services:
       TENANT_SERVICE_URL: http://tenant-service:3004
       SECURITY_SERVICE_URL: http://delivery-engine:3005
     ports:
-      - "${GATEWAY_BIND:-0.0.0.0}:${GATEWAY_PORT:-3000}:3000"
+      - "127.0.0.1:${GATEWAY_PORT:-3000}:3000"
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      api-gateway: { condition: service_started }
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
 
   auth-service:
     build: { context: ., dockerfile: Dockerfile, args: { SERVICE: auth-service } }
@@ -171,3 +184,5 @@ services:
 volumes:
   pgdata:
   redisdata:
+  caddy_data:
+  caddy_config:

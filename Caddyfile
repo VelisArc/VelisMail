@@ -1,0 +1,4 @@
+api.velismail.online {
+    encode zstd gzip
+    reverse_proxy api-gateway:3000
+}
