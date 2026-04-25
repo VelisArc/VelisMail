@@ -29,6 +29,16 @@ pub fn api_v1_routes(_state: &AppState) -> Router<AppState> {
         .route("/delivery/*rest", any(proxy_delivery))
 }
 
+pub async fn root() -> Json<serde_json::Value> {
+    Json(json!({
+        "service": "api-gateway",
+        "status": "online",
+        "message": "VelisMail API Gateway is running.",
+        "health": "/health",
+        "apiBase": "/api/v1"
+    }))
+}
+
 pub async fn health_check() -> Json<serde_json::Value> {
     Json(json!({
         "status": "healthy",

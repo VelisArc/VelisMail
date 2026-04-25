@@ -41,6 +41,7 @@ async fn main() -> anyhow::Result<()> {
     // the JWT so that the gateway can remain a transparent proxy. Re-enable
     // `middleware::authentication` once a shared verifier is wired here.
     let app = Router::new()
+        .route("/", get(routes::root))
         .route("/health", get(routes::health_check))
         .nest("/api/v1", routes::api_v1_routes(&state))
         .merge(routes::swagger_ui())
