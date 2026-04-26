@@ -441,7 +441,10 @@ function getLoginCandidates(user: Partial<User>): string[] {
 }
 
 function normalizeStoredUser(user: User & { password: string }): User & { password: string } {
-  const normalizedEmail = normalizeMailbox(user.email);
+  const rawEmail = normalizeMailbox(user.email);
+  const normalizedEmail = user.accountType === 'personal'
+    ? buildPersonalMailbox(user.personalMailboxLocalPart || rawEmail)
+    : rawEmail;
   const normalizedBusinessDomain = normalizeDomainInput(user.businessDomain || user.businessProfile?.domain || user.customDomain || '');
   const businessMailboxAddress = normalizeMailbox(
     user.businessMailboxAddress ||
@@ -574,6 +577,24 @@ function sessionHasMismatch(session: User | null): boolean {
     }
   }
   return false;
+}
+
+function normalizeSessionUser(session: User): User {
+  if (session.accountType !== 'personal') {
+    return session;
+  }
+
+  const localPart = normalizeLocalPart(session.personalMailboxLocalPart || session.email);
+  const email = buildPersonalMailbox(localPart);
+  if (session.email === email && session.personalMailboxLocalPart === localPart) {
+    return session;
+  }
+
+  return {
+    ...session,
+    email,
+    personalMailboxLocalPart: localPart,
+  };
 }
 
 // ---- Auth Functions ----
@@ -846,12 +867,16 @@ export const auth = {
 
   getSession(): User | null {
     const session = loadDB<User | null>(STORAGE_KEYS.session, null);
-    if (session && sessionHasMismatch(session)) {
+    const normalizedSession = session ? normalizeSessionUser(session) : null;
+    if (session && normalizedSession && JSON.stringify(session) !== JSON.stringify(normalizedSession)) {
+      saveDB(STORAGE_KEYS.session, normalizedSession);
+    }
+    if (normalizedSession && sessionHasMismatch(normalizedSession)) {
       console.warn('Session mismatch detected — logging out for safety.');
       this.logout();
       return null;
     }
-    return session;
+    return normalizedSession;
   },
 
   isLoggedIn(): boolean {

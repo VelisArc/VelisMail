@@ -90,9 +90,15 @@ export default function Login() {
     const expectedMailbox = accountType === 'personal'
       ? personalMailboxAddress
       : (regRecoveryEmail.trim().toLowerCase() || defaultBusinessMailboxAddress);
-    if (existingUsers.find((u: { email: string; recoveryEmail?: string; businessMailboxAddress?: string }) =>
-      [u.email, u.recoveryEmail, u.businessMailboxAddress].filter(Boolean).includes(expectedMailbox),
-    )) {
+    const candidateValues = [expectedMailbox, otpTargetEmail]
+      .map(value => value.trim().toLowerCase())
+      .filter(Boolean);
+    if (existingUsers.find((u: { email: string; recoveryEmail?: string; businessMailboxAddress?: string }) => {
+      const existingValues = [u.email, u.recoveryEmail, u.businessMailboxAddress]
+        .map(value => String(value || '').trim().toLowerCase())
+        .filter(Boolean);
+      return candidateValues.some(value => existingValues.includes(value));
+    })) {
       throw new Error('An account with this mailbox or recovery email already exists.');
     }
 
@@ -508,21 +514,21 @@ export default function Login() {
                 </p>
               </div>
 
-              <form onSubmit={handleRegisterSubmit} className="login-form" autoComplete="off">
+              <form onSubmit={handleRegisterSubmit} className="login-form" autoComplete="new-password">
                 <div className="form-group">
                   <label htmlFor="reg-name">Full Name</label>
                   <input id="reg-name" type="text" className="input" placeholder="Your full name"
-                    name="velismail-signup-display-name" autoComplete="off" required value={regName} onChange={e => setRegName(e.target.value)} autoFocus />
+                    name="velismail-new-account-display-name" autoComplete="new-password" required value={regName} onChange={e => setRegName(e.target.value)} autoFocus />
                 </div>
 
                 {accountType === 'personal' ? (
                   <div className="form-group">
-                    <label htmlFor="reg-email">VelisMail Username</label>
+                    <label htmlFor="reg-mailbox-local-part">VelisMail Username</label>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 8 }}>
-                      <input id="reg-email" type="text" className="input"
+                      <input id="reg-mailbox-local-part" type="text" className="input"
                         placeholder="yourname"
-                        name="velismail-signup-mailbox-local-part"
-                        autoComplete="off"
+                        name="velismail-new-account-local-part"
+                        autoComplete="new-password"
                         autoCapitalize="none"
                         spellCheck={false}
                         required value={regMailboxLocalPart} onChange={e => setRegMailboxLocalPart(normalizeMailboxLocalPart(e.target.value))} />
@@ -552,8 +558,8 @@ export default function Login() {
                   <label htmlFor="reg-recovery">{accountType === 'business' ? 'Recovery Email' : 'Recovery Email for OTP'}</label>
                   <input id="reg-recovery" type="email" className="input"
                     placeholder="you@gmail.com"
-                    name="velismail-signup-recovery-email"
-                    autoComplete="off"
+                    name="velismail-new-account-recovery-contact"
+                    autoComplete="new-password"
                     value={regRecoveryEmail} onChange={e => setRegRecoveryEmail(e.target.value)} />
                   <span className="form-hint">
                     {accountType === 'business'
