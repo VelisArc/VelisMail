@@ -18,10 +18,13 @@ impl SmtpClient {
     pub fn new(host: &str, port: u16, username: &str, password: &str) -> Result<Self> {
         let creds = Credentials::new(username.to_string(), password.to_string());
 
-        let transport = SmtpTransport::builder_dangerous(host)
-            .port(port)
-            .credentials(creds)
-            .build();
+        let transport_builder = match port {
+            465 => SmtpTransport::relay(host)?,
+            587 => SmtpTransport::starttls_relay(host)?,
+            _ => SmtpTransport::builder_dangerous(host).port(port),
+        };
+
+        let transport = transport_builder.credentials(creds).build();
 
         Ok(Self {
             transport,

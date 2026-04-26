@@ -119,14 +119,44 @@ fn send_otp_email(
         .body(text_body)
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    let transport = SmtpTransport::builder_dangerous(&state.config.smtp_host)
-        .port(state.config.smtp_port)
-        .credentials(credentials)
-        .build();
+    let transport_builder = match state.config.smtp_port {
+        465 => SmtpTransport::relay(&state.config.smtp_host).map_err(|err| {
+            tracing::error!(
+                "smtp relay builder failed for host {}:{}: {}",
+                state.config.smtp_host,
+                state.config.smtp_port,
+                err
+            );
+            StatusCode::BAD_GATEWAY
+        })?,
+        587 => SmtpTransport::starttls_relay(&state.config.smtp_host).map_err(|err| {
+            tracing::error!(
+                "smtp starttls builder failed for host {}:{}: {}",
+                state.config.smtp_host,
+                state.config.smtp_port,
+                err
+            );
+            StatusCode::BAD_GATEWAY
+        })?,
+        _ => SmtpTransport::builder_dangerous(&state.config.smtp_host).port(state.config.smtp_port),
+    };
+
+    let transport = transport_builder.credentials(credentials).build();
 
     transport
         .send(&message)
-        .map_err(|_| StatusCode::BAD_GATEWAY)?;
+        .map_err(|err| {
+            tracing::error!(
+                "otp smtp send failed via {}:{} as {} from {} to {}: {}",
+                state.config.smtp_host,
+                state.config.smtp_port,
+                state.config.smtp_username,
+                state.config.otp_from_email,
+                email,
+                err
+            );
+            StatusCode::BAD_GATEWAY
+        })?;
 
     Ok(())
 }

@@ -87,8 +87,29 @@ pub async fn send_email(
         .body(request.body.clone())
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    let transport = SmtpTransport::builder_dangerous(&state.config.smtp_host)
-        .port(state.config.smtp_port)
+    let transport_builder = match state.config.smtp_port {
+        465 => SmtpTransport::relay(&state.config.smtp_host).map_err(|err| {
+            tracing::error!(
+                "smtp relay builder failed for host {}:{}: {}",
+                state.config.smtp_host,
+                state.config.smtp_port,
+                err
+            );
+            StatusCode::BAD_GATEWAY
+        })?,
+        587 => SmtpTransport::starttls_relay(&state.config.smtp_host).map_err(|err| {
+            tracing::error!(
+                "smtp starttls builder failed for host {}:{}: {}",
+                state.config.smtp_host,
+                state.config.smtp_port,
+                err
+            );
+            StatusCode::BAD_GATEWAY
+        })?,
+        _ => SmtpTransport::builder_dangerous(&state.config.smtp_host).port(state.config.smtp_port),
+    };
+
+    let transport = transport_builder
         .credentials(Credentials::new(
             state.config.smtp_username.clone(),
             state.config.smtp_password.clone(),
