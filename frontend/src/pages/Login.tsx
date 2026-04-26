@@ -112,7 +112,7 @@ export default function Login() {
     setRegisterStep('otp');
   };
 
-  const completeRegistration = async () => {
+  const completeRegistration = async (verifiedToken?: string) => {
     const res = await auth.register({
       email: accountType === 'personal'
         ? personalMailboxAddress
@@ -122,6 +122,7 @@ export default function Login() {
       accountType,
       customDomain: accountType === 'business' ? businessDomainValue : undefined,
       recoveryEmail: otpTargetEmail || undefined,
+      verificationToken: verifiedToken || verificationToken || undefined,
       personalMailboxLocalPart: accountType === 'personal' ? regMailboxLocalPart : undefined,
     });
     if (res.success && res.user) {
@@ -231,6 +232,9 @@ export default function Login() {
       if (accountType === 'business' && !businessDomainValue) {
         throw new Error('Business domain is required.');
       }
+      if (regPassword.trim().length < 8) {
+        throw new Error('Password must be at least 8 characters.');
+      }
       if (otpTargetEmail) {
         await sendRegistrationOtp();
       } else {
@@ -263,7 +267,7 @@ export default function Login() {
       }
       setVerificationToken(verification.verificationToken);
 
-      await completeRegistration();
+      await completeRegistration(verification.verificationToken);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Invalid verification code.');
     } finally {
@@ -339,17 +343,17 @@ export default function Login() {
 
               {!forgotMode ? (
                 <>
-                  <form onSubmit={handleLogin} className="login-form">
-                    <div className="form-group">
-                      <label htmlFor="login-email">Email, username, or recovery email</label>
-                      <input id="login-email" type="text" className="input" placeholder="you / you@velismail.online / admin@yourdomain.com"
-                        required value={loginIdentifier} onChange={e => setLoginIdentifier(e.target.value)} autoFocus />
-                    </div>
-                    <div className="form-group">
-                      <label htmlFor="login-pass">Password</label>
-                      <input id="login-pass" type="password" className="input" placeholder="Enter password"
-                        required value={loginPassword} onChange={e => setLoginPassword(e.target.value)} />
-                    </div>
+              <form onSubmit={handleLogin} className="login-form" autoComplete="off">
+                <div className="form-group">
+                  <label htmlFor="login-email">Email, username, or recovery email</label>
+                  <input id="login-email" type="text" className="input" placeholder="you / you@velismail.online / admin@yourdomain.com"
+                    name="velismail-login-identifier" autoComplete="username" required value={loginIdentifier} onChange={e => setLoginIdentifier(e.target.value)} autoFocus />
+                </div>
+                <div className="form-group">
+                  <label htmlFor="login-pass">Password</label>
+                  <input id="login-pass" type="password" className="input" placeholder="Enter password"
+                    name="velismail-login-password" autoComplete="current-password" required value={loginPassword} onChange={e => setLoginPassword(e.target.value)} />
+                </div>
 
                     {error && <div className="form-error">{error}</div>}
 
@@ -367,7 +371,7 @@ export default function Login() {
                 </>
               ) : (
                 <>
-                  <form onSubmit={handlePasswordResetRequest} className="login-form">
+                  <form onSubmit={handlePasswordResetRequest} className="login-form" autoComplete="off">
                     <div className="form-group">
                       <label htmlFor="reset-identifier">Mailbox or Recovery Email</label>
                       <input
@@ -375,6 +379,8 @@ export default function Login() {
                         type="text"
                         className="input"
                         placeholder="you@velismail.online / you@gmail.com"
+                        name="velismail-reset-identifier"
+                        autoComplete="off"
                         required
                         value={resetIdentifier}
                         onChange={e => setResetIdentifier(e.target.value)}
@@ -389,7 +395,7 @@ export default function Login() {
                   </form>
 
                   {resetChallengeToken && (
-                    <form onSubmit={handlePasswordResetVerify} className="login-form" style={{ marginTop: 12 }}>
+                    <form onSubmit={handlePasswordResetVerify} className="login-form" style={{ marginTop: 12 }} autoComplete="off">
                       <div className="form-group">
                         <label htmlFor="reset-otp">Verification Code</label>
                         <input
@@ -397,6 +403,8 @@ export default function Login() {
                           type="text"
                           className="input"
                           placeholder="000000"
+                          name="velismail-reset-otp"
+                          autoComplete="one-time-code"
                           maxLength={6}
                           required
                           value={resetOtp}
@@ -410,7 +418,7 @@ export default function Login() {
                   )}
 
                   {resetVerificationToken && (
-                    <form onSubmit={handlePasswordResetComplete} className="login-form" style={{ marginTop: 12 }}>
+                    <form onSubmit={handlePasswordResetComplete} className="login-form" style={{ marginTop: 12 }} autoComplete="off">
                       <div className="form-group">
                         <label htmlFor="reset-password">New Password</label>
                         <input
@@ -418,6 +426,8 @@ export default function Login() {
                           type="password"
                           className="input"
                           placeholder="Enter new password"
+                          name="velismail-reset-new-password"
+                          autoComplete="new-password"
                           minLength={8}
                           required
                           value={resetPassword}
@@ -498,11 +508,11 @@ export default function Login() {
                 </p>
               </div>
 
-              <form onSubmit={handleRegisterSubmit} className="login-form">
+              <form onSubmit={handleRegisterSubmit} className="login-form" autoComplete="off">
                 <div className="form-group">
                   <label htmlFor="reg-name">Full Name</label>
                   <input id="reg-name" type="text" className="input" placeholder="Your full name"
-                    required value={regName} onChange={e => setRegName(e.target.value)} autoFocus />
+                    name="velismail-signup-display-name" autoComplete="off" required value={regName} onChange={e => setRegName(e.target.value)} autoFocus />
                 </div>
 
                 {accountType === 'personal' ? (
@@ -511,7 +521,11 @@ export default function Login() {
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 8 }}>
                       <input id="reg-email" type="text" className="input"
                         placeholder="yourname"
-                        required value={regMailboxLocalPart} onChange={e => setRegMailboxLocalPart(e.target.value)} />
+                        name="velismail-signup-mailbox-local-part"
+                        autoComplete="off"
+                        autoCapitalize="none"
+                        spellCheck={false}
+                        required value={regMailboxLocalPart} onChange={e => setRegMailboxLocalPart(normalizeMailboxLocalPart(e.target.value))} />
                       <input className="input" value="@velismail.online" disabled />
                     </div>
                     <span className="form-hint">Your personal mailbox will be locked to {personalMailboxAddress}.</span>
@@ -525,6 +539,10 @@ export default function Login() {
                       Custom Domain
                     </label>
                     <input id="reg-domain" type="text" className="input" placeholder="yourdomain.com"
+                      name="velismail-signup-business-domain"
+                      autoComplete="off"
+                      autoCapitalize="none"
+                      spellCheck={false}
                       required value={regDomain} onChange={e => setRegDomain(e.target.value)} />
                     <span className="form-hint">We will create your business mailbox only after DNS verification succeeds.</span>
                   </div>
@@ -534,6 +552,8 @@ export default function Login() {
                   <label htmlFor="reg-recovery">{accountType === 'business' ? 'Recovery Email' : 'Recovery Email for OTP'}</label>
                   <input id="reg-recovery" type="email" className="input"
                     placeholder="you@gmail.com"
+                    name="velismail-signup-recovery-email"
+                    autoComplete="off"
                     value={regRecoveryEmail} onChange={e => setRegRecoveryEmail(e.target.value)} />
                   <span className="form-hint">
                     {accountType === 'business'
@@ -545,7 +565,9 @@ export default function Login() {
                 <div className="form-group">
                   <label htmlFor="reg-pass">Password</label>
                   <input id="reg-pass" type="password" className="input" placeholder="Create a strong password"
-                    required minLength={6} value={regPassword} onChange={e => setRegPassword(e.target.value)} />
+                    name="velismail-signup-password"
+                    autoComplete="new-password"
+                    required minLength={8} value={regPassword} onChange={e => setRegPassword(e.target.value)} />
                 </div>
 
                 {error && <div className="form-error">{error}</div>}
@@ -573,14 +595,17 @@ export default function Login() {
                 <p className="login-card-desc">Enter the 6-digit code sent to {otpTargetEmail}</p>
               </div>
 
-              <form onSubmit={handleOtpSubmit} className="login-form">
+              <form onSubmit={handleOtpSubmit} className="login-form" autoComplete="off">
                 {otpDeliveryHint && <div className="form-success">{otpDeliveryHint}</div>}
                 {verificationToken && <div className="form-success">Verification session is active. Finish account creation now.</div>}
 
                 <div className="form-group">
                   <label htmlFor="otp-code">Verification Code</label>
                   <input id="otp-code" type="text" className="input" placeholder="000000"
-                    maxLength={6} required value={otp} onChange={e => setOtp(e.target.value)} autoFocus />
+                    name="velismail-signup-otp"
+                    autoComplete="one-time-code"
+                    inputMode="numeric"
+                    maxLength={6} required value={otp} onChange={e => setOtp(e.target.value.replace(/\D/g, ''))} autoFocus />
                 </div>
 
                 {error && <div className="form-error">{error}</div>}

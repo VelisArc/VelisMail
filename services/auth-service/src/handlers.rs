@@ -211,6 +211,7 @@ pub struct RegisterRequest {
     pub password: String,
     #[validate(email)]
     pub recovery_email: Option<String>,
+    pub verification_token: Option<String>,
     pub tenant_id: Option<Uuid>,
 }
 
@@ -234,6 +235,34 @@ pub struct ChangePasswordRequest {
     pub new_password: String,
 }
 
+fn ensure_registration_recovery_verified(
+    state: &AuthState,
+    recovery_email: Option<&str>,
+    verification_token: Option<&str>,
+) -> Result<(), StatusCode> {
+    let Some(recovery_email) = recovery_email else {
+        return Ok(());
+    };
+
+    let token = verification_token
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or(StatusCode::UNAUTHORIZED)?;
+
+    let decoded = decode::<OtpVerificationClaims>(
+        token,
+        &DecodingKey::from_secret(state.config.otp_signing_secret.as_bytes()),
+        &Validation::default(),
+    )
+    .map_err(|_| StatusCode::UNAUTHORIZED)?;
+
+    if decoded.claims.purpose != "register" || decoded.claims.sub != recovery_email {
+        return Err(StatusCode::UNAUTHORIZED);
+    }
+
+    Ok(())
+}
+
 /// Register a new user with a password. Returns a WebAuthn-style challenge so
 /// the client can optionally upgrade to passkey later.
 pub async fn register(
@@ -248,6 +277,12 @@ pub async fn register(
         .as_deref()
         .map(|value| value.trim().to_lowercase())
         .filter(|value| !value.is_empty());
+
+    ensure_registration_recovery_verified(
+        &state,
+        recovery_email.as_deref(),
+        request.verification_token.as_deref(),
+    )?;
 
     let existing: Option<i64> = sqlx::query_scalar(
         "SELECT COUNT(*) FROM users WHERE email = $1 OR ($2::text IS NOT NULL AND recovery_email = $2)",

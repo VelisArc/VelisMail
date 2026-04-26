@@ -296,7 +296,7 @@ export async function fetchApiResponse(endpoint: string, options: RequestInit = 
     }
 
     if (response.ok) {
-      return response.json();
+      return response;
     }
 
     const errorBody = await response.text();
@@ -644,6 +644,7 @@ export const auth = {
     accountType: 'personal' | 'business';
     customDomain?: string;
     recoveryEmail?: string;
+    verificationToken?: string;
     personalMailboxLocalPart?: string;
   }): Promise<{ success: boolean; error?: string; user?: User }> {
     const users = loadUsers();
@@ -692,6 +693,7 @@ export const auth = {
           display_name: data.displayName,
           password: data.password,
           recovery_email: normalizedRecoveryEmail || undefined,
+          verification_token: data.verificationToken || undefined,
         }),
       });
 
