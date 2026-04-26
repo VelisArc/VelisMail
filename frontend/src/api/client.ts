@@ -187,16 +187,12 @@ function expandApiBaseCandidates(input: string): string[] {
 
   if (configured.endsWith('/api/v1')) {
     pushCandidate(configured);
-    pushCandidate(configured.replace(/\/api\/v1$/, '/v1'));
   } else if (configured.endsWith('/api')) {
     pushCandidate(`${configured}/v1`);
-    pushCandidate(configured.replace(/\/api$/, '/v1'));
   } else if (configured.endsWith('/v1')) {
     pushCandidate(configured.replace(/\/v1$/, '/api/v1'));
-    pushCandidate(configured);
   } else {
     pushCandidate(`${configured}/api/v1`);
-    pushCandidate(`${configured}/v1`);
   }
 
   return candidates;

@@ -1,4 +1,8 @@
 api.velismail.online {
     encode zstd gzip
+    handle /v1/* {
+        uri replace /v1/ /api/v1/
+        reverse_proxy api-gateway:3000
+    }
     reverse_proxy api-gateway:3000
 }

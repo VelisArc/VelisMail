@@ -299,21 +299,126 @@ fn default_port_for_scheme(scheme: &str) -> Option<u16> {
     }
 }
 
+struct DatabaseEndpoint {
+    scheme: String,
+    host: String,
+    port: u16,
+    sqlite_path: Option<String>,
+}
+
+fn parse_database_endpoint(db_url: &str) -> Result<DatabaseEndpoint, String> {
+    let trimmed = db_url.trim();
+    let scheme = trimmed
+        .split_once("://")
+        .map(|(scheme, _)| scheme.to_lowercase())
+        .ok_or_else(|| "Database URL must include a scheme such as postgresql://.".to_string())?;
+
+    if scheme == "sqlite" {
+        let path = trimmed
+            .split_once("://")
+            .map(|(_, rest)| rest.trim().to_string())
+            .unwrap_or_default();
+        return Ok(DatabaseEndpoint {
+            scheme,
+            host: String::new(),
+            port: 0,
+            sqlite_path: Some(path),
+        });
+    }
+
+    match reqwest::Url::parse(trimmed) {
+        Ok(parsed) => {
+            let host = parsed
+                .host_str()
+                .map(str::to_string)
+                .filter(|value| !value.trim().is_empty())
+                .ok_or_else(|| "Database host is missing from the connection string.".to_string())?;
+            let port = parsed
+                .port()
+                .or_else(|| default_port_for_scheme(parsed.scheme()))
+                .ok_or_else(|| format!("Database port is missing for scheme '{}'.", parsed.scheme()))?;
+
+            return Ok(DatabaseEndpoint {
+                scheme: parsed.scheme().to_string(),
+                host,
+                port,
+                sqlite_path: None,
+            });
+        }
+        Err(parse_error) => {
+            let after_scheme = trimmed
+                .split_once("://")
+                .map(|(_, rest)| rest)
+                .unwrap_or(trimmed);
+            let authority = after_scheme
+                .rsplit_once('@')
+                .map(|(_, authority)| authority)
+                .unwrap_or(after_scheme)
+                .split(['/', '?', '#'])
+                .next()
+                .unwrap_or("")
+                .trim();
+
+            if authority.is_empty() {
+                return Err(format!("Invalid database URL: {parse_error}"));
+            }
+
+            let (host, port) = if authority.starts_with('[') {
+                let end = authority.find(']').ok_or_else(|| {
+                    "Invalid IPv6 database host. Close the host with ']'.".to_string()
+                })?;
+                let host = authority[1..end].to_string();
+                let suffix = authority[end + 1..].trim_start_matches(':');
+                let port = if suffix.is_empty() {
+                    default_port_for_scheme(&scheme)
+                } else {
+                    suffix.parse::<u16>().ok()
+                };
+                (host, port)
+            } else if let Some((host, port_text)) = authority.rsplit_once(':') {
+                if port_text.chars().all(|ch| ch.is_ascii_digit()) {
+                    (host.to_string(), port_text.parse::<u16>().ok())
+                } else {
+                    return Err("Invalid database URL: invalid port number. If your database password contains special characters like @, :, /, ?, #, or %, URL-encode the password before pasting the connection string.".to_string());
+                }
+            } else {
+                (authority.to_string(), default_port_for_scheme(&scheme))
+            };
+
+            let host = host.trim().to_string();
+            let port = port.ok_or_else(|| {
+                format!("Database port is missing or invalid for scheme '{scheme}'.")
+            })?;
+
+            if host.is_empty() {
+                return Err("Database host is missing from the connection string.".to_string());
+            }
+
+            Ok(DatabaseEndpoint {
+                scheme,
+                host,
+                port,
+                sqlite_path: None,
+            })
+        }
+    }
+}
+
 async fn verify_database_runtime(db_url: &str) -> RuntimeCheckResult {
-    let parsed = match reqwest::Url::parse(db_url.trim()) {
-        Ok(url) => url,
+    let endpoint = match parse_database_endpoint(db_url) {
+        Ok(endpoint) => endpoint,
         Err(err) => {
             return RuntimeCheckResult {
                 key: "database",
                 label: "Database Runtime Check",
                 status: "failed",
-                detail: format!("Invalid database URL: {err}"),
+                detail: err,
             }
         }
     };
 
-    if parsed.scheme() == "sqlite" {
-        let path = parsed.path().trim();
+    if endpoint.scheme == "sqlite" {
+        let path = endpoint.sqlite_path.as_deref().unwrap_or("").trim();
         return RuntimeCheckResult {
             key: "database",
             label: "Database Runtime Check",
@@ -326,21 +431,8 @@ async fn verify_database_runtime(db_url: &str) -> RuntimeCheckResult {
         };
     }
 
-    let host = match parsed.host_str() {
-        Some(value) if !value.trim().is_empty() => value.to_string(),
-        _ => {
-            return RuntimeCheckResult {
-                key: "database",
-                label: "Database Runtime Check",
-                status: "failed",
-                detail: "Database host is missing from the connection string.".to_string(),
-            }
-        }
-    };
-    let port = parsed
-        .port()
-        .or_else(|| default_port_for_scheme(parsed.scheme()))
-        .unwrap_or(0);
+    let host = endpoint.host;
+    let port = endpoint.port;
 
     let resolved = timeout(Duration::from_secs(5), lookup_host((host.as_str(), port))).await;
     let mut addresses = match resolved {
@@ -363,7 +455,7 @@ async fn verify_database_runtime(db_url: &str) -> RuntimeCheckResult {
         }
     };
 
-    if parsed.scheme() == "mongodb+srv" {
+    if endpoint.scheme == "mongodb+srv" {
         return RuntimeCheckResult {
             key: "database",
             label: "Database Runtime Check",
