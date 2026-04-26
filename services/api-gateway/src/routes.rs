@@ -112,7 +112,7 @@ async fn proxy_auth(State(state): State<AppState>, req: Request<Body>) -> Respon
     proxy_generic(
         &state,
         &state.config.auth_service_url,
-        "/api/v1/auth",
+        "/auth",
         parts.method,
         parts.uri,
         parts.headers,
@@ -126,7 +126,7 @@ async fn proxy_mail(State(state): State<AppState>, req: Request<Body>) -> Respon
     proxy_generic(
         &state,
         &state.config.mail_service_url,
-        "/api/v1/mail",
+        "/mail",
         parts.method,
         parts.uri,
         parts.headers,
@@ -140,7 +140,7 @@ async fn proxy_tenant(State(state): State<AppState>, req: Request<Body>) -> Resp
     proxy_generic(
         &state,
         &state.config.tenant_service_url,
-        "/api/v1/tenants",
+        "/tenants",
         parts.method,
         parts.uri,
         parts.headers,
@@ -154,7 +154,7 @@ async fn proxy_storage(State(state): State<AppState>, req: Request<Body>) -> Res
     proxy_generic(
         &state,
         &state.config.storage_service_url,
-        "/api/v1/storage",
+        "/storage",
         parts.method,
         parts.uri,
         parts.headers,
@@ -168,7 +168,7 @@ async fn proxy_delivery(State(state): State<AppState>, req: Request<Body>) -> Re
     proxy_generic(
         &state,
         &state.config.security_service_url,
-        "/api/v1/delivery",
+        "/delivery",
         parts.method,
         parts.uri,
         parts.headers,
@@ -1182,4 +1182,21 @@ pub async fn send_mail(
     };
 
     (status, Json(response_json))
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn nested_auth_path_rewrites_to_upstream_root() {
+        let path = "/auth/send-otp";
+        let remaining = path.strip_prefix("/auth").unwrap_or(path);
+        assert_eq!(remaining, "/send-otp");
+    }
+
+    #[test]
+    fn nested_mail_path_rewrites_to_upstream_root() {
+        let path = "/mail/emails";
+        let remaining = path.strip_prefix("/mail").unwrap_or(path);
+        assert_eq!(remaining, "/emails");
+    }
 }

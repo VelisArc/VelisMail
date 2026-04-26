@@ -37,6 +37,65 @@ dotenv_get() {
   fi
 }
 
+validate_env() {
+  local required_keys=(
+    POSTGRES_PASSWORD
+    REDIS_PASSWORD
+    JWT_SECRET
+    OTP_SIGNING_SECRET
+    SMTP_HOST
+    SMTP_PORT
+    SMTP_USERNAME
+    SMTP_PASSWORD
+    OTP_FROM_EMAIL
+    OTP_FROM_NAME
+    PASSKEY_RELYING_PARTY
+    PASSKEY_ORIGIN
+    ENCRYPTION_KEY
+  )
+  local recommended_keys=(
+    FRONTEND_URL
+    VITE_API_URL
+    AUTH_POSTGRES_DB
+    MAIL_POSTGRES_DB
+    STORAGE_POSTGRES_DB
+    TENANT_POSTGRES_DB
+    DELIVERY_POSTGRES_DB
+    S3_ENDPOINT
+    S3_BUCKET
+    S3_ACCESS_KEY
+    S3_SECRET_KEY
+    S3_REGION
+    DKIM_SELECTOR
+  )
+  local missing_required=()
+  local missing_recommended=()
+  local key value
+
+  for key in "${required_keys[@]}"; do
+    value=$(dotenv_get "$key")
+    [[ -n "${value// }" ]] || missing_required+=("$key")
+  done
+
+  for key in "${recommended_keys[@]}"; do
+    value=$(dotenv_get "$key")
+    [[ -n "${value// }" ]] || missing_recommended+=("$key")
+  done
+
+  if ((${#missing_required[@]} > 0)); then
+    echo "Missing required .env keys: ${missing_required[*]}"
+    exit 1
+  fi
+
+  echo "Environment audit:"
+  echo "  Required keys present: ${#required_keys[@]}/${#required_keys[@]}"
+  if ((${#missing_recommended[@]} == 0)); then
+    echo "  Recommended keys present: ${#recommended_keys[@]}/${#recommended_keys[@]}"
+  else
+    echo "  Recommended keys missing: ${missing_recommended[*]}"
+  fi
+}
+
 ensure_service_databases() {
   local postgres_user postgres_password auth_db mail_db storage_db tenant_db delivery_db
   postgres_user=$(dotenv_get POSTGRES_USER "velismail")
@@ -94,6 +153,7 @@ cmd=${1:-up}
 case "$cmd" in
   up)
     [[ -f "$ENV_FILE" ]] || { echo "Missing $ENV_FILE"; exit 1; }
+    validate_env
     prepare_build_space
     build_services_sequentially
     $COMPOSE up -d postgres redis nats
@@ -106,6 +166,7 @@ case "$cmd" in
     ;;
   pull)
     git pull --ff-only
+    validate_env
     prepare_build_space
     build_services_sequentially
     $COMPOSE up -d postgres redis nats
