@@ -24,6 +24,13 @@ APP_SERVICES=(
   tenant-service
   delivery-engine
 )
+COMPOSE_SERVICES=(
+  postgres
+  redis
+  nats
+  caddy
+  "${APP_SERVICES[@]}"
+)
 
 dotenv_get() {
   local key="$1"
@@ -148,6 +155,40 @@ build_services_sequentially() {
   done
 }
 
+cleanup_stale_compose_recreate_containers() {
+  local service_pattern id name removed=0
+  service_pattern=$(IFS='|'; echo "${COMPOSE_SERVICES[*]}")
+
+  echo "Checking for stale Docker Compose recreate containers..."
+  while read -r id name; do
+    [[ -n "${id:-}" && -n "${name:-}" ]] || continue
+
+    # Compose creates temporary containers like
+    # 689425803c00_velismail-storage-service-1 while recreating services.
+    # If a deploy is interrupted, the next deploy can fail with a name
+    # conflict against that stale temp container. Do not touch the real
+    # velismail-<service>-1 containers.
+    if [[ "$name" =~ ^[0-9a-f]+_velismail-(${service_pattern})-1$ ]]; then
+      echo "  Removing stale recreate container: ${name}"
+      docker rm -f "$id" >/dev/null 2>&1 || true
+      removed=$((removed + 1))
+    fi
+  done < <(docker ps -a --format '{{.ID}} {{.Names}}')
+
+  if [[ "$removed" -eq 0 ]]; then
+    echo "  No stale recreate containers found."
+  fi
+}
+
+compose_up_all_with_recovery() {
+  cleanup_stale_compose_recreate_containers
+  if ! $COMPOSE up -d; then
+    echo "Compose up failed. Cleaning stale recreate containers and retrying once..."
+    cleanup_stale_compose_recreate_containers
+    $COMPOSE up -d
+  fi
+}
+
 cmd=${1:-up}
 
 case "$cmd" in
@@ -158,7 +199,7 @@ case "$cmd" in
     build_services_sequentially
     $COMPOSE up -d postgres redis nats
     ensure_service_databases
-    $COMPOSE up -d
+    compose_up_all_with_recovery
     echo
     echo "VelisMail backend running."
     echo "  Local API Gateway: http://127.0.0.1:${GATEWAY_PORT:-3000}"
@@ -171,7 +212,7 @@ case "$cmd" in
     build_services_sequentially
     $COMPOSE up -d postgres redis nats
     ensure_service_databases
-    $COMPOSE up -d
+    compose_up_all_with_recovery
     ;;
   logs)  $COMPOSE logs -f --tail=200 ;;
   down)  $COMPOSE down ;;
