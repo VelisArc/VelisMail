@@ -1,6 +1,9 @@
 // VelisMail API Client — Fully local, no backend dependency
 // Uses localStorage for session persistence
 
+// VelisMail API Client
+// Uses localStorage for client-side persistence alongside deployed API integrations.
+
 // ---- Local Storage DB ----
 const STORAGE_KEYS = {
   users: 'velismail_users',
@@ -260,6 +263,14 @@ export function getPrimaryApiBase(): string {
   return getApiBaseCandidates()[0] || '';
 }
 
+export type ApiJsonDetailedResult<T = any> = {
+  ok: boolean;
+  status: number;
+  baseUrl: string;
+  data: T | null;
+  rawText: string;
+};
+
 export async function fetchApiResponse(endpoint: string, options: RequestInit = {}) {
   const apiBaseCandidates = getApiBaseCandidates();
 
@@ -320,6 +331,71 @@ export async function fetchApiResponse(endpoint: string, options: RequestInit = 
     }
 
     throw new Error(errorMessage);
+  }
+
+  throw lastError || new Error('Unable to reach the VelisMail API.');
+}
+
+export async function fetchApiJsonDetailed<T = any>(endpoint: string, options: RequestInit = {}): Promise<ApiJsonDetailedResult<T>> {
+  const apiBaseCandidates = getApiBaseCandidates();
+
+  if (apiBaseCandidates.length === 0) {
+    throw new Error('Unable to resolve the VelisMail API URL. Set VITE_API_URL or open the app from velismail.online so the frontend can auto-detect api.velismail.online.');
+  }
+
+  const token = localStorage.getItem('velismail_token');
+  const headers = new Headers(options.headers || {});
+
+  headers.set('Content-Type', 'application/json');
+  if (token) {
+    headers.set('Authorization', `Bearer ${token}`);
+  }
+
+  let lastError: Error | null = null;
+
+  for (let index = 0; index < apiBaseCandidates.length; index += 1) {
+    const baseUrl = apiBaseCandidates[index];
+    let response: Response;
+
+    try {
+      response = await fetch(`${baseUrl}${endpoint}`, {
+        ...options,
+        headers,
+      });
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error('Network request failed.');
+      continue;
+    }
+
+    const rawText = await response.text();
+    let data: T | null = null;
+
+    if (rawText.trim()) {
+      try {
+        data = JSON.parse(rawText) as T;
+      } catch {
+        const compactBody = rawText.replace(/\s+/g, ' ').trim();
+        const preview = compactBody.slice(0, 180);
+        throw new Error(
+          preview
+            ? `The VelisMail API returned an invalid JSON response: ${preview}`
+            : 'The VelisMail API returned an invalid JSON response.',
+        );
+      }
+    }
+
+    if (response.status === 404 && index < apiBaseCandidates.length - 1) {
+      lastError = new Error(`API Error ${response.status}`);
+      continue;
+    }
+
+    return {
+      ok: response.ok,
+      status: response.status,
+      baseUrl,
+      data,
+      rawText,
+    };
   }
 
   throw lastError || new Error('Unable to reach the VelisMail API.');

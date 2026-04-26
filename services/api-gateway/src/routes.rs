@@ -237,6 +237,76 @@ struct RuntimeCheckResult {
     label: &'static str,
     status: &'static str,
     detail: String,
+    category: &'static str,
+    recommendation: Option<String>,
+}
+
+fn runtime_check_failure(
+    key: &'static str,
+    label: &'static str,
+    detail: impl Into<String>,
+    category: &'static str,
+    recommendation: impl Into<String>,
+) -> RuntimeCheckResult {
+    RuntimeCheckResult {
+        key,
+        label,
+        status: "failed",
+        detail: detail.into(),
+        category,
+        recommendation: Some(recommendation.into()),
+    }
+}
+
+fn database_target_label(db_url: &str) -> String {
+    match parse_database_endpoint(db_url) {
+        Ok(endpoint) if endpoint.scheme == "sqlite" => endpoint
+            .sqlite_path
+            .filter(|value| !value.trim().is_empty())
+            .unwrap_or_else(|| "sqlite://".to_string()),
+        Ok(endpoint) => format!("{}:{} ({})", endpoint.host, endpoint.port, endpoint.scheme),
+        Err(_) => db_url
+            .trim()
+            .split_once("://")
+            .map(|(_, rest)| rest.split('/').next().unwrap_or(rest).to_string())
+            .unwrap_or_else(|| db_url.trim().to_string()),
+    }
+}
+
+fn verify_infrastructure_response(
+    status: StatusCode,
+    success: bool,
+    message: impl Into<String>,
+    api_provider: &str,
+    db_url: &str,
+    checks: Vec<RuntimeCheckResult>,
+) -> (StatusCode, Json<serde_json::Value>) {
+    let failing_check = checks.iter().find(|check| check.status != "verified");
+    let failing_label = failing_check.map(|check| check.label);
+    let failing_category = failing_check.map(|check| check.category);
+    let issue_owner = match failing_category {
+        Some("software") => "velismail",
+        Some("network") => "server-network",
+        Some("config") => "user-config",
+        _ if success => "connected",
+        _ => "unknown",
+    };
+    let database_target = database_target_label(db_url);
+
+    (
+        status,
+        Json(json!({
+            "success": success,
+            "message": message.into(),
+            "provider": api_provider,
+            "dbProtocol": db_url.split("://").next().unwrap_or(""),
+            "databaseTarget": database_target,
+            "failingCheck": failing_label,
+            "failingCategory": failing_category,
+            "issueOwner": issue_owner,
+            "checks": checks
+        })),
+    )
 }
 
 const DATABASE_SCHEMES: &[&str] = &[
@@ -413,6 +483,8 @@ async fn verify_database_runtime(db_url: &str) -> RuntimeCheckResult {
                 label: "Database Runtime Check",
                 status: "failed",
                 detail: err,
+                category: "config",
+                recommendation: Some("Review the database connection string format and URL-encode special characters inside the password.".to_string()),
             }
         }
     };
@@ -428,11 +500,18 @@ async fn verify_database_runtime(db_url: &str) -> RuntimeCheckResult {
             } else {
                 format!("SQLite path accepted: {path}")
             },
+            category: if path.is_empty() { "config" } else { "success" },
+            recommendation: if path.is_empty() {
+                Some("Provide a valid SQLite file path.".to_string())
+            } else {
+                None
+            },
         };
     }
 
     let host = endpoint.host;
     let port = endpoint.port;
+    let is_supabase_host = host.contains("supabase.co");
 
     let resolved = timeout(Duration::from_secs(5), lookup_host((host.as_str(), port))).await;
     let mut addresses = match resolved {
@@ -443,6 +522,8 @@ async fn verify_database_runtime(db_url: &str) -> RuntimeCheckResult {
                 label: "Database Runtime Check",
                 status: "failed",
                 detail: format!("Could not resolve database host {host}:{port}: {err}"),
+                category: "network",
+                recommendation: Some("Check the hostname, DNS resolution, and whether your VM network can reach the database provider.".to_string()),
             }
         }
         Err(_) => {
@@ -451,6 +532,8 @@ async fn verify_database_runtime(db_url: &str) -> RuntimeCheckResult {
                 label: "Database Runtime Check",
                 status: "failed",
                 detail: format!("Timed out while resolving database host {host}:{port}."),
+                category: "network",
+                recommendation: Some("DNS resolution timed out. Retry, or verify that outbound DNS/network access is available from the server.".to_string()),
             }
         }
     };
@@ -461,39 +544,64 @@ async fn verify_database_runtime(db_url: &str) -> RuntimeCheckResult {
             label: "Database Runtime Check",
             status: "verified",
             detail: format!("Resolved SRV host {host}."),
+            category: "success",
+            recommendation: None,
         };
     }
 
-    let target = match addresses.next() {
-        Some(addr) => addr,
-        None => {
-            return RuntimeCheckResult {
-                key: "database",
-                label: "Database Runtime Check",
-                status: "failed",
-                detail: format!("No addresses resolved for {host}:{port}."),
-            }
-        }
-    };
+    let resolved_addresses: Vec<_> = addresses.by_ref().collect();
+    if resolved_addresses.is_empty() {
+        return RuntimeCheckResult {
+            key: "database",
+            label: "Database Runtime Check",
+            status: "failed",
+            detail: format!("No addresses resolved for {host}:{port}."),
+            category: "network",
+            recommendation: Some("The database host resolved to no usable addresses. Verify the hostname and DNS configuration.".to_string()),
+        };
+    }
 
-    match timeout(Duration::from_secs(5), TcpStream::connect(target)).await {
-        Ok(Ok(_)) => RuntimeCheckResult {
-            key: "database",
-            label: "Database Runtime Check",
-            status: "verified",
-            detail: format!("Connected to {host}:{port}."),
-        },
-        Ok(Err(err)) => RuntimeCheckResult {
-            key: "database",
-            label: "Database Runtime Check",
-            status: "failed",
-            detail: format!("Network connection to {host}:{port} failed: {err}"),
-        },
-        Err(_) => RuntimeCheckResult {
-            key: "database",
-            label: "Database Runtime Check",
-            status: "failed",
-            detail: format!("Timed out while connecting to {host}:{port}."),
+    let mut failures = Vec::new();
+    for target in resolved_addresses {
+        match timeout(Duration::from_secs(5), TcpStream::connect(target)).await {
+            Ok(Ok(_)) => {
+                return RuntimeCheckResult {
+                    key: "database",
+                    label: "Database Runtime Check",
+                    status: "verified",
+                    detail: format!("Connected to {host}:{port} via {target}."),
+                    category: "success",
+                    recommendation: None,
+                };
+            }
+            Ok(Err(err)) => failures.push(format!("{target}: {err}")),
+            Err(_) => failures.push(format!("{target}: timed out")),
+        }
+    }
+
+    let joined_failures = failures.join(" | ");
+    let is_unreachable = failures.iter().all(|failure| failure.contains("Network is unreachable"));
+    let is_timeout = failures.iter().all(|failure| failure.contains("timed out"));
+    RuntimeCheckResult {
+        key: "database",
+        label: "Database Runtime Check",
+        status: "failed",
+        detail: format!("Unable to connect to {host}:{port}. Attempts: {joined_failures}"),
+        category: if is_unreachable || is_timeout { "network" } else { "config" },
+        recommendation: if is_unreachable {
+            Some(if is_supabase_host {
+                "The server cannot reach the Supabase database host at all. Verify that you copied the raw database URI from Supabase Project Settings, and if direct port 5432 is blocked for your plan/network, switch to the provider's recommended pooled/direct connection string.".to_string()
+            } else {
+                "The server cannot reach any resolved database address. This is usually outbound network or provider routing, not a frontend bug.".to_string()
+            })
+        } else if is_timeout {
+            Some(if is_supabase_host {
+                "The Supabase host resolved, but every connection attempt timed out. Check whether your VM can reach the provider over the required port, and prefer the exact connection string recommended by Supabase for external apps.".to_string()
+            } else {
+                "The database host resolved, but every connection attempt timed out. Check firewall rules, provider allowlists, and whether the direct connection port is open.".to_string()
+            })
+        } else {
+            Some("The database host was reached but rejected the connection path. Double-check the URL, password encoding, SSL mode, and provider-specific connection instructions.".to_string())
         },
     }
 }
@@ -513,6 +621,8 @@ async fn validate_provider_credentials(
                 label: "Mail Provider Runtime Check",
                 status: "failed",
                 detail: "Custom webhook endpoint is required.".to_string(),
+                category: "config",
+                recommendation: Some("Add the custom webhook endpoint URL before verifying.".to_string()),
             };
         };
 
@@ -525,24 +635,32 @@ async fn validate_provider_credentials(
                 label: "Mail Provider Runtime Check",
                 status: "verified",
                 detail: format!("Webhook endpoint responded with {}.", response.status()),
+                category: "success",
+                recommendation: None,
             },
             Ok(Ok(response)) => RuntimeCheckResult {
                 key: "mailProvider",
                 label: "Mail Provider Runtime Check",
                 status: "failed",
                 detail: format!("Webhook endpoint returned {}.", response.status()),
+                category: "config",
+                recommendation: Some("The custom provider endpoint responded, but it did not accept the verification request.".to_string()),
             },
             Ok(Err(err)) => RuntimeCheckResult {
                 key: "mailProvider",
                 label: "Mail Provider Runtime Check",
                 status: "failed",
                 detail: format!("Webhook check failed: {err}"),
+                category: "network",
+                recommendation: Some("The server could not reach your custom webhook endpoint. Check the URL, TLS, and firewall settings.".to_string()),
             },
             Err(_) => RuntimeCheckResult {
                 key: "mailProvider",
                 label: "Mail Provider Runtime Check",
                 status: "failed",
                 detail: "Webhook check timed out.".to_string(),
+                category: "network",
+                recommendation: Some("The custom webhook endpoint timed out. Check if it is publicly reachable and responding quickly enough.".to_string()),
             },
         };
     }
@@ -566,6 +684,8 @@ async fn validate_provider_credentials(
                 label: "Mail Provider Runtime Check",
                 status: "failed",
                 detail: format!("Provider '{provider}' is not supported for live runtime validation."),
+                category: "software",
+                recommendation: Some("This provider is not wired into live validation yet. Choose a supported provider or extend the gateway validator.".to_string()),
             }
         }
     };
@@ -576,6 +696,8 @@ async fn validate_provider_credentials(
             label: "Mail Provider Runtime Check",
             status: "verified",
             detail: format!("{provider} credentials accepted."),
+            category: "success",
+            recommendation: None,
         },
         Ok(Ok(response)) => {
             let status = response.status();
@@ -589,6 +711,8 @@ async fn validate_provider_credentials(
                 } else {
                     format!("{provider} rejected the credentials with status {status}: {}", body.trim())
                 },
+                category: "config",
+                recommendation: Some("The provider received the request but rejected the key or account configuration. Verify the API key, sender domain, and provider account status.".to_string()),
             }
         },
         Ok(Err(err)) => RuntimeCheckResult {
@@ -596,12 +720,16 @@ async fn validate_provider_credentials(
             label: "Mail Provider Runtime Check",
             status: "failed",
             detail: format!("{provider} validation failed: {err}"),
+            category: "network",
+            recommendation: Some("The server could not complete the provider validation request. Check outbound HTTPS access and provider reachability.".to_string()),
         },
         Err(_) => RuntimeCheckResult {
             key: "mailProvider",
             label: "Mail Provider Runtime Check",
             status: "failed",
             detail: format!("{provider} validation timed out."),
+            category: "network",
+            recommendation: Some("The provider validation request timed out. Retry, or check whether the provider is reachable from the server network.".to_string()),
         },
     }
 }
@@ -846,56 +974,86 @@ pub async fn verify_infrastructure(
     let api_endpoint = payload.api_endpoint.as_deref().map(str::trim);
 
     if db_url.is_empty() || api_provider.is_empty() || api_key.is_empty() {
-        return (
+        return verify_infrastructure_response(
             StatusCode::BAD_REQUEST,
-            Json(json!({
-                "success": false,
-                "errorType": "ValidationError",
-                "message": "Missing required fields."
-            })),
+            false,
+            "Missing required fields.",
+            api_provider,
+            db_url,
+            vec![runtime_check_failure(
+                "request",
+                "Request Validation",
+                "Database URL, provider, and API key are all required before verification can start.",
+                "config",
+                "Fill in the missing fields and retry the verification.",
+            )],
         );
     }
     if !is_valid_database_url(db_url) {
-        return (
+        return verify_infrastructure_response(
             StatusCode::BAD_REQUEST,
-            Json(json!({
-                "success": false,
-                "errorType": "DatabaseConnectionError",
-                "message": "Invalid database URL scheme."
-            })),
+            false,
+            "Invalid database URL scheme.",
+            api_provider,
+            db_url,
+            vec![runtime_check_failure(
+                "database",
+                "Database Runtime Check",
+                "The database connection string does not start with a supported scheme such as postgresql:// or mysql://.",
+                "config",
+                "Paste the full database URI, not a browser URL or dashboard page link.",
+            )],
         );
     }
     if !is_supported_mail_provider(api_provider) {
-        return (
+        return verify_infrastructure_response(
             StatusCode::BAD_REQUEST,
-            Json(json!({
-                "success": false,
-                "errorType": "MailProviderConnectionError",
-                "message": format!("Unsupported mail provider '{}'.", api_provider)
-            })),
+            false,
+            format!("Unsupported mail provider '{}'.", api_provider),
+            api_provider,
+            db_url,
+            vec![runtime_check_failure(
+                "mailProvider",
+                "Mail Provider Runtime Check",
+                format!("Provider '{}' is not available in the release validator.", api_provider),
+                "software",
+                "Choose a supported provider from the setup list, or extend the backend validator before using this provider.",
+            )],
         );
     }
     if requires_custom_endpoint(api_provider) {
         let valid_endpoint = api_endpoint.map(is_valid_http_url).unwrap_or(false);
         if !valid_endpoint {
-            return (
+            return verify_infrastructure_response(
                 StatusCode::BAD_REQUEST,
-                Json(json!({
-                    "success": false,
-                    "errorType": "MailProviderConnectionError",
-                    "message": "Custom webhook requires http(s) endpoint."
-                })),
+                false,
+                "Custom webhook requires http(s) endpoint.",
+                api_provider,
+                db_url,
+                vec![runtime_check_failure(
+                    "mailProvider",
+                    "Mail Provider Runtime Check",
+                    "A custom webhook provider was selected, but the endpoint URL is missing or invalid.",
+                    "config",
+                    "Provide a full http:// or https:// endpoint for the custom mail relay.",
+                )],
             );
         }
     }
     if api_key.len() < 8 {
-        return (
+        return verify_infrastructure_response(
             StatusCode::BAD_REQUEST,
-            Json(json!({
-                "success": false,
-                "errorType": "MailProviderConnectionError",
-                "message": "API key too short."
-            })),
+            false,
+            "API key too short.",
+            api_provider,
+            db_url,
+            vec![runtime_check_failure(
+                "mailProvider",
+                "Mail Provider Runtime Check",
+                "The supplied API key is shorter than the minimum accepted format.",
+                "config",
+                "Paste the full provider API key exactly as issued by the mail provider.",
+            )],
         );
     }
 
@@ -909,23 +1067,21 @@ pub async fn verify_infrastructure(
     .await;
     let success = database_check.status == "verified" && provider_check.status == "verified";
 
-    (
+    verify_infrastructure_response(
         if success {
             StatusCode::OK
         } else {
             StatusCode::BAD_REQUEST
         },
-        Json(json!({
-            "success": success,
-            "message": if success {
-                "Infrastructure validated successfully."
-            } else {
-                "Infrastructure validation failed. Review the runtime checks and fix the failing connection."
-            },
-            "provider": api_provider,
-            "dbProtocol": db_url.split("://").next().unwrap_or(""),
-            "checks": [database_check, provider_check]
-        })),
+        success,
+        if success {
+            "Infrastructure validated successfully."
+        } else {
+            "Infrastructure validation failed. Review the runtime checks and fix the failing connection."
+        },
+        api_provider,
+        db_url,
+        vec![database_check, provider_check],
     )
 }
 

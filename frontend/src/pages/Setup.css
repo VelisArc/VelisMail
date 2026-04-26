@@ -96,6 +96,11 @@
   font-size: 0.85rem; font-weight: 600; color: var(--text-secondary);
 }
 
+.setup-inline-note {
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
 .setup-select {
   appearance: none;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
@@ -184,6 +189,222 @@
   animation: float 2s ease-in-out infinite;
 }
 
+.verify-steps-live .v-step {
+  min-height: 22px;
+}
+
+.setup-diagnostics {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.setup-diag-hero {
+  display: grid;
+  grid-template-columns: 52px 1fr;
+  gap: 14px;
+  align-items: flex-start;
+  padding: 18px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--glass-border);
+  background: rgba(255, 255, 255, 0.68);
+}
+
+.setup-diag-hero h3 {
+  margin: 0 0 6px;
+  font-size: 1.12rem;
+}
+
+.setup-diag-hero p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 0.92rem;
+  line-height: 1.55;
+}
+
+.setup-diag-hero-icon {
+  width: 52px;
+  height: 52px;
+  border-radius: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.setup-diag-hero.tone-success {
+  border-color: rgba(52, 211, 153, 0.22);
+  background: rgba(236, 253, 245, 0.85);
+}
+
+.setup-diag-hero.tone-success .setup-diag-hero-icon {
+  background: rgba(16, 185, 129, 0.12);
+  color: #059669;
+}
+
+.setup-diag-hero.tone-network {
+  border-color: rgba(245, 158, 11, 0.24);
+  background: rgba(255, 251, 235, 0.9);
+}
+
+.setup-diag-hero.tone-network .setup-diag-hero-icon {
+  background: rgba(245, 158, 11, 0.14);
+  color: #d97706;
+}
+
+.setup-diag-hero.tone-config {
+  border-color: rgba(248, 113, 113, 0.2);
+  background: rgba(254, 242, 242, 0.92);
+}
+
+.setup-diag-hero.tone-config .setup-diag-hero-icon {
+  background: rgba(248, 113, 113, 0.12);
+  color: #dc2626;
+}
+
+.setup-diag-hero.tone-software {
+  border-color: rgba(99, 102, 241, 0.22);
+  background: rgba(238, 242, 255, 0.92);
+}
+
+.setup-diag-hero.tone-software .setup-diag-hero-icon {
+  background: rgba(99, 102, 241, 0.12);
+  color: #4f46e5;
+}
+
+.setup-overview-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.setup-overview-card {
+  padding: 14px;
+  border-radius: 14px;
+  border: 1px solid var(--glass-border);
+  background: rgba(255, 255, 255, 0.64);
+}
+
+.setup-overview-card strong {
+  display: block;
+  margin-top: 6px;
+  font-size: 0.95rem;
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+.setup-overview-label {
+  color: var(--text-muted);
+  font-size: 0.74rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.setup-diag-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.setup-diag-item {
+  border-radius: 14px;
+  padding: 16px;
+  border: 1px solid var(--glass-border);
+  background: rgba(255, 255, 255, 0.64);
+}
+
+.setup-diag-item.tone-success {
+  border-color: rgba(52, 211, 153, 0.22);
+}
+
+.setup-diag-item.tone-network {
+  border-color: rgba(245, 158, 11, 0.24);
+}
+
+.setup-diag-item.tone-config {
+  border-color: rgba(248, 113, 113, 0.18);
+}
+
+.setup-diag-item.tone-software {
+  border-color: rgba(99, 102, 241, 0.22);
+}
+
+.setup-diag-item-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.setup-diag-title-wrap {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.setup-diag-item-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.05);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.setup-diag-title-wrap h4 {
+  margin: 0 0 4px;
+  font-size: 0.96rem;
+}
+
+.setup-diag-badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 4px 9px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  background: rgba(15, 23, 42, 0.06);
+  color: var(--text-secondary);
+}
+
+.setup-diag-status {
+  font-size: 0.76rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.setup-diag-status.ok {
+  color: #059669;
+}
+
+.setup-diag-status.fail {
+  color: #dc2626;
+}
+
+.setup-diag-detail,
+.setup-diag-recommendation {
+  margin: 0;
+  font-size: 0.88rem;
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+.setup-diag-recommendation {
+  margin-top: 10px;
+  color: var(--text-primary);
+}
+
+.setup-diag-footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding-top: 4px;
+}
+
 /* Responsive */
 @media (max-width: 768px) {
   .setup-container { flex-direction: column; gap: 32px; }
@@ -191,4 +412,7 @@
   .setup-brand h1 { font-size: 2rem; }
   .setup-features { align-items: center; }
   .setup-card { width: 100%; max-width: 440px; }
+  .setup-overview-grid { grid-template-columns: 1fr; }
+  .setup-diag-footer { flex-direction: column; }
+  .setup-diag-footer .btn { width: 100%; justify-content: center; }
 }
