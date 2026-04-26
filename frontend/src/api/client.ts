@@ -171,8 +171,8 @@ function normalizeConfiguredApiUrl(value: string): string {
   }
 }
 
-function resolveApiBaseCandidates(): string[] {
-  const configured = normalizeConfiguredApiUrl(String(import.meta.env.VITE_API_URL || ''));
+function expandApiBaseCandidates(input: string): string[] {
+  const configured = normalizeConfiguredApiUrl(input);
   if (!configured) {
     return [];
   }
@@ -202,11 +202,73 @@ function resolveApiBaseCandidates(): string[] {
   return candidates;
 }
 
-const API_BASE_CANDIDATES = resolveApiBaseCandidates();
+function inferRuntimeApiOrigins(): string[] {
+  if (typeof window === 'undefined') {
+    return [];
+  }
 
-async function fetchAPI(endpoint: string, options: RequestInit = {}) {
-  if (API_BASE_CANDIDATES.length === 0) {
-    throw new Error('VITE_API_URL is missing. Point the frontend to your deployed VM API before using auth, setup, or mail actions.');
+  const { hostname, origin } = window.location;
+  const runtimeOrigins: string[] = [];
+  const pushOrigin = (value: string) => {
+    const normalized = normalizeConfiguredApiUrl(value);
+    if (normalized && !runtimeOrigins.includes(normalized)) {
+      runtimeOrigins.push(normalized);
+    }
+  };
+
+  if (!hostname) {
+    return runtimeOrigins;
+  }
+
+  if (hostname === 'localhost' || hostname === '127.0.0.1') {
+    pushOrigin('http://127.0.0.1:3000');
+    pushOrigin('http://localhost:3000');
+  }
+
+  if (hostname === 'api.velismail.online') {
+    pushOrigin(origin);
+  }
+
+  if (
+    hostname === 'velismail.online' ||
+    hostname.endsWith('.velismail.online') ||
+    hostname.endsWith('.pages.dev')
+  ) {
+    pushOrigin('https://api.velismail.online');
+  }
+
+  return runtimeOrigins;
+}
+
+export function getApiBaseCandidates(): string[] {
+  const candidates: string[] = [];
+  const pushCandidate = (value: string) => {
+    if (value && !candidates.includes(value)) {
+      candidates.push(value);
+    }
+  };
+
+  const configuredOrigins = [
+    String(import.meta.env.VITE_API_URL || ''),
+    ...inferRuntimeApiOrigins(),
+  ];
+
+  configuredOrigins.forEach((origin) => {
+    expandApiBaseCandidates(origin).forEach(pushCandidate);
+  });
+
+  return candidates;
+}
+
+export function getPrimaryApiBase(): string {
+  return getApiBaseCandidates()[0] || '';
+}
+
+export async function fetchApiResponse(endpoint: string, options: RequestInit = {}) {
+  const apiBaseCandidates = getApiBaseCandidates();
+
+  if (apiBaseCandidates.length === 0) {
+    throw new Error('Unable to resolve the VelisMail API URL. Set VITE_API_URL or open the app from velismail.online so the frontend can auto-detect api.velismail.online.');
   }
 
   const token = localStorage.getItem('velismail_token');
@@ -219,8 +281,8 @@ async function fetchAPI(endpoint: string, options: RequestInit = {}) {
 
   let lastError: Error | null = null;
 
-  for (let index = 0; index < API_BASE_CANDIDATES.length; index += 1) {
-    const baseUrl = API_BASE_CANDIDATES[index];
+  for (let index = 0; index < apiBaseCandidates.length; index += 1) {
+    const baseUrl = apiBaseCandidates[index];
     let response: Response;
 
     try {
@@ -246,7 +308,7 @@ async function fetchAPI(endpoint: string, options: RequestInit = {}) {
       errorMessage = errorBody || errorMessage;
     }
 
-    if (response.status === 404 && index < API_BASE_CANDIDATES.length - 1) {
+    if (response.status === 404 && index < apiBaseCandidates.length - 1) {
       lastError = new Error(errorMessage);
       continue;
     }
@@ -255,6 +317,29 @@ async function fetchAPI(endpoint: string, options: RequestInit = {}) {
   }
 
   throw lastError || new Error('Unable to reach the VelisMail API.');
+}
+
+async function fetchAPI(endpoint: string, options: RequestInit = {}) {
+  const response = await fetchApiResponse(endpoint, options);
+
+  try {
+    return await response.json();
+  } catch {
+    throw new Error('The VelisMail API returned an invalid JSON response.');
+  }
+}
+
+export function getApiAvailabilityHint(): string {
+  const primaryBase = getPrimaryApiBase();
+  if (primaryBase) {
+    return `Using API gateway ${primaryBase}.`;
+  }
+
+  if (typeof window !== 'undefined' && window.location.hostname.endsWith('.pages.dev')) {
+    return 'Pages preview detected. The frontend will target https://api.velismail.online automatically once the backend is reachable.';
+  }
+
+  return 'Set VITE_API_URL to your deployed gateway URL if automatic detection cannot determine the VelisMail API endpoint.';
 }
 
 // ---- Initialize DB ----

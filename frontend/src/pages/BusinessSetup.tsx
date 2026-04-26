@@ -4,7 +4,7 @@ import {
   Database, Mail, CheckCircle2, Server, Loader2, Lock, Globe,
   Zap, Shield, ArrowLeft, ArrowRight, XCircle, Wifi, LogOut
 } from 'lucide-react';
-import { auth, domains, type DnsRecord, type User } from '../api/client';
+import { auth, domains, fetchApiResponse, getApiAvailabilityHint, type DnsRecord, type User } from '../api/client';
 import {
   DATABASE_PROVIDERS,
   MAIL_PROVIDERS,
@@ -105,7 +105,6 @@ export default function BusinessSetup() {
 
   const selectedDatabaseProvider = getDatabaseProvider(dbProvider);
   const selectedMailProvider = getMailProvider(apiProvider);
-  const normalizedApiBase = (import.meta.env.VITE_API_URL || '').trim().replace(/\/+$/, '').replace(/\/api\/v1$/, '').replace(/\/api$/, '');
 
   // Step 1 — Verify Infrastructure
   const handleInfraVerify = async (e: React.FormEvent) => {
@@ -132,11 +131,7 @@ export default function BusinessSetup() {
     const finalProvider = apiProvider;
     const finalProviderEndpoint = requiresCustomMailEndpoint(apiProvider) ? customApiUrl.trim() : undefined;
     try {
-      if (!normalizedApiBase) {
-        throw new Error('VITE_API_URL is missing. Set frontend/.env or the Cloudflare Pages variable before verifying business infrastructure.');
-      }
-
-      const proxyTest = await fetch(`${normalizedApiBase}/api/v1/verify`, {
+      const proxyTest = await fetchApiResponse('/verify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -188,7 +183,8 @@ export default function BusinessSetup() {
 
       setStep(2);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unable to verify business infrastructure.');
+      const baseMessage = err instanceof Error ? err.message : 'Unable to verify business infrastructure.';
+      setError(baseMessage.includes('VelisMail API URL') ? `${baseMessage} ${getApiAvailabilityHint()}` : baseMessage);
     } finally {
       setLoading(false);
     }
@@ -254,12 +250,8 @@ export default function BusinessSetup() {
     setVerifySteps([...steps]);
 
     try {
-      if (!import.meta.env.VITE_API_URL) {
-        throw new Error('VITE_API_URL is missing. Set frontend/.env before verifying a business domain.');
-      }
-
       const verificationStartedAt = performance.now();
-      const response = await fetch(`${normalizedApiBase}/api/v1/tenants/verify-domain`, {
+      const response = await fetchApiResponse('/tenants/verify-domain', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -330,7 +322,8 @@ export default function BusinessSetup() {
       }
       setUser(updateResult.user);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Verification failed. Complete every DNS, database, and provider check before access is allowed.');
+      const baseMessage = err instanceof Error ? err.message : 'Verification failed. Complete every DNS, database, and provider check before access is allowed.';
+      setError(baseMessage.includes('VelisMail API URL') ? `${baseMessage} ${getApiAvailabilityHint()}` : baseMessage);
       setStep(2);
       return;
     }

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { Database, Mail, CheckCircle2, Play, Loader2, Lock, LogOut } from 'lucide-react';
-import { auth, type User } from '../api/client';
+import { auth, fetchApiResponse, getApiAvailabilityHint, type User } from '../api/client';
 import {
   DATABASE_PROVIDERS,
   MAIL_PROVIDERS,
@@ -48,7 +48,6 @@ export default function SetupPage() {
 
   const selectedDatabaseProvider = getDatabaseProvider(dbProvider);
   const selectedMailProvider = getMailProvider(apiProvider);
-  const normalizedApiBase = (import.meta.env.VITE_API_URL || '').trim().replace(/\/+$/, '').replace(/\/api\/v1$/, '').replace(/\/api$/, '');
 
   const handleVerify = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -98,11 +97,7 @@ export default function SetupPage() {
         apiEndpoint: finalApiEndpoint,
         apiKey: apiKey.trim(),
       };
-      if (!import.meta.env.VITE_API_URL) {
-        throw new Error('VITE_API_URL is missing. Set frontend/.env before running setup.');
-      }
-
-      const proxyTest = await fetch(`${normalizedApiBase}/api/v1/verify`, {
+      const proxyTest = await fetchApiResponse('/verify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -137,7 +132,8 @@ export default function SetupPage() {
         throw new Error('Failed to securely hash and cache local BYO settings.');
       }
     } catch (err: any) {
-      setError(err.message || 'Verification execution failed.');
+      const baseMessage = err?.message || 'Verification execution failed.';
+      setError(baseMessage.includes('VelisMail API URL') ? `${baseMessage} ${getApiAvailabilityHint()}` : baseMessage);
       setStep(1);
       setVerifying(false);
     }
