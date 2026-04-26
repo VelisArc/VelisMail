@@ -485,11 +485,19 @@ async fn validate_provider_credentials(
             status: "verified",
             detail: format!("{provider} credentials accepted."),
         },
-        Ok(Ok(response)) => RuntimeCheckResult {
-            key: "mailProvider",
-            label: "Mail Provider Runtime Check",
-            status: "failed",
-            detail: format!("{provider} rejected the credentials with status {}.", response.status()),
+        Ok(Ok(response)) => {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            RuntimeCheckResult {
+                key: "mailProvider",
+                label: "Mail Provider Runtime Check",
+                status: "failed",
+                detail: if body.trim().is_empty() {
+                    format!("{provider} rejected the credentials with status {status}.")
+                } else {
+                    format!("{provider} rejected the credentials with status {status}: {}", body.trim())
+                },
+            }
         },
         Ok(Err(err)) => RuntimeCheckResult {
             key: "mailProvider",
