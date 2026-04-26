@@ -101,6 +101,10 @@ export default function Login() {
       displayName: regName,
     });
 
+    if (!response.success || !response.challengeToken) {
+      throw new Error('OTP request succeeded but no verification challenge was returned.');
+    }
+
     setOtp('');
     setOtpChallengeToken(response.challengeToken);
     setOtpDeliveryHint(`Verification code sent to ${response.maskedEmail} via ${response.provider}.`);
@@ -254,6 +258,9 @@ export default function Login() {
         otp,
         challengeToken: otpChallengeToken,
       });
+      if (!verification.success || !verification.verificationToken) {
+        throw new Error('OTP verification succeeded but no verification token was returned.');
+      }
       setVerificationToken(verification.verificationToken);
 
       await completeRegistration();

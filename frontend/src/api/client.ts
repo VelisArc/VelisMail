@@ -321,11 +321,22 @@ export async function fetchApiResponse(endpoint: string, options: RequestInit = 
 
 async function fetchAPI(endpoint: string, options: RequestInit = {}) {
   const response = await fetchApiResponse(endpoint, options);
+  const rawBody = await response.text();
+
+  if (!rawBody.trim()) {
+    return {};
+  }
 
   try {
-    return await response.json();
+    return JSON.parse(rawBody);
   } catch {
-    throw new Error('The VelisMail API returned an invalid JSON response.');
+    const compactBody = rawBody.replace(/\s+/g, ' ').trim();
+    const preview = compactBody.slice(0, 180);
+    throw new Error(
+      preview
+        ? `The VelisMail API returned an invalid JSON response: ${preview}`
+        : 'The VelisMail API returned an invalid JSON response.',
+    );
   }
 }
 
@@ -602,7 +613,15 @@ export const auth = {
     displayName: string;
     purpose?: 'register';
   }): Promise<OtpSendResponse> {
-    return this.sendOtp(data);
+    const response = await this.sendOtp(data);
+    if (
+      !response ||
+      typeof response.challengeToken !== 'string' ||
+      typeof response.maskedEmail !== 'string'
+    ) {
+      throw new Error('OTP service returned an incomplete response. Please try again.');
+    }
+    return response;
   },
 
   async verifyRegistrationOtp(data: {
@@ -611,7 +630,11 @@ export const auth = {
     challengeToken: string;
     purpose?: 'register';
   }): Promise<OtpVerifyResponse> {
-    return this.verifyOtp(data);
+    const response = await this.verifyOtp(data);
+    if (!response || typeof response.verificationToken !== 'string') {
+      throw new Error('OTP verification service returned an incomplete response. Please retry the verification.');
+    }
+    return response;
   },
 
   async register(data: {
