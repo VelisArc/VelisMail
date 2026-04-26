@@ -286,6 +286,31 @@ export function requiresCustomMailEndpoint(providerId: string): boolean {
   return providerId === 'custom_webhook';
 }
 
+export function inferMailProviderFromApiKey(value: string): string | null {
+  const key = value.trim();
+  if (!key) return null;
+  if (key.startsWith('SG.')) return 'sendgrid';
+  if (key.startsWith('re_')) return 'resend';
+  if (key.startsWith('xkeysib-')) return 'brevo';
+  if (key.startsWith('xsmtpsib-')) return 'brevo_smtp';
+  return null;
+}
+
+export function getMailProviderKeyMismatch(providerId: string, apiKey: string): string | null {
+  const inferredProvider = inferMailProviderFromApiKey(apiKey);
+  if (!inferredProvider) return null;
+
+  if (inferredProvider === 'brevo_smtp') {
+    return 'This looks like a Brevo SMTP key. OTP uses SMTP keys, but mail setup requires a Brevo API key from Brevo SMTP & API > API keys, usually starting with xkeysib-.';
+  }
+
+  if (inferredProvider !== providerId) {
+    return `Selected provider is ${getMailProvider(providerId).label}, but this key looks like ${getMailProvider(inferredProvider).label}. Select the matching provider or paste the correct key.`;
+  }
+
+  return null;
+}
+
 export function getConnectionHostLabel(connectionString: string): string {
   const sanitized = connectionString.trim();
   if (!sanitized) {

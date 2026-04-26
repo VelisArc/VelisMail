@@ -7,6 +7,8 @@ import {
   MAIL_PROVIDERS,
   getDatabaseProvider,
   getMailProvider,
+  getMailProviderKeyMismatch,
+  inferMailProviderFromApiKey,
   inferDatabaseProviderFromUrl,
   isValidDatabaseUrl,
   requiresCustomMailEndpoint,
@@ -49,6 +51,14 @@ export default function SetupPage() {
   const selectedDatabaseProvider = getDatabaseProvider(dbProvider);
   const selectedMailProvider = getMailProvider(apiProvider);
 
+  const handleApiKeyChange = (value: string) => {
+    setApiKey(value);
+    const inferredProvider = inferMailProviderFromApiKey(value);
+    if (inferredProvider && inferredProvider !== 'brevo_smtp' && inferredProvider !== apiProvider) {
+      setApiProvider(inferredProvider);
+    }
+  };
+
   const handleVerify = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!customDbUrl.trim() || !apiKey.trim()) {
@@ -63,6 +73,12 @@ export default function SetupPage() {
 
     if (apiKey.length < 8) {
       setError('Invalid Secret API Key format length.');
+      return;
+    }
+
+    const providerMismatch = getMailProviderKeyMismatch(apiProvider, apiKey);
+    if (providerMismatch) {
+      setError(providerMismatch);
       return;
     }
 
@@ -251,7 +267,7 @@ export default function SetupPage() {
                   className="input"
                   placeholder={selectedMailProvider.placeholder}
                   value={apiKey}
-                  onChange={(e) => setApiKey(e.target.value)}
+                  onChange={(e) => handleApiKeyChange(e.target.value)}
                   required
                 />
               </div>

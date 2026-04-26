@@ -303,7 +303,17 @@ export async function fetchApiResponse(endpoint: string, options: RequestInit = 
     let errorMessage = `API Error ${response.status}`;
     try {
       const jsonError = JSON.parse(errorBody);
-      errorMessage = jsonError.message || errorMessage;
+      const checkDetails = Array.isArray(jsonError.checks)
+        ? jsonError.checks
+            .filter((check: { status?: string }) => check?.status && check.status !== 'verified')
+            .map((check: { label?: string; detail?: string; status?: string }) => {
+              const label = check.label || 'Runtime check';
+              const detail = check.detail || check.status || 'failed';
+              return `${label}: ${detail}`;
+            })
+        : [];
+      const prefix = jsonError.errorType ? `[${jsonError.errorType}] ` : '';
+      errorMessage = `${prefix}${jsonError.message || errorMessage}${checkDetails.length ? ` ${checkDetails.join(' ')}` : ''}`;
     } catch {
       errorMessage = errorBody || errorMessage;
     }

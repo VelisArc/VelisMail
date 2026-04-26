@@ -11,6 +11,8 @@ import {
   getConnectionHostLabel,
   getDatabaseProvider,
   getMailProvider,
+  getMailProviderKeyMismatch,
+  inferMailProviderFromApiKey,
   inferDatabaseProviderFromUrl,
   isValidDatabaseUrl,
   requiresCustomMailEndpoint,
@@ -106,6 +108,14 @@ export default function BusinessSetup() {
   const selectedDatabaseProvider = getDatabaseProvider(dbProvider);
   const selectedMailProvider = getMailProvider(apiProvider);
 
+  const handleApiKeyChange = (value: string) => {
+    setApiKey(value);
+    const inferredProvider = inferMailProviderFromApiKey(value);
+    if (inferredProvider && inferredProvider !== 'brevo_smtp' && inferredProvider !== apiProvider) {
+      setApiProvider(inferredProvider);
+    }
+  };
+
   // Step 1 — Verify Infrastructure
   const handleInfraVerify = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -119,6 +129,11 @@ export default function BusinessSetup() {
     }
     if (apiKey.length < 8) {
       setError('API Key too short.');
+      return;
+    }
+    const providerMismatch = getMailProviderKeyMismatch(apiProvider, apiKey);
+    if (providerMismatch) {
+      setError(providerMismatch);
       return;
     }
     if (requiresCustomMailEndpoint(apiProvider) && !customApiUrl.trim()) {
@@ -400,7 +415,7 @@ export default function BusinessSetup() {
               )}
               <div className="form-group">
                 <label>Secret API Key</label>
-                <input type="password" className="input" placeholder={selectedMailProvider.placeholder} value={apiKey} onChange={e => setApiKey(e.target.value)} required />
+                <input type="password" className="input" placeholder={selectedMailProvider.placeholder} value={apiKey} onChange={e => handleApiKeyChange(e.target.value)} required />
               </div>
               <button className="btn btn-primary" type="submit" disabled={loading}>
                 {loading ? <Loader2 size={16} className="animate-spin" /> : <ArrowRight size={16} />}
