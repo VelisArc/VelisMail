@@ -39,6 +39,11 @@ export default function Composer({
   // Rich text editor ref
   const editorRef = useRef<HTMLDivElement>(null);
 
+  // Link modal state
+  const [showLinkModal, setShowLinkModal] = useState(false);
+  const [linkUrl, setLinkUrl] = useState('');
+  const [savedRange, setSavedRange] = useState<Range | null>(null);
+
   useEffect(() => {
     if (editorRef.current && initialBody) {
       editorRef.current.innerHTML = initialBody.replace(/\n/g, '<br>');
@@ -148,8 +153,14 @@ export default function Composer({
             <button className="toolbar-btn" onMouseDown={e => { e.preventDefault(); execCmd('insertUnorderedList'); }} title="Bullet List"><List size={14} /></button>
             <button className="toolbar-btn" onMouseDown={e => { 
               e.preventDefault(); 
-              const url = prompt('Enter link URL:');
-              if (url) execCmd('createLink', url);
+              const selection = window.getSelection();
+              if (selection && selection.rangeCount > 0) {
+                setSavedRange(selection.getRangeAt(0));
+              } else {
+                setSavedRange(null);
+              }
+              setLinkUrl('');
+              setShowLinkModal(true);
             }} title="Link"><LinkIcon size={14} /></button>
           </div>
           
@@ -174,6 +185,55 @@ export default function Composer({
           </button>
         </div>
       </div>
+
+      {showLinkModal && (
+        <div className="modal-overlay" onClick={() => setShowLinkModal(false)} style={{ zIndex: 1000, position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.5)' }}>
+          <div className="glass animate-scale" onClick={e => e.stopPropagation()} style={{ padding: '24px', borderRadius: '12px', width: '100%', maxWidth: '400px', backgroundColor: 'var(--bg-card)', border: '1px solid var(--border)' }}>
+            <h3 style={{ marginTop: 0, marginBottom: '16px', fontSize: '18px' }}>Insert Link</h3>
+            <input
+              type="url"
+              className="input"
+              placeholder="https://example.com"
+              value={linkUrl}
+              onChange={e => setLinkUrl(e.target.value)}
+              autoFocus
+              style={{ width: '100%', marginBottom: '20px' }}
+              onKeyDown={e => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  if (linkUrl) {
+                    if (savedRange) {
+                      const selection = window.getSelection();
+                      if (selection) {
+                        selection.removeAllRanges();
+                        selection.addRange(savedRange);
+                      }
+                    }
+                    execCmd('createLink', linkUrl);
+                    setShowLinkModal(false);
+                  }
+                }
+              }}
+            />
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
+              <button className="btn btn-secondary" onClick={() => setShowLinkModal(false)}>Cancel</button>
+              <button className="btn btn-primary" onClick={() => {
+                if (linkUrl) {
+                  if (savedRange) {
+                    const selection = window.getSelection();
+                    if (selection) {
+                      selection.removeAllRanges();
+                      selection.addRange(savedRange);
+                    }
+                  }
+                  execCmd('createLink', linkUrl);
+                  setShowLinkModal(false);
+                }
+              }}>Insert</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

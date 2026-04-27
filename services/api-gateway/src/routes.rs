@@ -751,10 +751,11 @@ async fn dispatch_via_provider(
     payload: &SendMailPayload,
 ) -> Result<Option<String>, String> {
     let provider = provider.trim().to_lowercase();
+    let base_domain = std::env::var("BASE_DOMAIN").unwrap_or_else(|_| "velismail.online".to_string());
     let from_email = payload
         .from
         .clone()
-        .unwrap_or_else(|| "noreply@velismail.online".to_string());
+        .unwrap_or_else(|| format!("noreply@{}", base_domain));
     let from_name = payload.from_name.clone().unwrap_or_else(|| "VelisMail".to_string());
 
     let response = match provider.as_str() {
@@ -1365,15 +1366,16 @@ pub async fn verify_domain(
         );
     }
 
+    let base_domain = std::env::var("BASE_DOMAIN").unwrap_or_else(|_| "velismail.online".to_string());
     let txt_host = format!("_velismail-verify.{domain}");
     let dkim_host = format!("velismail._domainkey.{domain}");
     let dmarc_host = format!("_dmarc.{domain}");
     let expected_mx_hosts = vec![
-        "mx1.velismail.online".to_string(),
-        "mx2.velismail.online".to_string(),
+        format!("mx1.{}", base_domain),
+        format!("mx2.{}", base_domain),
     ];
-    let expected_spf_fragment = "include:velismail.online";
-    let expected_dkim_target = "dkim.velismail.online".to_string();
+    let expected_spf_fragment = format!("include:{}", base_domain);
+    let expected_dkim_target = format!("dkim.{}", base_domain);
 
     let txt_answers = match query_dns_answers(&state.http_client, &txt_host, "TXT").await {
         Ok(value) => value,
@@ -1463,13 +1465,13 @@ pub async fn verify_domain(
             label: "SPF",
             status: if domain_txt_answers
                 .iter()
-                .any(|value| value.contains(expected_spf_fragment))
+                .any(|value| value.contains(&expected_spf_fragment))
             {
                 "verified"
             } else {
                 "failed"
             },
-            expected: "v=spf1 include:velismail.online ~all".to_string(),
+            expected: format!("v=spf1 include:{} ~all", base_domain),
             actual: spf_actual,
         },
         DomainCheckResult {

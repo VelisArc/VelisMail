@@ -26,6 +26,7 @@ export default function SettingsPage() {
   const [passwordSaving, setPasswordSaving] = useState(false);
   const [securityError, setSecurityError] = useState<string | null>(null);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [recoveryEmailDraft, setRecoveryEmailDraft] = useState(user?.recoveryEmail || '');
   const [recoveryOtp, setRecoveryOtp] = useState('');
   const [recoveryChallengeToken, setRecoveryChallengeToken] = useState('');
@@ -136,11 +137,14 @@ export default function SettingsPage() {
   };
 
   const handleDeleteAccount = () => {
-    const confirmed = window.confirm('Kya aap sure ho ki account permanently delete karna hai?');
-    if (!confirmed) return;
+    setShowDeleteConfirm(true);
+  };
+
+  const confirmDeleteAccount = () => {
     const result = auth.deleteAccount();
     if (!result.success) {
       showToast('Account delete nahi ho saka', 'error');
+      setShowDeleteConfirm(false);
       return;
     }
     navigate('/login');
@@ -507,6 +511,22 @@ export default function SettingsPage() {
             <div className="logout-confirm-actions">
               <button className="btn btn-secondary" onClick={() => setShowLogoutConfirm(false)}>Cancel</button>
               <button className="btn btn-danger" onClick={handleLogout}><LogOut size={16} /> Yes, Log Out</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showDeleteConfirm && (
+        <div className="modal-overlay" onClick={() => setShowDeleteConfirm(false)}>
+          <div className="logout-confirm-modal glass animate-scale" onClick={e => e.stopPropagation()}>
+            <div className="logout-confirm-icon">
+              <AlertCircle size={40} color="var(--danger)" />
+            </div>
+            <h3>Delete Account?</h3>
+            <p>Kya aap sure ho ki account permanently delete karna hai? This action cannot be undone.</p>
+            <div className="logout-confirm-actions">
+              <button className="btn btn-secondary" onClick={() => setShowDeleteConfirm(false)}>Cancel</button>
+              <button className="btn btn-danger" onClick={confirmDeleteAccount}><Trash2 size={16} /> Yes, Delete</button>
             </div>
           </div>
         </div>

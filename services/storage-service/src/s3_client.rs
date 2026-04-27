@@ -45,7 +45,8 @@ impl S3Client {
 
         let client = Client::from_conf(config_builder.build());
         let public_base_url = if endpoint.trim().is_empty() {
-            "https://storage.velismail.online".to_string()
+            let base_domain = std::env::var("BASE_DOMAIN").unwrap_or_else(|_| "velismail.online".to_string());
+            format!("https://storage.{}", base_domain)
         } else {
             endpoint.trim_end_matches('/').to_string()
         };
