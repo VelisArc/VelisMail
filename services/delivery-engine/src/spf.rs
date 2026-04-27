@@ -11,10 +11,11 @@ impl SpfVerifier {
     pub async fn verify(domain: &str, ip: &str) -> Result<SpfResult> {
         // In production, query DNS for SPF record
         let _ = (domain, ip);
+        let base_domain = std::env::var("BASE_DOMAIN").unwrap_or_else(|_| "velismail.online".to_string());
 
         Ok(SpfResult {
             pass: true,
-            record: "v=spf1 include:velismail.online ~all".to_string(),
+            record: format!("v=spf1 include:{} ~all", base_domain),
             explanation: "SPF check passed".to_string(),
         })
     }
@@ -23,7 +24,8 @@ impl SpfVerifier {
     pub async fn get_spf_record(domain: &str) -> Result<String> {
         // Query DNS TXT record
         let _ = domain;
-        Ok("v=spf1 include:velismail.online ~all".to_string())
+        let base_domain = std::env::var("BASE_DOMAIN").unwrap_or_else(|_| "velismail.online".to_string());
+        Ok(format!("v=spf1 include:{} ~all", base_domain))
     }
 }
 

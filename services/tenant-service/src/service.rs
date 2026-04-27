@@ -282,6 +282,7 @@ impl TenantService {
         let verification_token = Uuid::new_v4().to_string();
 
         // Create DNS records for verification
+        let base_domain = std::env::var("BASE_DOMAIN").unwrap_or_else(|_| "velismail.online".to_string());
         let dns_records = json!([
             {
                 "type": "TXT",
@@ -292,7 +293,7 @@ impl TenantService {
             {
                 "type": "MX",
                 "name": "@",
-                "value": "mx.velismail.online",
+                "value": format!("mx.{}", base_domain),
                 "priority": 10,
                 "ttl": 3600
             }
