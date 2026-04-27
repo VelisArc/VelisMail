@@ -14,7 +14,27 @@ import {
   Layers,
   List, Grid, SortAsc, SortDesc, ArrowLeftRight, Menu
 } from 'lucide-react';
-import { auth, domains, isScamEmail, mail, type CustomDomain, type Email } from '../api/client';
+import {
+  auth,
+  businessAudit,
+  businessGroups,
+  businessMailboxes,
+  businessTeam,
+  businessTemplates,
+  connections,
+  domains,
+  fetchApiJsonDetailed,
+  isScamEmail,
+  mail,
+  type BusinessAuditEntry,
+  type BusinessGroup,
+  type BusinessMailbox,
+  type BusinessTeamMember,
+  type BusinessTemplate,
+  type ConnectionUsage,
+  type CustomDomain,
+  type Email,
+} from '../api/client';
 import Composer from '../components/Composer';
 import { useNavigation, useSessionActions } from '../store/sessionStore';
 import './BusinessDashboard.css';
@@ -24,15 +44,6 @@ type BizFolder = {
   label: string;
   icon: any;
   badge?: string;
-};
-
-type TeamMember = {
-  id: string;
-  name: string;
-  email: string;
-  role: 'admin' | 'member' | 'viewer';
-  addedAt: string;
-  lastActive: string;
 };
 
 type DomainHealth = {
@@ -53,24 +64,6 @@ type MailQueueItem = {
   error?: string;
 };
 
-type AuditEntry = {
-  id: string;
-  action: string;
-  actor: string;
-  target: string;
-  timestamp: string;
-  severity: 'info' | 'warn' | 'critical';
-};
-
-type Template = {
-  id: string;
-  name: string;
-  subject: string;
-  body: string;
-  lastUsed?: string;
-  usageCount: number;
-};
-
 type DomainRecord = {
   id: string;
   domain: string;
@@ -85,6 +78,23 @@ type DomainRecord = {
   reputation: number;
 };
 
+type DomainVerifyRuntimeCheck = {
+  key: string;
+  label: string;
+  status: 'verified' | 'failed';
+  detail: string;
+  category?: 'success' | 'network' | 'config' | 'software';
+  recommendation?: string | null;
+};
+
+type ProviderDnsRecord = {
+  recordType: string;
+  name: string;
+  value: string;
+  status?: string | null;
+  priority?: number | null;
+};
+
 const BIZ_FOLDERS: BizFolder[] = [
   { id: 'inbox', label: 'Inbox', icon: Inbox, badge: 'unread' },
   { id: 'starred', label: 'Starred', icon: Star },
@@ -97,10 +107,7 @@ const BIZ_FOLDERS: BizFolder[] = [
   { id: 'spam', label: 'Spam', icon: AlertCircle },
 ];
 
-const EMPTY_TEAM: TeamMember[] = [];
 const EMPTY_QUEUE: MailQueueItem[] = [];
-const EMPTY_AUDIT: AuditEntry[] = [];
-const EMPTY_TEMPLATES: Template[] = [];
 
 function toDomainRecord(domain: CustomDomain): DomainRecord {
   const statusFor = (key: string) => domain.checks.find(check => check.key === key)?.status || 'pending';
@@ -136,7 +143,7 @@ function formatRelative(iso: string): string {
   return new Date(iso).toLocaleDateString();
 }
 
-type BizTab = 'mail' | 'domains' | 'team' | 'queue' | 'analytics' | 'audit' | 'templates' | 'settings';
+type BizTab = 'mail' | 'domains' | 'mailboxes' | 'groups' | 'team' | 'queue' | 'analytics' | 'audit' | 'templates' | 'settings';
 
 export default function BusinessDashboard() {
   const navigate = useNavigate();
@@ -173,15 +180,19 @@ export default function BusinessDashboard() {
   const [composeSubject, setComposeSubject] = useState('');
   const [composeBody, setComposeBody] = useState('');
   const [sending, setSending] = useState(false);
+  const [selectedFromAddress, setSelectedFromAddress] = useState('');
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
   const [activeDomain, setActiveDomain] = useState<string>(initialDomainId);
   const [domainsList, setDomainsList] = useState<DomainRecord[]>(initialDomainRecords);
-  const [teamMembers, setTeamMembers] = useState<TeamMember[]>(EMPTY_TEAM);
+  const [domainMailboxes, setDomainMailboxes] = useState<BusinessMailbox[]>([]);
+  const [domainGroups, setDomainGroups] = useState<BusinessGroup[]>([]);
+  const [teamMembers, setTeamMembers] = useState<BusinessTeamMember[]>([]);
   const [mailQueue] = useState<MailQueueItem[]>(EMPTY_QUEUE);
-  const [auditLog, setAuditLog] = useState<AuditEntry[]>(EMPTY_AUDIT);
-  const [templates, setTemplates] = useState<Template[]>(EMPTY_TEMPLATES);
+  const [auditLog, setAuditLog] = useState<BusinessAuditEntry[]>([]);
+  const [templates, setTemplates] = useState<BusinessTemplate[]>([]);
+  const [connectionUsage, setConnectionUsage] = useState<ConnectionUsage[]>([]);
 
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
@@ -206,7 +217,19 @@ export default function BusinessDashboard() {
   const [templateName, setTemplateName] = useState('');
   const [templateSubject, setTemplateSubject] = useState('');
   const [templateBody, setTemplateBody] = useState('');
-  const [previewTemplate, setPreviewTemplate] = useState<Template | null>(null);
+  const [previewTemplate, setPreviewTemplate] = useState<BusinessTemplate | null>(null);
+  const [mailboxLocalPart, setMailboxLocalPart] = useState('');
+  const [mailboxDisplayName, setMailboxDisplayName] = useState('');
+  const [mailboxKind, setMailboxKind] = useState<BusinessMailbox['kind']>('mailbox');
+  const [groupName, setGroupName] = useState('');
+  const [groupLocalPart, setGroupLocalPart] = useState('');
+  const [groupMembers, setGroupMembers] = useState('');
+  const [verifyingDomainId, setVerifyingDomainId] = useState('');
+  const [domainVerifyOpen, setDomainVerifyOpen] = useState(false);
+  const [domainVerifySteps, setDomainVerifySteps] = useState<Array<{ label: string; detail: string; status: 'verified' | 'failed' | 'pending'; recommendation?: string | null }>>([]);
+  const [domainVerifyProviderRecords, setDomainVerifyProviderRecords] = useState<ProviderDnsRecord[]>([]);
+  const activeDomainRecord = domainsList.find(d => d.id === activeDomain);
+  const activeDomainName = activeDomainRecord?.domain || user?.businessDomain || '';
 
   useEffect(() => {
     if (!user) {
@@ -238,6 +261,32 @@ export default function BusinessDashboard() {
       setEmails(sorted);
     }
   }, [activeFolder, activeBizTab, searchQuery, sortOrder, activeDomain, domainsList]);
+
+  useEffect(() => {
+    if (!activeDomainName) {
+      setDomainMailboxes([]);
+      setDomainGroups([]);
+      setSelectedFromAddress('');
+      return;
+    }
+
+    const nextMailboxes = businessMailboxes.getByDomain(activeDomainName);
+    const nextGroups = businessGroups.getByDomain(activeDomainName);
+    setDomainMailboxes(nextMailboxes);
+    setDomainGroups(nextGroups);
+    setSelectedFromAddress((current) => (
+      nextMailboxes.some((entry) => entry.address === current)
+        ? current
+        : (nextMailboxes.find((entry) => entry.active)?.address || nextMailboxes[0]?.address || '')
+    ));
+  }, [activeDomainName]);
+
+  useEffect(() => {
+    setTeamMembers(businessTeam.getAll());
+    setTemplates(businessTemplates.getAll());
+    setAuditLog(businessAudit.getAll());
+    setConnectionUsage(connections.getUsage());
+  }, [activeDomainName]);
 
   useEffect(() => {
     updateNavigation({
@@ -281,12 +330,13 @@ export default function BusinessDashboard() {
     }
     const toAddresses = toArg.split(',').map(s => s.trim()).filter(Boolean);
     try {
-      await mail.sendBusiness(domain, toAddresses, subjectArg, bodyArg);
+      await mail.sendBusiness(domain, toAddresses, subjectArg, bodyArg, selectedFromAddress);
       showToast(`Business email dispatched via ${domain}`);
       setComposeOpen(false);
       setComposeTo('');
       setComposeSubject('');
       setComposeBody('');
+      setAuditLog(businessAudit.getAll());
     } catch (error) {
       showToast(error instanceof Error ? error.message : 'Business email send failed', 'error');
     } finally {
@@ -329,7 +379,7 @@ export default function BusinessDashboard() {
   };
 
   const handleInviteMember = (email: string, name: string, role: 'admin' | 'member' | 'viewer') => {
-    const newMember: TeamMember = {
+    const newMember: BusinessTeamMember = {
       id: crypto.randomUUID(),
       name,
       email,
@@ -337,7 +387,16 @@ export default function BusinessDashboard() {
       addedAt: new Date().toISOString(),
       lastActive: new Date().toISOString(),
     };
-    setTeamMembers(prev => [...prev, newMember]);
+    const next = [...teamMembers, newMember];
+    setTeamMembers(next);
+    businessTeam.save(next);
+    businessAudit.add({
+      action: 'Invited team member',
+      actor: user?.email || 'current user',
+      target: email,
+      severity: 'info',
+    });
+    setAuditLog(businessAudit.getAll());
     showToast(`Invitation sent to ${email}`);
   };
 
@@ -355,12 +414,36 @@ export default function BusinessDashboard() {
   };
 
   const handleRemoveMember = (id: string) => {
-    setTeamMembers(prev => prev.filter(m => m.id !== id));
+    const member = teamMembers.find((entry) => entry.id === id);
+    const next = teamMembers.filter(m => m.id !== id);
+    setTeamMembers(next);
+    businessTeam.save(next);
+    if (member) {
+      businessAudit.add({
+        action: 'Removed team member',
+        actor: user?.email || 'current user',
+        target: member.email,
+        severity: 'warn',
+      });
+      setAuditLog(businessAudit.getAll());
+    }
     showToast('Team member removed');
   };
 
   const handleUpdateMemberRole = (id: string, role: 'admin' | 'member' | 'viewer') => {
-    setTeamMembers(prev => prev.map(m => m.id === id ? { ...m, role } : m));
+    const next = teamMembers.map(m => m.id === id ? { ...m, role } : m);
+    setTeamMembers(next);
+    businessTeam.save(next);
+    const member = next.find((entry) => entry.id === id);
+    if (member) {
+      businessAudit.add({
+        action: 'Updated member role',
+        actor: user?.email || 'current user',
+        target: `${member.email} → ${role}`,
+        severity: 'info',
+      });
+      setAuditLog(businessAudit.getAll());
+    }
     showToast('Member role updated');
   };
 
@@ -389,32 +472,196 @@ export default function BusinessDashboard() {
       showToast('Template name is required.', 'error');
       return;
     }
-    const newTemplate: Template = {
+    const newTemplate: BusinessTemplate = {
       id: crypto.randomUUID(),
       name: templateName.trim(),
       subject: templateSubject.trim(),
       body: templateBody.trim(),
       usageCount: 0,
     };
-    setTemplates(prev => [...prev, newTemplate]);
+    const next = [...templates, newTemplate];
+    setTemplates(next);
+    businessTemplates.save(next);
+    businessAudit.add({
+      action: 'Created template',
+      actor: user?.email || 'current user',
+      target: newTemplate.name,
+      severity: 'info',
+    });
+    setAuditLog(businessAudit.getAll());
     setTemplateEditorOpen(false);
     showToast(`Template "${newTemplate.name}" created`);
   };
 
-  const handleUseTemplate = (template: Template) => {
+  const handleUseTemplate = (template: BusinessTemplate) => {
     setComposeOpen(true);
     setComposeSubject(template.subject);
     setComposeBody(template.body.replace(/\{\{name\}\}/g, ''));
+    const next = templates.map((entry) => (
+      entry.id === template.id
+        ? { ...entry, usageCount: entry.usageCount + 1, lastUsed: new Date().toISOString() }
+        : entry
+    ));
+    setTemplates(next);
+    businessTemplates.save(next);
     showToast(`Template "${template.name}" loaded`);
   };
 
   const handleDeleteTemplate = (id: string) => {
-    setTemplates(prev => prev.filter(t => t.id !== id));
+    const template = templates.find((entry) => entry.id === id);
+    const next = templates.filter(t => t.id !== id);
+    setTemplates(next);
+    businessTemplates.save(next);
+    if (template) {
+      businessAudit.add({
+        action: 'Deleted template',
+        actor: user?.email || 'current user',
+        target: template.name,
+        severity: 'warn',
+      });
+      setAuditLog(businessAudit.getAll());
+    }
     showToast('Template deleted');
   };
 
-  const activeDomainRecord = domainsList.find(d => d.id === activeDomain);
-  const activeDomainName = activeDomainRecord?.domain || user?.businessDomain || '';
+  const refreshConnectionUsage = () => {
+    setConnectionUsage(connections.getUsage());
+  };
+
+  const handleCreateMailbox = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!activeDomainName) {
+      showToast('Select a business domain first.', 'error');
+      return;
+    }
+    try {
+      const created = businessMailboxes.create(activeDomainName, {
+        localPart: mailboxLocalPart,
+        displayName: mailboxDisplayName,
+        kind: mailboxKind,
+      });
+      const next = businessMailboxes.getByDomain(activeDomainName);
+      setDomainMailboxes(next);
+      setMailboxLocalPart('');
+      setMailboxDisplayName('');
+      setMailboxKind('mailbox');
+      businessAudit.add({
+        action: 'Created business mailbox',
+        actor: user?.email || 'current user',
+        target: created.address,
+        severity: 'info',
+      });
+      setAuditLog(businessAudit.getAll());
+      showToast(`Mailbox ${created.address} created`);
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Mailbox create failed', 'error');
+    }
+  };
+
+  const handleCreateGroup = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!activeDomainName) {
+      showToast('Select a business domain first.', 'error');
+      return;
+    }
+    try {
+      const created = businessGroups.create(activeDomainName, {
+        name: groupName,
+        localPart: groupLocalPart,
+        members: groupMembers.split(',').map((entry) => entry.trim()).filter(Boolean),
+      });
+      setDomainGroups(businessGroups.getByDomain(activeDomainName));
+      setGroupName('');
+      setGroupLocalPart('');
+      setGroupMembers('');
+      businessAudit.add({
+        action: 'Created business group',
+        actor: user?.email || 'current user',
+        target: created.address,
+        severity: 'info',
+      });
+      setAuditLog(businessAudit.getAll());
+      showToast(`Group ${created.address} created`);
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Group create failed', 'error');
+    }
+  };
+
+  const handleRunDomainVerification = async (domainId: string) => {
+    const selectedDomain = domains.getById(domainId);
+    if (!selectedDomain || !user?.businessDbUrl || !user.businessApiKey || !user.businessMailProvider) {
+      showToast('Domain, database, or provider configuration is incomplete.', 'error');
+      return;
+    }
+
+    setVerifyingDomainId(domainId);
+    setDomainVerifyOpen(true);
+    setDomainVerifyProviderRecords([]);
+    setDomainVerifySteps([
+      { label: 'Starting verification', detail: selectedDomain.domain, status: 'pending' },
+    ]);
+
+    try {
+      const result = await fetchApiJsonDetailed<{
+        success: boolean;
+        message: string;
+        checks?: Array<{ label: string; actual?: string; expected: string; status: 'verified' | 'failed' }>;
+        runtimeChecks?: DomainVerifyRuntimeCheck[];
+        providerRecords?: ProviderDnsRecord[];
+      }>('/tenants/verify-domain', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          domain: selectedDomain.domain,
+          verificationToken: selectedDomain.verificationToken,
+          dbUrl: user.businessDbUrl,
+          apiKey: user.businessApiKey,
+          provider: user.businessMailProvider,
+          providerEndpoint: user.businessMailProviderEndpoint,
+        }),
+      });
+
+      const dnsSteps = Array.isArray(result.data?.checks)
+        ? result.data!.checks!.map((check) => ({
+            label: check.label,
+            detail: check.actual || check.expected,
+            status: check.status,
+          }))
+        : [];
+      const runtimeSteps = Array.isArray(result.data?.runtimeChecks)
+        ? result.data!.runtimeChecks!.map((check) => ({
+            label: check.label,
+            detail: check.detail,
+            status: check.status,
+            recommendation: check.recommendation,
+          }))
+        : [];
+
+      setDomainVerifySteps([...dnsSteps, ...runtimeSteps]);
+      setDomainVerifyProviderRecords(Array.isArray(result.data?.providerRecords) ? result.data!.providerRecords! : []);
+
+      if (!result.ok || !result.data?.success) {
+        throw new Error(result.data?.message || `Verification failed with status ${result.status}.`);
+      }
+
+      domains.runVerification(domainId, result.data.checks);
+      domains.setPrimary(domainId);
+      setDomainsList(domains.getAll().map(toDomainRecord));
+      businessAudit.add({
+        action: 'Verified domain',
+        actor: user.email,
+        target: selectedDomain.domain,
+        severity: 'info',
+      });
+      setAuditLog(businessAudit.getAll());
+      showToast(`Domain ${selectedDomain.domain} verified`);
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Domain verification failed', 'error');
+    } finally {
+      setVerifyingDomainId('');
+    }
+  };
+
   const unreadCount = activeDomainName ? mail.getBusinessUnreadCount(activeDomainName) : 0;
   const priorityCount = activeDomainName
     ? mail.getBusinessByFolder(activeDomainName, 'inbox').filter(e => e.labels.includes('priority')).length
@@ -510,6 +757,14 @@ export default function BusinessDashboard() {
             <button className={`folder-btn ${activeBizTab === 'domains' ? 'active' : ''}`} onClick={() => { setActiveBizTab('domains'); setSidebarOpen(false); }}>
               <Globe size={17} />
               <span className="folder-label">Domains</span>
+            </button>
+            <button className={`folder-btn ${activeBizTab === 'mailboxes' ? 'active' : ''}`} onClick={() => { setActiveBizTab('mailboxes'); setSidebarOpen(false); }}>
+              <Mail size={17} />
+              <span className="folder-label">Mailboxes</span>
+            </button>
+            <button className={`folder-btn ${activeBizTab === 'groups' ? 'active' : ''}`} onClick={() => { setActiveBizTab('groups'); setSidebarOpen(false); }}>
+              <Users size={17} />
+              <span className="folder-label">Groups</span>
             </button>
             <button className={`folder-btn ${activeBizTab === 'team' ? 'active' : ''}`} onClick={() => { setActiveBizTab('team'); setSidebarOpen(false); }}>
               <Users size={17} />
@@ -798,6 +1053,10 @@ export default function BusinessDashboard() {
                         {activeDomain === domain.id ? <CheckCircle2 size={14} /> : <Circle size={14} />}
                         {activeDomain === domain.id ? 'Active' : 'Set Active'}
                       </button>
+                      <button className="btn btn-ghost btn-sm" onClick={() => handleRunDomainVerification(domain.id)} disabled={verifyingDomainId === domain.id}>
+                        {verifyingDomainId === domain.id ? <Loader2 size={14} className="animate-spin" /> : <RefreshCcw size={14} />}
+                        Live Verify
+                      </button>
                       <button className="btn btn-ghost btn-sm"><Settings size={14} /></button>
                     </div>
                   </div>
@@ -820,11 +1079,20 @@ export default function BusinessDashboard() {
 
                   <div className="domain-dns-hint">
                     <Tag size={14} /> DNS records for <strong>{domain.domain}</strong>:
-                    <div className="dns-record-row">
+                    {(domains.getById(domain.id)?.dnsRecords || []).map((record, index) => (
+                      <div key={`${record.name}-${index}`} className="dns-record-row">
+                        <span className="dns-type-tag">{record.type}</span>
+                        <code>{record.name} → {record.value}{record.priority ? ` (priority ${record.priority})` : ''}</code>
+                        <button className="btn btn-ghost btn-icon btn-sm" onClick={() => copyToClipboard(record.value)}><Copy size={12} /></button>
+                      </div>
+                    ))}
+                  <div className="dns-record-row">
                       <span className="dns-type-tag">MX</span>
                       <code>mail.{domain.domain} → 10</code>
                       <button className="btn btn-ghost btn-icon btn-sm" onClick={() => copyToClipboard(`mail.${domain.domain}`)}><Copy size={12} /></button>
                     </div>
+                    {(domains.getById(domain.id)?.dnsRecords || []).length === 0 && (
+                      <>
                     <div className="dns-record-row">
                       <span className="dns-type-tag">SPF</span>
                       <code>v=spf1 include:_spf.{domain.domain} ~all</code>
@@ -840,6 +1108,120 @@ export default function BusinessDashboard() {
                       <code>v=DMARC1; p=quarantine; rua=mailto:dmarc@{domain.domain}</code>
                       <button className="btn btn-ghost btn-icon btn-sm" onClick={() => copyToClipboard(`v=DMARC1; p=quarantine; rua=mailto:dmarc@${domain.domain}`)}><Copy size={12} /></button>
                     </div>
+                      </>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ===== MAILBOXES TAB ===== */}
+        {activeBizTab === 'mailboxes' && (
+          <div className="biz-panel animate-fade">
+            <div className="panel-header">
+              <div>
+                <h2 style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <button className="btn btn-icon btn-ghost mobile-menu-btn" onClick={() => setSidebarOpen(true)}>
+                    <Menu size={20} />
+                  </button>
+                  <Mail size={20} /> Business Mailboxes
+                </h2>
+                <p>Create extra sender addresses, aliases, and shared inbox identities for {activeDomainName || 'your selected domain'}.</p>
+              </div>
+            </div>
+
+            <div className="glass-card" style={{ marginBottom: 16 }}>
+              <h3 style={{ marginBottom: 12 }}>Create Mailbox</h3>
+              <form onSubmit={handleCreateMailbox} style={{ display: 'grid', gridTemplateColumns: '1.1fr 1.1fr 0.8fr auto', gap: 12 }}>
+                <input className="input" value={mailboxLocalPart} onChange={(e) => setMailboxLocalPart(e.target.value)} placeholder="sales" />
+                <input className="input" value={mailboxDisplayName} onChange={(e) => setMailboxDisplayName(e.target.value)} placeholder="Sales Desk" />
+                <select className="input" value={mailboxKind} onChange={(e) => setMailboxKind(e.target.value as BusinessMailbox['kind'])}>
+                  <option value="mailbox">Mailbox</option>
+                  <option value="alias">Alias</option>
+                  <option value="shared">Shared</option>
+                </select>
+                <button className="btn btn-primary" type="submit"><Plus size={16} /> Add</button>
+              </form>
+            </div>
+
+            <div className="team-list">
+              {domainMailboxes.map((mailbox) => (
+                <div key={mailbox.id} className="team-row glass-card">
+                  <div className="team-avatar-wrap">
+                    <div className="user-avatar biz-avatar">{mailbox.address.charAt(0).toUpperCase()}</div>
+                  </div>
+                  <div className="team-info">
+                    <div className="team-name">{mailbox.displayName}</div>
+                    <div className="team-email">{mailbox.address}</div>
+                  </div>
+                  <div className="team-meta">
+                    <div className="team-last-active"><Clock size={12} /> {mailbox.lastUsedAt ? `Used ${formatRelative(mailbox.lastUsedAt)}` : 'Never used yet'}</div>
+                    <div className="team-joined">Created {formatRelative(mailbox.createdAt)}</div>
+                  </div>
+                  <span className={`badge ${mailbox.active ? 'badge-accent' : 'badge-secondary'}`}>{mailbox.kind}</span>
+                  <div className="team-actions">
+                    <button className="btn btn-ghost btn-sm" onClick={() => { businessMailboxes.setPrimary(activeDomainName, mailbox.address); setDomainMailboxes(businessMailboxes.getByDomain(activeDomainName)); setSelectedFromAddress(mailbox.address); showToast(`${mailbox.address} is now the active sender.`); }}>
+                      {mailbox.active ? 'Active Sender' : 'Set Sender'}
+                    </button>
+                    {mailbox.source !== 'system' && (
+                      <button className="btn btn-ghost btn-sm" onClick={() => { businessMailboxes.remove(activeDomainName, mailbox.address); setDomainMailboxes(businessMailboxes.getByDomain(activeDomainName)); showToast('Mailbox removed'); }}>
+                        <Trash size={14} />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ===== GROUPS TAB ===== */}
+        {activeBizTab === 'groups' && (
+          <div className="biz-panel animate-fade">
+            <div className="panel-header">
+              <div>
+                <h2 style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <button className="btn btn-icon btn-ghost mobile-menu-btn" onClick={() => setSidebarOpen(true)}>
+                    <Menu size={20} />
+                  </button>
+                  <Users size={20} /> Distribution Groups
+                </h2>
+                <p>Create reusable recipient groups so one address can fan out to multiple inboxes.</p>
+              </div>
+            </div>
+
+            <div className="glass-card" style={{ marginBottom: 16 }}>
+              <h3 style={{ marginBottom: 12 }}>Create Group</h3>
+              <form onSubmit={handleCreateGroup} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 2fr auto', gap: 12 }}>
+                <input className="input" value={groupName} onChange={(e) => setGroupName(e.target.value)} placeholder="Support Team" />
+                <input className="input" value={groupLocalPart} onChange={(e) => setGroupLocalPart(e.target.value)} placeholder="support" />
+                <input className="input" value={groupMembers} onChange={(e) => setGroupMembers(e.target.value)} placeholder="member1@domain.com, member2@domain.com" />
+                <button className="btn btn-primary" type="submit"><Plus size={16} /> Add</button>
+              </form>
+            </div>
+
+            <div className="team-list">
+              {domainGroups.map((group) => (
+                <div key={group.id} className="team-row glass-card">
+                  <div className="team-avatar-wrap">
+                    <div className="user-avatar biz-avatar">{group.name.charAt(0).toUpperCase()}</div>
+                  </div>
+                  <div className="team-info">
+                    <div className="team-name">{group.name}</div>
+                    <div className="team-email">{group.address}</div>
+                  </div>
+                  <div className="team-meta">
+                    <div className="team-last-active"><Users size={12} /> {group.members.length} members</div>
+                    <div className="team-joined">Updated {formatRelative(group.updatedAt)}</div>
+                  </div>
+                  <span className="badge badge-primary">Group</span>
+                  <div className="team-actions">
+                    <button className="btn btn-ghost btn-sm" onClick={() => copyToClipboard(group.members.join(', '))}>Copy Members</button>
+                    <button className="btn btn-ghost btn-sm" onClick={() => { businessGroups.remove(activeDomainName, group.id); setDomainGroups(businessGroups.getByDomain(activeDomainName)); showToast('Group removed'); }}>
+                      <Trash size={14} />
+                    </button>
                   </div>
                 </div>
               ))}
@@ -886,7 +1268,7 @@ export default function BusinessDashboard() {
                   </div>
                   <span className={`badge ${member.role === 'admin' ? 'badge-accent' : member.role === 'member' ? 'badge-primary' : 'badge-secondary'}`}>{member.role}</span>
                   <div className="team-actions">
-                    <select className="input input-sm role-select" value={member.role} onChange={e => handleUpdateMemberRole(member.id, e.target.value as TeamMember['role'])}>
+                    <select className="input input-sm role-select" value={member.role} onChange={e => handleUpdateMemberRole(member.id, e.target.value as BusinessTeamMember['role'])}>
                       <option value="admin">Admin</option>
                       <option value="member">Member</option>
                       <option value="viewer">Viewer</option>
@@ -1237,9 +1619,41 @@ export default function BusinessDashboard() {
               </div>
               <div className="glass-card">
                 <h3><Mail size={16} /> Default Sending Domain</h3>
-                <select className="input">
+                <select className="input" value={activeDomain} onChange={(e) => { setActiveDomain(e.target.value); domains.setPrimary(e.target.value); }}>
                   {domainsList.map(d => <option key={d.id} value={d.id}>{d.domain}</option>)}
                 </select>
+              </div>
+              <div className="glass-card">
+                <h3><Server size={16} /> Connected Infrastructure</h3>
+                <div style={{ display: 'grid', gap: 10 }}>
+                  {connectionUsage.length === 0 ? (
+                    <p style={{ margin: 0, color: 'var(--text-muted)' }}>No saved database or provider secrets found for this workspace.</p>
+                  ) : (
+                    connectionUsage.map((usage) => (
+                      <div key={usage.id} className="queue-row glass-card" style={{ padding: 12 }}>
+                        <div>
+                          <strong>{usage.label}</strong>
+                          <div style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>{usage.maskedValue}</div>
+                        </div>
+                        <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                          {usage.ownerDisplayName} · {usage.accountType}
+                          {usage.provider ? ` · ${usage.provider}` : ''}
+                        </div>
+                        <button className="btn btn-ghost btn-sm" onClick={() => {
+                          const revoked = connections.revoke(usage.id);
+                          if (revoked) {
+                            refreshConnectionUsage();
+                            showToast('Connection access revoked');
+                          } else {
+                            showToast('Unable to revoke this connection', 'error');
+                          }
+                        }}>
+                          Remove Access
+                        </button>
+                      </div>
+                    ))
+                  )}
+                </div>
               </div>
               <div className="glass-card">
                 <h3><Lock size={16} /> Security</h3>
@@ -1263,6 +1677,58 @@ export default function BusinessDashboard() {
         )}
       </main>
 
+      {domainVerifyOpen && (
+        <div className="modal-overlay" onClick={() => !verifyingDomainId && setDomainVerifyOpen(false)}>
+          <div className="biz-form-modal glass animate-scale" onClick={(e) => e.stopPropagation()}>
+            <div className="compose-header">
+              <h3><Globe size={16} /> Domain Verification Diagnostics</h3>
+              <button className="btn btn-ghost btn-icon" type="button" disabled={Boolean(verifyingDomainId)} onClick={() => setDomainVerifyOpen(false)}><X size={18} /></button>
+            </div>
+            <div className="diag-steps">
+              {domainVerifySteps.map((step, index) => (
+                <div key={`${step.label}-${index}`} className={`diag-step diag-${step.status === 'verified' ? 'success' : step.status === 'failed' ? 'error' : 'pending'}`}>
+                  <div className="diag-step-icon">
+                    {step.status === 'pending'
+                      ? <Loader2 size={16} className="animate-spin" />
+                      : step.status === 'verified'
+                        ? <CheckCircle2 size={16} />
+                        : <XCircle size={16} />}
+                  </div>
+                  <div className="diag-step-info">
+                    <span className="diag-step-label">{step.label}</span>
+                    <span className="diag-step-detail">{step.detail}</span>
+                    {step.recommendation && <span className="diag-step-detail">{step.recommendation}</span>}
+                  </div>
+                </div>
+              ))}
+            </div>
+            {domainVerifyProviderRecords.length > 0 && (
+              <div className="bsetup-dns" style={{ marginTop: 20 }}>
+                <p className="dns-instruction-text">Provider-specific DNS records:</p>
+                <table className="dns-table">
+                  <thead>
+                    <tr><th>Type</th><th>Name</th><th>Value</th><th>Status</th></tr>
+                  </thead>
+                  <tbody>
+                    {domainVerifyProviderRecords.map((record, index) => (
+                      <tr key={`${record.name}-${index}`}>
+                        <td><span className="dns-type">{record.recordType}</span></td>
+                        <td className="dns-name">{record.name}</td>
+                        <td className="dns-value">{record.value}{record.priority ? ` (priority ${record.priority})` : ''}</td>
+                        <td>{record.status || 'pending'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            <div className="biz-modal-actions">
+              <button className="btn btn-ghost" type="button" onClick={() => setDomainVerifyOpen(false)} disabled={Boolean(verifyingDomainId)}>Close</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Compose Modal */}
       {composeOpen && (
         <div className="modal-overlay" onClick={() => !sending && setComposeOpen(false)}>
@@ -1278,7 +1744,16 @@ export default function BusinessDashboard() {
               onSend={handleSend}
               onClose={() => setComposeOpen(false)}
               sending={sending}
-              fromBadge={<div className="compose-from-badge biz-from-badge"><Mail size={14} /> {businessMailbox}</div>}
+              fromControl={domainMailboxes.length > 1 ? (
+                <select className="input" value={selectedFromAddress} onChange={(e) => setSelectedFromAddress(e.target.value)}>
+                  {domainMailboxes.map((mailbox) => (
+                    <option key={mailbox.id} value={mailbox.address}>
+                      {mailbox.displayName} · {mailbox.address}
+                    </option>
+                  ))}
+                </select>
+              ) : undefined}
+              fromBadge={<div className="compose-from-badge biz-from-badge"><Mail size={14} /> {selectedFromAddress || businessMailbox}</div>}
             />
           </div>
         </div>
@@ -1295,7 +1770,7 @@ export default function BusinessDashboard() {
               <label>Name<input className="input" value={inviteName} onChange={e => setInviteName(e.target.value)} placeholder="Jane Doe" /></label>
               <label>Email<input className="input" type="email" value={inviteEmail} onChange={e => setInviteEmail(e.target.value)} placeholder={`member@${activeDomainName || 'domain.com'}`} required /></label>
               <label>Role
-                <select className="input" value={inviteRole} onChange={e => setInviteRole(e.target.value as TeamMember['role'])}>
+                <select className="input" value={inviteRole} onChange={e => setInviteRole(e.target.value as BusinessTeamMember['role'])}>
                   <option value="admin">Admin</option>
                   <option value="member">Member</option>
                   <option value="viewer">Viewer</option>

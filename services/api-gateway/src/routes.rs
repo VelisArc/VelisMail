@@ -232,6 +232,15 @@ struct DomainCheckResult {
 }
 
 #[derive(Debug, Serialize)]
+struct ProviderDnsRecord {
+    record_type: String,
+    name: String,
+    value: String,
+    status: Option<String>,
+    priority: Option<u64>,
+}
+
+#[derive(Debug, Serialize)]
 struct RuntimeCheckResult {
     key: &'static str,
     label: &'static str,
@@ -906,6 +915,202 @@ fn provider_endpoint(payload: &VerifyDomainPayload) -> Option<&str> {
         .or(payload.api_endpoint.as_deref())
 }
 
+fn extract_provider_dns_records(records: &Value) -> Vec<ProviderDnsRecord> {
+    records
+        .as_array()
+        .cloned()
+        .unwrap_or_default()
+        .into_iter()
+        .map(|record| ProviderDnsRecord {
+            record_type: record
+                .get("record")
+                .or_else(|| record.get("type"))
+                .and_then(Value::as_str)
+                .unwrap_or("TXT")
+                .to_string(),
+            name: record
+                .get("name")
+                .or_else(|| record.get("host"))
+                .and_then(Value::as_str)
+                .unwrap_or("@")
+                .to_string(),
+            value: record
+                .get("value")
+                .or_else(|| record.get("content"))
+                .or_else(|| record.get("data"))
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .to_string(),
+            status: record
+                .get("status")
+                .and_then(Value::as_str)
+                .map(str::to_string),
+            priority: record
+                .get("priority")
+                .and_then(Value::as_u64),
+        })
+        .collect()
+}
+
+async fn verify_provider_domain(
+    client: &reqwest::Client,
+    provider: &str,
+    api_key: &str,
+    endpoint: Option<&str>,
+    domain: &str,
+) -> (RuntimeCheckResult, Vec<ProviderDnsRecord>) {
+    let provider = provider.trim().to_lowercase();
+
+    if provider == "custom_webhook" {
+        return (
+            RuntimeCheckResult {
+                key: "providerDomain",
+                label: "Provider Domain Check",
+                status: "verified",
+                detail: "Custom webhook providers do not expose automated sender-domain verification. Validate sender policy inside your own relay.".to_string(),
+                category: "success",
+                recommendation: None,
+            },
+            vec![],
+        );
+    }
+
+    if provider != "resend" {
+        let label = if endpoint.is_some() {
+            format!("{provider} accepted the API key. Finish sender-domain onboarding inside the provider dashboard for {domain}.")
+        } else {
+            format!("{provider} credentials are valid. Sender-domain onboarding for {domain} must still be completed inside the provider dashboard.")
+        };
+        return (
+            RuntimeCheckResult {
+                key: "providerDomain",
+                label: "Provider Domain Check",
+                status: "verified",
+                detail: label,
+                category: "success",
+                recommendation: None,
+            },
+            vec![],
+        );
+    }
+
+    let response = match timeout(
+        Duration::from_secs(10),
+        client
+            .get("https://api.resend.com/domains")
+            .bearer_auth(api_key)
+            .send(),
+    )
+    .await
+    {
+        Ok(Ok(response)) => response,
+        Ok(Err(err)) => {
+            return (
+                RuntimeCheckResult {
+                    key: "providerDomain",
+                    label: "Provider Domain Check",
+                    status: "failed",
+                    detail: format!("Resend domain lookup failed: {err}"),
+                    category: "network",
+                    recommendation: Some("The server could not reach Resend domain APIs. Retry, or verify outbound HTTPS access from the backend.".to_string()),
+                },
+                vec![],
+            )
+        }
+        Err(_) => {
+            return (
+                RuntimeCheckResult {
+                    key: "providerDomain",
+                    label: "Provider Domain Check",
+                    status: "failed",
+                    detail: "Resend domain lookup timed out.".to_string(),
+                    category: "network",
+                    recommendation: Some("The backend could not finish querying Resend domains in time. Retry after checking provider/network reachability.".to_string()),
+                },
+                vec![],
+            )
+        }
+    };
+
+    if !response.status().is_success() {
+        let status = response.status();
+        let body = response.text().await.unwrap_or_default();
+        return (
+            RuntimeCheckResult {
+                key: "providerDomain",
+                label: "Provider Domain Check",
+                status: "failed",
+                detail: if body.trim().is_empty() {
+                    format!("Resend rejected the domain lookup with status {status}.")
+                } else {
+                    format!("Resend rejected the domain lookup with status {status}: {}", body.trim())
+                },
+                category: "config",
+                recommendation: Some("Verify that the Resend API key has access to the correct account and domain resources.".to_string()),
+            },
+            vec![],
+        );
+    }
+
+    let payload = response.json::<Value>().await.unwrap_or(Value::Null);
+    let domain_entry = payload
+        .get("data")
+        .and_then(Value::as_array)
+        .and_then(|entries| {
+            entries.iter().find(|entry| {
+                entry
+                    .get("name")
+                    .or_else(|| entry.get("domain"))
+                    .and_then(Value::as_str)
+                    .map(|name| name.eq_ignore_ascii_case(domain))
+                    .unwrap_or(false)
+            })
+        });
+
+    let Some(domain_entry) = domain_entry else {
+        return (
+            RuntimeCheckResult {
+                key: "providerDomain",
+                label: "Provider Domain Check",
+                status: "failed",
+                detail: format!("Resend API key is valid, but the domain {domain} has not been added to this Resend account."),
+                category: "config",
+                recommendation: Some("Open Resend Domains, add this exact business domain, publish the provider DNS records, and run verification again.".to_string()),
+            },
+            vec![],
+        );
+    };
+
+    let status = domain_entry
+        .get("status")
+        .and_then(Value::as_str)
+        .unwrap_or("unknown")
+        .to_lowercase();
+    let provider_records = extract_provider_dns_records(
+        domain_entry
+            .get("records")
+            .or_else(|| domain_entry.get("dns_records"))
+            .unwrap_or(&Value::Null),
+    );
+    let verified = matches!(status.as_str(), "verified" | "active" | "valid");
+
+    (
+        RuntimeCheckResult {
+            key: "providerDomain",
+            label: "Provider Domain Check",
+            status: if verified { "verified" } else { "failed" },
+            detail: format!("Resend domain status for {domain}: {status}."),
+            category: if verified { "success" } else { "config" },
+            recommendation: if verified {
+                None
+            } else {
+                Some("The domain exists in Resend, but it is not fully verified yet. Complete every pending DNS record shown below inside your DNS provider, then retry verification.".to_string())
+            },
+        },
+        provider_records,
+    )
+}
+
 pub async fn get_supported_providers() -> Json<serde_json::Value> {
     let database_providers = vec![
         ProviderCatalogEntry {
@@ -1294,23 +1499,57 @@ pub async fn verify_domain(
         },
     ];
 
+    let database_check = verify_database_runtime(db_url).await;
+    let provider_runtime_check = validate_provider_credentials(
+        &state.http_client,
+        provider,
+        api_key,
+        provider_endpoint(&payload),
+    )
+    .await;
+    let (provider_domain_check, provider_records) = verify_provider_domain(
+        &state.http_client,
+        provider,
+        api_key,
+        provider_endpoint(&payload),
+        &domain,
+    )
+    .await;
+    let runtime_checks = vec![database_check, provider_runtime_check, provider_domain_check];
+
     let failed_labels: Vec<&str> = checks
         .iter()
         .filter(|check| check.status != "verified")
         .map(|check| check.label)
         .collect();
+    let failed_runtime_labels: Vec<&str> = runtime_checks
+        .iter()
+        .filter(|check| check.status != "verified")
+        .map(|check| check.label)
+        .collect();
+    let success = failed_labels.is_empty() && failed_runtime_labels.is_empty();
+    let mut failure_segments = Vec::new();
+    if !failed_labels.is_empty() {
+        failure_segments.push(format!("DNS checks: {}", failed_labels.join(", ")));
+    }
+    if !failed_runtime_labels.is_empty() {
+        failure_segments.push(format!("Runtime checks: {}", failed_runtime_labels.join(", ")));
+    }
 
     (
         StatusCode::OK,
         Json(json!({
-            "success": failed_labels.is_empty(),
+            "success": success,
             "domain": domain,
-            "message": if failed_labels.is_empty() {
+            "message": if success {
                 "Domain verification completed successfully.".to_string()
             } else {
-                format!("DNS verification is incomplete. Fix: {}.", failed_labels.join(", "))
+                format!("Domain verification is incomplete. Fix: {}.", failure_segments.join(" | "))
             },
-            "checks": checks
+            "checks": checks,
+            "runtimeChecks": runtime_checks,
+            "providerRecords": provider_records,
+            "provider": provider,
         })),
     )
 }
@@ -1370,14 +1609,28 @@ pub async fn send_mail(
                     "fromName": payload.from_name
                 })),
             ),
-            Err(err) => (
-                StatusCode::BAD_GATEWAY,
-                Json(json!({
-                    "success": false,
-                    "message": err,
-                    "provider": provider
-                })),
-            ),
+            Err(err) => {
+                let lower = err.to_lowercase();
+                let suggestion = if provider.eq_ignore_ascii_case("resend")
+                    && lower.contains("domain")
+                    && lower.contains("not verified")
+                {
+                    Some("The sender domain is not verified in Resend yet. Open Business → Domains, review the provider domain check, publish the required DNS records in Resend, then retry sending.".to_string())
+                } else {
+                    None
+                };
+
+                (
+                    StatusCode::BAD_GATEWAY,
+                    Json(json!({
+                        "success": false,
+                        "message": err,
+                        "provider": provider,
+                        "errorType": "ProviderRejected",
+                        "suggestion": suggestion
+                    })),
+                )
+            }
         };
     }
 

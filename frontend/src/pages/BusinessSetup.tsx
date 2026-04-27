@@ -4,7 +4,7 @@ import {
   Database, Mail, CheckCircle2, Server, Loader2, Lock, Globe,
   Zap, Shield, ArrowLeft, ArrowRight, XCircle, Wifi, LogOut
 } from 'lucide-react';
-import { auth, domains, fetchApiResponse, getApiAvailabilityHint, type DnsRecord, type User } from '../api/client';
+import { auth, domains, fetchApiJsonDetailed, fetchApiResponse, getApiAvailabilityHint, type DnsRecord, type User } from '../api/client';
 import {
   DATABASE_PROVIDERS,
   MAIL_PROVIDERS,
@@ -35,6 +35,23 @@ type RemoteVerificationCheck = {
   actual?: string;
 };
 
+type RuntimeVerificationCheck = {
+  key: string;
+  label: string;
+  status: 'verified' | 'failed';
+  detail: string;
+  category?: 'success' | 'network' | 'config' | 'software';
+  recommendation?: string | null;
+};
+
+type ProviderDnsRecord = {
+  recordType: string;
+  name: string;
+  value: string;
+  status?: string | null;
+  priority?: number | null;
+};
+
 function mapCheckToStep(check: RemoteVerificationCheck): VerifyStep {
   const iconByKey = {
     txt: Shield,
@@ -49,6 +66,22 @@ function mapCheckToStep(check: RemoteVerificationCheck): VerifyStep {
     icon: iconByKey[check.key],
     status: check.status === 'verified' ? 'success' : check.status === 'failed' ? 'error' : 'pending',
     detail: check.actual || check.expected,
+  };
+}
+
+function mapRuntimeCheckToStep(check: RuntimeVerificationCheck): VerifyStep {
+  const iconByKey: Record<string, any> = {
+    request: Shield,
+    database: Database,
+    mailProvider: Mail,
+    providerDomain: Globe,
+  };
+
+  return {
+    label: check.label,
+    icon: iconByKey[check.key] || Server,
+    status: check.status === 'verified' ? 'success' : 'error',
+    detail: check.detail,
   };
 }
 
@@ -73,6 +106,7 @@ export default function BusinessSetup() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [verifySteps, setVerifySteps] = useState<VerifyStep[]>([]);
+  const [providerDnsRecords, setProviderDnsRecords] = useState<ProviderDnsRecord[]>([]);
 
   useEffect(() => {
     const session = auth.getSession();
@@ -263,10 +297,17 @@ export default function BusinessSetup() {
       { label: 'Domain Activation', icon: CheckCircle2, status: 'pending', detail: domain },
     ];
     setVerifySteps([...steps]);
+    setProviderDnsRecords([]);
 
     try {
       const verificationStartedAt = performance.now();
-      const response = await fetchApiResponse('/tenants/verify-domain', {
+      const response = await fetchApiJsonDetailed<{
+        success: boolean;
+        message: string;
+        checks?: RemoteVerificationCheck[];
+        runtimeChecks?: RuntimeVerificationCheck[];
+        providerRecords?: ProviderDnsRecord[];
+      }>('/tenants/verify-domain', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -281,26 +322,47 @@ export default function BusinessSetup() {
         }),
       });
 
-      const responseData = await response.json().catch(() => null);
+      const responseData = response.data;
       if (!response.ok || !responseData?.success) {
+        const failedRemoteChecks = Array.isArray(responseData?.checks) ? responseData.checks as RemoteVerificationCheck[] : [];
+        const failedRuntimeChecks = Array.isArray(responseData?.runtimeChecks) ? responseData.runtimeChecks as RuntimeVerificationCheck[] : [];
+        const failedProviderDns = Array.isArray(responseData?.providerRecords) ? responseData.providerRecords as ProviderDnsRecord[] : [];
+        if (failedRemoteChecks.length || failedRuntimeChecks.length) {
+          setVerifySteps([
+            ...failedRemoteChecks.map(mapCheckToStep),
+            ...failedRuntimeChecks.map(mapRuntimeCheckToStep),
+            { label: 'Domain Activation', icon: CheckCircle2, status: 'error', detail: domain },
+          ]);
+        }
+        setProviderDnsRecords(failedProviderDns);
         throw new Error(responseData?.message || 'Live DNS/database/provider verification failed.');
       }
       const elapsed = Math.max(1, Math.round(performance.now() - verificationStartedAt));
       const remoteChecks = Array.isArray(responseData.checks) ? responseData.checks as RemoteVerificationCheck[] : [];
+      const runtimeChecks = Array.isArray(responseData.runtimeChecks) ? responseData.runtimeChecks as RuntimeVerificationCheck[] : [];
+      const providerDns = Array.isArray(responseData.providerRecords) ? responseData.providerRecords as ProviderDnsRecord[] : [];
       const remoteSteps = remoteChecks.map(mapCheckToStep);
+      const runtimeSteps = runtimeChecks.map(mapRuntimeCheckToStep);
       const domainPassed = remoteChecks.length > 0 && remoteChecks.every((check) => check.status === 'verified');
-      const configStatus: VerifyStep['status'] = domainPassed ? 'success' : 'error';
+      const runtimePassed = runtimeChecks.every((check) => check.status === 'verified');
+      const configStatus: VerifyStep['status'] = domainPassed && runtimePassed ? 'success' : 'error';
 
       setVerifySteps([
         ...remoteSteps.map((stepItem) => ({ ...stepItem, ms: elapsed })),
-        { label: 'Database Config', icon: Database, status: 'success', detail: getConnectionHostLabel(customDbUrl), ms: elapsed },
-        { label: 'Mail Provider Config', icon: Mail, status: 'success', detail: getMailProvider(apiProvider).label, ms: elapsed },
+        ...runtimeSteps.map((stepItem) => ({ ...stepItem, ms: elapsed })),
         { label: 'Domain Activation', icon: CheckCircle2, status: configStatus, detail: domain, ms: elapsed },
       ]);
+      setProviderDnsRecords(providerDns);
 
-      if (!domainPassed) {
+      if (!domainPassed || !runtimePassed) {
         const failedCheck = remoteChecks.find((check) => check.status !== 'verified');
-        throw new Error(failedCheck?.actual || failedCheck?.expected || 'DNS verification is still incomplete.');
+        const failedRuntime = runtimeChecks.find((check) => check.status !== 'verified');
+        throw new Error(
+          failedRuntime?.detail ||
+          failedCheck?.actual ||
+          failedCheck?.expected ||
+          'DNS verification is still incomplete.',
+        );
       }
 
       const verifiedDomain = domains.runVerification(currentDomainId, remoteChecks);
@@ -339,7 +401,6 @@ export default function BusinessSetup() {
     } catch (err) {
       const baseMessage = err instanceof Error ? err.message : 'Verification failed. Complete every DNS, database, and provider check before access is allowed.';
       setError(baseMessage.includes('VelisMail API URL') ? `${baseMessage} ${getApiAvailabilityHint()}` : baseMessage);
-      setStep(2);
       return;
     }
 
@@ -476,6 +537,7 @@ export default function BusinessSetup() {
               <span>Domain Verification Scan</span>
               <span className="diag-status">Scanning…</span>
             </div>
+            {error && <div className="form-error" style={{ marginBottom: 16 }}>{error}</div>}
             <div className="diag-steps">
               {verifySteps.map((vs, i) => {
                 const StepIcon = vs.icon;
@@ -495,6 +557,35 @@ export default function BusinessSetup() {
                   </div>
                 );
               })}
+            </div>
+            {providerDnsRecords.length > 0 && (
+              <div className="bsetup-dns" style={{ marginTop: 20 }}>
+                <p className="dns-instruction-text">Provider-side DNS records still required before mail can send:</p>
+                <table className="dns-table">
+                  <thead>
+                    <tr><th>Type</th><th>Name</th><th>Value</th><th>Status</th></tr>
+                  </thead>
+                  <tbody>
+                    {providerDnsRecords.map((rec, i) => (
+                      <tr key={`${rec.name}-${i}`}>
+                        <td><span className="dns-type">{rec.recordType}</span></td>
+                        <td className="dns-name">{rec.name}</td>
+                        <td className="dns-value">
+                          {rec.value}
+                          {rec.priority ? ` (priority ${rec.priority})` : ''}
+                        </td>
+                        <td>{rec.status || 'pending'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            <div style={{ display: 'flex', gap: 12, marginTop: 20 }}>
+              <button className="btn btn-ghost" onClick={() => setStep(2)}>Back to DNS Setup</button>
+              <button className="btn btn-primary" onClick={handleDomainVerify}>
+                <CheckCircle2 size={16} /> Retry Verification
+              </button>
             </div>
           </div>
         )}

@@ -291,24 +291,6 @@ export default function SetupPage() {
     const finalApiEndpoint = requiresCustomMailEndpoint(apiProvider) ? customApiUrl.trim() : undefined;
 
     try {
-      const allUsersRaw = localStorage.getItem('velismail_users') || '[]';
-      const allUsers = JSON.parse(allUsersRaw);
-      const dbConflict = allUsers.find(
-        (existingUser: any) =>
-          existingUser.id !== user?.id &&
-          (existingUser.customDbUrl === finalDbUrl || existingUser.businessDbUrl === finalDbUrl),
-      );
-
-      if (dbConflict) {
-        const conflictMessage =
-          'This Database URL is already associated with another account. Each account requires an isolated database.';
-        setError(conflictMessage);
-        setVerifyResult(buildSoftwareFailure(conflictMessage));
-        setScreen('result');
-        setVerifying(false);
-        return;
-      }
-
       const payload = {
         dbProvider,
         dbUrl: finalDbUrl,

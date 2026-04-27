@@ -11,6 +11,7 @@ interface ComposerProps {
   initialSubject?: string;
   initialBody?: string;
   fromBadge?: React.ReactNode;
+  fromControl?: React.ReactNode;
   onSend: (to: string, subject: string, body: string) => void;
   onClose: () => void;
   sending?: boolean;
@@ -21,6 +22,7 @@ export default function Composer({
   initialSubject = '',
   initialBody = '',
   fromBadge,
+  fromControl,
   onSend,
   onClose,
   sending = false
@@ -94,10 +96,10 @@ export default function Composer({
   return (
     <div className="composer-container">
       <div className="compose-fields">
-        {fromBadge && (
+        {(fromControl || fromBadge) && (
           <div className="compose-field">
             <label>From</label>
-            {fromBadge}
+            {fromControl || fromBadge}
           </div>
         )}
         

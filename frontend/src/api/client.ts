@@ -4,12 +4,19 @@
 // VelisMail API Client
 // Uses localStorage for client-side persistence alongside deployed API integrations.
 
+import { getConnectionHostLabel } from '../config/providers';
+
 // ---- Local Storage DB ----
 const STORAGE_KEYS = {
   users: 'velismail_users',
   session: 'velismail_session',
   emails: 'velismail_emails',
   domains: 'velismail_domains',
+  businessMailboxes: 'velismail_business_mailboxes',
+  businessGroups: 'velismail_business_groups',
+  businessTeam: 'velismail_business_team',
+  businessTemplates: 'velismail_business_templates',
+  businessAudit: 'velismail_business_audit',
   contacts: 'velismail_contacts',
   theme: 'velismail_theme',
   signatures: 'velismail_signatures',
@@ -121,6 +128,72 @@ export type CustomDomain = {
   addedAt: string;
   lastCheckedAt?: string;
   verifiedAt?: string;
+};
+
+export type BusinessMailbox = {
+  id: string;
+  domain: string;
+  address: string;
+  displayName: string;
+  kind: 'primary' | 'mailbox' | 'alias' | 'shared';
+  aliases: string[];
+  active: boolean;
+  source: 'system' | 'custom';
+  createdAt: string;
+  lastUsedAt?: string;
+};
+
+export type BusinessGroup = {
+  id: string;
+  domain: string;
+  name: string;
+  address: string;
+  members: string[];
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type BusinessTeamMember = {
+  id: string;
+  name: string;
+  email: string;
+  role: 'admin' | 'member' | 'viewer';
+  addedAt: string;
+  lastActive: string;
+};
+
+export type BusinessTemplate = {
+  id: string;
+  name: string;
+  subject: string;
+  body: string;
+  lastUsed?: string;
+  usageCount: number;
+};
+
+export type BusinessAuditEntry = {
+  id: string;
+  action: string;
+  actor: string;
+  target: string;
+  timestamp: string;
+  severity: 'info' | 'warn' | 'critical';
+};
+
+export type ConnectionUsage = {
+  id: string;
+  type: 'database' | 'mail-provider';
+  fingerprint: string;
+  label: string;
+  maskedValue: string;
+  provider?: string;
+  ownerAccountId: string;
+  ownerDisplayName: string;
+  ownerEmail: string;
+  accountType: 'personal' | 'business';
+  domain?: string;
+  mailbox?: string;
+  createdAt: string;
 };
 
 export type Email = {
@@ -567,6 +640,199 @@ function loadUsers(): (User & { password: string })[] {
 
 function saveUsers(users: (User & { password: string })[]) {
   saveDB(STORAGE_KEYS.users, users);
+}
+
+function hashString(value: string): string {
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(16).padStart(8, '0');
+}
+
+function maskApiSecret(value: string): string {
+  const trimmed = String(value || '').trim();
+  if (!trimmed) return 'Not configured';
+  if (trimmed.length <= 10) {
+    return `${trimmed.slice(0, 3)}***${trimmed.slice(-2)}`;
+  }
+  return `${trimmed.slice(0, 6)}...${trimmed.slice(-4)}`;
+}
+
+function maskDatabaseSecret(value: string): string {
+  const trimmed = String(value || '').trim();
+  if (!trimmed) return 'Not configured';
+  const protocol = trimmed.split('://')[0] || 'db';
+  return `${protocol}://${getConnectionHostLabel(trimmed)}`;
+}
+
+function normalizeBusinessMailboxEntry(entry: Partial<BusinessMailbox>, domain: string): BusinessMailbox {
+  const normalizedDomain = normalizeDomainInput(domain);
+  const address = normalizeMailbox(entry.address || `admin@${normalizedDomain}`);
+  return {
+    id: entry.id || `mbx_${Math.random().toString(36).slice(2, 10)}`,
+    domain: normalizedDomain,
+    address,
+    displayName: entry.displayName?.trim() || address.split('@')[0],
+    kind: entry.kind || 'mailbox',
+    aliases: Array.isArray(entry.aliases) ? entry.aliases.map((alias) => normalizeMailbox(alias)).filter(Boolean) : [],
+    active: entry.active !== false,
+    source: entry.source || 'custom',
+    createdAt: entry.createdAt || new Date().toISOString(),
+    lastUsedAt: entry.lastUsedAt,
+  };
+}
+
+function normalizeBusinessGroupEntry(entry: Partial<BusinessGroup>, domain: string): BusinessGroup {
+  const normalizedDomain = normalizeDomainInput(domain);
+  const address = normalizeMailbox(entry.address || `team@${normalizedDomain}`);
+  return {
+    id: entry.id || `grp_${Math.random().toString(36).slice(2, 10)}`,
+    domain: normalizedDomain,
+    name: entry.name?.trim() || address.split('@')[0],
+    address,
+    members: Array.isArray(entry.members) ? entry.members.map((member) => normalizeMailbox(member)).filter(Boolean) : [],
+    createdAt: entry.createdAt || new Date().toISOString(),
+    updatedAt: entry.updatedAt || new Date().toISOString(),
+  };
+}
+
+function getSystemBusinessMailbox(domain: string): BusinessMailbox {
+  const session = auth.getSession();
+  const normalizedDomain = normalizeDomainInput(domain);
+  const preferredAddress = normalizeMailbox(
+    session?.businessMailboxAddress && session.businessMailboxAddress.endsWith(`@${normalizedDomain}`)
+      ? session.businessMailboxAddress
+      : `admin@${normalizedDomain}`,
+  );
+  return {
+    id: `sys_${hashString(normalizedDomain)}`,
+    domain: normalizedDomain,
+    address: preferredAddress,
+    displayName: session?.displayName?.trim() || 'Administrator',
+    kind: 'primary',
+    aliases: [],
+    active: true,
+    source: 'system',
+    createdAt: session?.createdAt || new Date().toISOString(),
+    lastUsedAt: undefined,
+  };
+}
+
+function loadBusinessMailboxes(domain?: string): BusinessMailbox[] {
+  const stored = loadUserDB<BusinessMailbox[]>(STORAGE_KEYS.businessMailboxes, []);
+  const normalizedDomain = normalizeDomainInput(domain || '');
+  const normalized = stored
+    .map((entry) => normalizeBusinessMailboxEntry(entry, entry.domain || normalizedDomain))
+    .filter((entry) => entry.domain);
+
+  const byDomain = normalizedDomain
+    ? normalized.filter((entry) => entry.domain === normalizedDomain)
+    : normalized;
+
+  if (!normalizedDomain) {
+    return normalized;
+  }
+
+  const systemMailbox = getSystemBusinessMailbox(normalizedDomain);
+  const existingPrimaryIndex = byDomain.findIndex((entry) => entry.kind === 'primary' || entry.address === systemMailbox.address);
+  const domainEntries = byDomain.length > 0 ? [...byDomain] : [systemMailbox];
+
+  if (existingPrimaryIndex === -1) {
+    domainEntries.unshift(systemMailbox);
+  } else {
+    domainEntries[existingPrimaryIndex] = {
+      ...domainEntries[existingPrimaryIndex],
+      ...systemMailbox,
+      source: domainEntries[existingPrimaryIndex].source,
+      aliases: domainEntries[existingPrimaryIndex].aliases,
+      lastUsedAt: domainEntries[existingPrimaryIndex].lastUsedAt,
+    };
+  }
+
+  const activeExists = domainEntries.some((entry) => entry.active);
+  const normalizedActiveEntries = domainEntries.map((entry, index) => ({
+    ...entry,
+    kind: index === 0 ? 'primary' as const : entry.kind,
+    active: activeExists ? entry.active : index === 0,
+  }));
+
+  const untouched = normalized.filter((entry) => entry.domain !== normalizedDomain);
+  saveUserDB(STORAGE_KEYS.businessMailboxes, [...untouched, ...normalizedActiveEntries]);
+  return normalizedActiveEntries;
+}
+
+function saveBusinessMailboxes(domain: string, entries: BusinessMailbox[]) {
+  const normalizedDomain = normalizeDomainInput(domain);
+  const untouched = loadUserDB<BusinessMailbox[]>(STORAGE_KEYS.businessMailboxes, [])
+    .filter((entry) => normalizeDomainInput(entry.domain) !== normalizedDomain);
+  const normalizedEntries = entries.map((entry, index) => ({
+    ...normalizeBusinessMailboxEntry(entry, normalizedDomain),
+    kind: index === 0 ? 'primary' as const : entry.kind,
+    active: entries.some((candidate) => candidate.active) ? entry.active : index === 0,
+  }));
+  saveUserDB(STORAGE_KEYS.businessMailboxes, [...untouched, ...normalizedEntries]);
+}
+
+function loadBusinessGroups(domain?: string): BusinessGroup[] {
+  const stored = loadUserDB<BusinessGroup[]>(STORAGE_KEYS.businessGroups, []);
+  const normalizedDomain = normalizeDomainInput(domain || '');
+  return stored
+    .map((entry) => normalizeBusinessGroupEntry(entry, entry.domain || normalizedDomain))
+    .filter((entry) => !normalizedDomain || entry.domain === normalizedDomain);
+}
+
+function saveBusinessGroups(domain: string, entries: BusinessGroup[]) {
+  const normalizedDomain = normalizeDomainInput(domain);
+  const untouched = loadUserDB<BusinessGroup[]>(STORAGE_KEYS.businessGroups, [])
+    .filter((entry) => normalizeDomainInput(entry.domain) !== normalizedDomain);
+  const normalizedEntries = entries.map((entry) => normalizeBusinessGroupEntry(entry, normalizedDomain));
+  saveUserDB(STORAGE_KEYS.businessGroups, [...untouched, ...normalizedEntries]);
+}
+
+function loadBusinessTeamMembers(): BusinessTeamMember[] {
+  return loadUserDB<BusinessTeamMember[]>(STORAGE_KEYS.businessTeam, []);
+}
+
+function saveBusinessTeamMembers(entries: BusinessTeamMember[]) {
+  saveUserDB(STORAGE_KEYS.businessTeam, entries);
+}
+
+function loadBusinessTemplates(): BusinessTemplate[] {
+  return loadUserDB<BusinessTemplate[]>(STORAGE_KEYS.businessTemplates, []);
+}
+
+function saveBusinessTemplates(entries: BusinessTemplate[]) {
+  saveUserDB(STORAGE_KEYS.businessTemplates, entries);
+}
+
+function loadBusinessAuditEntries(): BusinessAuditEntry[] {
+  return loadUserDB<BusinessAuditEntry[]>(STORAGE_KEYS.businessAudit, []);
+}
+
+function saveBusinessAuditEntries(entries: BusinessAuditEntry[]) {
+  saveUserDB(STORAGE_KEYS.businessAudit, entries);
+}
+
+function buildConnectionUsage(type: 'database' | 'mail-provider', user: User, value: string, provider?: string): ConnectionUsage {
+  const normalizedValue = String(value || '').trim();
+  const fingerprintSource = `${type}:${provider || ''}:${normalizedValue.toLowerCase()}`;
+  return {
+    id: `${type}_${hashString(`${user.id}:${fingerprintSource}`)}`,
+    type,
+    fingerprint: hashString(fingerprintSource),
+    label: type === 'database' ? 'Database connection' : 'Mail provider secret',
+    maskedValue: type === 'database' ? maskDatabaseSecret(normalizedValue) : maskApiSecret(normalizedValue),
+    provider,
+    ownerAccountId: user.id,
+    ownerDisplayName: user.displayName,
+    ownerEmail: user.email,
+    accountType: user.accountType,
+    domain: user.businessDomain,
+    mailbox: user.businessMailboxAddress || user.email,
+    createdAt: user.createdAt,
+  };
 }
 
 function findUserByLogin(users: (User & { password: string })[], identifier: string) {
@@ -1123,17 +1389,34 @@ export const mail = {
     });
   },
 
-  async sendBusiness(domain: string, to: string[], subject: string, body: string): Promise<Email> {
+  async sendBusiness(domain: string, to: string[], subject: string, body: string, fromAddress?: string): Promise<Email> {
     const session = auth.getSession();
-    const fromAddr = `admin@${domain}`;
+    const normalizedDomain = normalizeDomainInput(domain);
+    const availableMailboxes = loadBusinessMailboxes(normalizedDomain);
+    const selectedMailbox =
+      availableMailboxes.find((mailbox) => mailbox.address === normalizeMailbox(fromAddress || '')) ||
+      availableMailboxes.find((mailbox) => mailbox.active) ||
+      availableMailboxes[0] ||
+      getSystemBusinessMailbox(normalizedDomain);
+    const groupEntries = loadBusinessGroups(normalizedDomain);
+    const expandedRecipients = Array.from(new Set(
+      to
+        .map((recipient) => normalizeMailbox(recipient))
+        .flatMap((recipient) => {
+          const group = groupEntries.find((entry) => entry.address === recipient);
+          return group ? group.members : [recipient];
+        })
+        .filter(Boolean),
+    ));
+    const fromAddr = selectedMailbox.address;
     await fetchAPI('/mail/send', {
       method: 'POST',
       body: JSON.stringify({
-        to,
+        to: expandedRecipients,
         subject,
         body,
         from: fromAddr,
-        fromName: session?.displayName || 'Business',
+        fromName: selectedMailbox.displayName || session?.displayName || 'Business',
         provider: session?.businessMailProvider,
         apiKey: session?.businessApiKey,
         providerEndpoint: session?.businessMailProviderEndpoint,
@@ -1142,13 +1425,20 @@ export const mail = {
     const email: Email = {
       id: 'bem_' + Math.random().toString(36).slice(2, 8),
       from: fromAddr,
-      fromName: session?.displayName || 'Business',
-      to, subject, body,
+      fromName: selectedMailbox.displayName || session?.displayName || 'Business',
+      to: expandedRecipients, subject, body,
       date: new Date().toISOString(),
       folder: 'sent', unread: false, starred: false, labels: [], hasAttachment: false,
     };
     emailsCache.unshift(email);
     saveUserDB(STORAGE_KEYS.emails, emailsCache);
+    businessMailboxes.touch(normalizedDomain, fromAddr);
+    businessAudit.add({
+      action: 'Sent business email',
+      actor: fromAddr,
+      target: expandedRecipients.join(', '),
+      severity: 'info',
+    });
     return email;
   },
 
@@ -1237,6 +1527,274 @@ export const mail = {
     return emailsCache.filter(e => e.unread).length;
   },
 
+};
+
+export const businessMailboxes = {
+  getByDomain(domain: string): BusinessMailbox[] {
+    return loadBusinessMailboxes(domain);
+  },
+
+  getPrimary(domain: string): BusinessMailbox {
+    return this.getByDomain(domain).find((entry) => entry.active) || this.getByDomain(domain)[0] || getSystemBusinessMailbox(domain);
+  },
+
+  create(domain: string, data: {
+    localPart?: string;
+    address?: string;
+    displayName?: string;
+    kind?: BusinessMailbox['kind'];
+    aliases?: string[];
+  }): BusinessMailbox {
+    const normalizedDomain = normalizeDomainInput(domain);
+    const entries = this.getByDomain(normalizedDomain);
+    const normalizedAddress = normalizeMailbox(
+      data.address || `${normalizeLocalPart(data.localPart || data.displayName || 'mailbox')}@${normalizedDomain}`,
+    );
+    if (!normalizedAddress.endsWith(`@${normalizedDomain}`)) {
+      throw new Error(`Mailbox must use @${normalizedDomain}.`);
+    }
+    if (entries.some((entry) => entry.address === normalizedAddress)) {
+      throw new Error('This mailbox already exists for the selected domain.');
+    }
+
+    const mailbox = normalizeBusinessMailboxEntry({
+      address: normalizedAddress,
+      displayName: data.displayName || normalizedAddress.split('@')[0],
+      kind: data.kind || 'mailbox',
+      aliases: data.aliases || [],
+      active: entries.length === 0,
+      source: 'custom',
+    }, normalizedDomain);
+    saveBusinessMailboxes(normalizedDomain, [...entries, mailbox]);
+    businessAudit.add({
+      action: 'Created mailbox',
+      actor: auth.getSession()?.email || mailbox.address,
+      target: mailbox.address,
+      severity: 'info',
+    });
+    return mailbox;
+  },
+
+  setPrimary(domain: string, address: string): BusinessMailbox[] {
+    const normalizedDomain = normalizeDomainInput(domain);
+    const normalizedAddress = normalizeMailbox(address);
+    const updated = this.getByDomain(normalizedDomain).map((entry) => ({
+      ...entry,
+      active: entry.address === normalizedAddress,
+      kind: entry.address === normalizedAddress ? 'primary' as const : entry.kind === 'primary' ? 'mailbox' as const : entry.kind,
+    }));
+    saveBusinessMailboxes(normalizedDomain, updated);
+
+    const session = auth.getSession();
+    if (session?.businessDomain === normalizedDomain) {
+      auth.updateSettings({ businessMailboxAddress: normalizedAddress });
+    }
+    return updated;
+  },
+
+  touch(domain: string, address: string) {
+    const normalizedDomain = normalizeDomainInput(domain);
+    const normalizedAddress = normalizeMailbox(address);
+    const updated = this.getByDomain(normalizedDomain).map((entry) => (
+      entry.address === normalizedAddress
+        ? { ...entry, lastUsedAt: new Date().toISOString() }
+        : entry
+    ));
+    saveBusinessMailboxes(normalizedDomain, updated);
+  },
+
+  remove(domain: string, address: string): BusinessMailbox[] {
+    const normalizedDomain = normalizeDomainInput(domain);
+    const normalizedAddress = normalizeMailbox(address);
+    const current = this.getByDomain(normalizedDomain);
+    const next = current.filter((entry) => entry.address !== normalizedAddress);
+    if (next.length === 0) {
+      throw new Error('At least one business mailbox must remain on the domain.');
+    }
+    if (!next.some((entry) => entry.active)) {
+      next[0] = { ...next[0], active: true, kind: 'primary' };
+    }
+    saveBusinessMailboxes(normalizedDomain, next);
+    const session = auth.getSession();
+    if (session?.businessMailboxAddress === normalizedAddress) {
+      auth.updateSettings({ businessMailboxAddress: next.find((entry) => entry.active)?.address || next[0].address });
+    }
+    businessAudit.add({
+      action: 'Removed mailbox',
+      actor: auth.getSession()?.email || normalizedAddress,
+      target: normalizedAddress,
+      severity: 'warn',
+    });
+    return next;
+  },
+
+  removeDomain(domain: string) {
+    saveBusinessMailboxes(domain, []);
+  },
+};
+
+export const businessGroups = {
+  getByDomain(domain: string): BusinessGroup[] {
+    return loadBusinessGroups(domain);
+  },
+
+  create(domain: string, data: { name: string; localPart?: string; members: string[] }): BusinessGroup {
+    const normalizedDomain = normalizeDomainInput(domain);
+    const entries = this.getByDomain(normalizedDomain);
+    const address = normalizeMailbox(`${normalizeLocalPart(data.localPart || data.name)}@${normalizedDomain}`);
+    if (entries.some((entry) => entry.address === address)) {
+      throw new Error('This group mailbox already exists.');
+    }
+    const group = normalizeBusinessGroupEntry({
+      name: data.name,
+      address,
+      members: data.members,
+    }, normalizedDomain);
+    saveBusinessGroups(normalizedDomain, [...entries, group]);
+    businessAudit.add({
+      action: 'Created group',
+      actor: auth.getSession()?.email || address,
+      target: address,
+      severity: 'info',
+    });
+    return group;
+  },
+
+  update(domain: string, id: string, data: Partial<BusinessGroup>) {
+    const normalizedDomain = normalizeDomainInput(domain);
+    const updated = this.getByDomain(normalizedDomain).map((entry) => (
+      entry.id === id
+        ? normalizeBusinessGroupEntry({ ...entry, ...data, updatedAt: new Date().toISOString() }, normalizedDomain)
+        : entry
+    ));
+    saveBusinessGroups(normalizedDomain, updated);
+  },
+
+  remove(domain: string, id: string) {
+    const normalizedDomain = normalizeDomainInput(domain);
+    const current = this.getByDomain(normalizedDomain);
+    const group = current.find((entry) => entry.id === id);
+    saveBusinessGroups(normalizedDomain, current.filter((entry) => entry.id !== id));
+    if (group) {
+      businessAudit.add({
+        action: 'Removed group',
+        actor: auth.getSession()?.email || group.address,
+        target: group.address,
+        severity: 'warn',
+      });
+    }
+  },
+
+  removeDomain(domain: string) {
+    saveBusinessGroups(domain, []);
+  },
+};
+
+export const businessTeam = {
+  getAll(): BusinessTeamMember[] {
+    return loadBusinessTeamMembers();
+  },
+  save(entries: BusinessTeamMember[]) {
+    saveBusinessTeamMembers(entries);
+  },
+};
+
+export const businessTemplates = {
+  getAll(): BusinessTemplate[] {
+    return loadBusinessTemplates();
+  },
+  save(entries: BusinessTemplate[]) {
+    saveBusinessTemplates(entries);
+  },
+};
+
+export const businessAudit = {
+  getAll(): BusinessAuditEntry[] {
+    return loadBusinessAuditEntries();
+  },
+  save(entries: BusinessAuditEntry[]) {
+    saveBusinessAuditEntries(entries);
+  },
+  add(entry: Omit<BusinessAuditEntry, 'id' | 'timestamp'> & Partial<Pick<BusinessAuditEntry, 'id' | 'timestamp'>>) {
+    const all = this.getAll();
+    const nextEntry: BusinessAuditEntry = {
+      id: entry.id || `aud_${Math.random().toString(36).slice(2, 10)}`,
+      timestamp: entry.timestamp || new Date().toISOString(),
+      action: entry.action,
+      actor: entry.actor,
+      target: entry.target,
+      severity: entry.severity,
+    };
+    this.save([nextEntry, ...all]);
+    return nextEntry;
+  },
+};
+
+export const connections = {
+  getUsage(): ConnectionUsage[] {
+    return loadUsers().flatMap((user) => {
+      const usages: ConnectionUsage[] = [];
+      if (user.customDbUrl) {
+        usages.push(buildConnectionUsage('database', user, user.customDbUrl));
+      }
+      if (user.businessDbUrl) {
+        usages.push(buildConnectionUsage('database', user, user.businessDbUrl));
+      }
+      if (user.apiKey) {
+        usages.push(buildConnectionUsage('mail-provider', user, user.apiKey, user.mailProvider));
+      }
+      if (user.businessApiKey) {
+        usages.push(buildConnectionUsage('mail-provider', user, user.businessApiKey, user.businessMailProvider));
+      }
+      return usages;
+    });
+  },
+
+  revoke(id: string): boolean {
+    const users = loadUsers();
+    const usage = this.getUsage().find((entry) => entry.id === id);
+    if (!usage) return false;
+    const userIndex = users.findIndex((entry) => entry.id === usage.ownerAccountId);
+    if (userIndex === -1) return false;
+
+    const next = { ...users[userIndex] };
+    if (usage.type === 'database') {
+      if (next.customDbUrl && hashString(`database::${next.customDbUrl.toLowerCase()}`) === usage.fingerprint) {
+        next.customDbUrl = undefined;
+        next.isSetupComplete = false;
+      }
+      if (next.businessDbUrl && hashString(`database::${next.businessDbUrl.toLowerCase()}`) === usage.fingerprint) {
+        next.businessDbUrl = undefined;
+        next.isBusinessSetupComplete = false;
+      }
+    } else {
+      if (next.apiKey && hashString(`mail-provider:${next.mailProvider || ''}:${next.apiKey.toLowerCase()}`) === usage.fingerprint) {
+        next.apiKey = undefined;
+        next.isSetupComplete = false;
+      }
+      if (next.businessApiKey && hashString(`mail-provider:${next.businessMailProvider || ''}:${next.businessApiKey.toLowerCase()}`) === usage.fingerprint) {
+        next.businessApiKey = undefined;
+        next.isBusinessSetupComplete = false;
+      }
+    }
+
+    users[userIndex] = normalizeStoredUser(next as User & { password: string });
+    saveUsers(users);
+
+    const session = auth.getSession();
+    if (session?.id === next.id) {
+      auth.updateSettings({
+        customDbUrl: next.customDbUrl,
+        businessDbUrl: next.businessDbUrl,
+        apiKey: next.apiKey,
+        businessApiKey: next.businessApiKey,
+        isSetupComplete: next.isSetupComplete,
+        isBusinessSetupComplete: next.isBusinessSetupComplete,
+      });
+    }
+
+    return true;
+  },
 };
 
 // Basic heuristic scam detection. This is a client-side heuristic and should
@@ -1373,6 +1931,16 @@ export const domains = {
     let allDomains = this.getAll();
     allDomains = allDomains.filter(d => d.id !== id);
     saveUserDB(STORAGE_KEYS.domains, allDomains);
+    if (domainToDelete) {
+      businessMailboxes.removeDomain(domainToDelete.domain);
+      businessGroups.removeDomain(domainToDelete.domain);
+      businessAudit.add({
+        action: 'Deleted domain',
+        actor: auth.getSession()?.email || domainToDelete.domain,
+        target: domainToDelete.domain,
+        severity: 'warn',
+      });
+    }
 
     const session = auth.getSession();
     if (session?.businessDomain && domainToDelete?.domain === session.businessDomain) {
