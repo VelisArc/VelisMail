@@ -1644,8 +1644,8 @@ pub async fn send_mail(
         ))
         .json(&json!({
             "to": payload.to,
-            "cc": [],
-            "bcc": [],
+            "cc": Value::Null,
+            "bcc": Value::Null,
             "subject": payload.subject.trim(),
             "body": payload.body,
             "html_body": Value::Null,
