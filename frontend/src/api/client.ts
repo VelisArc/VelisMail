@@ -595,7 +595,7 @@ function getLoginCandidates(user: Partial<User>): string[] {
   return Array.from(candidates);
 }
 
-function normalizeStoredUser(user: User & { password: string }): User & { password: string } {
+function normalizeStoredUser(user: User & { passwordHash: string }): User & { passwordHash: string } {
   const rawEmail = normalizeMailbox(user.email);
   const normalizedEmail = user.accountType === 'personal'
     ? buildPersonalMailbox(user.personalMailboxLocalPart || rawEmail)
@@ -629,8 +629,8 @@ function normalizeStoredUser(user: User & { password: string }): User & { passwo
   };
 }
 
-function loadUsers(): (User & { password: string })[] {
-  const rawUsers = loadDB<(User & { password: string })[]>(STORAGE_KEYS.users, []);
+function loadUsers(): (User & { passwordHash: string })[] {
+  const rawUsers = loadDB<(User & { passwordHash: string })[]>(STORAGE_KEYS.users, []);
   const normalizedUsers = rawUsers.map(normalizeStoredUser);
   if (JSON.stringify(rawUsers) !== JSON.stringify(normalizedUsers)) {
     saveDB(STORAGE_KEYS.users, normalizedUsers);
@@ -638,7 +638,7 @@ function loadUsers(): (User & { password: string })[] {
   return normalizedUsers;
 }
 
-function saveUsers(users: (User & { password: string })[]) {
+function saveUsers(users: (User & { passwordHash: string })[]) {
   saveDB(STORAGE_KEYS.users, users);
 }
 
@@ -835,7 +835,7 @@ function buildConnectionUsage(type: 'database' | 'mail-provider', user: User, va
   };
 }
 
-function findUserByLogin(users: (User & { password: string })[], identifier: string) {
+function findUserByLogin(users: (User & { passwordHash: string })[], identifier: string) {
   const normalizedIdentifier = normalizeMailbox(identifier);
   const personalMailboxCandidate = identifier.includes('@') ? normalizedIdentifier : buildPersonalMailbox(identifier);
   const localPartCandidate = normalizeLocalPart(identifier);
@@ -850,7 +850,7 @@ function findUserByLogin(users: (User & { password: string })[], identifier: str
   });
 }
 
-function hasLoginConflict(users: (User & { password: string })[], userId: string | undefined, values: string[]) {
+function hasLoginConflict(users: (User & { passwordHash: string })[], userId: string | undefined, values: string[]) {
   const normalizedValues = values
     .map((value) => normalizeMailbox(value))
     .filter(Boolean);
@@ -1036,11 +1036,11 @@ export const auth = {
       return { success: false, error: 'An account with this email already exists.' };
     }
 
-    const newUser: User & { password: string } = {
+    const newUser: User & { passwordHash: string } = {
       id: 'usr_' + Math.random().toString(36).slice(2, 8),
       email: primaryEmail,
       displayName: data.displayName,
-      password: data.password,
+      passwordHash: hashString(data.password),
       plan: 'Starter',
       accountType: data.accountType,
       customDomain: normalizedCustomDomain,
@@ -1087,7 +1087,7 @@ export const auth = {
     saveUsers(users);
 
     // Auto-login
-    const { password: _, ...safeUser } = newUser;
+    const { passwordHash: _, ...safeUser } = newUser;
     saveDB(STORAGE_KEYS.session, safeUser);
     reloadAccountCaches();
 
@@ -1111,8 +1111,18 @@ export const auth = {
   async login(email: string, password: string): Promise<{ success: boolean; error?: string; user?: User }> {
     const users = loadUsers();
     const found = findUserByLogin(users, email);
-    if (!found || found.password !== password) {
+    // Support legacy plain text passwords during migration by checking both
+    const hash = hashString(password);
+    const passwordMatch = found && (found.passwordHash === hash || (found as any).password === password);
+    if (!found || !passwordMatch) {
       return { success: false, error: 'Invalid email or password.' };
+    }
+
+    // Migrate legacy plaintext passwords to hash on successful login
+    if ((found as any).password) {
+      delete (found as any).password;
+      found.passwordHash = hash;
+      saveUsers(users);
     }
     try {
       const res = await fetchAPI('/auth/login', {
@@ -1134,7 +1144,7 @@ export const auth = {
     } catch (error) {
       return { success: false, error: error instanceof Error ? error.message : 'Login failed.' };
     }
-    const { password: _, ...safeUser } = found;
+    const { passwordHash: _, ...safeUser } = found;
     saveDB(STORAGE_KEYS.session, safeUser);
     reloadAccountCaches();
     return { success: true, user: safeUser };
@@ -1196,7 +1206,8 @@ export const auth = {
     const users = loadUsers();
     const userToUpdate = findUserByLogin(users, normalizedIdentifier);
     if (userToUpdate) {
-      userToUpdate.password = data.newPassword;
+      userToUpdate.passwordHash = hashString(data.newPassword);
+      if ((userToUpdate as any).password) delete (userToUpdate as any).password;
       saveUsers(users);
     }
 
@@ -1301,7 +1312,7 @@ export const auth = {
     saveUsers(users);
 
     // Update Session
-    const { password: _, ...safeUser } = updatedUser;
+    const { passwordHash: _, ...safeUser } = updatedUser;
     saveDB(STORAGE_KEYS.session, safeUser);
     
     return { success: true, user: safeUser };
@@ -1314,7 +1325,11 @@ export const auth = {
     const users = loadUsers();
     const userIndex = users.findIndex(u => u.id === session.id);
     if (userIndex === -1) return { success: false, error: 'User not found.' };
-    if (users[userIndex].password !== currentPassword) {
+
+    const user = users[userIndex];
+    const match = user.passwordHash === hashString(currentPassword) || (user as any).password === currentPassword;
+
+    if (!match) {
       return { success: false, error: 'Current password incorrect hai.' };
     }
 
@@ -1331,10 +1346,12 @@ export const auth = {
       return { success: false, error: error instanceof Error ? error.message : 'Password update failed.' };
     }
 
-    users[userIndex] = {
+    const updated = {
       ...users[userIndex],
-      password: nextPassword,
+      passwordHash: hashString(nextPassword),
     };
+    if ((updated as any).password) delete (updated as any).password;
+    users[userIndex] = updated;
     saveUsers(users);
 
     return { success: true };
@@ -1778,7 +1795,7 @@ export const connections = {
       }
     }
 
-    users[userIndex] = normalizeStoredUser(next as User & { password: string });
+    users[userIndex] = normalizeStoredUser(next as User & { passwordHash: string });
     saveUsers(users);
 
     const session = auth.getSession();
