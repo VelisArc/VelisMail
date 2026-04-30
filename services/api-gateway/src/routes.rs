@@ -63,7 +63,12 @@ async fn proxy_generic(
     let path = uri.path();
     let remaining = path.strip_prefix(strip_prefix).unwrap_or(path);
     let query = uri.query().map(|q| format!("?{}", q)).unwrap_or_default();
-    let target = format!("{}{}{}", upstream_base.trim_end_matches('/'), remaining, query);
+    let target = format!(
+        "{}{}{}",
+        upstream_base.trim_end_matches('/'),
+        remaining,
+        query
+    );
 
     let body_bytes = match axum::body::to_bytes(body, 10 * 1024 * 1024).await {
         Ok(bytes) => bytes,
@@ -107,75 +112,29 @@ async fn proxy_generic(
     }
 }
 
-async fn proxy_auth(State(state): State<AppState>, req: Request<Body>) -> Response {
-    let (parts, body) = req.into_parts();
-    proxy_generic(
-        &state,
-        &state.config.auth_service_url,
-        "/auth",
-        parts.method,
-        parts.uri,
-        parts.headers,
-        body,
-    )
-    .await
+macro_rules! proxy_handler {
+    ($fn_name:ident, $url_field:ident, $prefix:expr) => {
+        async fn $fn_name(State(state): State<AppState>, req: Request<Body>) -> Response {
+            let (parts, body) = req.into_parts();
+            proxy_generic(
+                &state,
+                &state.config.$url_field,
+                $prefix,
+                parts.method,
+                parts.uri,
+                parts.headers,
+                body,
+            )
+            .await
+        }
+    };
 }
 
-async fn proxy_mail(State(state): State<AppState>, req: Request<Body>) -> Response {
-    let (parts, body) = req.into_parts();
-    proxy_generic(
-        &state,
-        &state.config.mail_service_url,
-        "/mail",
-        parts.method,
-        parts.uri,
-        parts.headers,
-        body,
-    )
-    .await
-}
-
-async fn proxy_tenant(State(state): State<AppState>, req: Request<Body>) -> Response {
-    let (parts, body) = req.into_parts();
-    proxy_generic(
-        &state,
-        &state.config.tenant_service_url,
-        "/tenants",
-        parts.method,
-        parts.uri,
-        parts.headers,
-        body,
-    )
-    .await
-}
-
-async fn proxy_storage(State(state): State<AppState>, req: Request<Body>) -> Response {
-    let (parts, body) = req.into_parts();
-    proxy_generic(
-        &state,
-        &state.config.storage_service_url,
-        "/storage",
-        parts.method,
-        parts.uri,
-        parts.headers,
-        body,
-    )
-    .await
-}
-
-async fn proxy_delivery(State(state): State<AppState>, req: Request<Body>) -> Response {
-    let (parts, body) = req.into_parts();
-    proxy_generic(
-        &state,
-        &state.config.security_service_url,
-        "/delivery",
-        parts.method,
-        parts.uri,
-        parts.headers,
-        body,
-    )
-    .await
-}
+proxy_handler!(proxy_auth, auth_service_url, "/auth");
+proxy_handler!(proxy_mail, mail_service_url, "/mail");
+proxy_handler!(proxy_tenant, tenant_service_url, "/tenants");
+proxy_handler!(proxy_storage, storage_service_url, "/storage");
+proxy_handler!(proxy_delivery, security_service_url, "/delivery");
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -336,13 +295,7 @@ const DATABASE_SCHEMES: &[&str] = &[
     "custom://",
 ];
 
-const MAIL_PROVIDER_IDS: &[&str] = &[
-    "sendgrid",
-    "resend",
-    "postmark",
-    "brevo",
-    "custom_webhook",
-];
+const MAIL_PROVIDER_IDS: &[&str] = &["sendgrid", "resend", "postmark", "brevo", "custom_webhook"];
 
 fn is_valid_database_url(value: &str) -> bool {
     let normalized = value.trim().to_lowercase();
@@ -411,11 +364,15 @@ fn parse_database_endpoint(db_url: &str) -> Result<DatabaseEndpoint, String> {
                 .host_str()
                 .map(str::to_string)
                 .filter(|value| !value.trim().is_empty())
-                .ok_or_else(|| "Database host is missing from the connection string.".to_string())?;
+                .ok_or_else(|| {
+                    "Database host is missing from the connection string.".to_string()
+                })?;
             let port = parsed
                 .port()
                 .or_else(|| default_port_for_scheme(parsed.scheme()))
-                .ok_or_else(|| format!("Database port is missing for scheme '{}'.", parsed.scheme()))?;
+                .ok_or_else(|| {
+                    format!("Database port is missing for scheme '{}'.", parsed.scheme())
+                })?;
 
             return Ok(DatabaseEndpoint {
                 scheme: parsed.scheme().to_string(),
@@ -503,7 +460,11 @@ async fn verify_database_runtime(db_url: &str) -> RuntimeCheckResult {
         return RuntimeCheckResult {
             key: "database",
             label: "Database Runtime Check",
-            status: if path.is_empty() { "failed" } else { "verified" },
+            status: if path.is_empty() {
+                "failed"
+            } else {
+                "verified"
+            },
             detail: if path.is_empty() {
                 "SQLite path is empty.".to_string()
             } else {
@@ -589,14 +550,20 @@ async fn verify_database_runtime(db_url: &str) -> RuntimeCheckResult {
     }
 
     let joined_failures = failures.join(" | ");
-    let is_unreachable = failures.iter().all(|failure| failure.contains("Network is unreachable"));
+    let is_unreachable = failures
+        .iter()
+        .all(|failure| failure.contains("Network is unreachable"));
     let is_timeout = failures.iter().all(|failure| failure.contains("timed out"));
     RuntimeCheckResult {
         key: "database",
         label: "Database Runtime Check",
         status: "failed",
         detail: format!("Unable to connect to {host}:{port}. Attempts: {joined_failures}"),
-        category: if is_unreachable || is_timeout { "network" } else { "config" },
+        category: if is_unreachable || is_timeout {
+            "network"
+        } else {
+            "config"
+        },
         recommendation: if is_unreachable {
             Some(if is_supabase_host {
                 "The server cannot reach the Supabase database host at all. Verify that you copied the raw database URI from Supabase Project Settings, and if direct port 5432 is blocked for your plan/network, switch to the provider's recommended pooled/direct connection string.".to_string()
@@ -631,13 +598,16 @@ async fn validate_provider_credentials(
                 status: "failed",
                 detail: "Custom webhook endpoint is required.".to_string(),
                 category: "config",
-                recommendation: Some("Add the custom webhook endpoint URL before verifying.".to_string()),
+                recommendation: Some(
+                    "Add the custom webhook endpoint URL before verifying.".to_string(),
+                ),
             };
         };
 
-        let request = client
-            .get(endpoint)
-            .header(axum::http::header::AUTHORIZATION, format!("Bearer {api_key}"));
+        let request = client.get(endpoint).header(
+            axum::http::header::AUTHORIZATION,
+            format!("Bearer {api_key}"),
+        );
         return match timeout(Duration::from_secs(10), request.send()).await {
             Ok(Ok(response)) if response.status().is_success() || response.status().as_u16() == 405 => RuntimeCheckResult {
                 key: "mailProvider",
@@ -751,12 +721,16 @@ async fn dispatch_via_provider(
     payload: &SendMailPayload,
 ) -> Result<Option<String>, String> {
     let provider = provider.trim().to_lowercase();
-    let base_domain = std::env::var("BASE_DOMAIN").unwrap_or_else(|_| "velismail.online".to_string());
+    let base_domain =
+        std::env::var("BASE_DOMAIN").unwrap_or_else(|_| "velismail.online".to_string());
     let from_email = payload
         .from
         .clone()
         .unwrap_or_else(|| format!("noreply@{}", base_domain));
-    let from_name = payload.from_name.clone().unwrap_or_else(|| "VelisMail".to_string());
+    let from_name = payload
+        .from_name
+        .clone()
+        .unwrap_or_else(|| "VelisMail".to_string());
 
     let response = match provider.as_str() {
         "sendgrid" => client
@@ -837,7 +811,9 @@ async fn dispatch_via_provider(
     if !response.status().is_success() {
         let status = response.status();
         let body = response.text().await.unwrap_or_default();
-        return Err(format!("Provider rejected the message with status {status}: {body}"));
+        return Err(format!(
+            "Provider rejected the message with status {status}: {body}"
+        ));
     }
 
     let response_body = response.json::<Value>().await.unwrap_or(Value::Null);
@@ -863,18 +839,25 @@ fn is_valid_domain(value: &str) -> bool {
             && label.len() <= 63
             && !label.starts_with('-')
             && !label.ends_with('-')
-            && label.chars().all(|ch| ch.is_ascii_alphanumeric() || ch == '-')
+            && label
+                .chars()
+                .all(|ch| ch.is_ascii_alphanumeric() || ch == '-')
     })
 }
 
 fn normalize_dns_answer(value: &str) -> String {
-    value.trim()
+    value
+        .trim()
         .trim_end_matches('.')
         .trim_matches('"')
         .replace("\" \"", "")
 }
 
-async fn query_dns_answers(client: &reqwest::Client, name: &str, record_type: &str) -> Result<Vec<String>, String> {
+async fn query_dns_answers(
+    client: &reqwest::Client,
+    name: &str,
+    record_type: &str,
+) -> Result<Vec<String>, String> {
     let response = client
         .get("https://cloudflare-dns.com/dns-query")
         .query(&[("name", name), ("type", record_type)])
@@ -946,9 +929,7 @@ fn extract_provider_dns_records(records: &Value) -> Vec<ProviderDnsRecord> {
                 .get("status")
                 .and_then(Value::as_str)
                 .map(str::to_string),
-            priority: record
-                .get("priority")
-                .and_then(Value::as_u64),
+            priority: record.get("priority").and_then(Value::as_u64),
         })
         .collect()
 }
@@ -1264,13 +1245,9 @@ pub async fn verify_infrastructure(
     }
 
     let database_check = verify_database_runtime(db_url).await;
-    let provider_check = validate_provider_credentials(
-        &state.http_client,
-        api_provider,
-        api_key,
-        api_endpoint,
-    )
-    .await;
+    let provider_check =
+        validate_provider_credentials(&state.http_client, api_provider, api_key, api_endpoint)
+            .await;
     let success = database_check.status == "verified" && provider_check.status == "verified";
 
     verify_infrastructure_response(
@@ -1366,7 +1343,8 @@ pub async fn verify_domain(
         );
     }
 
-    let base_domain = std::env::var("BASE_DOMAIN").unwrap_or_else(|_| "velismail.online".to_string());
+    let base_domain =
+        std::env::var("BASE_DOMAIN").unwrap_or_else(|_| "velismail.online".to_string());
     let txt_host = format!("_velismail-verify.{domain}");
     let dkim_host = format!("velismail._domainkey.{domain}");
     let dmarc_host = format!("_dmarc.{domain}");
@@ -1438,7 +1416,10 @@ pub async fn verify_domain(
         DomainCheckResult {
             key: "txt",
             label: "Ownership TXT",
-            status: if txt_answers.iter().any(|value| value.contains(verification_token)) {
+            status: if txt_answers
+                .iter()
+                .any(|value| value.contains(verification_token))
+            {
                 "verified"
             } else {
                 "failed"
@@ -1477,7 +1458,10 @@ pub async fn verify_domain(
         DomainCheckResult {
             key: "dkim",
             label: "DKIM",
-            status: if dkim_answers.iter().any(|value| value == &expected_dkim_target) {
+            status: if dkim_answers
+                .iter()
+                .any(|value| value == &expected_dkim_target)
+            {
                 "verified"
             } else {
                 "failed"
@@ -1517,7 +1501,11 @@ pub async fn verify_domain(
         &domain,
     )
     .await;
-    let runtime_checks = vec![database_check, provider_runtime_check, provider_domain_check];
+    let runtime_checks = vec![
+        database_check,
+        provider_runtime_check,
+        provider_domain_check,
+    ];
 
     let failed_labels: Vec<&str> = checks
         .iter()
@@ -1535,7 +1523,10 @@ pub async fn verify_domain(
         failure_segments.push(format!("DNS checks: {}", failed_labels.join(", ")));
     }
     if !failed_runtime_labels.is_empty() {
-        failure_segments.push(format!("Runtime checks: {}", failed_runtime_labels.join(", ")));
+        failure_segments.push(format!(
+            "Runtime checks: {}",
+            failed_runtime_labels.join(", ")
+        ));
     }
 
     (
@@ -1561,7 +1552,8 @@ pub async fn send_mail(
     headers: HeaderMap,
     Json(payload): Json<SendMailPayload>,
 ) -> (StatusCode, Json<serde_json::Value>) {
-    if payload.to.is_empty() || payload.subject.trim().is_empty() || payload.body.trim().is_empty() {
+    if payload.to.is_empty() || payload.subject.trim().is_empty() || payload.body.trim().is_empty()
+    {
         return (
             StatusCode::BAD_REQUEST,
             Json(json!({
@@ -1571,7 +1563,9 @@ pub async fn send_mail(
         );
     }
 
-    if let (Some(provider), Some(api_key)) = (payload.provider.as_deref(), payload.api_key.as_deref()) {
+    if let (Some(provider), Some(api_key)) =
+        (payload.provider.as_deref(), payload.api_key.as_deref())
+    {
         let provider_check = validate_provider_credentials(
             &state.http_client,
             provider,
@@ -1672,7 +1666,8 @@ pub async fn send_mail(
         }
     };
 
-    let status = StatusCode::from_u16(response.status().as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
+    let status =
+        StatusCode::from_u16(response.status().as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
     let body = response
         .json::<Value>()
         .await
