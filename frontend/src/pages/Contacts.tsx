@@ -13,6 +13,7 @@ export default function Contacts() {
 
   useEffect(() => {
     if (!user) {
+      navigate('/');
     } else if (!user.isBusinessSetupComplete) {
       navigate('/business-setup');
     }
