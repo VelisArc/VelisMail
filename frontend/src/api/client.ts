@@ -602,7 +602,7 @@ function normalizeBusinessMailboxEntry(entry: Partial<BusinessMailbox>, domain: 
   const normalizedDomain = normalizeDomainInput(domain);
   const address = normalizeMailbox(entry.address || `admin@${normalizedDomain}`);
   return {
-    id: entry.id || `mbx_${Math.random().toString(36).slice(2, 10)}`,
+    id: entry.id || `mbx_${crypto.randomUUID()}`,
     domain: normalizedDomain,
     address,
     displayName: entry.displayName?.trim() || address.split('@')[0],
@@ -619,7 +619,7 @@ function normalizeBusinessGroupEntry(entry: Partial<BusinessGroup>, domain: stri
   const normalizedDomain = normalizeDomainInput(domain);
   const address = normalizeMailbox(entry.address || `team@${normalizedDomain}`);
   return {
-    id: entry.id || `grp_${Math.random().toString(36).slice(2, 10)}`,
+    id: entry.id || `grp_${crypto.randomUUID()}`,
     domain: normalizedDomain,
     name: entry.name?.trim() || address.split('@')[0],
     address,
@@ -791,7 +791,7 @@ function buildDomainChecks(domain: string, verificationToken: string): DomainChe
 
 function normalizeStoredDomain(domain: Partial<CustomDomain> & { id: string; domain: string; status?: 'pending' | 'verified' | 'failed' }): CustomDomain {
   const normalizedDomain = normalizeDomainInput(domain.domain);
-  const verificationToken = domain.verificationToken || 'velismail-verify=' + Math.random().toString(36).slice(2, 14);
+  const verificationToken = domain.verificationToken || 'velismail-verify=' + crypto.randomUUID();
   const fallbackChecks = buildDomainChecks(normalizedDomain, verificationToken);
   const checks = Array.isArray(domain.checks) && domain.checks.length > 0 ? domain.checks : fallbackChecks;
   const dnsRecords = Array.isArray(domain.dnsRecords) && domain.dnsRecords.length > 0
@@ -1180,7 +1180,7 @@ export const mail = {
       }),
     });
     const email: Email = {
-      id: 'bem_' + Math.random().toString(36).slice(2, 8),
+      id: 'bem_' + crypto.randomUUID(),
       from: fromAddr,
       fromName: selectedMailbox.displayName || session?.displayName || 'Business',
       to: expandedRecipients, subject, body,
@@ -1219,7 +1219,7 @@ export const mail = {
       }),
     });
     const email: Email = {
-      id: 'em_' + Math.random().toString(36).slice(2, 8),
+      id: 'em_' + crypto.randomUUID(),
       from: session?.email || 'you@velismail.online',
       fromName: session?.displayName || 'You',
       to, subject, body,
@@ -1512,7 +1512,7 @@ export const businessAudit = {
   add(entry: Omit<BusinessAuditEntry, 'id' | 'timestamp'> & Partial<Pick<BusinessAuditEntry, 'id' | 'timestamp'>>) {
     const all = this.getAll();
     const nextEntry: BusinessAuditEntry = {
-      id: entry.id || `aud_${Math.random().toString(36).slice(2, 10)}`,
+      id: entry.id || `aud_${crypto.randomUUID()}`,
       timestamp: entry.timestamp || new Date().toISOString(),
       action: entry.action,
       actor: entry.actor,
@@ -1631,9 +1631,9 @@ export const domains = {
       return existing;
     }
 
-    const verificationToken = 'velismail-verify=' + Math.random().toString(36).slice(2, 14);
+    const verificationToken = 'velismail-verify=' + crypto.randomUUID();
     const newDomain: CustomDomain = {
-      id: 'dom_' + Math.random().toString(36).slice(2, 8),
+      id: 'dom_' + crypto.randomUUID(),
       domain: normalizedDomain,
       status: 'pending',
       verificationToken,
@@ -1786,7 +1786,7 @@ export const contacts = {
   add(data: Omit<Contact, 'id' | 'favorite' | 'createdAt'>): Contact {
     const all = this.getAll();
     const c: Contact = {
-      id: 'ct_' + Math.random().toString(36).slice(2, 8),
+      id: 'ct_' + crypto.randomUUID(),
       ...data,
       group: data.group || 'General',
       favorite: false,
@@ -1866,7 +1866,7 @@ export const signatures = {
   add(name: string, content: string): Signature {
     const all = this.getAll();
     const sig: Signature = {
-      id: 'sig_' + Math.random().toString(36).slice(2, 8),
+      id: 'sig_' + crypto.randomUUID(),
       name, content,
       isDefault: all.length === 0,
     };
