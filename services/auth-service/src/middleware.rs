@@ -1,7 +1,13 @@
 #![allow(dead_code)]
 //! Auth service middleware
 
-use axum::{extract::Request, http::StatusCode, middleware::Next, response::Response};
+use crate::state::AuthState;
+use axum::{
+    extract::{Request, State},
+    http::StatusCode,
+    middleware::Next,
+    response::Response,
+};
 use std::time::Duration;
 use tower::limit::RateLimitLayer;
 use tower_http::cors::CorsLayer;
@@ -17,7 +23,11 @@ pub fn cors_layer() -> CorsLayer {
 }
 
 /// Authentication middleware for protected routes
-pub async fn require_auth(request: Request, next: Next) -> Result<Response, StatusCode> {
+pub async fn require_auth(
+    State(state): State<AuthState>,
+    mut request: Request,
+    next: Next,
+) -> Result<Response, StatusCode> {
     let auth_header = request
         .headers()
         .get(axum::http::header::AUTHORIZATION)
@@ -29,9 +39,14 @@ pub async fn require_auth(request: Request, next: Next) -> Result<Response, Stat
         return Err(StatusCode::UNAUTHORIZED);
     }
 
-    let _token = &auth_str[7..];
+    let token = &auth_str[7..];
 
-    // In production: validate JWT here
+    let claims = state
+        .jwt_manager
+        .validate_token(token)
+        .map_err(|_| StatusCode::UNAUTHORIZED)?;
+
+    request.extensions_mut().insert(claims);
 
     Ok(next.run(request).await)
 }

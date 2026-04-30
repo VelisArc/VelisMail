@@ -11,7 +11,7 @@ use crate::passkey::generate_challenge;
 use crate::state::AuthState;
 use argon2::password_hash::{rand_core::OsRng, PasswordHasher, PasswordVerifier, SaltString};
 use argon2::{Argon2, PasswordHash};
-use axum::{extract::State, http::StatusCode, Json};
+use axum::{extract::State, http::StatusCode, Extension, Json};
 use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, Validation};
 use lettre::{
     message::{header::ContentType, Mailbox},
@@ -844,10 +844,49 @@ pub async fn logout(
 }
 
 pub async fn get_current_user(
-    State(_state): State<AuthState>,
+    State(state): State<AuthState>,
+    Extension(claims): Extension<velismail_common::Claims>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
-    // TODO: decode JWT from Authorization header via middleware and look up user.
-    Err(StatusCode::NOT_IMPLEMENTED)
+    let user_id = claims.sub.0;
+
+    let user = sqlx::query(
+        "SELECT id, tenant_id, email, recovery_email, display_name, status, created_at, updated_at, last_login
+         FROM users
+         WHERE id = $1"
+    )
+    .bind(user_id)
+    .fetch_optional(&state.db)
+    .await
+    .map_err(|e| {
+        tracing::error!("get_current_user query failed: {}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?
+    .ok_or(StatusCode::NOT_FOUND)?;
+
+    let id: Uuid = user.try_get("id").map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let tenant_id: Uuid = user.try_get("tenant_id").map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let email: String = user.try_get("email").map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let recovery_email: Option<String> = user.try_get("recovery_email").ok();
+    let display_name: String = user.try_get("display_name").map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let status: String = user.try_get("status").map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let created_at: chrono::DateTime<chrono::Utc> = user.try_get("created_at").map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let updated_at: chrono::DateTime<chrono::Utc> = user.try_get("updated_at").map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let last_login: Option<chrono::DateTime<chrono::Utc>> = user.try_get("last_login").ok();
+
+    Ok(Json(json!({
+        "success": true,
+        "user": {
+            "id": id,
+            "tenant_id": tenant_id,
+            "email": email,
+            "recovery_email": recovery_email,
+            "display_name": display_name,
+            "status": status,
+            "created_at": created_at,
+            "updated_at": updated_at,
+            "last_login": last_login,
+        }
+    })))
 }
 
 pub async fn list_sessions(

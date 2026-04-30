@@ -39,6 +39,18 @@ async fn main() -> anyhow::Result<()> {
     let config = AuthConfig::from_env()?;
     let state = AuthState::new(config.clone()).await?;
 
+    let protected_routes = Router::new()
+        .route("/me", get(handlers::get_current_user))
+        .route("/sessions", get(handlers::list_sessions))
+        .route("/sessions/:id", delete(handlers::revoke_session))
+        .route("/device/register", post(handlers::register_device))
+        .route("/device/trust", post(handlers::trust_device))
+        .route("/logout", post(handlers::logout))
+        .route_layer(axum::middleware::from_fn_with_state(
+            state.clone(),
+            middleware::require_auth,
+        ));
+
     let app = Router::new()
         .route("/health", get(handlers::health_check))
         .route("/register", post(handlers::register))
@@ -53,12 +65,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/reset-password", post(handlers::reset_password))
         .route("/change-password", post(handlers::change_password))
         .route("/token/refresh", post(handlers::refresh_token))
-        .route("/logout", post(handlers::logout))
-        .route("/me", get(handlers::get_current_user))
-        .route("/sessions", get(handlers::list_sessions))
-        .route("/sessions/:id", delete(handlers::revoke_session))
-        .route("/device/register", post(handlers::register_device))
-        .route("/device/trust", post(handlers::trust_device))
+        .merge(protected_routes)
         .layer(CorsLayer::permissive())
         .layer(tower_http::trace::TraceLayer::new_for_http())
         .with_state(state);
