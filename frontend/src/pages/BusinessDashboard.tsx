@@ -748,29 +748,15 @@ export default function BusinessDashboard() {
               <Plus size={17} />
               <span className="folder-label">Add Domain</span>
             </button>
+            {/* Mail & Communications */}
+            <div className="sidebar-section-title">Mail & Communications</div>
             <button className={`folder-btn ${activeBizTab === 'mail' ? 'active' : ''}`} onClick={() => { setActiveBizTab('mail'); setSidebarOpen(false); }}>
               <Mail size={17} />
               <span className="folder-label">Mailbox</span>
             </button>
-            <button className={`folder-btn ${activeBizTab === 'domains' ? 'active' : ''}`} onClick={() => { setActiveBizTab('domains'); setSidebarOpen(false); }}>
-              <Globe size={17} />
-              <span className="folder-label">Domains</span>
-            </button>
-            <button className={`folder-btn ${activeBizTab === 'mailboxes' ? 'active' : ''}`} onClick={() => { setActiveBizTab('mailboxes'); setSidebarOpen(false); }}>
-              <Mail size={17} />
-              <span className="folder-label">Mailboxes</span>
-            </button>
-            <button className={`folder-btn ${activeBizTab === 'groups' ? 'active' : ''}`} onClick={() => { setActiveBizTab('groups'); setSidebarOpen(false); }}>
-              <Users size={17} />
-              <span className="folder-label">Groups</span>
-            </button>
-            <button className={`folder-btn ${activeBizTab === 'team' ? 'active' : ''}`} onClick={() => { setActiveBizTab('team'); setSidebarOpen(false); }}>
-              <Users size={17} />
-              <span className="folder-label">Team</span>
-            </button>
-            <button className={`folder-btn ${activeBizTab === 'analytics' ? 'active' : ''}`} onClick={() => { setActiveBizTab('analytics'); setSidebarOpen(false); }}>
-              <BarChart3 size={17} />
-              <span className="folder-label">Analytics</span>
+            <button className={`folder-btn ${activeBizTab === 'templates' ? 'active' : ''}`} onClick={() => { setActiveBizTab('templates'); setSidebarOpen(false); }}>
+              <Layers size={17} />
+              <span className="folder-label">Templates</span>
             </button>
             <button className={`folder-btn ${activeBizTab === 'queue' ? 'active' : ''}`} onClick={() => { setActiveBizTab('queue'); setSidebarOpen(false); }}>
               <Server size={17} />
@@ -779,17 +765,39 @@ export default function BusinessDashboard() {
                 <span className="folder-count">{mailQueue.filter(q => q.status === 'queued' || q.status === 'sending').length}</span>
               )}
             </button>
-            <button className={`folder-btn ${activeBizTab === 'templates' ? 'active' : ''}`} onClick={() => { setActiveBizTab('templates'); setSidebarOpen(false); }}>
-              <Layers size={17} />
-              <span className="folder-label">Templates</span>
+
+            {/* Organization */}
+            <div className="sidebar-section-title" style={{ marginTop: '16px' }}>Organization</div>
+            <button className={`folder-btn ${activeBizTab === 'domains' ? 'active' : ''}`} onClick={() => { setActiveBizTab('domains'); setSidebarOpen(false); }}>
+              <Globe size={17} />
+              <span className="folder-label">Domains</span>
+            </button>
+            <button className={`folder-btn ${activeBizTab === 'mailboxes' ? 'active' : ''}`} onClick={() => { setActiveBizTab('mailboxes'); setSidebarOpen(false); }}>
+              <Inbox size={17} />
+              <span className="folder-label">Alias Mailboxes</span>
+            </button>
+            <button className={`folder-btn ${activeBizTab === 'groups' ? 'active' : ''}`} onClick={() => { setActiveBizTab('groups'); setSidebarOpen(false); }}>
+              <Users size={17} />
+              <span className="folder-label">Groups</span>
+            </button>
+            <button className={`folder-btn ${activeBizTab === 'team' ? 'active' : ''}`} onClick={() => { setActiveBizTab('team'); setSidebarOpen(false); }}>
+              <Shield size={17} />
+              <span className="folder-label">Team Access</span>
+            </button>
+
+            {/* Administration */}
+            <div className="sidebar-section-title" style={{ marginTop: '16px' }}>Administration</div>
+            <button className={`folder-btn ${activeBizTab === 'analytics' ? 'active' : ''}`} onClick={() => { setActiveBizTab('analytics'); setSidebarOpen(false); }}>
+              <BarChart3 size={17} />
+              <span className="folder-label">Analytics</span>
             </button>
             <button className={`folder-btn ${activeBizTab === 'audit' ? 'active' : ''}`} onClick={() => { setActiveBizTab('audit'); setSidebarOpen(false); }}>
-              <Shield size={17} />
+              <Activity size={17} />
               <span className="folder-label">Audit Log</span>
             </button>
             <button className={`folder-btn ${activeBizTab === 'settings' ? 'active' : ''}`} onClick={() => { setActiveBizTab('settings'); setSidebarOpen(false); }}>
               <Settings size={17} />
-              <span className="folder-label">Business Settings</span>
+              <span className="folder-label">Settings</span>
             </button>
 
             {activeBizTab === 'mail' && (
