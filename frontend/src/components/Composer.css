@@ -1,0 +1,157 @@
+/* ======================================================
+   VelisMail — Composer Styles
+   ====================================================== */
+
+.composer-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  flex: 1;
+}
+
+.to-field-container {
+  position: relative;
+}
+
+.autocomplete-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 68px; /* Align with input start roughly */
+  right: 0;
+  max-height: 200px;
+  overflow-y: auto;
+  background: var(--bg-surface-2);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--glass-shadow);
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  padding: 4px;
+}
+
+.autocomplete-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.autocomplete-item:hover {
+  background: var(--bg-hover);
+}
+
+.autocomplete-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-full);
+  background: var(--primary);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.8rem;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.autocomplete-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.autocomplete-name {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.autocomplete-email {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+/* Rich Text Editor */
+.rich-text-container {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  margin-top: 4px;
+  background: var(--bg-surface);
+  transition: border-color 0.2s;
+}
+
+.rich-text-container:focus-within {
+  border-color: var(--primary-400);
+  box-shadow: 0 0 0 2px var(--primary-glow);
+}
+
+.rich-text-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--glass-border);
+  background: var(--bg-surface-2);
+}
+
+.toolbar-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.toolbar-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.toolbar-divider {
+  width: 1px;
+  height: 16px;
+  background: var(--glass-border);
+  margin: 0 4px;
+}
+
+.rich-text-editor {
+  flex: 1;
+  min-height: 150px;
+  padding: 12px 14px;
+  outline: none;
+  font-size: 0.95rem;
+  line-height: 1.6;
+  color: var(--text-primary);
+  overflow-y: auto;
+}
+
+.rich-text-editor[contenteditable]:empty::before {
+  content: attr(placeholder);
+  color: var(--text-muted);
+  opacity: 0.7;
+  pointer-events: none;
+}
+
+/* Formatting within editor */
+.rich-text-editor a {
+  color: var(--primary);
+  text-decoration: underline;
+}
+
+.rich-text-editor ul, .rich-text-editor ol {
+  padding-left: 24px;
+  margin: 8px 0;
+}

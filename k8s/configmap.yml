@@ -1,0 +1,47 @@
+# VelisMail ConfigMap
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: velismail-config
+  namespace: velismail
+data:
+  # Common
+  RUST_LOG: "info"
+  
+  # API Gateway
+  GATEWAY_HOST: "0.0.0.0"
+  GATEWAY_PORT: "3000"
+  AUTH_SERVICE_URL: "http://auth-service:3001"
+  MAIL_SERVICE_URL: "http://mail-service:3002"
+  STORAGE_SERVICE_URL: "http://storage-service:3003"
+  TENANT_SERVICE_URL: "http://tenant-service:3004"
+  DELIVERY_SERVICE_URL: "http://delivery-engine:3005"
+  
+  # Auth Service
+  AUTH_HOST: "0.0.0.0"
+  AUTH_PORT: "3001"
+  JWT_EXPIRY_SECONDS: "3600"
+  MAX_SESSIONS_PER_USER: "5"
+  PASSKEY_RELYING_PARTY: "velismail.online"
+  
+  # Mail Service
+  MAIL_HOST: "0.0.0.0"
+  MAIL_PORT: "3002"
+  MAX_ATTACHMENT_SIZE_MB: "25"
+  UNDO_SEND_WINDOW: "30"
+  
+  # Storage Service
+  STORAGE_HOST: "0.0.0.0"
+  STORAGE_PORT: "3003"
+  S3_REGION: "us-east-1"
+  S3_BUCKET: "velismail"
+  MAX_FILE_SIZE_MB: "50"
+  
+  # Tenant Service
+  TENANT_HOST: "0.0.0.0"
+  TENANT_PORT: "3004"
+  
+  # Delivery Engine
+  DELIVERY_HOST: "0.0.0.0"
+  DELIVERY_PORT: "3005"
+  DKIM_SELECTOR: "velismail"
