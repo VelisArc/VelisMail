@@ -214,6 +214,38 @@ export default function Home() {
         </div>
       </section>
 
+      {/* SEO Section: Technical Architecture */}
+      <section className="seo-content-block" style={{ background: 'var(--bg-surface-2)' }}>
+        <div className="container">
+          <div className="seo-grid">
+            <div className="seo-text-content">
+              <h2>Engineered with Rust for Sub-Millisecond Latency</h2>
+              <p>
+                The foundation of our secure business email hosting platform is written entirely in <strong>Rust</strong>. Legacy email providers rely on decades-old C and C++ codebases, which are notoriously vulnerable to memory safety exploits like buffer overflows. By utilizing Rust's strict compiler guarantees, VelisMail eliminates entire classes of security vulnerabilities at the source code level.
+              </p>
+              <h3>Global Edge Network & SMTP Routing</h3>
+              <p>
+                Our proprietary SMTP/IMAP routing engine operates on a globally distributed edge network. This allows for intelligent, geo-routed email delivery that bypasses traditional network bottlenecks. Whether your enterprise team is operating in Tokyo, London, or New York, our infrastructure guarantees inbound and outbound email delivery speeds of under 50 milliseconds.
+              </p>
+            </div>
+            <div className="seo-text-content">
+              <h2>Automated Domain Reputation Management</h2>
+              <p>
+                Email deliverability is critical for modern business operations. If your corporate emails are landing in the spam folder, your communication breaks down. VelisMail automates the complex process of domain reputation management.
+              </p>
+              <ul>
+                <li><strong>SPF (Sender Policy Framework):</strong> Cryptographically authorize our IPs to send on your behalf.</li>
+                <li><strong>DKIM (DomainKeys Identified Mail):</strong> Every outgoing message is signed with a unique 2048-bit RSA key.</li>
+                <li><strong>DMARC Enforcement:</strong> Instantly reject spoofing and phishing attempts using your corporate identity.</li>
+              </ul>
+              <p>
+                Our live DNS dashboard continuously monitors your domain health, alerting you instantly if your DNS records degrade or if third-party providers attempt to intercept your traffic.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* SEO Section: FAQ */}
       <section className="faq-section">
         <div className="container">
