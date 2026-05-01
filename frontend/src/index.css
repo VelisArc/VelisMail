@@ -254,6 +254,28 @@ a:hover {
   padding: var(--space-6);
 }
 
+/* --- Branding & Logos --- */
+.nav-logo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  text-decoration: none;
+}
+
+.logo-img {
+  height: 28px;
+  width: auto;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+.logo-text {
+  font-weight: 700;
+  font-size: 1.25rem;
+  color: var(--text-primary);
+  letter-spacing: -0.02em;
+}
+
 /* --- Layout Utilities --- */
 .container {
   width: 100%;
