@@ -4,6 +4,7 @@
 
 /* --- CSS Variables / Design Tokens --- */
 :root {
+  color-scheme: dark;
   /* Font */
   --font-sans: 'Inter', 'Geist', system-ui, -apple-system, sans-serif;
   --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
@@ -194,6 +195,12 @@ a:hover {
   transition: all var(--transition-normal);
   gap: var(--space-2);
   min-height: 44px;
+}
+
+.btn-sm {
+  padding: var(--space-2) var(--space-4);
+  font-size: 0.85rem;
+  min-height: 36px;
 }
 
 .btn-primary {

@@ -100,8 +100,8 @@ export default function Home() {
               </Link>
             ) : (
               <>
-                <Link to="/login" className="btn btn-secondary">Log In</Link>
-                <Link to="/login" className="btn btn-primary">Get Started</Link>
+                <Link to="/login" className="btn btn-secondary btn-sm">Log In</Link>
+                <Link to="/login" className="btn btn-primary btn-sm">Get Started</Link>
               </>
             )}
           </div>
@@ -373,7 +373,7 @@ export default function Home() {
             <Link to="/terms" className="footer-link">Terms</Link>
             <Link to="/security" className="footer-link">Security</Link>
             <Link to="/about" className="footer-link">About</Link>
-            <Link to="/contact" className="footer-link">Contact</Link>
+            <a href="mailto:support@velismail.online" className="footer-link">Contact</a>
           </div>
           <p className="footer-copyright">
             © 2024 VelisMail. All rights reserved. Enterprise-grade secure communication.

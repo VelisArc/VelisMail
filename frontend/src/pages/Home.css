@@ -81,7 +81,7 @@
 /* --- Hero Section --- */
 .hero {
   position: relative;
-  padding: 56px 0 16px;
+  padding: 100px 0 40px;
   overflow: hidden;
   text-align: center;
   background: var(--bg-body);
