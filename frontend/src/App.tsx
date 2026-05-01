@@ -22,6 +22,7 @@ const SecurityPolicy = lazy(() => import('./pages/SecurityPolicy'));
 const Refund = lazy(() => import('./pages/Refund'));
 const Documentation = lazy(() => import('./pages/Documentation'));
 const Status = lazy(() => import('./pages/Status'));
+const AdminDashboard = lazy(() => import('./pages/AdminDashboard'));
 
 // Initialize theme on app load
 theme.init();
@@ -75,6 +76,15 @@ function App() {
               element={
                 <AuthGuard>
                   <Settings />
+                </AuthGuard>
+              }
+            />
+
+            <Route
+              path="/admin"
+              element={
+                <AuthGuard>
+                  <AdminDashboard />
                 </AuthGuard>
               }
             />

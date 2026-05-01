@@ -925,6 +925,7 @@ export const auth = {
           email: primaryEmail,
           display_name: data.displayName,
           password: data.password,
+          custom_domain: data.customDomain || undefined,
           recovery_email: normalizedRecoveryEmail || undefined,
           verification_token: data.verificationToken || undefined,
         }),

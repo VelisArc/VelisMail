@@ -360,6 +360,9 @@ export default function Home() {
               <a href="#features" className="btn btn-secondary">
                 Learn More
               </a>
+              <a href="mailto:feedback@velismail.online" className="btn btn-ghost" style={{ border: '1px solid var(--border-primary)' }}>
+                Submit Feedback
+              </a>
             </div>
           </div>
         </div>
