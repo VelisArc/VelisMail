@@ -356,7 +356,14 @@
   
   .hero-actions {
     flex-direction: column;
-    align-items: center;
+    align-items: stretch;
+    width: 100%;
+    max-width: 320px;
+    margin: 0 auto;
+  }
+  
+  .hero-actions .btn {
+    width: 100%;
   }
   
   .hero-stats {

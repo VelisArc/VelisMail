@@ -183,6 +183,7 @@ export default function BusinessDashboard() {
   const [selectedFromAddress, setSelectedFromAddress] = useState('');
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const [confirmRevokeId, setConfirmRevokeId] = useState<string | null>(null);
 
   const [activeDomain, setActiveDomain] = useState<string>(initialDomainId);
   const [domainsList, setDomainsList] = useState<DomainRecord[]>(initialDomainRecords);
@@ -1655,15 +1656,7 @@ export default function BusinessDashboard() {
                           {usage.ownerDisplayName}
                           {usage.provider ? ` · ${usage.provider}` : ''}
                         </div>
-                        <button className="btn btn-ghost btn-sm" onClick={() => {
-                          const revoked = connections.revoke(usage.id);
-                          if (revoked) {
-                            refreshConnectionUsage();
-                            showToast('Connection access revoked');
-                          } else {
-                            showToast('Unable to revoke this connection', 'error');
-                          }
-                        }}>
+                        <button className="btn btn-ghost btn-sm" onClick={() => setConfirmRevokeId(usage.id)}>
                           Remove Access
                         </button>
                       </div>
@@ -1861,7 +1854,44 @@ export default function BusinessDashboard() {
           <div className={`toast toast-${toast.type}`}><CheckCircle2 size={16} />{toast.msg}</div>
         </div>
       )}
+
+      {/* Revoke Confirm Modal */}
+      {confirmRevokeId && (
+        <div className="modal-overlay" onClick={() => setConfirmRevokeId(null)}>
+          <div className="biz-form-modal glass animate-scale" style={{ maxWidth: '400px' }} onClick={e => e.stopPropagation()}>
+            <div style={{ display: 'flex', gap: '16px', alignItems: 'flex-start' }}>
+              <div style={{ width: '40px', height: '40px', borderRadius: '50%', background: 'rgba(239, 68, 68, 0.1)', color: 'var(--danger)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <AlertTriangle size={24} />
+              </div>
+              <div>
+                <h3 style={{ marginBottom: '8px', fontSize: '1.1rem' }}>Confirm Disconnect</h3>
+                <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: '20px', lineHeight: 1.5 }}>
+                  Are you absolutely sure you want to revoke this connection? Your application will immediately lose access to this database or API provider, which may cause downtime.
+                </p>
+                <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+                  <button className="btn btn-ghost" onClick={() => setConfirmRevokeId(null)}>Cancel</button>
+                  <button 
+                    className="btn btn-primary" 
+                    style={{ background: 'var(--danger)', borderColor: 'var(--danger)' }}
+                    onClick={() => {
+                      const revoked = connections.revoke(confirmRevokeId);
+                      if (revoked) {
+                        refreshConnectionUsage();
+                        showToast('Connection access revoked');
+                      } else {
+                        showToast('Unable to revoke this connection', 'error');
+                      }
+                      setConfirmRevokeId(null);
+                    }}
+                  >
+                    Yes, Disconnect
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
-
