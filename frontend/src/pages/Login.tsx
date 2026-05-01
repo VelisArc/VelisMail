@@ -7,7 +7,6 @@ import './Login.css';
 type Mode = 'login' | 'register';
 type RegisterStep = 'form' | 'otp';
 function nextRouteForUser(user: { email?: string; isBusinessSetupComplete?: boolean }) {
-  if (user.email === 'admin@velisads.online') return '/admin';
   return user.isBusinessSetupComplete ? '/business' : '/business-setup';
 }
 
