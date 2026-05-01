@@ -87,7 +87,7 @@ export default function Home() {
       <nav className={`home-nav ${scrolled ? 'nav-scrolled' : ''}`}>
         <div className="nav-inner">
           <Link to="/" className="nav-logo">
-            <span className="brand-mark" aria-hidden="true">V</span>
+            <img src="/ZeeResizer.png" alt="VelisMail" style={{ height: '24px', width: 'auto' }} />
             <span className="logo-text">VelisMail</span>
           </Link>
           <div className="nav-links">
@@ -112,7 +112,7 @@ export default function Home() {
       <section className="hero">
         <div className="hero-content">
           <div className="hero-badge">
-            <Zap size={14} />
+            <Zap size={12} />
             <span>Powered by Rust & Zero-Knowledge Proofs</span>
           </div>
           
@@ -167,7 +167,7 @@ export default function Home() {
             {features.map((feature, index) => (
               <div key={index} className="feature-card">
                 <div className="feature-icon">
-                  <feature.icon size={32} />
+                  <feature.icon size={18} />
                 </div>
                 <h3 className="feature-title">{feature.title}</h3>
                 <p className="feature-description">{feature.desc}</p>
@@ -304,7 +304,7 @@ export default function Home() {
               <span style={{ position: 'absolute', top: '-10px', right: '12px', background: 'var(--accent)', color: '#000', fontSize: '0.7rem', fontWeight: 700, padding: '2px 10px', borderRadius: '100px' }}>POPULAR</span>
               <div className="feature-icon" style={{ marginBottom: '12px' }}><Globe size={20} /></div>
               <h3 className="feature-title">Business</h3>
-              <div style={{ fontSize: '2rem', fontWeight: 800, color: 'var(--text-primary)', margin: '8px 0' }}>$29<span style={{ fontSize: '0.9rem', fontWeight: 400, color: 'var(--text-muted)' }}>/mo</span></div>
+              <div style={{ fontSize: '2rem', fontWeight: 800, color: 'var(--text-primary)', margin: '8px 0' }}>₹2,499<span style={{ fontSize: '0.9rem', fontWeight: 400, color: 'var(--text-muted)' }}>/mo</span></div>
               <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '16px' }}>For growing teams and businesses</p>
               <ul style={{ listStyle: 'none', padding: 0, display: 'grid', gap: '8px' }}>
                 <li style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>✓ 10,000 emails / day</li>

@@ -262,28 +262,7 @@ a:hover {
   text-decoration: none;
 }
 
-.brand-mark {
-  width: 36px;
-  height: 36px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 10px;
-  flex-shrink: 0;
-  background: linear-gradient(135deg, var(--primary), var(--accent));
-  color: #fff;
-  font-weight: 800;
-  font-size: 1rem;
-  letter-spacing: -0.03em;
-  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.24);
-}
 
-.brand-mark.brand-mark-sm {
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
-  font-size: 0.9rem;
-}
 
 .logo-img {
   height: 28px;
@@ -302,7 +281,7 @@ a:hover {
 /* --- Layout Utilities --- */
 .container {
   width: 100%;
-  max-width: 1200px;
+  max-width: 1400px;
   margin: 0 auto;
   padding: 0 var(--space-6);
 }

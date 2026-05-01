@@ -731,7 +731,7 @@ export default function BusinessDashboard() {
       <aside className={`biz-sidebar glass ${sidebarOpen ? 'open' : ''}`}>
         <div className="sidebar-top">
           <div className="dash-brand" onClick={() => navigate('/')}>
-            <span className="brand-mark brand-mark-sm" aria-hidden="true">V</span>
+            <img src="/ZeeResizer.png" alt="VelisMail" style={{ height: '20px', width: 'auto' }} />
             <div className="dash-brand-info">
               <span className="dash-brand-name">VelisMail</span>
               <span className="badge badge-accent dash-brand-sub" style={{ fontSize: '0.65rem', padding: '2px 6px' }}>Business</span>

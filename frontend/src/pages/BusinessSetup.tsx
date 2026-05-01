@@ -437,7 +437,7 @@ export default function BusinessSetup() {
       <nav className="bsetup-nav">
         <div className="container bsetup-nav-inner">
           <Link to="/" className="nav-logo">
-            <span className="brand-mark brand-mark-sm" aria-hidden="true">V</span>
+            <img src="/ZeeResizer.png" alt="VelisMail" style={{ height: '24px', width: 'auto' }} />
             <span className="logo-text">VelisMail</span>
             <span className="badge badge-primary" style={{ marginLeft: 8 }}>Business</span>
           </Link>
