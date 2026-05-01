@@ -46,8 +46,8 @@ const features = [
   },
   {
     icon: Database,
-    title: 'Unlimited Storage',
-    desc: 'Scalable storage architecture with automatic compression and intelligent data tiering.',
+    title: 'Bring Your Own Database',
+    desc: 'Connect your own PostgreSQL or MySQL database for complete data sovereignty. No vendor lock-in, full portability.',
   }
 ];
 
@@ -87,7 +87,7 @@ export default function Home() {
       <nav className={`home-nav ${scrolled ? 'nav-scrolled' : ''}`}>
         <div className="nav-inner">
           <Link to="/" className="nav-logo">
-            <img src="/ZeeResizer.png" className="logo-img" alt="VelisMail" style={{ height: '32px', width: 'auto', marginRight: '8px' }} />
+            <span className="brand-mark" aria-hidden="true">V</span>
             <span className="logo-text">VelisMail</span>
           </Link>
           <div className="nav-links">
@@ -129,11 +129,11 @@ export default function Home() {
           <div className="hero-actions">
             {user ? (
               <Link to={getDashboardLink()} className="btn btn-primary">
-                Go to {getDashboardText()} <ArrowRight size={20} />
+                Go to {getDashboardText()} <ArrowRight size={18} />
               </Link>
             ) : (
               <Link to="/login" className="btn btn-primary">
-                Start for Free <ArrowRight size={20} />
+                Go to Setup <ArrowRight size={18} />
               </Link>
             )}
             <a href="#features" className="btn btn-secondary">
@@ -271,23 +271,90 @@ export default function Home() {
         </div>
       </section>
 
+      {/* Pricing Section */}
+      <section className="features" id="pricing" style={{ background: 'var(--bg-surface)' }}>
+        <div className="container">
+          <div className="section-header">
+            <span className="section-tag">PRICING</span>
+            <h2 className="section-title">Simple, Usage-Based Plans</h2>
+            <p className="section-subtitle">
+              Connect your own database. Pay only for sending capacity, traffic, and concurrent connections.
+            </p>
+          </div>
+
+          <div className="features-grid" style={{ maxWidth: '960px' }}>
+            {/* Starter */}
+            <div className="feature-card" style={{ textAlign: 'left' }}>
+              <div className="feature-icon" style={{ marginBottom: '12px' }}><Zap size={20} /></div>
+              <h3 className="feature-title">Starter</h3>
+              <div style={{ fontSize: '2rem', fontWeight: 800, color: 'var(--text-primary)', margin: '8px 0' }}>Free</div>
+              <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '16px' }}>For individuals and small projects</p>
+              <ul style={{ listStyle: 'none', padding: 0, display: 'grid', gap: '8px' }}>
+                <li style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>✓ 100 emails / day</li>
+                <li style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>✓ 1 custom domain</li>
+                <li style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>✓ 5 concurrent connections</li>
+                <li style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>✓ BYOD — Your own database</li>
+                <li style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>✓ Basic DNS verification</li>
+              </ul>
+              <Link to="/login" className="btn btn-secondary" style={{ width: '100%', marginTop: '20px', textAlign: 'center' }}>Get Started</Link>
+            </div>
+
+            {/* Business */}
+            <div className="feature-card" style={{ textAlign: 'left', border: '1px solid var(--accent)', position: 'relative' }}>
+              <span style={{ position: 'absolute', top: '-10px', right: '12px', background: 'var(--accent)', color: '#000', fontSize: '0.7rem', fontWeight: 700, padding: '2px 10px', borderRadius: '100px' }}>POPULAR</span>
+              <div className="feature-icon" style={{ marginBottom: '12px' }}><Globe size={20} /></div>
+              <h3 className="feature-title">Business</h3>
+              <div style={{ fontSize: '2rem', fontWeight: 800, color: 'var(--text-primary)', margin: '8px 0' }}>$29<span style={{ fontSize: '0.9rem', fontWeight: 400, color: 'var(--text-muted)' }}>/mo</span></div>
+              <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '16px' }}>For growing teams and businesses</p>
+              <ul style={{ listStyle: 'none', padding: 0, display: 'grid', gap: '8px' }}>
+                <li style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>✓ 10,000 emails / day</li>
+                <li style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>✓ 5 custom domains</li>
+                <li style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>✓ 50 concurrent connections</li>
+                <li style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>✓ BYOD — Your own database</li>
+                <li style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>✓ Advanced DNS + DKIM/DMARC</li>
+                <li style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>✓ Team management (up to 25)</li>
+                <li style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>✓ Priority email routing</li>
+              </ul>
+              <Link to="/login" className="btn btn-primary" style={{ width: '100%', marginTop: '20px', textAlign: 'center' }}>Start Business Plan</Link>
+            </div>
+
+            {/* Enterprise */}
+            <div className="feature-card" style={{ textAlign: 'left' }}>
+              <div className="feature-icon" style={{ marginBottom: '12px' }}><Shield size={20} /></div>
+              <h3 className="feature-title">Enterprise</h3>
+              <div style={{ fontSize: '2rem', fontWeight: 800, color: 'var(--text-primary)', margin: '8px 0' }}>Custom</div>
+              <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '16px' }}>For large organizations</p>
+              <ul style={{ listStyle: 'none', padding: 0, display: 'grid', gap: '8px' }}>
+                <li style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>✓ Unlimited emails / day</li>
+                <li style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>✓ Unlimited domains</li>
+                <li style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>✓ Unlimited concurrent connections</li>
+                <li style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>✓ BYOD + managed DB option</li>
+                <li style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>✓ Dedicated IP pool</li>
+                <li style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>✓ SLA guarantee (99.99%)</li>
+                <li style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>✓ 24/7 priority support</li>
+              </ul>
+              <a href="mailto:enterprise@velismail.online" className="btn btn-secondary" style={{ width: '100%', marginTop: '20px', textAlign: 'center' }}>Contact Sales</a>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* CTA Section */}
       <section className="cta-section">
         <div className="container">
           <div className="cta-content">
             <h2 className="cta-title">Ready to Secure Your Communications?</h2>
             <p className="cta-description">
-              Join thousands of enterprises that trust VelisMail for their most sensitive communications.
-              Get started in minutes with our enterprise-grade security platform.
+              Connect your own database, bring your own domain, and scale your email infrastructure on your terms.
             </p>
             <div className="cta-actions">
               {user ? (
                 <Link to={getDashboardLink()} className="btn btn-accent">
-                  Go to Dashboard <ArrowRight size={20} />
+                  Go to Dashboard <ArrowRight size={18} />
                 </Link>
               ) : (
                 <Link to="/login" className="btn btn-accent">
-                  Start Free Trial <ArrowRight size={20} />
+                  Start Setup <ArrowRight size={18} />
                 </Link>
               )}
               <a href="#features" className="btn btn-secondary">

@@ -731,7 +731,7 @@ export default function BusinessDashboard() {
       <aside className={`biz-sidebar glass ${sidebarOpen ? 'open' : ''}`}>
         <div className="sidebar-top">
           <div className="dash-brand" onClick={() => navigate('/')}>
-            <img src="/ZeeResizer.png" className="dash-brand-icon" alt="VelisMail" />
+            <span className="brand-mark brand-mark-sm" aria-hidden="true">V</span>
             <div className="dash-brand-info">
               <span className="dash-brand-name">VelisMail</span>
               <span className="badge badge-accent dash-brand-sub" style={{ fontSize: '0.65rem', padding: '2px 6px' }}>Business</span>
@@ -1054,7 +1054,7 @@ export default function BusinessDashboard() {
                     </div>
                     <div className="domain-card-actions">
                       <button className={`btn btn-ghost btn-sm ${activeDomain === domain.id ? 'active' : ''}`} onClick={() => { setActiveDomain(domain.id); domains.setPrimary(domain.id); }}>
-                        {activeDomain === domain.id ? <CheckCircle2 size={14} /> : <Circle size={14} />}
+                        {activeDomain === domain.id ? <CheckCircle2 size={14} /> : <Square size={14} />}
                         {activeDomain === domain.id ? 'Active' : 'Set Active'}
                       </button>
                       <button className="btn btn-ghost btn-sm" onClick={() => handleRunDomainVerification(domain.id)} disabled={verifyingDomainId === domain.id}>
@@ -1424,81 +1424,93 @@ export default function BusinessDashboard() {
                     <Menu size={20} />
                   </button>
                   <BarChart3 size={20} /> Mail Analytics
+                  <span className="live-dot" title="Live" />
                 </h2>
-                <p>Delivery performance, domain health trends, and engagement metrics.</p>
+                <p>Real-time delivery performance and domain health metrics.</p>
               </div>
               <div style={{ display: 'flex', gap: 8 }}>
-                <select className="input input-sm">
-                  <option>Last 7 days</option>
-                  <option>Last 30 days</option>
-                  <option>Last 90 days</option>
-                </select>
-                <button className="btn btn-ghost btn-sm"><Download size={16} /> Export</button>
+                <button className="btn btn-ghost btn-sm" onClick={() => refetchEmails()}><RefreshCw size={16} /> Refresh</button>
               </div>
             </div>
 
             <div className="analytics-cards">
               <div className="analytics-card glass-card">
                 <div className="analytics-card-label"><Mail size={16} /> Emails Sent</div>
-                <div className="analytics-card-value">1,847</div>
-                <div className="analytics-card-change positive">+12.4% vs last period</div>
+                <div className="analytics-card-value">{mail.getBusinessByFolder(activeDomainName, 'sent').length}</div>
+                <div className="analytics-card-change neutral">From {activeDomainName}</div>
                 <div className="analytics-bar">
-                  <div className="analytics-bar-fill" style={{ width: '72%' }} />
+                  <div className="analytics-bar-fill" style={{ width: `${Math.min(mail.getBusinessByFolder(activeDomainName, 'sent').length * 2, 100)}%` }} />
                 </div>
               </div>
               <div className="analytics-card glass-card">
-                <div className="analytics-card-label"><CheckCircle2 size={16} /> Delivery Rate</div>
-                <div className="analytics-card-value">98.2%</div>
-                <div className="analytics-card-change positive">+0.3% vs last period</div>
+                <div className="analytics-card-label"><Inbox size={16} /> Inbox Count</div>
+                <div className="analytics-card-value">{mail.getBusinessByFolder(activeDomainName, 'inbox').length}</div>
+                <div className="analytics-card-change neutral">Total received</div>
                 <div className="analytics-bar">
-                  <div className="analytics-bar-fill accent" style={{ width: '98%' }} />
+                  <div className="analytics-bar-fill accent" style={{ width: `${Math.min(mail.getBusinessByFolder(activeDomainName, 'inbox').length * 2, 100)}%` }} />
                 </div>
               </div>
               <div className="analytics-card glass-card">
-                <div className="analytics-card-label"><AlertCircle size={16} /> Bounce Rate</div>
-                <div className="analytics-card-value">0.8%</div>
-                <div className="analytics-card-change positive">-0.2% vs last period</div>
+                <div className="analytics-card-label"><Globe size={16} /> Active Domains</div>
+                <div className="analytics-card-value">{domainsList.filter(d => d.status === 'active').length}/{domainsList.length}</div>
+                <div className="analytics-card-change neutral">Verified domains</div>
                 <div className="analytics-bar">
-                  <div className="analytics-bar-fill warning" style={{ width: '8%' }} />
-                </div>
-              </div>
-              <div className="analytics-card glass-card">
-                <div className="analytics-card-label"><Activity size={16} /> Open Rate</div>
-                <div className="analytics-card-value">34.7%</div>
-                <div className="analytics-card-change positive">+5.1% vs last period</div>
-                <div className="analytics-bar">
-                  <div className="analytics-bar-fill" style={{ width: '35%' }} />
+                  <div className="analytics-bar-fill accent" style={{ width: `${domainsList.length > 0 ? (domainsList.filter(d => d.status === 'active').length / domainsList.length) * 100 : 0}%` }} />
                 </div>
               </div>
               <div className="analytics-card glass-card">
                 <div className="analytics-card-label"><Shield size={16} /> Domain Reputation</div>
-                <div className="analytics-card-value">94/100</div>
-                <div className="analytics-card-change positive">+2 pts vs last period</div>
+                <div className="analytics-card-value">{activeDomainRecord?.reputation ?? 0}/100</div>
+                <div className="analytics-card-change neutral">DNS health score</div>
                 <div className="analytics-bar">
-                  <div className="analytics-bar-fill accent" style={{ width: '94%' }} />
+                  <div className="analytics-bar-fill accent" style={{ width: `${activeDomainRecord?.reputation ?? 0}%` }} />
                 </div>
               </div>
               <div className="analytics-card glass-card">
-                <div className="analytics-card-label"><Server size={16} /> Queue Depth</div>
-                <div className="analytics-card-value">4</div>
-                <div className="analytics-card-change neutral">No change</div>
+                <div className="analytics-card-label"><Users size={16} /> Team Members</div>
+                <div className="analytics-card-value">{teamMembers.length}</div>
+                <div className="analytics-card-change neutral">{teamMembers.filter(m => m.role === 'admin').length} admins</div>
                 <div className="analytics-bar">
-                  <div className="analytics-bar-fill muted" style={{ width: '15%' }} />
+                  <div className="analytics-bar-fill muted" style={{ width: `${Math.min(teamMembers.length * 10, 100)}%` }} />
+                </div>
+              </div>
+              <div className="analytics-card glass-card">
+                <div className="analytics-card-label"><Activity size={16} /> Audit Events</div>
+                <div className="analytics-card-value">{auditLog.length}</div>
+                <div className="analytics-card-change neutral">{auditLog.filter(e => e.severity === 'critical' || e.severity === 'warn').length} warnings</div>
+                <div className="analytics-bar">
+                  <div className="analytics-bar-fill warning" style={{ width: `${auditLog.length > 0 ? Math.min((auditLog.filter(e => e.severity === 'warn').length / auditLog.length) * 100, 100) : 0}%` }} />
                 </div>
               </div>
             </div>
 
             <div className="analytics-charts glass-card">
-              <h3><Activity size={16} /> Delivery Performance (Last 30 Days)</h3>
-              <div className="chart-placeholder">
-                {[40, 55, 45, 70, 65, 80, 75, 85, 78, 90, 88, 95].map((h, i) => (
-                  <div key={i} className="chart-bar-wrap">
-                    <div className="chart-bar" style={{ height: `${h}%` }} />
+              <h3><Activity size={16} /> Connection Status</h3>
+              <div style={{ display: 'grid', gap: '12px', marginTop: '16px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px', background: 'var(--bg-surface-2)', borderRadius: '8px', border: '1px solid var(--border-primary)' }}>
+                  <span className="live-dot" />
+                  <div>
+                    <strong style={{ color: 'var(--text-primary)' }}>Mail Provider</strong>
+                    <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{user?.businessMailProvider || 'Not configured'}</div>
                   </div>
-                ))}
-              </div>
-              <div className="chart-labels">
-                {['Week 1', 'Week 2', 'Week 3', 'Week 4'].map(l => <span key={l}>{l}</span>)}
+                  <span className="badge badge-accent" style={{ marginLeft: 'auto' }}>{user?.businessMailProvider ? 'Connected' : 'Pending'}</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px', background: 'var(--bg-surface-2)', borderRadius: '8px', border: '1px solid var(--border-primary)' }}>
+                  <span className={`live-dot ${user?.businessDbUrl ? '' : 'offline'}`} />
+                  <div>
+                    <strong style={{ color: 'var(--text-primary)' }}>Database</strong>
+                    <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{user?.businessDbUrl ? 'BYOD Connected' : 'Not connected'}</div>
+                  </div>
+                  <span className={`badge ${user?.businessDbUrl ? 'badge-accent' : 'badge-secondary'}`} style={{ marginLeft: 'auto' }}>{user?.businessDbUrl ? 'Connected' : 'Disconnected'}</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px', background: 'var(--bg-surface-2)', borderRadius: '8px', border: '1px solid var(--border-primary)' }}>
+                  <span className={`live-dot ${activeDomainRecord?.status === 'active' ? '' : 'offline'}`} />
+                  <div>
+                    <strong style={{ color: 'var(--text-primary)' }}>Primary Domain</strong>
+                    <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{activeDomainName}</div>
+                  </div>
+                  <span className={`badge ${activeDomainRecord?.status === 'active' ? 'badge-accent' : 'badge-warning'}`} style={{ marginLeft: 'auto' }}>{activeDomainRecord?.status || 'Unknown'}</span>
+                </div>
               </div>
             </div>
           </div>
@@ -1853,6 +1865,3 @@ export default function BusinessDashboard() {
   );
 }
 
-function Circle({ size = 16 }: { size?: number }) {
-  return <svg width={size} height={size} viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="2" /></svg>;
-}

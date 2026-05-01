@@ -285,7 +285,7 @@ export default function Login() {
       <div className="login-grid-bg" />
 
       <Link to="/" className="login-back-link">
-        <img src="/ZeeResizer.png" className="logo-img" alt="ZeeResizer" />
+        <span className="brand-mark brand-mark-sm" aria-hidden="true">V</span>
         <span>VelisMail</span>
       </Link>
 

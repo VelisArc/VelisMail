@@ -400,7 +400,30 @@ export default function BusinessSetup() {
       setUser(updateResult.user);
     } catch (err) {
       const baseMessage = err instanceof Error ? err.message : 'Verification failed. Complete every DNS, database, and provider check before access is allowed.';
-      setError(baseMessage.includes('VelisMail API URL') ? `${baseMessage} ${getApiAvailabilityHint()}` : baseMessage);
+      const isNetworkFailure = /Failed to fetch|Network request failed|Unable to reach the VelisMail API/i.test(baseMessage);
+      const finalMessage = isNetworkFailure
+        ? `Unable to reach the domain verification service. ${getApiAvailabilityHint()}`
+        : baseMessage.includes('VelisMail API URL')
+          ? `${baseMessage} ${getApiAvailabilityHint()}`
+          : baseMessage;
+      setError(finalMessage);
+      if (isNetworkFailure) {
+        setVerifySteps((prev) => ([
+          ...prev.slice(0, Math.max(prev.length - 1, 0)),
+          {
+            label: 'Verification Service',
+            icon: Wifi,
+            status: 'error',
+            detail: finalMessage,
+          },
+          {
+            label: 'Domain Activation',
+            icon: CheckCircle2,
+            status: 'error',
+            detail: domain,
+          },
+        ]));
+      }
       return;
     }
 
@@ -414,7 +437,7 @@ export default function BusinessSetup() {
       <nav className="bsetup-nav">
         <div className="container bsetup-nav-inner">
           <Link to="/" className="nav-logo">
-            <img src="/ZeeResizer.png" className="logo-img" alt="VelisMail" />
+            <span className="brand-mark brand-mark-sm" aria-hidden="true">V</span>
             <span className="logo-text">VelisMail</span>
             <span className="badge badge-primary" style={{ marginLeft: 8 }}>Business</span>
           </Link>

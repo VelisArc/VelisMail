@@ -8,7 +8,7 @@ export default function Documentation() {
       <nav className="legal-nav">
         <div className="container legal-nav-inner">
           <Link to="/" className="nav-logo">
-            <img src="/ZeeResizer.png" className="logo-img" alt="ZeeResizer" />
+            <span className="brand-mark brand-mark-sm" aria-hidden="true">V</span>
             <span className="logo-text">VelisMail</span>
           </Link>
           <Link to="/" className="btn btn-ghost btn-sm"><ArrowLeft size={16} /> Back</Link>

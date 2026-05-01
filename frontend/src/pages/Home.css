@@ -9,18 +9,16 @@
   left: 0;
   right: 0;
   z-index: var(--z-fixed);
-  padding: var(--space-4) 0;
+  padding: 8px 0;
   background: var(--bg-surface);
-  backdrop-filter: var(--glass-blur);
-  -webkit-backdrop-filter: var(--glass-blur);
-  border-bottom: 1px solid var(--glass-border);
+  border-bottom: 1px solid var(--border-primary);
   transition: all var(--transition-normal);
 }
 
 .nav-scrolled {
-  padding: var(--space-3) 0;
+  padding: 6px 0;
   background: var(--bg-surface-2);
-  box-shadow: var(--glass-shadow);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.4);
 }
 
 .nav-inner {
@@ -83,7 +81,7 @@
 /* --- Hero Section --- */
 .hero {
   position: relative;
-  padding: 100px 0 20px; /* Accounts for fixed nav without excessive space */
+  padding: 56px 0 16px;
   overflow: hidden;
   text-align: center;
   background: var(--bg-body);

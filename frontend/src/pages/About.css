@@ -54,7 +54,7 @@
   width: 600px;
   height: 600px;
   border-radius: 50%;
-  background: radial-gradient(circle, rgba(99, 102, 241, 0.12), transparent 70%);
+  background: radial-gradient(circle, rgba(16, 185, 129, 0.14), transparent 70%);
   top: -200px;
   left: 50%;
   transform: translateX(-50%);
@@ -144,7 +144,7 @@
   width: 52px;
   height: 52px;
   border-radius: 14px;
-  background: rgba(99, 102, 241, 0.1);
+  background: rgba(16, 185, 129, 0.12);
   color: var(--primary-400);
   display: flex;
   align-items: center;
@@ -280,7 +280,7 @@
 .about-cta-box {
   text-align: center;
   padding: 60px 40px;
-  background: linear-gradient(135deg, rgba(99, 102, 241, 0.08), rgba(52, 211, 153, 0.05));
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(249, 115, 22, 0.08));
 }
 
 .about-cta-box h2 {

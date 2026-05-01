@@ -1,7 +1,7 @@
 /* Business Setup Page */
 .bsetup-page {
   min-height: 100vh;
-  background: var(--bg-primary);
+  background: var(--bg-body);
 }
 
 .bsetup-nav {
@@ -72,7 +72,7 @@
   background: var(--primary);
   border-color: var(--primary);
   color: #fff;
-  box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.15);
+  box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.18);
 }
 
 .bsetup-progress-step.active {
@@ -161,7 +161,7 @@
 }
 
 .bsetup-dns .dns-type {
-  background: rgba(99, 102, 241, 0.08);
+  background: rgba(16, 185, 129, 0.14);
   color: var(--primary);
   padding: 2px 8px;
   border-radius: 4px;
@@ -187,4 +187,27 @@
 .bsetup-card .diag-steps,
 .bsetup-card .diag-step {
   font-family: 'JetBrains Mono', 'Fira Code', monospace;
+}
+
+.bsetup-card.glass {
+  background: var(--bg-card);
+  border: 1px solid var(--border-primary);
+  box-shadow: var(--glass-shadow);
+}
+
+.bsetup-card .diag-header {
+  margin-bottom: 20px;
+}
+
+.bsetup-card .diag-step {
+  background: var(--bg-surface);
+}
+
+.bsetup-card .diag-step-label {
+  font-family: var(--font-sans);
+}
+
+.bsetup-card .diag-step-detail,
+.bsetup-card .diag-step-ms {
+  font-family: var(--font-mono);
 }

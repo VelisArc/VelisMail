@@ -262,6 +262,29 @@ a:hover {
   text-decoration: none;
 }
 
+.brand-mark {
+  width: 36px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  flex-shrink: 0;
+  background: linear-gradient(135deg, var(--primary), var(--accent));
+  color: #fff;
+  font-weight: 800;
+  font-size: 1rem;
+  letter-spacing: -0.03em;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.24);
+}
+
+.brand-mark.brand-mark-sm {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  font-size: 0.9rem;
+}
+
 .logo-img {
   height: 28px;
   width: auto;
@@ -347,4 +370,163 @@ a:hover {
 
 .animate-pulse {
   animation: pulse 2s infinite;
+}
+
+/* --- Diagnostics --- */
+.diag-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-bottom: 14px;
+  margin-bottom: 18px;
+  border-bottom: 1px solid var(--border-primary);
+}
+
+.diag-header h3,
+.diag-header span {
+  font-weight: 700;
+}
+
+.diag-status {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 28px;
+  padding: 4px 10px;
+  border-radius: var(--radius-full);
+  background: rgba(249, 115, 22, 0.14);
+  color: var(--accent);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.diag-steps {
+  display: grid;
+  gap: 12px;
+}
+
+.diag-step {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 12px;
+  padding: 14px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-primary);
+  background: var(--bg-surface-2);
+}
+
+.diag-step-icon {
+  width: 44px;
+  height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-secondary);
+}
+
+.diag-step-info {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.diag-step-label {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.diag-step-detail {
+  font-size: 0.84rem;
+  color: var(--text-secondary);
+  line-height: 1.55;
+  word-break: break-word;
+}
+
+.diag-step-ms {
+  font-size: 0.74rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.diag-success {
+  border-color: rgba(16, 185, 129, 0.28);
+}
+
+.diag-success .diag-step-icon {
+  background: rgba(16, 185, 129, 0.14);
+  color: var(--primary);
+}
+
+.diag-error {
+  border-color: rgba(239, 68, 68, 0.3);
+}
+
+.diag-error .diag-step-icon {
+  background: rgba(239, 68, 68, 0.12);
+  color: var(--danger);
+}
+
+.diag-pending .diag-step-icon,
+.diag-running .diag-step-icon {
+  background: rgba(249, 115, 22, 0.12);
+  color: var(--accent);
+}
+
+.dns-instruction-text {
+  font-size: 0.88rem;
+  color: var(--text-secondary);
+  margin-bottom: 16px;
+}
+
+.dns-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.82rem;
+  font-family: var(--font-mono);
+}
+
+.dns-table th {
+  text-align: left;
+  padding: 10px 12px;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border-primary);
+}
+
+.dns-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border-secondary);
+  color: var(--text-secondary);
+  word-break: break-word;
+}
+
+.dns-type {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 52px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: rgba(16, 185, 129, 0.12);
+  color: var(--primary);
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+@media (max-width: 640px) {
+  .diag-step {
+    grid-template-columns: 40px minmax(0, 1fr);
+  }
+
+  .diag-step-ms {
+    grid-column: 2;
+  }
 }
