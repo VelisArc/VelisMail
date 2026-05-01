@@ -82,7 +82,7 @@ export default function Home() {
   };
 
   return (
-    <div className="home">
+    <div className="home animate-page">
       {/* Navigation */}
       <nav className={`home-nav ${scrolled ? 'nav-scrolled' : ''}`}>
         <div className="nav-inner">

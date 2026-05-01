@@ -725,7 +725,7 @@ export default function BusinessDashboard() {
   const businessMailbox = user.businessMailboxAddress || (activeDomainName ? `admin@${activeDomainName}` : user.email);
 
   return (
-    <div className="biz-dash">
+    <div className="biz-dash animate-page">
       <div className={`dash-sidebar-overlay ${sidebarOpen ? 'open' : ''}`} onClick={() => setSidebarOpen(false)}></div>
       {/* Sidebar */}
       <aside className={`biz-sidebar glass ${sidebarOpen ? 'open' : ''}`}>

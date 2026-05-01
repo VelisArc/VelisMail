@@ -25,29 +25,30 @@
   flex-direction: column;
   border-radius: 0;
   border: none;
-  border-right: 1px solid var(--glass-border);
+  border-right: 1px solid var(--border-primary);
   overflow-y: auto;
   background: var(--bg-surface);
-  padding: 16px 12px;
+  padding: 12px 8px;
 }
 
 /* Biz Brand */
 .dash-brand {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 4px 8px;
-  margin-bottom: 20px;
+  gap: 8px;
+  padding: 6px 8px;
+  margin-bottom: 24px;
   cursor: pointer;
   transition: opacity 0.2s;
+  border-radius: var(--radius-sm);
 }
 
 .dash-brand:hover {
-  opacity: 0.8;
+  background: var(--bg-hover);
 }
 
 .dash-brand-icon {
-  height: 24px;
+  height: 20px;
   width: auto;
   object-fit: contain;
 }
@@ -59,19 +60,21 @@
 }
 
 .dash-brand-name {
-  font-weight: 700;
-  font-size: 1rem;
+  font-weight: 600;
+  font-size: 0.95rem;
   color: var(--text-primary);
   line-height: 1.1;
+  letter-spacing: -0.01em;
 }
 
 .biz-sidebar .compose-btn {
-  margin-bottom: 16px;
-  width: 100%;
+  margin: 0 8px 20px 8px;
+  width: calc(100% - 16px);
   padding: 8px 12px;
   font-weight: 500;
-  border-radius: var(--radius-sm);
+  border-radius: 6px;
   font-size: 0.85rem;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.1);
 }
 
 .sidebar-section-title {
@@ -80,7 +83,7 @@
   color: var(--text-muted);
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  margin: 12px 0 8px 12px;
+  margin: 16px 0 6px 12px;
 }
 
 /* Sidebar Folders */
@@ -93,15 +96,17 @@
 .biz-sidebar .folder-btn {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 6px 12px;
-  border-radius: var(--radius-sm);
+  gap: 10px;
+  padding: 6px 10px;
+  margin: 0 4px;
+  border-radius: 6px;
   font-size: 0.85rem;
-  font-weight: 400;
+  font-weight: 500;
   color: var(--text-secondary);
-  transition: all 0.1s;
-  width: 100%;
+  transition: all 0.1s ease-in-out;
+  width: calc(100% - 8px);
   text-align: left;
+  border: 1px solid transparent;
 }
 
 .biz-sidebar .folder-btn:hover {
@@ -110,9 +115,10 @@
 }
 
 .biz-sidebar .folder-btn.active {
-  background: var(--bg-hover);
+  background: var(--bg-surface-2);
   color: var(--text-primary);
-  font-weight: 500;
+  border-color: var(--border-primary);
+  box-shadow: 0 1px 2px rgba(0,0,0,0.05);
 }
 
 .biz-sidebar .add-domain-shortcut {

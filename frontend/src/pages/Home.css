@@ -83,7 +83,7 @@
 /* --- Hero Section --- */
 .hero {
   position: relative;
-  padding: 80px 0 40px;
+  padding: 100px 0 20px; /* Accounts for fixed nav without excessive space */
   overflow: hidden;
   text-align: center;
   background: var(--bg-body);
