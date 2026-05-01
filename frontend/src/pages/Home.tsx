@@ -87,7 +87,7 @@ export default function Home() {
       <nav className={`home-nav ${scrolled ? 'nav-scrolled' : ''}`}>
         <div className="nav-inner">
           <Link to="/" className="nav-logo">
-            <div className="logo-mark">V</div>
+            <img src="/ZeeResizer.png" className="logo-img" alt="VelisMail" style={{ height: '32px', width: 'auto', marginRight: '8px' }} />
             <span className="logo-text">VelisMail</span>
           </Link>
           <div className="nav-links">
@@ -173,6 +173,68 @@ export default function Home() {
                 <p className="feature-description">{feature.desc}</p>
               </div>
             ))}
+          </div>
+        </div>
+      </section>
+
+      {/* SEO Section: Deep Dive into Enterprise Security */}
+      <section className="seo-content-block">
+        <div className="container">
+          <div className="seo-grid">
+            <div className="seo-text-content">
+              <h2>The Most Secure Business Email Hosting Solution</h2>
+              <p>
+                In today's threat landscape, standard email protocols are insufficient for enterprise security. VelisMail provides a <strong>zero-trust business email hosting solution</strong> engineered with military-grade encryption, ensuring that your corporate communications remain absolutely confidential. Whether you're managing sensitive financial data, healthcare records, or intellectual property, our platform guarantees that only authorized recipients can decrypt your messages.
+              </p>
+              <h3>End-to-End Encryption & Data Sovereignty</h3>
+              <p>
+                Unlike legacy providers that hold your encryption keys, VelisMail operates on a strict zero-knowledge architecture. This means our servers cannot read your emails, and a data breach on our end would yield nothing but cryptographically secure ciphertexts. We comply with GDPR, HIPAA, and strict European data sovereignty laws by isolating your organization's data in dedicated multi-tenant vaults.
+              </p>
+              <h3>Protection Against Phishing and Ransomware</h3>
+              <p>
+                Business Email Compromise (BEC) costs enterprises billions annually. We mitigate this through hardware-backed passkeys, biometric authentication, and strict enforcement of DMARC, SPF, and DKIM protocols. By locking down your domain reputation and rejecting unauthenticated spoofing attempts, VelisMail ensures your brand's integrity remains uncompromised.
+              </p>
+            </div>
+            <div className="seo-text-content">
+              <h2>Why Migrate from Legacy Email Providers?</h2>
+              <p>
+                Migrating your enterprise email to VelisMail means transitioning from a vulnerable, heavily-targeted legacy system to a quantum-resistant infrastructure. 
+              </p>
+              <ul>
+                <li><strong>Cryptographic Proofs:</strong> We use Zero-Knowledge Proofs (ZKP) to authenticate users without ever transmitting passwords over the network.</li>
+                <li><strong>Instant Delivery:</strong> Built on Rust, our edge network routes emails globally with sub-50ms latency.</li>
+                <li><strong>Absolute Control:</strong> Custom alias mailboxes, detailed audit logs, and granular team access controls give IT administrators unprecedented visibility.</li>
+              </ul>
+              <h3>Seamless Onboarding & Domain Management</h3>
+              <p>
+                Setting up a secure email infrastructure usually takes days of DNS configuration and MX record propagation. Our automated setup wizard scans your DNS records in real-time, verifying your MX, TXT, and SPF records instantly. With direct integrations for major registrars, your business can be up and running with secure, encrypted email in under 5 minutes.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* SEO Section: FAQ */}
+      <section className="faq-section">
+        <div className="container">
+          <h2 className="section-title text-center">Frequently Asked Questions</h2>
+          <div className="faq-grid">
+            <div className="faq-item">
+              <h3>What makes VelisMail different from standard email?</h3>
+              <p>VelisMail is a zero-knowledge, zero-trust enterprise email provider. We use end-to-end encryption and advanced routing to ensure that nobody—not even our system administrators—can read your corporate communications.</p>
+            </div>
+            <div className="faq-item">
+              <h3>Can I use my own custom domain?</h3>
+              <p>Yes. Our platform is built specifically for custom domains. You can easily link your business domain, configure your DNS (MX, SPF, DKIM, DMARC), and start sending professional, branded emails immediately.</p>
+            </div>
+            <div className="faq-item">
+              <h3>Is the platform compliant with data regulations?</h3>
+              <p>Absolutely. Because of our strict zero-knowledge architecture, VelisMail helps your organization easily comply with HIPAA, GDPR, SOC2, and other strict data privacy regulations by guaranteeing data sovereignty.</p>
+            </div>
+            <div className="faq-item">
+              <h3>How does the Zero-Trust Authentication work?</h3>
+              <p>Instead of vulnerable passwords, we support modern WebAuthn protocols like Passkeys and biometric authentication. This mathematically eliminates the risk of credential stuffing and phishing attacks.</p>
+            </div>
           </div>
         </div>
       </section>
