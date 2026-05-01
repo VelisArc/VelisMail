@@ -52,10 +52,16 @@ fn build_cors_layer(frontend_url: &str) -> CorsLayer {
 
     info!("CORS restricted to origins: {}", frontend_url);
 
+    let allowed_headers = vec![
+        axum::http::header::AUTHORIZATION,
+        axum::http::header::ACCEPT,
+        axum::http::header::CONTENT_TYPE,
+    ];
+
     CorsLayer::new()
         .allow_origin(AllowOrigin::list(origins))
         .allow_methods(methods)
-        .allow_headers(tower_http::cors::Any)
+        .allow_headers(allowed_headers)
         .allow_credentials(true)
         .max_age(std::time::Duration::from_secs(3600))
 }
