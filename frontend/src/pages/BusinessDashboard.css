@@ -1491,13 +1491,13 @@
 }
 
 /* Logout Modal */
-.biz-dash .logout-confirm-modal {
+.logout-confirm-modal {
   width: 380px;
   padding: 30px;
   text-align: center;
 }
 
-.biz-dash .logout-confirm-icon {
+.logout-confirm-icon {
   width: 80px;
   height: 80px;
   border-radius: var(--radius-full);
@@ -1509,19 +1509,19 @@
   margin: 0 auto 24px;
 }
 
-.biz-dash .logout-confirm-modal h3 {
+.logout-confirm-modal h3 {
   margin-bottom: 12px;
   font-size: 1.4rem;
 }
 
-.biz-dash .logout-confirm-modal p {
+.logout-confirm-modal p {
   font-size: 1rem;
   color: var(--text-muted);
   margin-bottom: 28px;
   line-height: 1.5;
 }
 
-.biz-dash .logout-confirm-actions {
+.logout-confirm-actions {
   display: flex;
   gap: 12px;
   justify-content: center;

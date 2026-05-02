@@ -792,10 +792,30 @@ export default function BusinessDashboard() {
             </button>
             {/* Mail & Communications */}
             <div className="sidebar-section-title">Mail & Communications</div>
-            <button className={`folder-btn ${activeBizTab === 'mail' ? 'active' : ''}`} onClick={() => { setActiveBizTab('mail'); setSidebarOpen(false); }}>
+            <button className={`folder-btn ${activeBizTab === 'mail' && !activeFolder ? 'active' : ''}`} onClick={() => { setActiveBizTab('mail'); setSidebarOpen(false); }}>
               <Mail size={17} />
               <span className="folder-label">Mailbox</span>
             </button>
+            
+            {activeBizTab === 'mail' && (
+              <div style={{ marginLeft: '16px', marginBottom: '8px', borderLeft: '1px solid var(--border-primary)', paddingLeft: '8px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                {BIZ_FOLDERS.map(f => {
+                  const Icon = f.icon;
+                  const count = f.id === 'inbox' ? unreadCount : f.id === 'priority' ? priorityCount : 0;
+                  return (
+                    <button key={f.id}
+                      className={`folder-btn ${activeFolder === f.id ? 'active' : ''}`}
+                      onClick={() => { setActiveFolder(f.id); setSelectedEmail(null); setSidebarOpen(false); }}
+                      style={{ padding: '4px 8px', fontSize: '0.8rem', minHeight: '30px' }}
+                    >
+                      <Icon size={15} />
+                      <span className="folder-label">{f.label}</span>
+                      {count > 0 && <span className="folder-count">{count}</span>}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
             <button className={`folder-btn ${activeBizTab === 'templates' ? 'active' : ''}`} onClick={() => { setActiveBizTab('templates'); setSidebarOpen(false); }}>
               <Layers size={17} />
               <span className="folder-label">Templates</span>
@@ -842,25 +862,7 @@ export default function BusinessDashboard() {
               <span className="folder-label">Settings</span>
             </button>
 
-            {activeBizTab === 'mail' && (
-              <>
-                <div className="sidebar-section-title" style={{ marginTop: '16px' }}>Folders</div>
-                {BIZ_FOLDERS.map(f => {
-                  const Icon = f.icon;
-                  const count = f.id === 'inbox' ? unreadCount : f.id === 'priority' ? priorityCount : 0;
-                  return (
-                    <button key={f.id}
-                      className={`folder-btn ${activeFolder === f.id ? 'active' : ''}`}
-                      onClick={() => { setActiveFolder(f.id); setSelectedEmail(null); setSidebarOpen(false); }}
-                    >
-                      <Icon size={17} />
-                      <span className="folder-label">{f.label}</span>
-                      {count > 0 && <span className="folder-count">{count}</span>}
-                    </button>
-                  );
-                })}
-              </>
-            )}
+
           </nav>
         </div>
 
@@ -1886,7 +1888,7 @@ export default function BusinessDashboard() {
       {/* Logout Confirmation */}
       {showLogoutConfirm && (
         <div className="modal-overlay" onClick={() => setShowLogoutConfirm(false)}>
-          <div className="logout-confirm-modal glass animate-scale" onClick={e => e.stopPropagation()}>
+          <div className="logout-confirm-modal glass-card animate-scale" onClick={e => e.stopPropagation()}>
             <div className="logout-confirm-icon">
               <AlertTriangle size={40} color="var(--danger)" />
             </div>

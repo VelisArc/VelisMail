@@ -485,7 +485,7 @@ export default function SettingsPage() {
 
       {showLogoutConfirm && (
         <div className="modal-overlay" onClick={() => setShowLogoutConfirm(false)}>
-          <div className="logout-confirm-modal glass animate-scale" onClick={e => e.stopPropagation()}>
+          <div className="logout-confirm-modal glass-card animate-scale" onClick={e => e.stopPropagation()}>
             <div className="logout-confirm-icon">
               <AlertCircle size={40} color="var(--danger)" />
             </div>
@@ -501,7 +501,7 @@ export default function SettingsPage() {
 
       {showDeleteConfirm && (
         <div className="modal-overlay" onClick={() => setShowDeleteConfirm(false)}>
-          <div className="logout-confirm-modal glass animate-scale" onClick={e => e.stopPropagation()}>
+          <div className="logout-confirm-modal glass-card animate-scale" onClick={e => e.stopPropagation()}>
             <div className="logout-confirm-icon">
               <AlertCircle size={40} color="var(--danger)" />
             </div>
