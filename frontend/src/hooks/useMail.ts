@@ -14,13 +14,21 @@ export function useEmails(domain: string, folder: string) {
     
     // Convert http/https to ws/wss
     const wsUrl = apiBase.replace(/^http/, 'ws') + '/ws';
-    const ws = new WebSocket(wsUrl);
+    let ws: WebSocket;
+    try {
+      ws = new WebSocket(wsUrl);
+    } catch {
+      return;
+    }
     
     ws.onmessage = (event) => {
       if (event.data === 'new_email' || event.data === 'connected') {
         // Invalidate emails query to trigger an instant refresh
         queryClient.invalidateQueries({ queryKey: ['emails', domain] });
       }
+    };
+    ws.onerror = () => {
+      ws.close();
     };
     
     return () => {

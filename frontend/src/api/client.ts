@@ -16,6 +16,7 @@ const STORAGE_KEYS = {
   businessGroups: 'velismail_business_groups',
   businessTeam: 'velismail_business_team',
   businessTemplates: 'velismail_business_templates',
+  businessQueue: 'velismail_business_queue',
   businessAudit: 'velismail_business_audit',
   contacts: 'velismail_contacts',
   theme: 'velismail_theme',
@@ -168,6 +169,21 @@ export type BusinessTemplate = {
   body: string;
   lastUsed?: string;
   usageCount: number;
+};
+
+export type BusinessMailQueueItem = {
+  id: string;
+  domain: string;
+  fromAddress: string;
+  to: string;
+  recipients: string[];
+  subject: string;
+  body: string;
+  status: 'queued' | 'sending' | 'sent' | 'failed' | 'deferred';
+  queuedAt: string;
+  updatedAt: string;
+  retryCount: number;
+  error?: string;
 };
 
 export type BusinessAuditEntry = {
@@ -343,6 +359,35 @@ export type ApiJsonDetailedResult<T = any> = {
   rawText: string;
 };
 
+function friendlyApiError(endpoint: string, status: number, fallback: string): string {
+  const route = endpoint.toLowerCase();
+  if (status === 401) {
+    if (route.includes('/auth/login')) {
+      return 'Invalid workspace email/domain or password.';
+    }
+    if (route.includes('/auth/verify-otp')) {
+      return 'Verification code expired or invalid. Request a new OTP and try again.';
+    }
+    if (route.includes('/auth/register')) {
+      return 'Email verification expired. Request a new OTP before completing registration.';
+    }
+    return 'Your session is not authorized. Sign in again.';
+  }
+  if (status === 409) {
+    if (route.includes('/auth/register')) {
+      return 'This business mailbox or recovery email already has an account. Sign in, or reset the password if you own it.';
+    }
+    return 'This record already exists.';
+  }
+  if (status === 429) {
+    return 'Too many attempts. Wait a moment and try again.';
+  }
+  if (status >= 500) {
+    return 'VelisMail backend is temporarily unavailable. Retry after the service recovers.';
+  }
+  return fallback || `API Error ${status}`;
+}
+
 export async function fetchApiResponse(endpoint: string, options: RequestInit = {}) {
   const apiBaseCandidates = getApiBaseCandidates();
 
@@ -396,6 +441,7 @@ export async function fetchApiResponse(endpoint: string, options: RequestInit = 
     } catch {
       errorMessage = errorBody || errorMessage;
     }
+    errorMessage = friendlyApiError(endpoint, response.status, errorMessage);
 
     if (response.status === 404 && index < apiBaseCandidates.length - 1) {
       lastError = new Error(errorMessage);
@@ -738,6 +784,39 @@ function saveBusinessTemplates(entries: BusinessTemplate[]) {
   saveUserDB(STORAGE_KEYS.businessTemplates, entries);
 }
 
+function normalizeBusinessQueueEntry(entry: Partial<BusinessMailQueueItem>): BusinessMailQueueItem {
+  const now = new Date().toISOString();
+  const recipients = Array.isArray(entry.recipients)
+    ? entry.recipients.map((recipient) => normalizeMailbox(recipient)).filter(Boolean)
+    : String(entry.to || '').split(',').map((recipient) => normalizeMailbox(recipient)).filter(Boolean);
+  return {
+    id: entry.id || `queue_${Math.random().toString(36).slice(2, 10)}`,
+    domain: normalizeDomainInput(entry.domain || ''),
+    fromAddress: normalizeMailbox(entry.fromAddress || ''),
+    to: recipients.join(', '),
+    recipients,
+    subject: String(entry.subject || '').trim(),
+    body: String(entry.body || ''),
+    status: entry.status || 'queued',
+    queuedAt: entry.queuedAt || now,
+    updatedAt: entry.updatedAt || now,
+    retryCount: Number(entry.retryCount || 0),
+    error: entry.error,
+  };
+}
+
+function loadBusinessQueue(domain?: string): BusinessMailQueueItem[] {
+  const normalizedDomain = normalizeDomainInput(domain || '');
+  return loadUserDB<BusinessMailQueueItem[]>(STORAGE_KEYS.businessQueue, [])
+    .map(normalizeBusinessQueueEntry)
+    .filter((entry) => !normalizedDomain || entry.domain === normalizedDomain)
+    .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+}
+
+function saveBusinessQueue(entries: BusinessMailQueueItem[]) {
+  saveUserDB(STORAGE_KEYS.businessQueue, entries.map(normalizeBusinessQueueEntry));
+}
+
 function loadBusinessAuditEntries(): BusinessAuditEntry[] {
   return loadUserDB<BusinessAuditEntry[]>(STORAGE_KEYS.businessAudit, []);
 }
@@ -841,6 +920,95 @@ function normalizeSessionUser(session: User): User {
   return normalized;
 }
 
+function decodeJwtPayload(token: string): Record<string, any> {
+  try {
+    const payload = token.split('.')[1] || '';
+    const normalized = payload.replace(/-/g, '+').replace(/_/g, '/');
+    const padded = normalized.padEnd(normalized.length + ((4 - (normalized.length % 4)) % 4), '=');
+    return JSON.parse(atob(padded));
+  } catch {
+    return {};
+  }
+}
+
+async function fetchAuthenticatedProfile(): Promise<Partial<User>> {
+  try {
+    const profile = await fetchAPI('/auth/me');
+    const raw = profile?.user || {};
+    return {
+      id: raw.id,
+      tenantId: raw.tenant_id,
+      email: raw.email,
+      displayName: raw.display_name,
+      recoveryEmail: raw.recovery_email || undefined,
+      recoveryEmailVerified: Boolean(raw.recovery_email),
+      createdAt: raw.created_at,
+    };
+  } catch {
+    return {};
+  }
+}
+
+function buildSessionUser(params: {
+  token: string;
+  email: string;
+  displayName?: string;
+  recoveryEmail?: string;
+  customDomain?: string;
+  existing?: User | null;
+  profile?: Partial<User>;
+}): User {
+  const tokenPayload = decodeJwtPayload(params.token);
+  const profile = params.profile || {};
+  const email = normalizeMailbox(profile.email || tokenPayload.email || params.email);
+  const domain = normalizeDomainInput(params.customDomain || email.split('@')[1] || params.existing?.businessDomain || '');
+  const businessMailboxAddress = domain ? `admin@${domain}` : email;
+  const existingBusinessComplete = params.existing?.isBusinessSetupComplete || false;
+
+  return normalizeSessionUser({
+    ...params.existing,
+    id: String(profile.id || tokenPayload.sub || params.existing?.id || `usr_${hashString(email)}`),
+    tenantId: String(profile.tenantId || tokenPayload.tenant_id || params.existing?.tenantId || ''),
+    email,
+    displayName: String(profile.displayName || params.displayName || params.existing?.displayName || email.split('@')[0] || 'Business User'),
+    plan: params.existing?.plan || 'Starter',
+    accountType: 'business',
+    customDomain: params.customDomain || params.existing?.customDomain,
+    recoveryEmail: profile.recoveryEmail || params.recoveryEmail || params.existing?.recoveryEmail,
+    recoveryEmailVerified: profile.recoveryEmailVerified ?? params.existing?.recoveryEmailVerified,
+    isSetupComplete: params.existing?.isSetupComplete || false,
+    isBusinessSetupComplete: existingBusinessComplete,
+    businessDomain: params.existing?.businessDomain || domain || undefined,
+    businessMailboxAddress: params.existing?.businessMailboxAddress || businessMailboxAddress,
+    businessDomainVerified: params.existing?.businessDomainVerified || false,
+    dkimStatus: params.existing?.dkimStatus || 'pending',
+    spfStatus: params.existing?.spfStatus || 'pending',
+    dmarcStatus: params.existing?.dmarcStatus || 'pending',
+    createdAt: String(profile.createdAt || params.existing?.createdAt || new Date().toISOString()),
+  });
+}
+
+function loginIdentifierCandidates(identifier: string): string[] {
+  const normalized = normalizeMailbox(identifier);
+  const candidates = [normalized];
+  if (normalized && !normalized.includes('@')) {
+    candidates.push(`admin@${normalizeDomainInput(normalized)}`);
+  }
+  return Array.from(new Set(candidates.filter(Boolean)));
+}
+
+function scopedExistingSession(email: string): User | null {
+  const existing = getSessionSafe();
+  if (!existing) return null;
+  const normalizedEmail = normalizeMailbox(email);
+  const existingValues = [
+    existing.email,
+    existing.recoveryEmail,
+    existing.businessMailboxAddress,
+  ].map(value => normalizeMailbox(value || '')).filter(Boolean);
+  return existingValues.includes(normalizedEmail) ? existing : null;
+}
+
 // ---- Auth Functions ----
 export const auth = {
   async sendOtp(data: {
@@ -919,6 +1087,7 @@ export const auth = {
     }
 
     try {
+      const existingLocal = scopedExistingSession(primaryEmail);
       await fetchAPI('/auth/register', {
         method: 'POST',
         body: JSON.stringify({
@@ -944,18 +1113,16 @@ export const auth = {
       if (typeof loginResponse.refresh_token === 'string') {
         localStorage.setItem('velismail_refresh', loginResponse.refresh_token);
       }
-      
-      const tokenPayload = JSON.parse(atob(loginResponse.access_token.split('.')[1]));
-      const safeUser: User = {
-        id: tokenPayload.sub,
-        tenantId: tokenPayload.tenant_id,
+      const profile = await fetchAuthenticatedProfile();
+      const safeUser = buildSessionUser({
+        token: loginResponse.access_token,
         email: primaryEmail,
         displayName: data.displayName,
-        plan: 'Starter',
-        accountType: 'business',
-        isSetupComplete: false,
-        createdAt: new Date().toISOString(),
-      };
+        recoveryEmail: normalizedRecoveryEmail,
+        customDomain: data.customDomain,
+        existing: existingLocal,
+        profile,
+      });
       
       // Temporarily stash user in localStorage to support synchronous getSession until React Query migration
       saveDB(STORAGE_KEYS.session, safeUser);
@@ -963,44 +1130,55 @@ export const auth = {
       
       return { success: true, user: safeUser };
     } catch (error) {
+      const message = error instanceof Error ? error.message : 'Registration failed.';
+      if (message.includes('already has an account') || message.includes('already exists')) {
+        const loginResult = await this.login(primaryEmail, data.password);
+        if (loginResult.success && loginResult.user) {
+          return { success: true, user: loginResult.user };
+        }
+        return {
+          success: false,
+          error: 'This account already exists. Sign in with the existing password, or use Forgot Password to recover access.',
+        };
+      }
       return { success: false, error: error instanceof Error ? error.message : 'Registration failed.' };
     }
   },
 
   async login(email: string, password: string): Promise<{ success: boolean; error?: string; user?: User }> {
-    try {
-      const res = await fetchAPI('/auth/login', {
-        method: 'POST',
-        body: JSON.stringify({ email, password }),
-      });
+    let lastError = 'Login failed.';
+    for (const candidate of loginIdentifierCandidates(email)) {
+      try {
+        const existingLocal = scopedExistingSession(candidate);
+        const res = await fetchAPI('/auth/login', {
+          method: 'POST',
+          body: JSON.stringify({ email: candidate, password }),
+        });
 
-      if (!res || typeof res.access_token !== 'string') {
-        return { success: false, error: 'Backend authentication failed.' };
+        if (!res || typeof res.access_token !== 'string') {
+          return { success: false, error: 'Backend authentication failed.' };
+        }
+
+        localStorage.setItem('velismail_token', res.access_token);
+        if (typeof res.refresh_token === 'string') {
+          localStorage.setItem('velismail_refresh', res.refresh_token);
+        }
+        const profile = await fetchAuthenticatedProfile();
+        const safeUser = buildSessionUser({
+          token: res.access_token,
+          email: candidate,
+          existing: existingLocal,
+          profile,
+        });
+
+        saveDB(STORAGE_KEYS.session, safeUser);
+        reloadAccountCaches();
+        return { success: true, user: safeUser };
+      } catch (error) {
+        lastError = error instanceof Error ? error.message : 'Login failed.';
       }
-
-      localStorage.setItem('velismail_token', res.access_token);
-      if (typeof res.refresh_token === 'string') {
-        localStorage.setItem('velismail_refresh', res.refresh_token);
-      }
-      
-      const tokenPayload = JSON.parse(atob(res.access_token.split('.')[1]));
-      const safeUser: User = {
-        id: tokenPayload.sub,
-        tenantId: tokenPayload.tenant_id,
-        email: tokenPayload.email,
-        displayName: 'Business User',
-        plan: 'Starter',
-        accountType: 'business',
-        isSetupComplete: false,
-        createdAt: new Date().toISOString(),
-      };
-
-      saveDB(STORAGE_KEYS.session, safeUser);
-      reloadAccountCaches();
-      return { success: true, user: safeUser };
-    } catch (error) {
-      return { success: false, error: error instanceof Error ? error.message : 'Login failed.' };
     }
+    return { success: false, error: lastError };
   },
 
   loginPasskey(_email: string): { success: boolean; error?: string; user?: User } {
@@ -1167,19 +1345,51 @@ export const mail = {
         .filter(Boolean),
     ));
     const fromAddr = selectedMailbox.address;
-    await fetchAPI('/mail/send', {
-      method: 'POST',
-      body: JSON.stringify({
-        to: expandedRecipients,
-        subject,
-        body,
-        from: fromAddr,
-        fromName: selectedMailbox.displayName || session?.displayName || 'Business',
-        provider: session?.businessMailProvider,
-        apiKey: session?.businessApiKey,
-        providerEndpoint: session?.businessMailProviderEndpoint,
-      }),
+    if (expandedRecipients.length === 0) {
+      throw new Error('Add at least one valid recipient.');
+    }
+    if (!subject.trim() || !body.trim()) {
+      throw new Error('Subject and message body are required.');
+    }
+    const queueEntry = businessQueue.enqueue({
+      domain: normalizedDomain,
+      fromAddress: fromAddr,
+      to: expandedRecipients.join(', '),
+      recipients: expandedRecipients,
+      subject,
+      body,
+      status: 'sending',
     });
+    try {
+      await fetchAPI('/mail/send', {
+        method: 'POST',
+        body: JSON.stringify({
+          to: expandedRecipients,
+          subject,
+          body,
+          from: fromAddr,
+          fromName: selectedMailbox.displayName || session?.displayName || 'Business',
+          provider: session?.businessMailProvider,
+          apiKey: session?.businessApiKey,
+          providerEndpoint: session?.businessMailProviderEndpoint,
+        }),
+      });
+      businessQueue.mark(queueEntry.id, { status: 'sent', error: undefined });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Business email delivery failed.';
+      businessQueue.mark(queueEntry.id, {
+        status: queueEntry.retryCount >= 2 ? 'failed' : 'deferred',
+        error: message,
+        retryCount: queueEntry.retryCount + 1,
+      });
+      businessAudit.add({
+        action: 'Queued failed delivery',
+        actor: fromAddr,
+        target: expandedRecipients.join(', '),
+        severity: 'warn',
+      });
+      throw error;
+    }
     const email: Email = {
       id: 'bem_' + Math.random().toString(36).slice(2, 8),
       from: fromAddr,
@@ -1500,6 +1710,44 @@ export const businessTemplates = {
   },
   save(entries: BusinessTemplate[]) {
     saveBusinessTemplates(entries);
+  },
+};
+
+export const businessQueue = {
+  getAll(domain?: string): BusinessMailQueueItem[] {
+    return loadBusinessQueue(domain);
+  },
+
+  enqueue(entry: Partial<BusinessMailQueueItem>): BusinessMailQueueItem {
+    const all = loadBusinessQueue();
+    const normalized = normalizeBusinessQueueEntry({
+      ...entry,
+      status: entry.status || 'queued',
+      queuedAt: entry.queuedAt || new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+    saveBusinessQueue([normalized, ...all.filter((item) => item.id !== normalized.id)]);
+    return normalized;
+  },
+
+  mark(id: string, updates: Partial<BusinessMailQueueItem>): BusinessMailQueueItem | null {
+    let updatedItem: BusinessMailQueueItem | null = null;
+    const now = new Date().toISOString();
+    const next = loadBusinessQueue().map((entry) => {
+      if (entry.id !== id) return entry;
+      updatedItem = normalizeBusinessQueueEntry({ ...entry, ...updates, updatedAt: now });
+      return updatedItem;
+    });
+    saveBusinessQueue(next);
+    return updatedItem;
+  },
+
+  remove(id: string) {
+    saveBusinessQueue(loadBusinessQueue().filter((entry) => entry.id !== id));
+  },
+
+  clearSent() {
+    saveBusinessQueue(loadBusinessQueue().filter((entry) => entry.status !== 'sent'));
   },
 };
 

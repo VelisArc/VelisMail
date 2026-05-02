@@ -19,6 +19,7 @@ import {
   businessAudit,
   businessGroups,
   businessMailboxes,
+  businessQueue,
   businessTeam,
   businessTemplates,
   connections,
@@ -57,10 +58,15 @@ type DomainHealth = {
 
 type MailQueueItem = {
   id: string;
+  domain?: string;
+  fromAddress?: string;
   to: string;
+  recipients?: string[];
   subject: string;
+  body?: string;
   status: 'queued' | 'sending' | 'sent' | 'failed' | 'deferred';
   queuedAt: string;
+  updatedAt?: string;
   retryCount: number;
   error?: string;
 };
@@ -107,8 +113,6 @@ const BIZ_FOLDERS: BizFolder[] = [
   { id: 'scheduled', label: 'Scheduled', icon: Clock },
   { id: 'spam', label: 'Spam', icon: AlertCircle },
 ];
-
-const EMPTY_QUEUE: MailQueueItem[] = [];
 
 function toDomainRecord(domain: CustomDomain): DomainRecord {
   const statusFor = (key: string) => domain.checks.find(check => check.key === key)?.status || 'pending';
@@ -190,7 +194,7 @@ export default function BusinessDashboard() {
   const [domainMailboxes, setDomainMailboxes] = useState<BusinessMailbox[]>([]);
   const [domainGroups, setDomainGroups] = useState<BusinessGroup[]>([]);
   const [teamMembers, setTeamMembers] = useState<BusinessTeamMember[]>([]);
-  const [mailQueue] = useState<MailQueueItem[]>(EMPTY_QUEUE);
+  const [mailQueue, setMailQueue] = useState<MailQueueItem[]>([]);
   const [auditLog, setAuditLog] = useState<BusinessAuditEntry[]>([]);
   const [templates, setTemplates] = useState<BusinessTemplate[]>([]);
   const [connectionUsage, setConnectionUsage] = useState<ConnectionUsage[]>([]);
@@ -285,6 +289,7 @@ export default function BusinessDashboard() {
     setTemplates(businessTemplates.getAll());
     setAuditLog(businessAudit.getAll());
     setConnectionUsage(connections.getUsage());
+    setMailQueue(businessQueue.getAll(activeDomainName));
   }, [activeDomainName]);
 
   useEffect(() => {
@@ -336,8 +341,10 @@ export default function BusinessDashboard() {
       setComposeSubject('');
       setComposeBody('');
       setAuditLog(businessAudit.getAll());
+      setMailQueue(businessQueue.getAll(domain));
     } catch (error) {
       showToast(error instanceof Error ? error.message : 'Business email send failed', 'error');
+      setMailQueue(businessQueue.getAll(domain));
     } finally {
       setSending(false);
     }
@@ -446,15 +453,45 @@ export default function BusinessDashboard() {
     showToast('Member role updated');
   };
 
-  const handleRetryQueueItem = (_id: string) => {
-    showToast('Retrying message delivery...');
+  const refreshQueue = () => {
+    setMailQueue(businessQueue.getAll(activeDomainName));
   };
 
-  const handlePauseQueueItem = (_id: string) => {
+  const handleRetryQueueItem = async (id: string) => {
+    const item = mailQueue.find((entry) => entry.id === id);
+    if (!item || !item.domain || !item.body) {
+      showToast('Queue item is missing delivery details.', 'error');
+      return;
+    }
+    businessQueue.mark(id, { status: 'sending', error: undefined });
+    refreshQueue();
+    try {
+      await mail.sendBusiness(item.domain, item.recipients || item.to.split(','), item.subject, item.body, item.fromAddress);
+      businessQueue.mark(id, { status: 'sent', error: undefined });
+      showToast('Queued message delivered');
+    } catch (error) {
+      const retryCount = item.retryCount + 1;
+      businessQueue.mark(id, {
+        status: retryCount >= 3 ? 'failed' : 'deferred',
+        retryCount,
+        error: error instanceof Error ? error.message : 'Retry failed',
+      });
+      showToast('Retry failed. Message kept in queue.', 'error');
+    } finally {
+      refreshQueue();
+      setAuditLog(businessAudit.getAll());
+    }
+  };
+
+  const handlePauseQueueItem = (id: string) => {
+    businessQueue.mark(id, { status: 'deferred', error: 'Paused by workspace admin.' });
+    refreshQueue();
     showToast('Message paused');
   };
 
-  const handleDeleteQueueItem = (_id: string) => {
+  const handleDeleteQueueItem = (id: string) => {
+    businessQueue.remove(id);
+    refreshQueue();
     showToast('Message deleted from queue');
   };
 
@@ -1337,7 +1374,10 @@ export default function BusinessDashboard() {
                 <button className="btn btn-ghost btn-sm" onClick={() => setShowQueueFilters(!showQueueFilters)}>
                   <Filter size={16} /> Filters
                 </button>
-                <button className="btn btn-ghost btn-sm"><RefreshCcw size={16} /> Refresh</button>
+                <button className="btn btn-ghost btn-sm" onClick={refreshQueue}><RefreshCcw size={16} /> Refresh</button>
+                <button className="btn btn-ghost btn-sm" onClick={() => { businessQueue.clearSent(); refreshQueue(); }}>
+                  <Trash2 size={16} /> Clear Sent
+                </button>
               </div>
             </div>
 
@@ -1409,6 +1449,13 @@ export default function BusinessDashboard() {
                       </td>
                     </tr>
                   ))}
+                  {mailQueue.filter(q => queueStatusFilter === 'all' || q.status === queueStatusFilter).length === 0 && (
+                    <tr>
+                      <td colSpan={7} className="queue-empty">
+                        No messages match this queue view.
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>

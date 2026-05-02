@@ -1224,6 +1224,14 @@
   font-weight: 500;
 }
 
+.queue-empty {
+  text-align: center;
+  padding: 28px 16px;
+  color: var(--text-muted);
+  background: var(--bg-surface);
+  font-weight: 600;
+}
+
 /* Audit */
 .audit-log {
   display: flex;
