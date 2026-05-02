@@ -1854,7 +1854,7 @@ export default function BusinessDashboard() {
                   ))}
                 </select>
               ) : undefined}
-              fromBadge={<div className="compose-from-badge biz-from-badge"><Mail size={14} /> {selectedFromAddress || businessMailbox}</div>}
+              fromBadge={<div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 600, color: 'var(--text-primary)' }}><Mail size={14} color="var(--text-muted)" /> {selectedFromAddress || businessMailbox}</div>}
             />
           </div>
         </div>

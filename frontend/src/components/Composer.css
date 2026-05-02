@@ -7,6 +7,49 @@
   flex-direction: column;
   height: 100%;
   flex: 1;
+  background: var(--bg-surface);
+}
+
+.compose-fields {
+  display: flex;
+  flex-direction: column;
+  padding: 16px 20px 0;
+}
+
+.compose-field {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding-bottom: 12px;
+  margin-bottom: 12px;
+  border-bottom: 1px solid var(--border-primary);
+}
+
+.compose-field > label {
+  width: 60px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  flex-shrink: 0;
+}
+
+.compose-field .input,
+.compose-field select.input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  padding: 4px 8px;
+  box-shadow: none;
+  font-size: 0.95rem;
+  color: var(--text-primary);
+}
+
+.compose-field .input:focus,
+.compose-field select.input:focus {
+  background: var(--bg-hover);
+  outline: none;
 }
 
 .to-field-container {
@@ -79,11 +122,11 @@
   display: flex;
   flex-direction: column;
   flex: 1;
-  border: 1px solid var(--glass-border);
-  border-radius: var(--radius-md);
   overflow: hidden;
-  margin-top: 4px;
-  background: var(--bg-surface);
+  margin: 0 20px 20px;
+  border-radius: var(--radius-md);
+  background: var(--bg-surface-2);
+  border: 1px solid var(--border-primary);
   transition: border-color 0.2s;
 }
 
@@ -143,6 +186,21 @@
   color: var(--text-muted);
   opacity: 0.7;
   pointer-events: none;
+}
+
+.compose-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 20px;
+  background: var(--bg-surface);
+  border-top: 1px solid var(--border-primary);
+}
+
+.compose-footer-left, .compose-footer-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 
 /* Formatting within editor */
