@@ -23,15 +23,15 @@
 .biz-sidebar {
   display: flex;
   flex-direction: column;
-  border-radius: var(--radius-xl);
+  border-radius: 0;
   border: 1px solid var(--glass-border);
   overflow-y: auto;
-  background: rgba(10, 10, 10, 0.4);
-  backdrop-filter: blur(24px) saturate(180%);
-  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  background: var(--bg-surface);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
   padding: 16px 12px;
-  margin: 16px 0 16px 16px;
-  box-shadow: var(--glass-shadow);
+  margin: 0;
+  box-shadow: none;
   z-index: 10;
 }
 
@@ -268,23 +268,23 @@
 .biz-main {
   flex: 1;
   overflow-y: auto;
-  background: transparent;
+  background: var(--bg-body);
   position: relative;
-  padding: 16px;
+  padding: 0;
 }
 
 /* Mail List */
 .biz-dash .dash-list {
-  border-radius: var(--radius-xl);
-  border: 1px solid var(--glass-border);
+  border-radius: 0;
+  border: none;
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  height: calc(100vh - 32px);
-  background: rgba(15, 15, 15, 0.6);
-  backdrop-filter: blur(30px);
-  -webkit-backdrop-filter: blur(30px);
-  box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+  height: 100vh;
+  background: var(--bg-surface);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  box-shadow: none;
 }
 
 .biz-dash .list-header {
@@ -695,15 +695,15 @@
 .biz-panel {
   padding: 32px 40px;
   overflow-y: auto;
-  height: calc(100vh - 32px);
+  height: 100vh;
   max-width: 1200px;
   margin: 0 auto;
-  background: rgba(15, 15, 15, 0.5);
-  backdrop-filter: blur(30px);
-  -webkit-backdrop-filter: blur(30px);
-  border-radius: var(--radius-xl);
-  border: 1px solid var(--glass-border);
-  box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+  background: var(--bg-surface);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border-radius: 0;
+  border: none;
+  box-shadow: none;
 }
 
 .panel-header {
