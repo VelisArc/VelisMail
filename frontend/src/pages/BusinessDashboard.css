@@ -23,12 +23,16 @@
 .biz-sidebar {
   display: flex;
   flex-direction: column;
-  border-radius: 0;
-  border: none;
-  border-right: 1px solid var(--border-primary);
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--glass-border);
   overflow-y: auto;
-  background: var(--bg-surface);
-  padding: 12px 8px;
+  background: rgba(10, 10, 10, 0.4);
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  padding: 16px 12px;
+  margin: 16px 0 16px 16px;
+  box-shadow: var(--glass-shadow);
+  z-index: 10;
 }
 
 /* Biz Brand */
@@ -264,27 +268,32 @@
 .biz-main {
   flex: 1;
   overflow-y: auto;
-  background: var(--bg-body);
+  background: transparent;
   position: relative;
+  padding: 16px;
 }
 
 /* Mail List */
 .biz-dash .dash-list {
-  border-radius: 0;
-  border: none;
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--glass-border);
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  height: 100vh;
+  height: calc(100vh - 32px);
+  background: rgba(15, 15, 15, 0.6);
+  backdrop-filter: blur(30px);
+  -webkit-backdrop-filter: blur(30px);
+  box-shadow: 0 10px 40px rgba(0,0,0,0.5);
 }
 
 .biz-dash .list-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--border-primary);
-  background: var(--bg-surface);
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--glass-border-light);
+  background: linear-gradient(180deg, rgba(255,255,255,0.05) 0%, transparent 100%);
 }
 
 .biz-dash .list-title {
@@ -684,11 +693,17 @@
 
 /* Biz Panel */
 .biz-panel {
-  padding: 20px 24px;
+  padding: 32px 40px;
   overflow-y: auto;
-  height: 100vh;
+  height: calc(100vh - 32px);
   max-width: 1200px;
   margin: 0 auto;
+  background: rgba(15, 15, 15, 0.5);
+  backdrop-filter: blur(30px);
+  -webkit-backdrop-filter: blur(30px);
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--glass-border);
+  box-shadow: 0 10px 40px rgba(0,0,0,0.5);
 }
 
 .panel-header {

@@ -581,6 +581,17 @@ function saveUserDB<T>(key: string, data: T) {
   saveDB(userScopedKey(key), data);
 }
 
+function saveUserToPersistentStore(user: User) {
+  const users = loadDB<Record<string, User>>('velismail_users_db', {});
+  users[user.email] = user;
+  saveDB('velismail_users_db', users);
+}
+
+function getUserFromPersistentStore(email: string): User | null {
+  const users = loadDB<Record<string, User>>('velismail_users_db', {});
+  return users[normalizeMailbox(email)] || null;
+}
+
 function initEmails(): Email[] {
   return loadUserDB<Email[]>(STORAGE_KEYS.emails, SEED_EMAILS);
 }
@@ -1013,9 +1024,13 @@ function loginIdentifierCandidates(identifier: string): string[] {
 }
 
 function scopedExistingSession(email: string): User | null {
+  const normalizedEmail = normalizeMailbox(email);
+  
+  const storedUser = getUserFromPersistentStore(normalizedEmail);
+  if (storedUser) return storedUser;
+
   const existing = getSessionSafe();
   if (!existing) return null;
-  const normalizedEmail = normalizeMailbox(email);
   const existingValues = [
     existing.email,
     existing.recoveryEmail,
@@ -1162,6 +1177,7 @@ export const auth = {
       
       // Temporarily stash user in localStorage to support synchronous getSession until React Query migration
       saveDB(STORAGE_KEYS.session, safeUser);
+      saveUserToPersistentStore(safeUser);
       reloadAccountCaches();
       
       return { success: true, user: safeUser };
@@ -1208,6 +1224,7 @@ export const auth = {
         });
 
         saveDB(STORAGE_KEYS.session, safeUser);
+        saveUserToPersistentStore(safeUser);
         reloadAccountCaches();
         return { success: true, user: safeUser };
       } catch (error) {
@@ -1289,6 +1306,7 @@ export const auth = {
     };
 
     saveDB(STORAGE_KEYS.session, nextUser);
+    saveUserToPersistentStore(nextUser);
     reloadAccountCaches();
     return { success: true, user: nextUser };
   },
