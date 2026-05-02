@@ -275,12 +275,16 @@ export default function BusinessDashboard() {
 
     const nextMailboxes = businessMailboxes.getByDomain(activeDomainName);
     const nextGroups = businessGroups.getByDomain(activeDomainName);
-    setDomainMailboxes(nextMailboxes);
+    
+    // Deduplicate mailboxes by address
+    const uniqueMailboxes = Array.from(new Map(nextMailboxes.map(m => [m.address, m])).values());
+    
+    setDomainMailboxes(uniqueMailboxes);
     setDomainGroups(nextGroups);
     setSelectedFromAddress((current) => (
-      nextMailboxes.some((entry) => entry.address === current)
+      uniqueMailboxes.some((entry) => entry.address === current)
         ? current
-        : (nextMailboxes.find((entry) => entry.active)?.address || nextMailboxes[0]?.address || '')
+        : (uniqueMailboxes.find((entry) => entry.active)?.address || uniqueMailboxes[0]?.address || '')
     ));
   }, [activeDomainName]);
 
