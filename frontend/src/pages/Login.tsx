@@ -468,14 +468,15 @@ export default function Login() {
                   </div>
 
                 <div className="form-group">
-                  <label htmlFor="reg-recovery">Recovery Email</label>
+                  <label htmlFor="reg-recovery">Recovery Email *</label>
                   <input id="reg-recovery" type="email" className="input"
                     placeholder="you@gmail.com"
                     name="velismail-new-account-recovery-contact"
-                    autoComplete="new-password"
+                    autoComplete="email"
+                    required
                     value={regRecoveryEmail} onChange={e => setRegRecoveryEmail(e.target.value)} />
                   <span className="form-hint">
-                    Optional. If added, OTP and recovery codes go here until your business mailbox is active.
+                    Required. Your initial verification code and account recovery links will be sent here.
                   </span>
                 </div>
 
@@ -490,7 +491,7 @@ export default function Login() {
                 {error && <div className="form-error">{error}</div>}
 
                 <button type="submit" className="btn btn-primary w-full" disabled={loading}>
-                  {loading ? <Loader2 size={18} className="animate-spin" /> : <>{otpTargetEmail ? 'Send Verification Code' : 'Create Account'} <ArrowRight size={18} /></>}
+                  {loading ? <Loader2 size={18} className="animate-spin" /> : <>Send Verification Code <ArrowRight size={18} /></>}
                 </button>
               </form>
 

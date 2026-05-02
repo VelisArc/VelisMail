@@ -479,8 +479,8 @@ export default function BusinessSetup() {
               </div>
               <div className="form-group">
                 <label>Connection String</label>
-                <input type="password" 
-                  autoComplete="new-password" 
+                <input type="text" 
+                  autoComplete="off" 
                   data-1p-ignore="true" 
                   data-lpignore="true" 
                   className="input" 
@@ -508,8 +508,8 @@ export default function BusinessSetup() {
               )}
               <div className="form-group">
                 <label>Secret API Key</label>
-                <input type="password" 
-                  autoComplete="new-password" 
+                <input type="text" 
+                  autoComplete="off" 
                   data-1p-ignore="true" 
                   data-lpignore="true" 
                   className="input" 
