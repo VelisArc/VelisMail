@@ -381,7 +381,7 @@ function friendlyApiError(endpoint: string, status: number, fallback: string): s
   }
   if (status === 404) {
     if (route.includes('/auth/send-otp') || route.includes('/auth/otp/send') || route.includes('/auth/password-reset/request')) {
-      return 'OTP service is not available on the current backend deployment. Retry after the latest backend deploy finishes.';
+      return 'OTP service is not yet available. The backend auth service may still be deploying, or the OTP routes have not been configured. Please try again in a few minutes or contact support@velismail.online.';
     }
     return 'Requested VelisMail service route was not found on the backend.';
   }
@@ -898,19 +898,28 @@ function normalizeStoredDomain(domain: Partial<CustomDomain> & { id: string; dom
 
 function sessionHasMismatch(session: User | null): boolean {
   if (!session) return false;
-    if (session.accountType === 'business') {
-      const allDomains = loadUserDB<CustomDomain[]>(STORAGE_KEYS.domains, []);
-      const businessDomain = session.businessDomain;
-      const profileDomain = session.businessProfile?.domain;
-      if (businessDomain && !allDomains.find(d => normalizeDomainInput(d.domain) === normalizeDomainInput(businessDomain))) {
-        return true;
-      }
-      if (profileDomain && !allDomains.find(d => normalizeDomainInput(d.domain) === normalizeDomainInput(profileDomain))) {
-        return true;
-      }
-      if ((session.businessDomainVerified || session.businessProfile?.verified) && businessDomain) {
-        const dom = allDomains.find(d => normalizeDomainInput(d.domain) === normalizeDomainInput(businessDomain));
-        if (dom && dom.status !== 'verified') return true;
+  if (session.accountType === 'business') {
+    // Only check mismatch if user has completed business setup.
+    // New users or users mid-setup won't have domains stored yet — that's NOT a mismatch.
+    if (!session.isBusinessSetupComplete) {
+      return false;
+    }
+    const allDomains = loadUserDB<CustomDomain[]>(STORAGE_KEYS.domains, []);
+    // If domains list is empty, the user may have cleared storage or is starting fresh — not a mismatch
+    if (allDomains.length === 0) {
+      return false;
+    }
+    const businessDomain = session.businessDomain;
+    const profileDomain = session.businessProfile?.domain;
+    if (businessDomain && !allDomains.find(d => normalizeDomainInput(d.domain) === normalizeDomainInput(businessDomain))) {
+      return true;
+    }
+    if (profileDomain && !allDomains.find(d => normalizeDomainInput(d.domain) === normalizeDomainInput(profileDomain))) {
+      return true;
+    }
+    if ((session.businessDomainVerified || session.businessProfile?.verified) && businessDomain) {
+      const dom = allDomains.find(d => normalizeDomainInput(d.domain) === normalizeDomainInput(businessDomain));
+      if (dom && dom.status !== 'verified') return true;
     }
   }
   return false;
@@ -1023,8 +1032,12 @@ export const auth = {
     displayName?: string;
     purpose?: 'register' | 'recovery_email' | 'password_reset';
   }): Promise<OtpSendResponse> {
+    // Build payload with BOTH email and identifier for max backend compatibility
+    const normalizedEmail = (data.email || data.identifier || '').trim().toLowerCase();
     const payload = JSON.stringify({
       ...data,
+      email: normalizedEmail,
+      identifier: normalizedEmail,
       purpose: data.purpose || 'register',
     });
     const endpoints = [
@@ -1041,12 +1054,12 @@ export const auth = {
         });
       } catch (error) {
         lastError = error instanceof Error ? error : new Error('OTP request failed.');
-        if (!lastError.message.includes('OTP service is not available') && !lastError.message.includes('route was not found')) {
+        if (!lastError.message.includes('OTP service is not') && !lastError.message.includes('route was not found')) {
           throw lastError;
         }
       }
     }
-    throw lastError || new Error('OTP service is not available.');
+    throw lastError || new Error('OTP service is not yet available. Please try again later or contact support.');
   },
 
   async verifyOtp(data: {

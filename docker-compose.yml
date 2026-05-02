@@ -71,7 +71,7 @@ services:
       - MAIL_SERVICE_URL=http://mail-service:3002
       - STORAGE_SERVICE_URL=http://storage-service:3003
       - TENANT_SERVICE_URL=http://tenant-service:3004
-      - DELIVERY_SERVICE_URL=http://delivery-engine:3005
+      - SECURITY_SERVICE_URL=http://delivery-engine:3005
     depends_on:
       - auth-service
       - mail-service
