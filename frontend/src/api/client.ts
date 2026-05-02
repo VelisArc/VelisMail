@@ -379,6 +379,12 @@ function friendlyApiError(endpoint: string, status: number, fallback: string): s
     }
     return 'This record already exists.';
   }
+  if (status === 404) {
+    if (route.includes('/auth/send-otp') || route.includes('/auth/otp/send') || route.includes('/auth/password-reset/request')) {
+      return 'OTP service is not available on the current backend deployment. Retry after the latest backend deploy finishes.';
+    }
+    return 'Requested VelisMail service route was not found on the backend.';
+  }
   if (status === 429) {
     return 'Too many attempts. Wait a moment and try again.';
   }
@@ -503,7 +509,7 @@ export async function fetchApiJsonDetailed<T = any>(endpoint: string, options: R
     }
 
     if (response.status === 404 && index < apiBaseCandidates.length - 1) {
-      lastError = new Error(`API Error ${response.status}`);
+      lastError = new Error(friendlyApiError(endpoint, response.status, `API Error ${response.status}`));
       continue;
     }
 
@@ -1017,13 +1023,30 @@ export const auth = {
     displayName?: string;
     purpose?: 'register' | 'recovery_email' | 'password_reset';
   }): Promise<OtpSendResponse> {
-    return fetchAPI('/auth/send-otp', {
-      method: 'POST',
-      body: JSON.stringify({
-        ...data,
-        purpose: data.purpose || 'register',
-      }),
+    const payload = JSON.stringify({
+      ...data,
+      purpose: data.purpose || 'register',
     });
+    const endpoints = [
+      '/auth/send-otp',
+      '/auth/otp/send',
+      '/auth/password-reset/request',
+    ];
+    let lastError: Error | null = null;
+    for (const endpoint of endpoints) {
+      try {
+        return await fetchAPI(endpoint, {
+          method: 'POST',
+          body: payload,
+        });
+      } catch (error) {
+        lastError = error instanceof Error ? error : new Error('OTP request failed.');
+        if (!lastError.message.includes('OTP service is not available') && !lastError.message.includes('route was not found')) {
+          throw lastError;
+        }
+      }
+    }
+    throw lastError || new Error('OTP service is not available.');
   },
 
   async verifyOtp(data: {

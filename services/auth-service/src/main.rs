@@ -61,7 +61,11 @@ async fn main() -> anyhow::Result<()> {
         .route("/login/passkey", post(handlers::login_passkey))
         .route("/login/zkp", post(handlers::login_zkp))
         .route("/send-otp", post(handlers::send_otp))
+        // Compatibility aliases for deployed clients and cached gateways.
+        .route("/otp/send", post(handlers::send_otp))
+        .route("/password-reset/request", post(handlers::send_otp))
         .route("/verify-otp", post(handlers::verify_otp))
+        .route("/otp/verify", post(handlers::verify_otp))
         .route("/reset-password", post(handlers::reset_password))
         .route("/change-password", post(handlers::change_password))
         .route("/token/refresh", post(handlers::refresh_token))
