@@ -1234,46 +1234,85 @@ export default function BusinessDashboard() {
                   <button className="btn btn-icon btn-ghost mobile-menu-btn" onClick={() => setSidebarOpen(true)}>
                     <Menu size={20} />
                   </button>
-                  <Users size={20} /> Distribution Groups
+                  <Users size={20} color="var(--primary)" /> Distribution Groups
                 </h2>
-                <p>Create reusable recipient groups so one address can fan out to multiple inboxes.</p>
+                <p>Create reusable recipient lists so one email address can fan out to multiple team members.</p>
               </div>
             </div>
 
-            <div className="glass-card" style={{ marginBottom: 16 }}>
-              <h3 style={{ marginBottom: 12 }}>Create Group</h3>
-              <form onSubmit={handleCreateGroup} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 2fr auto', gap: 12 }}>
-                <input className="input" value={groupName} onChange={(e) => setGroupName(e.target.value)} placeholder="Support Team" />
-                <input className="input" value={groupLocalPart} onChange={(e) => setGroupLocalPart(e.target.value)} placeholder="support" />
-                <input className="input" value={groupMembers} onChange={(e) => setGroupMembers(e.target.value)} placeholder="member1@domain.com, member2@domain.com" />
-                <button className="btn btn-primary" type="submit"><Plus size={16} /> Add</button>
+            <div className="card" style={{ marginBottom: 24, padding: '20px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
+                <div style={{ background: 'var(--primary-glow)', color: 'var(--primary)', padding: '8px', borderRadius: '8px' }}>
+                  <Plus size={16} />
+                </div>
+                <h3 style={{ margin: 0, fontSize: '1.1rem' }}>Create New Group</h3>
+              </div>
+              <form onSubmit={handleCreateGroup} style={{ display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'flex-end' }}>
+                <div style={{ flex: '1 1 200px' }}>
+                  <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>Group Name</label>
+                  <input className="input input-sm" value={groupName} onChange={(e) => setGroupName(e.target.value)} placeholder="e.g. Sales Team" required />
+                </div>
+                <div style={{ flex: '1 1 180px' }}>
+                  <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>Group Address</label>
+                  <div style={{ display: 'flex', alignItems: 'center', background: 'var(--bg-surface-2)', border: '1px solid var(--border-primary)', borderRadius: 'var(--radius-md)', paddingRight: '12px' }}>
+                    <input style={{ flex: 1, background: 'transparent', border: 'none', padding: '6px 12px', color: 'var(--text-primary)', outline: 'none' }} value={groupLocalPart} onChange={(e) => setGroupLocalPart(e.target.value)} placeholder="sales" required />
+                    <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>@{activeDomainName}</span>
+                  </div>
+                </div>
+                <div style={{ flex: '2 1 300px' }}>
+                  <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>Members (comma separated)</label>
+                  <input className="input input-sm" value={groupMembers} onChange={(e) => setGroupMembers(e.target.value)} placeholder="alice@, bob@" required />
+                </div>
+                <button className="btn btn-primary btn-sm" type="submit" style={{ minHeight: '34px' }}>Add Group</button>
               </form>
             </div>
 
-            <div className="team-list">
-              {domainGroups.map((group) => (
-                <div key={group.id} className="team-row glass-card">
-                  <div className="team-avatar-wrap">
-                    <div className="user-avatar biz-avatar">{group.name.charAt(0).toUpperCase()}</div>
-                  </div>
-                  <div className="team-info">
-                    <div className="team-name">{group.name}</div>
-                    <div className="team-email">{group.address}</div>
-                  </div>
-                  <div className="team-meta">
-                    <div className="team-last-active"><Users size={12} /> {group.members.length} members</div>
-                    <div className="team-joined">Updated {formatRelative(group.updatedAt)}</div>
-                  </div>
-                  <span className="badge badge-primary">Group</span>
-                  <div className="team-actions">
-                    <button className="btn btn-ghost btn-sm" onClick={() => copyToClipboard(group.members.join(', '))}>Copy Members</button>
-                    <button className="btn btn-ghost btn-sm" onClick={() => { businessGroups.remove(activeDomainName, group.id); setDomainGroups(businessGroups.getByDomain(activeDomainName)); showToast('Group removed'); }}>
-                      <Trash size={14} />
-                    </button>
-                  </div>
+            {domainGroups.length === 0 ? (
+              <div className="card" style={{ padding: '40px', textAlign: 'center', border: '1px dashed var(--border-primary)', background: 'transparent' }}>
+                <div style={{ width: '48px', height: '48px', background: 'var(--bg-surface-2)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px', color: 'var(--text-muted)' }}>
+                  <Users size={24} />
                 </div>
-              ))}
-            </div>
+                <h3 style={{ fontSize: '1.1rem', marginBottom: '8px' }}>No Groups Yet</h3>
+                <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', maxWidth: '400px', margin: '0 auto' }}>Create your first distribution group to start managing team email lists efficiently.</p>
+              </div>
+            ) : (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: '16px' }}>
+                {domainGroups.map((group) => (
+                  <div key={group.id} className="card" style={{ display: 'flex', flexDirection: 'column', gap: '16px', padding: '20px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                        <div style={{ width: '40px', height: '40px', borderRadius: 'var(--radius-md)', background: 'var(--primary-glow)', color: 'var(--primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '1.2rem' }}>
+                          {group.name.charAt(0).toUpperCase()}
+                        </div>
+                        <div>
+                          <h4 style={{ margin: 0, fontSize: '1.05rem', color: 'var(--text-primary)' }}>{group.name}</h4>
+                          <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>{group.address}</span>
+                        </div>
+                      </div>
+                      <button className="btn btn-icon btn-ghost btn-sm" style={{ color: 'var(--danger)' }} onClick={() => { businessGroups.remove(activeDomainName, group.id); setDomainGroups(businessGroups.getByDomain(activeDomainName)); showToast('Group removed'); }}>
+                        <Trash size={14} />
+                      </button>
+                    </div>
+                    
+                    <div style={{ background: 'var(--bg-surface-2)', padding: '12px', borderRadius: 'var(--radius-md)' }}>
+                      <div style={{ fontSize: '0.75rem', textTransform: 'uppercase', color: 'var(--text-muted)', fontWeight: 600, marginBottom: '8px' }}>Members ({group.members.length})</div>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                        {group.members.slice(0, 3).map((m, i) => (
+                          <span key={i} style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-primary)', padding: '2px 8px', borderRadius: '12px', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                            {m}
+                          </span>
+                        ))}
+                        {group.members.length > 3 && (
+                          <span style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-primary)', padding: '2px 8px', borderRadius: '12px', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                            +{group.members.length - 3} more
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
