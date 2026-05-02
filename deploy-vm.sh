@@ -113,6 +113,23 @@ ensure_service_databases() {
   tenant_db=$(dotenv_get TENANT_POSTGRES_DB "velismail_tenant")
   delivery_db=$(dotenv_get DELIVERY_POSTGRES_DB "velismail_delivery")
 
+  echo "Waiting for PostgreSQL to become ready..."
+  local retries=30
+  while [ $retries -gt 0 ]; do
+    if $COMPOSE exec -T -e PGPASSWORD="$postgres_password" postgres pg_isready -U "$postgres_user" >/dev/null 2>&1; then
+      echo "PostgreSQL is ready."
+      break
+    fi
+    echo "  waiting... ($retries)"
+    sleep 2
+    retries=$((retries - 1))
+  done
+
+  if [ $retries -eq 0 ]; then
+    echo "Error: PostgreSQL did not become ready in time."
+    exit 1
+  fi
+
   echo "Ensuring service PostgreSQL databases exist..."
   for db_name in "$auth_db" "$mail_db" "$storage_db" "$tenant_db" "$delivery_db"; do
     if ! $COMPOSE exec -T -e PGPASSWORD="$postgres_password" postgres \
