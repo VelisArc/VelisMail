@@ -56,7 +56,7 @@ export default function SettingsPage() {
   const handleProfileSave = (e: React.FormEvent) => {
     e.preventDefault();
     if (!profileName.trim()) {
-      setProfileError('Full name required hai.');
+      setProfileError('Full name is required.');
       return;
     }
     setProfileSaving(true);
@@ -65,7 +65,7 @@ export default function SettingsPage() {
       const result = auth.updateSettings({ displayName: profileName.trim() });
       if (!result.success || !result.user) {
         setProfileSaving(false);
-        setProfileError('Profile update nahi ho saka.');
+        setProfileError('Profile update failed. Please try again.');
         showToast('Profile update failed', 'error');
         return;
       }
@@ -107,15 +107,15 @@ export default function SettingsPage() {
   const handlePasswordUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!currentPassword || !newPassword || !confirmPassword) {
-      setSecurityError('Saare password fields bharna zaroori hai.');
+      setSecurityError('All password fields are required.');
       return;
     }
     if (newPassword.length < 8) {
-      setSecurityError('New password kam se kam 8 characters ka hona chahiye.');
+      setSecurityError('New password must be at least 8 characters.');
       return;
     }
     if (newPassword !== confirmPassword) {
-      setSecurityError('New password aur confirm password match nahi kar rahe.');
+      setSecurityError('New password and confirm password do not match.');
       return;
     }
     setPasswordSaving(true);
@@ -123,7 +123,7 @@ export default function SettingsPage() {
     const result = await auth.changePassword(currentPassword, newPassword);
     setPasswordSaving(false);
     if (!result.success) {
-      setSecurityError(result.error || 'Password update fail ho gaya.');
+      setSecurityError(result.error || 'Password update failed.');
       showToast(result.error || 'Password update failed', 'error');
       return;
     }
@@ -140,7 +140,7 @@ export default function SettingsPage() {
   const confirmDeleteAccount = async () => {
     const result = await auth.deleteAccount();
     if (!result.success) {
-      showToast(result.error || 'Account delete nahi ho saka', 'error');
+      showToast(result.error || 'Account deletion failed', 'error');
       setShowDeleteConfirm(false);
       return;
     }
@@ -154,7 +154,7 @@ export default function SettingsPage() {
 
   const handleSendRecoveryOtp = async () => {
     if (!recoveryEmailDraft.trim()) {
-      showToast('Recovery email required hai.', 'error');
+      showToast('Recovery email is required.', 'error');
       return;
     }
 
@@ -170,7 +170,7 @@ export default function SettingsPage() {
       setRecoveryHint(`Verification code sent to ${response.maskedEmail}.`);
       showToast('Recovery verification code sent');
     } catch (err) {
-      showToast(err instanceof Error ? err.message : 'Recovery code send nahi ho saka.', 'error');
+      showToast(err instanceof Error ? err.message : 'Failed to send recovery code.', 'error');
     } finally {
       setRecoverySaving(false);
     }
@@ -178,11 +178,11 @@ export default function SettingsPage() {
 
   const handleVerifyRecoveryEmail = async () => {
     if (!recoveryChallengeToken) {
-      showToast('Pehle verification code bhejo.', 'error');
+      showToast('Please send a verification code first.', 'error');
       return;
     }
     if (!recoveryOtp.trim()) {
-      showToast('Verification code enter karo.', 'error');
+      showToast('Please enter the verification code.', 'error');
       return;
     }
 
@@ -200,7 +200,7 @@ export default function SettingsPage() {
         pendingRecoveryEmail: undefined,
       });
       if (!result.success || !result.user) {
-        throw new Error(result.error || 'Recovery email save nahi ho saka.');
+        throw new Error(result.error || 'Failed to save recovery email.');
       }
       setUser(result.user);
       setRecoveryOtp('');
@@ -208,7 +208,7 @@ export default function SettingsPage() {
       setRecoveryHint('Recovery email verified and saved.');
       showToast('Recovery email verified');
     } catch (err) {
-      showToast(err instanceof Error ? err.message : 'Recovery email verify nahi ho saka.', 'error');
+      showToast(err instanceof Error ? err.message : 'Failed to verify recovery email.', 'error');
     } finally {
       setRecoveryVerifying(false);
     }
@@ -218,17 +218,17 @@ export default function SettingsPage() {
     if (theme === 'system') {
       const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
       document.documentElement.setAttribute('data-theme', prefersDark ? 'dark' : 'light');
-      localStorage.removeItem('velismail-theme');
+      localStorage.removeItem('velismail_theme');
     } else {
       document.documentElement.setAttribute('data-theme', theme);
-      localStorage.setItem('velismail-theme', theme);
+      localStorage.setItem('velismail_theme', theme);
     }
     showToast(`Theme set to ${theme}`);
   };
 
   if (!user || !user.isBusinessSetupComplete) return null;
 
-  const currentTheme = localStorage.getItem('velismail-theme') || 'system';
+  const currentTheme = localStorage.getItem('velismail_theme') || 'system';
   const primaryMailbox = user.businessMailboxAddress || user.email;
 
   return (
@@ -506,7 +506,7 @@ export default function SettingsPage() {
               <AlertCircle size={40} color="var(--danger)" />
             </div>
             <h3>Delete Account?</h3>
-            <p>Kya aap sure ho ki account permanently delete karna hai? This action cannot be undone.</p>
+            <p>Are you sure you want to permanently delete your account? This action cannot be undone.</p>
             <div className="logout-confirm-actions">
               <button className="btn btn-secondary" onClick={() => setShowDeleteConfirm(false)}>Cancel</button>
               <button className="btn btn-danger" onClick={confirmDeleteAccount}><Trash2 size={16} /> Yes, Delete</button>

@@ -6,6 +6,7 @@ import {
   Shield, Key, Cloud, Database
 } from 'lucide-react';
 import { auth } from '../api/client';
+import { fetchApiResponse } from '../api/client';
 import './Home.css';
 
 const features = [
@@ -61,6 +62,14 @@ const stats = [
 export default function Home() {
   const [user] = useState(auth.getSession());
   const [scrolled, setScrolled] = useState(false);
+  const [showContactModal, setShowContactModal] = useState(false);
+  const [showFeedbackModal, setShowFeedbackModal] = useState(false);
+  const [contactForm, setContactForm] = useState({ name: '', email: '', company: '', message: '' });
+  const [feedbackForm, setFeedbackForm] = useState({ name: '', email: '', type: 'suggestion', message: '' });
+  const [contactSending, setContactSending] = useState(false);
+  const [feedbackSending, setFeedbackSending] = useState(false);
+  const [contactSuccess, setContactSuccess] = useState(false);
+  const [feedbackSuccess, setFeedbackSuccess] = useState(false);
 
   useEffect(() => {
     const handleScroll = () => {
@@ -79,6 +88,51 @@ export default function Home() {
   const getDashboardText = () => {
     if (!user) return '';
     return user.isBusinessSetupComplete ? 'Dashboard' : 'Setup';
+  };
+
+  const handleContactSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setContactSending(true);
+    try {
+      await fetchApiResponse('/contact/sales', {
+        method: 'POST',
+        body: JSON.stringify(contactForm),
+      });
+    } catch {
+      // Fallback: open mailto if API is unreachable
+      const subject = encodeURIComponent(`Enterprise Inquiry from ${contactForm.company || contactForm.name}`);
+      const body = encodeURIComponent(`Name: ${contactForm.name}\nEmail: ${contactForm.email}\nCompany: ${contactForm.company}\n\n${contactForm.message}`);
+      window.open(`mailto:enterprise@velismail.online?subject=${subject}&body=${body}`, '_blank');
+    }
+    setContactSending(false);
+    setContactSuccess(true);
+    setTimeout(() => {
+      setContactSuccess(false);
+      setShowContactModal(false);
+      setContactForm({ name: '', email: '', company: '', message: '' });
+    }, 2500);
+  };
+
+  const handleFeedbackSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setFeedbackSending(true);
+    try {
+      await fetchApiResponse('/feedback', {
+        method: 'POST',
+        body: JSON.stringify(feedbackForm),
+      });
+    } catch {
+      const subject = encodeURIComponent(`Feedback (${feedbackForm.type}) from ${feedbackForm.name}`);
+      const body = encodeURIComponent(`Name: ${feedbackForm.name}\nEmail: ${feedbackForm.email}\nType: ${feedbackForm.type}\n\n${feedbackForm.message}`);
+      window.open(`mailto:feedback@velismail.online?subject=${subject}&body=${body}`, '_blank');
+    }
+    setFeedbackSending(false);
+    setFeedbackSuccess(true);
+    setTimeout(() => {
+      setFeedbackSuccess(false);
+      setShowFeedbackModal(false);
+      setFeedbackForm({ name: '', email: '', type: 'suggestion', message: '' });
+    }, 2500);
   };
 
   return (
@@ -333,7 +387,7 @@ export default function Home() {
                 <li style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>✓ SLA guarantee (99.99%)</li>
                 <li style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>✓ 24/7 priority support</li>
               </ul>
-              <a href="mailto:enterprise@velismail.online" className="btn btn-secondary" style={{ width: '100%', marginTop: '20px', textAlign: 'center' }}>Contact Sales</a>
+              <button onClick={() => setShowContactModal(true)} className="btn btn-secondary" style={{ width: '100%', marginTop: '20px', textAlign: 'center' }}>Contact Sales</button>
             </div>
           </div>
         </div>
@@ -360,9 +414,9 @@ export default function Home() {
               <a href="#features" className="btn btn-secondary">
                 Learn More
               </a>
-              <a href="mailto:feedback@velismail.online" className="btn btn-ghost" style={{ border: '1px solid var(--border-primary)' }}>
+              <button onClick={() => setShowFeedbackModal(true)} className="btn btn-ghost" style={{ border: '1px solid var(--border-primary)' }}>
                 Submit Feedback
-              </a>
+              </button>
             </div>
           </div>
         </div>
@@ -379,10 +433,120 @@ export default function Home() {
             <a href="mailto:support@velismail.online" className="footer-link">Contact</a>
           </div>
           <p className="footer-copyright">
-            © 2024 VelisMail. All rights reserved. Enterprise-grade secure communication.
+            © 2025 VelisMail. All rights reserved. Enterprise-grade secure communication.
           </p>
         </div>
       </footer>
+
+      {/* Contact Sales Modal */}
+      {showContactModal && (
+        <div className="modal-overlay" onClick={() => setShowContactModal(false)}>
+          <div className="contact-modal glass animate-scale" onClick={e => e.stopPropagation()}>
+            {contactSuccess ? (
+              <div className="modal-success">
+                <div className="success-icon">✓</div>
+                <h3>Thank you!</h3>
+                <p>Our sales team will contact you within 24 hours.</p>
+              </div>
+            ) : (
+              <>
+                <div className="modal-header">
+                  <h3>Contact Sales</h3>
+                  <p>Get a custom enterprise plan tailored to your organization.</p>
+                </div>
+                <form onSubmit={handleContactSubmit} className="modal-form">
+                  <div className="form-row">
+                    <div className="form-group">
+                      <label htmlFor="contact-name">Full Name *</label>
+                      <input id="contact-name" className="input" required value={contactForm.name}
+                        onChange={e => setContactForm(p => ({ ...p, name: e.target.value }))} placeholder="Your name" />
+                    </div>
+                    <div className="form-group">
+                      <label htmlFor="contact-email">Work Email *</label>
+                      <input id="contact-email" className="input" type="email" required value={contactForm.email}
+                        onChange={e => setContactForm(p => ({ ...p, email: e.target.value }))} placeholder="you@company.com" />
+                    </div>
+                  </div>
+                  <div className="form-group">
+                    <label htmlFor="contact-company">Company</label>
+                    <input id="contact-company" className="input" value={contactForm.company}
+                      onChange={e => setContactForm(p => ({ ...p, company: e.target.value }))} placeholder="Your company name" />
+                  </div>
+                  <div className="form-group">
+                    <label htmlFor="contact-message">How can we help? *</label>
+                    <textarea id="contact-message" className="input" rows={4} required value={contactForm.message}
+                      onChange={e => setContactForm(p => ({ ...p, message: e.target.value }))} placeholder="Tell us about your requirements…" />
+                  </div>
+                  <div className="modal-actions">
+                    <button type="button" className="btn btn-secondary" onClick={() => setShowContactModal(false)}>Cancel</button>
+                    <button type="submit" className="btn btn-primary" disabled={contactSending}>
+                      {contactSending ? 'Sending…' : 'Send Inquiry'}
+                    </button>
+                  </div>
+                </form>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Feedback Modal */}
+      {showFeedbackModal && (
+        <div className="modal-overlay" onClick={() => setShowFeedbackModal(false)}>
+          <div className="contact-modal glass animate-scale" onClick={e => e.stopPropagation()}>
+            {feedbackSuccess ? (
+              <div className="modal-success">
+                <div className="success-icon">✓</div>
+                <h3>Feedback Received!</h3>
+                <p>Thank you for helping us improve VelisMail.</p>
+              </div>
+            ) : (
+              <>
+                <div className="modal-header">
+                  <h3>Submit Feedback</h3>
+                  <p>We value your input. Help us build a better product.</p>
+                </div>
+                <form onSubmit={handleFeedbackSubmit} className="modal-form">
+                  <div className="form-row">
+                    <div className="form-group">
+                      <label htmlFor="fb-name">Name *</label>
+                      <input id="fb-name" className="input" required value={feedbackForm.name}
+                        onChange={e => setFeedbackForm(p => ({ ...p, name: e.target.value }))} placeholder="Your name" />
+                    </div>
+                    <div className="form-group">
+                      <label htmlFor="fb-email">Email *</label>
+                      <input id="fb-email" className="input" type="email" required value={feedbackForm.email}
+                        onChange={e => setFeedbackForm(p => ({ ...p, email: e.target.value }))} placeholder="you@email.com" />
+                    </div>
+                  </div>
+                  <div className="form-group">
+                    <label htmlFor="fb-type">Feedback Type</label>
+                    <select id="fb-type" className="input" value={feedbackForm.type}
+                      onChange={e => setFeedbackForm(p => ({ ...p, type: e.target.value }))}>
+                      <option value="suggestion">Suggestion</option>
+                      <option value="bug">Bug Report</option>
+                      <option value="feature">Feature Request</option>
+                      <option value="praise">Praise</option>
+                      <option value="other">Other</option>
+                    </select>
+                  </div>
+                  <div className="form-group">
+                    <label htmlFor="fb-message">Your Feedback *</label>
+                    <textarea id="fb-message" className="input" rows={4} required value={feedbackForm.message}
+                      onChange={e => setFeedbackForm(p => ({ ...p, message: e.target.value }))} placeholder="Share your thoughts…" />
+                  </div>
+                  <div className="modal-actions">
+                    <button type="button" className="btn btn-secondary" onClick={() => setShowFeedbackModal(false)}>Cancel</button>
+                    <button type="submit" className="btn btn-primary" disabled={feedbackSending}>
+                      {feedbackSending ? 'Sending…' : 'Submit Feedback'}
+                    </button>
+                  </div>
+                </form>
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

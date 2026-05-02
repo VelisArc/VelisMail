@@ -76,6 +76,8 @@ services:
       - auth-service
       - mail-service
       - storage-service
+      - tenant-service
+      - delivery-engine
 
   # Auth Service
   auth-service:
@@ -158,8 +160,36 @@ services:
       redis:
         condition: service_healthy
 
+  # Delivery Engine
+  delivery-engine:
+    build:
+      context: .
+      dockerfile: services/delivery-engine/Dockerfile
+    ports:
+      - "3005:3005"
+    environment:
+      - DELIVERY_HOST=0.0.0.0
+      - DELIVERY_PORT=3005
+      - DATABASE_URL=postgres://postgres:postgres@postgres:5432/velismail_delivery
+      - REDIS_URL=redis://redis:6379
+      - NATS_URL=nats://nats:4222
+      - SMTP_HOST=${SMTP_HOST}
+      - SMTP_PORT=${SMTP_PORT}
+      - SMTP_USERNAME=${SMTP_USERNAME}
+      - SMTP_PASSWORD=${SMTP_PASSWORD}
+      - DKIM_PRIVATE_KEY=${DKIM_PRIVATE_KEY}
+      - DKIM_SELECTOR=${DKIM_SELECTOR}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      nats:
+        condition: service_started
+
 volumes:
   postgres_data:
   redis_data:
   nats_data:
   minio_data:
+
