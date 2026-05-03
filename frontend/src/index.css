@@ -26,6 +26,7 @@
   --glass-sidebar-bg: rgba(30, 30, 30, 0.7);
 
   /* Primary — Soft Monochrome / Silver */
+  --primary-50: rgba(251, 191, 36, 0.1);
   --primary-500: #f59e0b;
   --primary-400: #fbbf24;
   --primary-600: #d97706;
@@ -58,13 +59,13 @@
   --border-secondary: rgba(255, 255, 255, 0.05);
   --border-accent: rgba(255, 255, 255, 0.15);
 
-  /* Radius - More modern/industrial */
-  --radius-sm: 0px;
-  --radius-md: 0px;
-  --radius-lg: 0px;
-  --radius-xl: 0px;
-  --radius-2xl: 0px;
-  --radius-full: 0px;
+  /* Radius - Modern rounded */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
+  --radius-xl: 14px;
+  --radius-2xl: 20px;
+  --radius-full: 9999px;
 
   /* Spacing - Optimized (Zoomed Out ~20%) */
   --space-1: 0.2rem;
@@ -382,6 +383,120 @@ select.input option {
 
 .text-center {
   text-align: center;
+}
+
+/* --- Text Colors --- */
+.text-primary { color: var(--primary-400); }
+
+/* --- Badges --- */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.badge-primary {
+  background: var(--primary-glow);
+  color: var(--primary-400);
+  border: 1px solid rgba(251, 191, 36, 0.2);
+}
+
+/* --- Alert --- */
+.inline-alert {
+  padding: 12px 16px;
+  border-radius: var(--radius-md);
+  font-size: 0.9rem;
+  border: 1px solid;
+}
+
+.inline-alert.success {
+  background: rgba(16, 185, 129, 0.1);
+  border-color: rgba(16, 185, 129, 0.3);
+  color: #34d399;
+}
+
+.inline-alert.error {
+  background: rgba(239, 68, 68, 0.1);
+  border-color: rgba(239, 68, 68, 0.3);
+  color: #f87171;
+}
+
+.inline-alert.info {
+  background: rgba(59, 130, 246, 0.1);
+  border-color: rgba(59, 130, 246, 0.3);
+  color: #60a5fa;
+}
+
+/* --- Icon Button --- */
+.btn-icon {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-md);
+  background: transparent;
+  border: 1px solid var(--border-primary);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all var(--transition-normal);
+}
+
+.btn-icon:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+  border-color: var(--border-accent);
+}
+
+/* --- Danger Button --- */
+.btn-danger {
+  background: var(--danger);
+  color: white;
+  border-color: var(--danger);
+}
+
+.btn-danger:hover {
+  background: #dc2626;
+  border-color: #dc2626;
+}
+
+/* --- Ghost Button --- */
+.btn-ghost {
+  background: transparent;
+  color: var(--text-secondary);
+  border-color: var(--border-primary);
+}
+
+.btn-ghost:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+  border-color: var(--border-accent);
+}
+
+/* --- Large Button --- */
+.btn-lg {
+  padding: var(--space-4) var(--space-8);
+  font-size: 1.05rem;
+  min-height: 48px;
+}
+
+/* --- Glass Effect --- */
+.glass {
+  background: var(--glass-bg);
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  border: 1px solid var(--glass-border);
+}
+
+/* --- Fade Animation --- */
+.animate-fade {
+  animation: fadeIn 0.3s var(--ease-out);
 }
 
 /* --- Animations --- */
