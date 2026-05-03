@@ -337,7 +337,7 @@
 /* --- Footer --- */
 .home-footer {
   padding: 64px 0 32px; /* Zoomed out padding */
-  background: #0a0a0a;
+  background: transparent;
   border-top: 1px solid var(--glass-border);
 }
 
