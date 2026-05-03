@@ -429,11 +429,8 @@ export default function SettingsPage() {
                 <p>Customize the primary color used throughout the app</p>
                 <div className="accent-options">
                   {[
-                    { name: 'Indigo', value: '#6366f1' },
-                    { name: 'Blue', value: '#3b82f6' },
                     { name: 'Purple', value: '#8b5cf6' },
                     { name: 'Rose', value: '#f43f5e' },
-                    { name: 'Emerald', value: '#10b981' },
                     { name: 'Amber', value: '#f59e0b' },
                   ].map(color => (
                     <button
