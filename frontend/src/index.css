@@ -97,13 +97,13 @@
   --z-tooltip: 1060;
 }
 
-/* --- Light Mode (Premium Soft Colors) --- */
+/* --- Light Mode (Professional B2B Theme) --- */
 [data-theme="light"] {
   --bg-body: #f8fafc;
   --bg-surface: #ffffff;
   --bg-surface-2: #f1f5f9;
   --bg-elevated: #ffffff;
-  --bg-hover: rgba(20, 184, 166, 0.05);
+  --bg-hover: rgba(59, 130, 246, 0.05);
   --bg-card: #ffffff;
 
   --glass-border: rgba(0, 0, 0, 0.06);
@@ -113,7 +113,25 @@
   --glass-panel-bg: rgba(248, 250, 252, 0.9);
   --glass-sidebar-bg: rgba(255, 255, 255, 0.8);
 
+  /* Professional Blue & Indigo */
+  --primary-50: #eff6ff;
+  --primary-100: #dbeafe;
+  --primary-200: #bfdbfe;
+  --primary-300: #93c5fd;
+  --primary-400: #60a5fa;
+  --primary-500: #3b82f6;
+  --primary-600: #2563eb;
+  --primary-700: #1d4ed8;
+  --primary-800: #1e40af;
+  --primary-900: #1e3a8a;
+
+  --accent-50: #eef2ff;
+  --accent-500: #6366f1;
+  --accent-600: #4f46e5;
+
   --primary: var(--primary-600);
+  --accent: var(--accent-600);
+
   --text-primary: #0f172a;
   --text-secondary: #475569;
   --text-muted: #94a3b8;
@@ -122,7 +140,7 @@
 
   --border-primary: rgba(0, 0, 0, 0.08);
   --border-secondary: rgba(0, 0, 0, 0.04);
-  --border-accent: rgba(20, 184, 166, 0.2);
+  --border-accent: rgba(59, 130, 246, 0.2);
 }
 
 /* --- Reset & Base Styles --- */

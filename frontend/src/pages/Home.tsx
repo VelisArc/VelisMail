@@ -10,7 +10,6 @@ import {
   Key,
   Lock,
   Menu,
-  MessageSquare,
   Server,
   Shield,
   Sparkles,
@@ -173,7 +172,7 @@ export default function Home() {
           <div className="hero-copy">
             <div className="hero-badge animate-fadeIn">
               <Sparkles size={14} />
-              <span>Enterprise Email for the Modern Era</span>
+              <span>Enterprise Email Service for the Modern Era</span>
             </div>
 
             <h1 className="hero-title animate-fadeIn">
@@ -181,15 +180,17 @@ export default function Home() {
             </h1>
 
             <p className="hero-subtitle animate-fadeIn" style={{ animationDelay: '0.1s' }}>
-              The next-generation secure communication platform. Built for modern organizations 
-              with end-to-end encryption, Zero Trust access, and absolute data sovereignty.
+              The next-generation secure email platform. Built for modern organizations
+              with end-to-end email encryption, Zero Trust email access, and absolute data sovereignty.
+              Scale your business communications safely and reliably. Experience superior inbox deliverability,
+              custom domain management, and professional business email hosting with 99.9% uptime.
             </p>
 
             <div className="hero-actions animate-fadeIn" style={{ animationDelay: '0.2s' }}>
               <Link to={getDashboardLink()} className="btn btn-primary">
                 {getDashboardText()} <ArrowRight size={18} />
               </Link>
-              <a href="#features" className="btn btn-secondary">Explore Features</a>
+              <a href="#features" className="btn btn-secondary">Explore Business Email Features</a>
             </div>
 
             <div className="hero-proof-row animate-fadeIn" style={{ animationDelay: '0.3s' }}>
@@ -209,12 +210,42 @@ export default function Home() {
         </div>
       </section>
 
+      {/* --- SEO Content Section --- */}
+      <section className="seo-content-section" style={{ padding: '4rem 0', background: 'var(--bg-surface-2)' }}>
+        <div className="container">
+          <div className="section-head text-center" style={{ marginBottom: '3rem' }}>
+            <h2 className="section-title">Professional Business Email Hosting Solutions</h2>
+            <p className="section-subtitle" style={{ maxWidth: '800px', margin: '0 auto', color: 'var(--text-secondary)' }}>
+              VelisMail provides industry-leading secure email hosting, custom domain email addresses, and robust email infrastructure for enterprises. Enhance your professional brand with our reliable business email service.
+            </p>
+          </div>
+          <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '2rem' }}>
+            <div className="seo-card glass-card">
+              <h3>Secure Email Infrastructure</h3>
+              <p>Our secure email infrastructure is designed with privacy and compliance in mind. Protect sensitive corporate communications with advanced threat protection, spam filtering, and enterprise-grade encryption. VelisMail is the trusted choice for organizations requiring high-security email solutions.</p>
+            </div>
+            <div className="seo-card glass-card">
+              <h3>Custom Domain Email Addresses</h3>
+              <p>Build trust and professional credibility with custom domain email addresses (e.g., yourname@yourcompany.com). Our seamless domain integration allows you to easily connect your existing domains or register new ones, ensuring your brand identity remains strong in every communication.</p>
+            </div>
+            <div className="seo-card glass-card">
+              <h3>Reliable Email Deliverability</h3>
+              <p>Don't let your important business emails end up in the spam folder. VelisMail utilizes optimized routing algorithms and maintains strict sender reputations to guarantee superior email deliverability rates. Reach your clients and partners reliably, every single time.</p>
+            </div>
+            <div className="seo-card glass-card">
+              <h3>Collaborative Webmail Interface</h3>
+              <p>Experience a modern, lightning-fast webmail interface that boosts team productivity. Our intuitive platform features seamless calendar integration, contact management, and robust organizational tools designed specifically for professional email users.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* --- Features Grid --- */}
       <section id="features" className="features-section">
         <div className="container">
           <div className="section-head">
             <span className="section-badge">Platform Capabilities</span>
-            <h2 className="section-title">Engineered for security, built for teams.</h2>
+            <h2 className="section-title">Engineered for security, built for enterprise teams.</h2>
           </div>
 
           <div className="features-grid">

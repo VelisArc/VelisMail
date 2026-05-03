@@ -485,8 +485,8 @@ impl TenantService {
 
         // Get user counts (this would need user service integration)
         // TODO: Integrate with user service to get real user counts
-        let total_users = 0; // TODO: Implement fetch_total_users
-        let active_users = 0; // TODO: Implement fetch_active_users
+        let total_users = 0;
+        let active_users = 0;
 
         let stats = TenantStats {
             total_users,
