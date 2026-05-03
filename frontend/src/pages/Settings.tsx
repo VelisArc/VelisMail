@@ -228,7 +228,7 @@ export default function SettingsPage() {
 
   if (!user || !user.isBusinessSetupComplete) return null;
 
-  const currentTheme = localStorage.getItem('velismail_theme') || 'system';
+  const currentTheme = localStorage.getItem('velismail_theme') || 'light';
   const primaryMailbox = user.businessMailboxAddress || user.email;
 
   return (
