@@ -248,7 +248,7 @@ export default function Home() {
             <h2 className="section-title">Seamless Integration Process.</h2>
             <p style={{ color: 'var(--text-secondary)', maxWidth: 600, margin: '0 auto', marginTop: 16 }}>Deploy VelisMail across your entire organization in three simple steps. We handle the complex infrastructure so you can focus on communication.</p>
           </div>
-
+          
           <div className="features-grid">
             <div className="feature-card glass-card">
               <div className="feature-icon-wrap">
@@ -310,7 +310,7 @@ export default function Home() {
             <span className="section-badge">Support</span>
             <h2 className="section-title">Frequently Asked Questions.</h2>
           </div>
-
+          
           <div style={{ maxWidth: 800, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 16 }}>
             {[
               { q: 'How does the end-to-end encryption work?', a: 'We utilize a combination of robust public-key cryptography (RSA-4096) for message transit and AES-256 for data at rest. Your private keys never leave your secure enclave.' },
