@@ -15,6 +15,10 @@ import {
   Sparkles,
   X,
   Zap,
+  Briefcase,
+  Users,
+  Settings,
+  ChevronDown
 } from 'lucide-react';
 import { auth, fetchApiResponse } from '../api/client';
 import './Home.css';
@@ -124,6 +128,12 @@ export default function Home() {
     }
   };
 
+  const [openFaq, setOpenFaq] = useState<number | null>(null);
+
+  const toggleFaq = (index: number) => {
+    setOpenFaq(openFaq === index ? null : index);
+  };
+
   return (
     <div className="home animate-page">
       <div className="home-bg-orb orb-1" />
@@ -224,6 +234,100 @@ export default function Home() {
                 </div>
                 <h3>{f.title}</h3>
                 <p>{f.desc}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* --- How It Works Section --- */}
+      <section className="features-section" style={{ borderTop: '1px solid var(--glass-border)' }}>
+        <div className="container">
+          <div className="section-head">
+            <span className="section-badge">Deployment</span>
+            <h2 className="section-title">Seamless Integration Process.</h2>
+            <p style={{ color: 'var(--text-secondary)', maxWidth: 600, margin: '0 auto', marginTop: 16 }}>Deploy VelisMail across your entire organization in three simple steps. We handle the complex infrastructure so you can focus on communication.</p>
+          </div>
+
+          <div className="features-grid">
+            <div className="feature-card glass-card">
+              <div className="feature-icon-wrap">
+                <Settings size={24} />
+              </div>
+              <h3>1. Configure Domain</h3>
+              <p>Add your business domains and automatically verify DNS settings for SPF, DKIM, and DMARC without leaving the dashboard.</p>
+            </div>
+            <div className="feature-card glass-card">
+              <div className="feature-icon-wrap">
+                <Users size={24} />
+              </div>
+              <h3>2. Provision Users</h3>
+              <p>Create mailboxes manually or sync your existing active directory to instantly provision access for your entire team.</p>
+            </div>
+            <div className="feature-card glass-card">
+              <div className="feature-icon-wrap">
+                <Briefcase size={24} />
+              </div>
+              <h3>3. Start Communicating</h3>
+              <p>Users log in via secure, passwordless authentication and instantly access their encrypted inbox from any modern browser.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* --- Premium Use Cases --- */}
+      <section className="features-section" style={{ background: 'var(--bg-surface-2)' }}>
+        <div className="container">
+          <div className="section-head">
+            <span className="section-badge">Solutions</span>
+            <h2 className="section-title">Built for Modern Organizations.</h2>
+          </div>
+          <div className="features-grid" style={{ gridTemplateColumns: 'repeat(2, 1fr)' }}>
+            <div className="feature-card glass-card">
+              <h3>Enterprise Security Teams</h3>
+              <p>Enforce strict compliance policies, audit all internal and external communication logs, and mandate zero-trust architecture across all endpoints.</p>
+            </div>
+            <div className="feature-card glass-card">
+              <h3>Regulated Industries</h3>
+              <p>Perfect for healthcare, finance, and legal sectors where data sovereignty and verifiable end-to-end encryption are legal requirements.</p>
+            </div>
+            <div className="feature-card glass-card">
+              <h3>Global Remote Teams</h3>
+              <p>Ensure low-latency, highly available communication streams regardless of geographical location, backed by our distributed edge infrastructure.</p>
+            </div>
+            <div className="feature-card glass-card">
+              <h3>Rapidly Scaling Startups</h3>
+              <p>Grow from 10 to 10,000 employees with instant mailbox provisioning, predictable pricing, and zero on-premise hardware maintenance.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* --- FAQ Section --- */}
+      <section className="features-section" style={{ borderTop: '1px solid var(--glass-border)' }}>
+        <div className="container">
+          <div className="section-head">
+            <span className="section-badge">Support</span>
+            <h2 className="section-title">Frequently Asked Questions.</h2>
+          </div>
+
+          <div style={{ maxWidth: 800, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 16 }}>
+            {[
+              { q: 'How does the end-to-end encryption work?', a: 'We utilize a combination of robust public-key cryptography (RSA-4096) for message transit and AES-256 for data at rest. Your private keys never leave your secure enclave.' },
+              { q: 'Can I migrate my existing email history?', a: 'Yes. Our automated migration tools support IMAP import from major providers including Google Workspace and Microsoft 365 with zero downtime.' },
+              { q: 'What happens if I lose my device?', a: 'Our passwordless authentication system allows administrators to instantly revoke device tokens and provision new access credentials without compromising account security.' },
+              { q: 'Is custom branding supported?', a: 'Absolutely. Enterprise tier customers can white-label the entire webmail interface with custom logos, colors, and dedicated login portals.' }
+            ].map((faq, idx) => (
+              <div key={idx} className="glass-card" style={{ padding: '20px 24px', cursor: 'pointer', transition: 'background 0.2s' }} onClick={() => toggleFaq(idx)}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <h4 style={{ margin: 0, fontSize: '1.1rem' }}>{faq.q}</h4>
+                  <ChevronDown size={20} style={{ transform: openFaq === idx ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.3s' }} />
+                </div>
+                {openFaq === idx && (
+                  <p style={{ marginTop: 16, color: 'var(--text-secondary)', marginBottom: 0 }}>
+                    {faq.a}
+                  </p>
+                )}
               </div>
             ))}
           </div>
