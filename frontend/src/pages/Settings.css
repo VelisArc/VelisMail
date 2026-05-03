@@ -316,8 +316,8 @@
 .security-fields {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  max-width: 400px;
+  gap: 16px;
+  max-width: 440px;
 }
 
 .key-info {
