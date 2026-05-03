@@ -436,29 +436,38 @@ export default function BusinessSetup() {
     <div className="bsetup-page">
       <nav className="bsetup-nav">
         <div className="container bsetup-nav-inner">
-          <Link to="/" className="nav-logo">
-            <img src="/ZeeResizer.png" alt="VelisMail" style={{ height: '24px', width: 'auto' }} />
-            <span className="logo-text">VelisMail</span>
-            <span className="badge badge-primary" style={{ marginLeft: 8 }}>Business</span>
-          </Link>
-          <div style={{ display: 'flex', gap: '8px' }}>
-
-            <button className="btn btn-ghost btn-sm" onClick={() => { auth.logout(); navigate('/login'); }}>
-              <LogOut size={16} /> Logout
-            </button>
+          <div className="dash-brand" onClick={() => navigate('/')}>
+            <img src="/ZeeResizer.png" alt="VelisMail" style={{ height: '20px' }} />
+            <div className="dash-brand-info">
+              <span className="dash-brand-name">VelisMail</span>
+              <span className="badge badge-accent dash-brand-sub" style={{ fontSize: '0.6rem' }}>Onboarding</span>
+            </div>
           </div>
+          <button className="btn btn-ghost btn-sm" onClick={() => setShowLogoutConfirm(true)}>
+            <LogOut size={16} /> Save & Exit
+          </button>
         </div>
       </nav>
 
       <div className="bsetup-container">
         {/* Progress Bar */}
         <div className="bsetup-progress">
-          {['Infrastructure', 'Domain Setup', 'Verification', 'Complete'].map((label, i) => (
-            <div key={i} className={`bsetup-progress-step ${step > i + 1 ? 'done' : step === i + 1 ? 'active' : ''}`}>
-              <div className="bsetup-step-num">{step > i + 1 ? <CheckCircle2 size={16} /> : i + 1}</div>
-              <span>{label}</span>
-            </div>
-          ))}
+          <div className={`bsetup-progress-step ${step === 1 ? 'active' : step > 1 ? 'done' : ''}`}>
+            <div className="bsetup-step-num">{step > 1 ? <CheckCircle2 size={16} /> : '1'}</div>
+            <span>Infrastructure</span>
+          </div>
+          <div className={`bsetup-progress-step ${step === 2 ? 'active' : step > 2 ? 'done' : ''}`}>
+            <div className="bsetup-step-num">{step > 2 ? <CheckCircle2 size={16} /> : '2'}</div>
+            <span>Domain Setup</span>
+          </div>
+          <div className={`bsetup-progress-step ${step === 3 ? 'active' : step > 3 ? 'done' : ''}`}>
+            <div className="bsetup-step-num">{step > 3 ? <CheckCircle2 size={16} /> : '3'}</div>
+            <span>Verification</span>
+          </div>
+          <div className={`bsetup-progress-step ${step === 4 ? 'active' : ''}`}>
+            <div className="bsetup-step-num">4</div>
+            <span>Ready</span>
+          </div>
         </div>
 
         {/* Step 1: Infrastructure */}
