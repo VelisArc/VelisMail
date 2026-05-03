@@ -63,7 +63,6 @@
   display: flex;
   flex-direction: column;
   background: var(--bg-surface);
-  border-right: 1px solid var(--glass-border);
   height: 100vh; overflow-y: auto;
   padding: var(--space-6) var(--space-4);
   z-index: var(--z-sticky);
@@ -789,7 +788,7 @@
 
 /* Biz Panel */
 .biz-panel {
-  padding: 0;
+  padding: var(--space-8);
   overflow-y: auto;
   height: 100vh;
 
@@ -1110,8 +1109,7 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  padding: 0;
-
+  padding: var(--space-8);
 }
 
 .panel-header {
