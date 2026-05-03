@@ -2250,7 +2250,11 @@ export const theme = {
   },
 
   init() {
-    const mode = this.get();
+    let mode = this.get();
+    if (!localStorage.getItem(STORAGE_KEYS.theme)) {
+        mode = 'light';
+        this.set(mode);
+    }
     document.documentElement.setAttribute('data-theme', mode);
   },
 };
