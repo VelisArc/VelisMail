@@ -37,7 +37,7 @@ import {
   type Email,
 } from '../api/client';
 import Composer from '../components/Composer';
-import { useNavigation, useSessionActions } from '../store/sessionStore';
+import { useNavigation, useSessionStore } from '../store/sessionStore';
 import { useEmails } from '../hooks/useMail';
 import './BusinessDashboard.css';
 
@@ -153,7 +153,7 @@ type BizTab = 'mail' | 'domains' | 'mailboxes' | 'groups' | 'team' | 'queue' | '
 export default function BusinessDashboard() {
   const navigate = useNavigate();
   const navigation = useNavigation();
-  const updateNavigation = useSessionActions().updateNavigation;
+  const updateNavigation = useSessionStore(state => state.updateNavigation);
   const user = auth.getSession();
   const storedDomainRecords = domains.getAll().map(toDomainRecord);
   const initialDomainRecords = storedDomainRecords;

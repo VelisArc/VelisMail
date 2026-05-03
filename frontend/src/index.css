@@ -514,11 +514,11 @@ select.input option {
 }
 
 .diag-success {
-  border-color: rgba(16, 185, 129, 0.28);
+  border-color: rgba(217, 119, 6, 0.28);
 }
 
 .diag-success .diag-step-icon {
-  background: rgba(16, 185, 129, 0.14);
+  background: rgba(217, 119, 6, 0.14);
   color: var(--primary);
 }
 
@@ -574,7 +574,7 @@ select.input option {
   min-width: 52px;
   padding: 3px 8px;
   border-radius: 999px;
-  background: rgba(16, 185, 129, 0.12);
+  background: rgba(217, 119, 6, 0.12);
   color: var(--primary);
   font-size: 0.72rem;
   font-weight: 700;
