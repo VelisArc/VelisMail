@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, type KeyboardEvent } from 'react';
 import { 
   Bold, Italic, Underline, List, Link as LinkIcon, 
-  Paperclip, Send
+  Paperclip, Send, X
 } from 'lucide-react';
 import { contacts, type Contact } from '../api/client';
 import './Composer.css';

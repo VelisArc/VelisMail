@@ -408,12 +408,12 @@ fn parse_database_endpoint(db_url: &str) -> Result<DatabaseEndpoint, String> {
                     format!("Database port is missing for scheme '{}'.", parsed.scheme())
                 })?;
 
-            return Ok(DatabaseEndpoint {
+            Ok(DatabaseEndpoint {
                 scheme: parsed.scheme().to_string(),
                 host,
                 port,
                 sqlite_path: None,
-            });
+            })
         }
         Err(parse_error) => {
             let after_scheme = trimmed
@@ -1382,7 +1382,7 @@ pub async fn verify_domain(
     let txt_host = format!("_velismail-verify.{domain}");
     let dkim_host = format!("velismail._domainkey.{domain}");
     let dmarc_host = format!("_dmarc.{domain}");
-    let expected_mx_hosts = vec![
+    let expected_mx_hosts = [
         format!("mx1.{}", base_domain),
         format!("mx2.{}", base_domain),
     ];

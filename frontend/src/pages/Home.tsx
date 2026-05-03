@@ -10,7 +10,6 @@ import {
   Key,
   Lock,
   Menu,
-  MessageSquare,
   Server,
   Shield,
   Sparkles,

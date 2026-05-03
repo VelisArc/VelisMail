@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import {
   Database, Mail, CheckCircle2, Server, Loader2, Lock, Globe,
   Zap, Shield, ArrowRight, XCircle, Wifi, LogOut
@@ -105,8 +105,14 @@ export default function BusinessSetup() {
   // Shared
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [verifySteps, setVerifySteps] = useState<VerifyStep[]>([]);
   const [providerDnsRecords, setProviderDnsRecords] = useState<ProviderDnsRecord[]>([]);
+
+  const handleLogout = () => {
+    auth.logout();
+    navigate('/login');
+  };
 
   useEffect(() => {
     const session = auth.getSession();
@@ -653,6 +659,27 @@ export default function BusinessSetup() {
             </div>
           </div>
         )}
+
+      {showLogoutConfirm && (
+        <div className="modal-overlay" onClick={() => setShowLogoutConfirm(false)}>
+          <div className="modal-content" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>Sign Out</h2>
+              <button className="icon-button" onClick={() => setShowLogoutConfirm(false)}>
+                <LogOut size={20} />
+              </button>
+            </div>
+            <div className="modal-body">
+              <p>Are you sure you want to sign out of the workspace setup?</p>
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-ghost" onClick={() => setShowLogoutConfirm(false)}>Cancel</button>
+              <button className="btn btn-primary" onClick={handleLogout}>Sign Out</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       </div>
     </div>
   );
