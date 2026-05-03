@@ -83,7 +83,7 @@
 }
 
 .tab-btn.active {
-  background: var(--primary-glow);
+  background: rgba(16, 185, 129, 0.12);
   color: var(--primary-400);
 }
 
