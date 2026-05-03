@@ -93,6 +93,19 @@ export default function Composer({
     }
   };
 
+  const [attachments, setAttachments] = useState<File[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) {
+      setAttachments(prev => [...prev, ...Array.from(e.target.files!)]);
+    }
+  };
+
+  const removeAttachment = (index: number) => {
+    setAttachments(prev => prev.filter((_, i) => i !== index));
+  };
+
   const handleSend = () => {
     if (!to || !subject) return;
     onSend(to, subject, bodyHtml);
@@ -172,11 +185,36 @@ export default function Composer({
             aria-label="Write your email here"
           />
         </div>
+
+        {attachments.length > 0 && (
+          <div className="attachments-list" style={{ padding: '0 20px', display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '16px' }}>
+            {attachments.map((file, i) => (
+              <div key={i} className="attachment-chip" style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '4px 10px', background: 'var(--bg-surface-2)', borderRadius: '4px', fontSize: '0.8rem', border: '1px solid var(--border)' }}>
+                <Paperclip size={12} />
+                <span>{file.name}</span>
+                <button onClick={() => removeAttachment(i)} style={{ color: 'var(--text-muted)', marginLeft: '4px' }}><X size={12} /></button>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
       
       <div className="compose-footer">
         <div className="compose-footer-left">
-          <button className="btn btn-ghost btn-icon" title="Attach Files"><Paperclip size={16} /></button>
+          <input 
+            type="file" 
+            ref={fileInputRef} 
+            onChange={handleFileChange} 
+            style={{ display: 'none' }} 
+            multiple 
+          />
+          <button 
+            className="btn btn-ghost btn-icon" 
+            title="Attach Files"
+            onClick={() => fileInputRef.current?.click()}
+          >
+            <Paperclip size={16} />
+          </button>
         </div>
         <div className="compose-footer-right">
           <button className="btn btn-secondary btn-sm" onClick={onClose} disabled={sending}>Discard</button>

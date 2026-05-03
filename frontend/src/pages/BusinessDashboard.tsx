@@ -889,6 +889,24 @@ export default function BusinessDashboard() {
 
       {/* Main Content */}
       <main className="biz-main">
+        {/* Mobile Global Header */}
+        <div className="mobile-dash-header">
+          <button className="btn btn-icon btn-ghost" onClick={() => setSidebarOpen(true)}>
+            <Menu size={20} />
+          </button>
+          <div className="mobile-brand">
+            <img src="/ZeeResizer.png" alt="VelisMail" />
+            <span>VelisMail</span>
+          </div>
+          <div style={{ marginLeft: 'auto', display: 'flex', gap: '8px' }}>
+            <button className="btn btn-icon btn-ghost" onClick={() => setComposeOpen(true)} title="Compose">
+              <Plus size={20} />
+            </button>
+            <button className="btn btn-icon btn-ghost" onClick={() => setActiveBizTab('analytics')} title="Analytics">
+              <BarChart3 size={20} />
+            </button>
+          </div>
+        </div>
 
         {/* ===== MAIL TAB ===== */}
         {activeBizTab === 'mail' && (
@@ -903,9 +921,9 @@ export default function BusinessDashboard() {
                     <div className="reader-toolbar-actions">
                       <button className="btn btn-ghost btn-icon" title="Reply" onClick={handleReply}><Reply size={16} /></button>
                       <button className="btn btn-ghost btn-icon" title="Forward" onClick={handleForward}><Forward size={16} /></button>
-                      <button className="btn btn-ghost btn-icon" title="Print"><ExternalLink size={16} /></button>
-                      <button className="btn btn-ghost btn-icon" title="Archive" onClick={() => handleArchive()}><ArchiveIcon size={16} /></button>
-                      <button className="btn btn-danger btn-icon btn-sm" title="Delete" onClick={() => handleDeleteEmail()}><Trash size={16} /></button>
+                      <button className="btn btn-ghost btn-icon" title="Print" onClick={() => { window.print(); showToast('Preparing print view...'); }}><ExternalLink size={16} /></button>
+                      <button className="btn btn-ghost btn-icon" title="Archive" onClick={() => { handleArchive(); showToast('Email archived'); }}><ArchiveIcon size={16} /></button>
+                      <button className="btn btn-danger btn-icon btn-sm" title="Delete" onClick={() => { handleDeleteEmail(); showToast('Email deleted'); }}><Trash size={16} /></button>
                     </div>
                   </div>
                   <div className="reader-header">
