@@ -26,7 +26,7 @@
 
 .nav-scrolled {
   height: 64px;
-  background: rgba(2, 6, 23, 0.8);
+  background: rgba(18, 18, 18, 0.85);
   backdrop-filter: blur(20px);
   border-bottom: 1px solid var(--glass-border);
 }
@@ -44,12 +44,14 @@
 .nav-logo {
   display: flex;
   align-items: center;
+  justify-content: flex-start; /* Explicit left alignment */
   gap: 12px;
   font-weight: 800;
   font-size: 1.5rem;
   letter-spacing: -0.04em;
   color: var(--text-primary);
   z-index: 100;
+  margin-right: auto; /* Push other nav elements to the right */
 }
 
 .home-logo-img {
@@ -115,14 +117,14 @@
 
 /* --- Hero Section --- */
 .hero {
-  padding: 180px 0 100px;
+  padding: 140px 0 80px; /* Zoomed out padding */
   position: relative;
 }
 
 .hero-grid {
   display: grid;
   grid-template-columns: 1.1fr 0.9fr;
-  gap: var(--space-12);
+  gap: var(--space-10); /* Reduced gap */
   align-items: center;
 }
 
@@ -133,24 +135,24 @@
 .hero-badge {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 14px;
+  gap: 6px;
+  padding: 4px 12px;
   border-radius: var(--radius-full);
-  background: rgba(20, 184, 166, 0.08);
-  border: 1px solid rgba(20, 184, 166, 0.15);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
   color: var(--primary-400);
-  font-size: 0.8rem;
+  font-size: 0.75rem;
   font-weight: 600;
-  margin-bottom: var(--space-8);
+  margin-bottom: var(--space-6);
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
 
 .hero-title {
-  font-size: 4.5rem;
-  line-height: 1.05;
+  font-size: 3.8rem; /* Zoomed out font size */
+  line-height: 1.1;
   font-weight: 800;
-  margin-bottom: var(--space-6);
+  margin-bottom: var(--space-4);
   letter-spacing: -0.05em;
 }
 
@@ -163,11 +165,11 @@
 }
 
 .hero-subtitle {
-  font-size: 1.25rem;
+  font-size: 1.1rem; /* Zoomed out font size */
   color: var(--text-secondary);
   max-width: 600px;
-  margin-bottom: var(--space-10);
-  line-height: 1.6;
+  margin-bottom: var(--space-8);
+  line-height: 1.5;
 }
 
 .hero-actions {
@@ -205,28 +207,28 @@
 
 /* --- Features Section --- */
 .features-section {
-  padding: 100px 0;
-  background: linear-gradient(to bottom, transparent, rgba(20, 184, 166, 0.02));
+  padding: 80px 0; /* Zoomed out padding */
+  background: linear-gradient(to bottom, transparent, rgba(255, 255, 255, 0.01));
 }
 
 .section-head {
   text-align: center;
   max-width: 800px;
-  margin: 0 auto 80px;
+  margin: 0 auto 60px; /* Reduced margin */
 }
 
 .section-badge {
   color: var(--primary);
   font-weight: 700;
-  font-size: 0.85rem;
+  font-size: 0.8rem;
   text-transform: uppercase;
   letter-spacing: 0.1em;
-  margin-bottom: 12px;
+  margin-bottom: 8px;
   display: block;
 }
 
 .section-title {
-  font-size: 3rem;
+  font-size: 2.5rem; /* Zoomed out font size */
   font-weight: 800;
   letter-spacing: -0.04em;
 }
@@ -254,7 +256,7 @@
   width: 48px;
   height: 48px;
   border-radius: var(--radius-md);
-  background: rgba(20, 184, 166, 0.1);
+  background: rgba(255, 255, 255, 0.08);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -275,19 +277,19 @@
 
 /* --- Feedback Section (Integrated) --- */
 .feedback-section {
-  padding: 120px 0;
+  padding: 96px 0; /* Zoomed out padding */
   border-top: 1px solid var(--glass-border);
 }
 
 .feedback-container {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: var(--space-16);
+  gap: var(--space-12); /* Reduced gap */
   align-items: flex-start;
 }
 
 .feedback-copy h2 {
-  font-size: 2.5rem;
+  font-size: 2.1rem; /* Zoomed out */
   font-weight: 800;
   margin-bottom: var(--space-4);
 }
@@ -334,8 +336,8 @@
 
 /* --- Footer --- */
 .home-footer {
-  padding: 80px 0 40px;
-  background: #010413;
+  padding: 64px 0 32px; /* Zoomed out padding */
+  background: #0a0a0a;
   border-top: 1px solid var(--glass-border);
 }
 
@@ -343,7 +345,7 @@
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  margin-bottom: 60px;
+  margin-bottom: 48px; /* Reduced margin */
 }
 
 .footer-brand {
@@ -394,7 +396,7 @@
 
 .footer-bottom {
   border-top: 1px solid var(--glass-border);
-  padding-top: 40px;
+  padding-top: 32px; /* Zoomed out padding */
   display: flex;
   justify-content: space-between;
   align-items: center;
