@@ -362,6 +362,8 @@
 /* Main */
 .biz-main {
   flex: 1;
+  display: flex;
+  flex-direction: column;
   overflow-y: auto;
   background: var(--bg-body);
   position: relative;
@@ -638,14 +640,14 @@
   border: none;
   display: flex;
   flex-direction: column;
-  overflow-y: auto;
+  overflow: hidden;
   height: 100vh;
 }
 
 .biz-dash .reader-content {
   padding: 20px 24px;
   flex: 1;
-
+  overflow-y: auto;
   margin: 0;
   width: 100%;
 }
@@ -1100,7 +1102,7 @@
   flex: 1;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  overflow-y: auto;
   background: var(--bg-body);
 }
 
@@ -1108,7 +1110,7 @@
   flex: 1;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  overflow-y: auto;
   padding: var(--space-8);
 }
 
@@ -1155,9 +1157,9 @@
   flex-direction: column;
   overflow: hidden;
   background: var(--bg-surface);
-  border: 1px solid var(--glass-border);
-  border-radius: var(--radius-xl);
-  margin: var(--space-6);
+  border: none;
+  border-radius: 0;
+  margin: 0;
 }
 
 .list-header {
@@ -1737,4 +1739,53 @@
 .live-dot.offline {
   background: var(--danger);
   animation: none;
+}
+
+/* Biz Settings Custom Styles */
+.biz-settings-sections {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  padding: var(--space-4) 0;
+}
+
+.biz-settings-sections .glass-card {
+  padding: var(--space-6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.biz-settings-sections .glass-card h3 {
+  font-size: 1.1rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-2);
+  border-bottom: 1px solid var(--border-primary);
+  padding-bottom: var(--space-3);
+}
+
+.biz-settings-sections .toggle-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--space-3) 0;
+  border-bottom: 1px solid var(--border-primary);
+}
+
+.biz-settings-sections .toggle-row:last-child {
+  border-bottom: none;
+}
+
+.biz-settings-sections .toggle-label {
+  font-weight: 600;
+  font-size: 0.95rem;
+  margin-bottom: 4px;
+}
+
+.biz-settings-sections .toggle-desc {
+  font-size: 0.85rem;
+  color: var(--text-muted);
 }
