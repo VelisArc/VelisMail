@@ -1198,7 +1198,7 @@ export default function BusinessDashboard() {
               </div>
             </div>
 
-            <div className="glass-card" style={{ marginBottom: 16 }}>
+            <div className="glass-card" style={{ marginBottom: 16, padding: '24px' }}>
               <h3 style={{ marginBottom: 12 }}>Create Mailbox</h3>
               <form onSubmit={handleCreateMailbox} style={{ display: 'grid', gridTemplateColumns: '1.1fr 1.1fr 0.8fr auto', gap: 12 }}>
                 <input className="input" value={mailboxLocalPart} onChange={(e) => setMailboxLocalPart(e.target.value)} placeholder="sales" />
