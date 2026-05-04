@@ -790,7 +790,7 @@
 
 /* Biz Panel */
 .biz-panel {
-  padding: var(--space-8);
+  padding: var(--space-8) var(--space-10);
   overflow-y: auto;
   height: 100vh;
 
@@ -807,7 +807,7 @@
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  margin-bottom: 24px;
+  margin-bottom: 32px;
   gap: 20px;
 }
 
@@ -875,7 +875,7 @@
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 16px;
-  margin-bottom: 24px;
+  margin-bottom: 32px;
 }
 
 .health-card {
@@ -975,7 +975,7 @@
 .team-filter-bar {
   display: flex;
   gap: 12px;
-  margin-bottom: 24px;
+  margin-bottom: 32px;
 }
 
 .team-list {
@@ -1044,7 +1044,7 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  margin-bottom: 24px;
+  margin-bottom: 32px;
   font-size: 1.2rem;
 }
 
@@ -1111,14 +1111,14 @@
   display: flex;
   flex-direction: column;
   overflow-y: auto;
-  padding: var(--space-8);
+  padding: var(--space-8) var(--space-10);
 }
 
 .panel-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: var(--space-2);
+  margin-bottom: var(--space-4);
 }
 
 .panel-header h2 {
@@ -1325,7 +1325,7 @@
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 16px;
-  margin-bottom: 24px;
+  margin-bottom: 32px;
 }
 
 .queue-stat {
@@ -1437,7 +1437,7 @@
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 20px;
-  margin-bottom: 24px;
+  margin-bottom: 32px;
 }
 
 .analytics-card {
