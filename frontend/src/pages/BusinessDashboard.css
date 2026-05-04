@@ -235,6 +235,15 @@
 .biz-form-modal {
   width: min(560px, calc(100vw - 32px));
   padding: 0;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.diag-steps, .bsetup-dns {
+  overflow-y: auto;
+  max-height: 40vh;
 }
 
 .biz-modal-grid {
