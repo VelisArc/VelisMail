@@ -1379,7 +1379,7 @@ export const mail = {
     });
   },
 
-  async sendBusiness(domain: string, to: string[], subject: string, body: string, fromAddress?: string): Promise<Email> {
+  async sendBusiness(domain: string, to: string[], subject: string, body: string, fromAddress?: string, attachments?: { filename: string, content: string, contentType: string }[]): Promise<Email> {
     const session = auth.getSession();
     const normalizedDomain = normalizeDomainInput(domain);
     const availableMailboxes = loadBusinessMailboxes(normalizedDomain);
@@ -1426,6 +1426,7 @@ export const mail = {
           provider: session?.businessMailProvider,
           apiKey: session?.businessApiKey,
           providerEndpoint: session?.businessMailProviderEndpoint,
+          attachments,
         }),
       });
       businessQueue.mark(queueEntry.id, { status: 'sent', error: undefined });
@@ -1450,7 +1451,7 @@ export const mail = {
       fromName: selectedMailbox.displayName || session?.displayName || 'Business',
       to: expandedRecipients, subject, body,
       date: new Date().toISOString(),
-      folder: 'sent', unread: false, starred: false, labels: [], hasAttachment: false,
+      folder: 'sent', unread: false, starred: false, labels: [], hasAttachment: attachments && attachments.length > 0 ? true : false,
     };
     emailsCache.unshift(email);
     saveUserDB(STORAGE_KEYS.emails, emailsCache);

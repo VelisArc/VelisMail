@@ -249,6 +249,12 @@ export const MAIL_PROVIDERS: ProviderOption[] = [
     description: 'Your own HTTP delivery endpoint with bearer auth.',
     placeholder: 'custom-provider-secret',
   },
+  {
+    id: 'amazonses',
+    label: 'Amazon SES',
+    description: 'Amazon Simple Email Service (SES) API delivery.',
+    placeholder: 'AKIA...:SecretKey:Region',
+  },
 ];
 
 const ALLOWED_DB_SCHEMES = [

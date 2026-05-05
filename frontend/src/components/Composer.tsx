@@ -12,7 +12,7 @@ interface ComposerProps {
   initialBody?: string;
   fromBadge?: React.ReactNode;
   fromControl?: React.ReactNode;
-  onSend: (to: string, subject: string, body: string) => void;
+  onSend: (to: string, subject: string, body: string, attachments?: File[]) => void;
   onClose: () => void;
   sending?: boolean;
 }
@@ -108,7 +108,7 @@ export default function Composer({
 
   const handleSend = () => {
     if (!to || !subject) return;
-    onSend(to, subject, bodyHtml);
+    onSend(to, subject, bodyHtml, attachments);
   };
 
   return (

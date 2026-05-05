@@ -193,6 +193,15 @@ pub struct VerifyDomainPayload {
     api_endpoint: Option<String>,
 }
 
+
+#[derive(Debug, Deserialize, Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct AttachmentPayload {
+    pub filename: String,
+    pub content: String,
+    pub mime_type: String,
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SendMailPayload {
@@ -204,6 +213,7 @@ pub struct SendMailPayload {
     provider: Option<String>,
     api_key: Option<String>,
     provider_endpoint: Option<String>,
+    pub attachments: Option<Vec<AttachmentPayload>>,
 }
 
 #[derive(Debug, Serialize)]
@@ -343,7 +353,7 @@ fn is_supported_mail_provider(provider: &str) -> bool {
 }
 
 fn requires_custom_endpoint(provider: &str) -> bool {
-    provider == "custom_webhook"
+    provider == "custom_webhook" || provider == "amazonses"
 }
 
 fn is_valid_http_url(value: &str) -> bool {
@@ -767,10 +777,8 @@ async fn dispatch_via_provider(
         .unwrap_or_else(|| "VelisMail".to_string());
 
     let response = match provider.as_str() {
-        "sendgrid" => client
-            .post("https://api.sendgrid.com/v3/mail/send")
-            .bearer_auth(api_key)
-            .json(&json!({
+        "sendgrid" => {
+            let mut req_body = json!({
                 "personalizations": [{
                     "to": payload.to.iter().map(|email| json!({ "email": email })).collect::<Vec<_>>()
                 }],
@@ -780,38 +788,100 @@ async fn dispatch_via_provider(
                     "type": "text/plain",
                     "value": payload.body
                 }]
-            }))
-            .send()
-            .await
-            .map_err(|err| err.to_string())?,
-        "resend" => client
-            .post("https://api.resend.com/emails")
-            .bearer_auth(api_key)
-            .json(&json!({
+            });
+            if let Some(atts) = &payload.attachments {
+                if !atts.is_empty() {
+                    let sg_atts: Vec<_> = atts.iter().map(|a| {
+                        let content = if let Some(idx) = a.content.find("base64,") {
+                            &a.content[idx + 7..]
+                        } else {
+                            &a.content
+                        };
+                        json!({
+                            "content": content,
+                            "filename": a.filename,
+                            "type": a.mime_type,
+                            "disposition": "attachment"
+                        })
+                    }).collect();
+                    req_body.as_object_mut().unwrap().insert("attachments".to_string(), json!(sg_atts));
+                }
+            }
+            client
+                .post("https://api.sendgrid.com/v3/mail/send")
+                .bearer_auth(api_key)
+                .json(&req_body)
+                .send()
+                .await
+                .map_err(|err| err.to_string())?
+        },
+        "resend" => {
+            let mut req_body = json!({
                 "from": format!("{from_name} <{from_email}>"),
                 "to": payload.to,
                 "subject": payload.subject.trim(),
                 "text": payload.body,
-            }))
-            .send()
-            .await
-            .map_err(|err| err.to_string())?,
-        "postmark" => client
-            .post("https://api.postmarkapp.com/email")
-            .header("X-Postmark-Server-Token", api_key)
-            .json(&json!({
+            });
+            if let Some(atts) = &payload.attachments {
+                if !atts.is_empty() {
+                    let rs_atts: Vec<_> = atts.iter().map(|a| {
+                        let content = if let Some(idx) = a.content.find("base64,") {
+                            &a.content[idx + 7..]
+                        } else {
+                            &a.content
+                        };
+                        // Note: resend API expects base64 content in 'content' without base64 prefix
+                        // Wait, Resend expects raw buffer or b64 string, actually the API docs say: content: "base64..."
+                        json!({
+                            "content": content,
+                            "filename": a.filename
+                        })
+                    }).collect();
+                    req_body.as_object_mut().unwrap().insert("attachments".to_string(), json!(rs_atts));
+                }
+            }
+            client
+                .post("https://api.resend.com/emails")
+                .bearer_auth(api_key)
+                .json(&req_body)
+                .send()
+                .await
+                .map_err(|err| err.to_string())?
+        },
+        "postmark" => {
+            let mut req_body = json!({
                 "From": format!("{from_name} <{from_email}>"),
                 "To": payload.to.join(","),
                 "Subject": payload.subject.trim(),
                 "TextBody": payload.body,
-            }))
-            .send()
-            .await
-            .map_err(|err| err.to_string())?,
-        "brevo" => client
-            .post("https://api.brevo.com/v3/smtp/email")
-            .header("api-key", api_key)
-            .json(&json!({
+            });
+            if let Some(atts) = &payload.attachments {
+                if !atts.is_empty() {
+                    let pm_atts: Vec<_> = atts.iter().map(|a| {
+                        let content = if let Some(idx) = a.content.find("base64,") {
+                            &a.content[idx + 7..]
+                        } else {
+                            &a.content
+                        };
+                        json!({
+                            "Name": a.filename,
+                            "Content": content,
+                            "ContentType": a.mime_type
+                        })
+                    }).collect();
+                    req_body.as_object_mut().unwrap().insert("Attachments".to_string(), json!(pm_atts));
+                }
+            }
+            client
+                .post("https://api.postmarkapp.com/email")
+                .header("X-Postmark-Server-Token", api_key)
+                .json(&req_body)
+                .send()
+                .await
+                .map_err(|err| err.to_string())?
+        },
+        "brevo" => {
+            let mut req_body = json!({
                 "sender": {
                     "email": from_email,
                     "name": from_name
@@ -819,10 +889,111 @@ async fn dispatch_via_provider(
                 "to": payload.to.iter().map(|email| json!({ "email": email })).collect::<Vec<_>>(),
                 "subject": payload.subject.trim(),
                 "textContent": payload.body,
-            }))
-            .send()
-            .await
-            .map_err(|err| err.to_string())?,
+            });
+            if let Some(atts) = &payload.attachments {
+                if !atts.is_empty() {
+                    let br_atts: Vec<_> = atts.iter().map(|a| {
+                        let content = if let Some(idx) = a.content.find("base64,") {
+                            &a.content[idx + 7..]
+                        } else {
+                            &a.content
+                        };
+                        json!({
+                            "name": a.filename,
+                            "content": content
+                        })
+                    }).collect();
+                    req_body.as_object_mut().unwrap().insert("attachment".to_string(), json!(br_atts));
+                }
+            }
+            client
+                .post("https://api.brevo.com/v3/smtp/email")
+                .header("api-key", api_key)
+                .json(&req_body)
+                .send()
+                .await
+                .map_err(|err| err.to_string())?
+        },
+
+        "amazonses" => {
+            let credentials = if let Some((ak, sk)) = api_key.split_once(':') {
+                aws_sdk_sesv2::config::Credentials::new(ak, sk, None, None, "manual")
+            } else {
+                return Err("Amazon SES requires api_key in the format 'ACCESS_KEY:SECRET_KEY'".to_string());
+            };
+            let region = aws_config::Region::new(endpoint.unwrap_or("us-east-1").to_string());
+            let config = aws_config::SdkConfig::builder()
+                .credentials_provider(aws_sdk_sesv2::config::SharedCredentialsProvider::new(credentials))
+                .region(region)
+                .build();
+            let ses_client = aws_sdk_sesv2::Client::new(&config);
+
+            let dest_builder = aws_sdk_sesv2::types::Destination::builder()
+                .set_to_addresses(Some(payload.to.clone()))
+                .build();
+
+            let email_content = if let Some(atts) = &payload.attachments {
+                if !atts.is_empty() {
+                    let boundary = "----=_NextPart_VelisMail_Boundary_123456789";
+                    let mut raw_message = String::new();
+                    raw_message.push_str(&format!("From: {} <{}>\n", from_name, from_email));
+                    raw_message.push_str(&format!("To: {}\n", payload.to.join(",")));
+                    raw_message.push_str(&format!("Subject: {}\n", payload.subject.trim()));
+                    raw_message.push_str("MIME-Version: 1.0\n");
+                    raw_message.push_str(&format!("Content-Type: multipart/mixed; boundary=\"{}\"\n\n", boundary));
+
+                    raw_message.push_str(&format!("--{}\n", boundary));
+                    raw_message.push_str("Content-Type: text/plain; charset=UTF-8\n\n");
+                    raw_message.push_str(&format!("{}\n\n", payload.body));
+
+                    for att in atts {
+                        raw_message.push_str(&format!("--{}\n", boundary));
+                        raw_message.push_str(&format!("Content-Type: {}; name=\"{}\"\n", att.mime_type, att.filename));
+                        raw_message.push_str("Content-Disposition: attachment\n");
+                        raw_message.push_str("Content-Transfer-Encoding: base64\n\n");
+                        let b64_content = if let Some(idx) = att.content.find("base64,") {
+                            &att.content[idx + 7..]
+                        } else {
+                            &att.content
+                        };
+                        raw_message.push_str(&format!("{}\n\n", b64_content));
+                    }
+                    raw_message.push_str(&format!("--{}--\n", boundary));
+
+                    aws_sdk_sesv2::types::EmailContent::builder()
+                        .raw(aws_sdk_sesv2::types::RawMessage::builder().data(aws_sdk_sesv2::primitives::Blob::new(raw_message.into_bytes())).build().unwrap())
+                        .build()
+                } else {
+                    let message_builder = aws_sdk_sesv2::types::Message::builder()
+                        .subject(aws_sdk_sesv2::types::Content::builder().data(payload.subject.trim()).build().unwrap())
+                        .body(
+                            aws_sdk_sesv2::types::Body::builder()
+                                .text(aws_sdk_sesv2::types::Content::builder().data(payload.body.clone()).build().unwrap())
+                                .build()
+                        );
+                    aws_sdk_sesv2::types::EmailContent::builder().simple(message_builder.build()).build()
+                }
+            } else {
+                let message_builder = aws_sdk_sesv2::types::Message::builder()
+                    .subject(aws_sdk_sesv2::types::Content::builder().data(payload.subject.trim()).build().unwrap())
+                    .body(
+                        aws_sdk_sesv2::types::Body::builder()
+                            .text(aws_sdk_sesv2::types::Content::builder().data(payload.body.clone()).build().unwrap())
+                            .build()
+                    );
+                aws_sdk_sesv2::types::EmailContent::builder().simple(message_builder.build()).build()
+            };
+
+            match ses_client.send_email()
+                .from_email_address(format!("{} <{}>", from_name, from_email))
+                .destination(dest_builder)
+                .content(email_content)
+                .send()
+                .await {
+                Ok(resp) => return Ok(resp.message_id),
+                Err(err) => return Err(format!("Amazon SES error: {}", err)),
+            }
+        }
         "custom_webhook" => {
             let endpoint = endpoint.ok_or_else(|| "Custom webhook endpoint is missing.".to_string())?;
             client
@@ -1173,7 +1344,7 @@ pub async fn get_supported_providers() -> Json<serde_json::Value> {
             label: id,
             placeholder: "api-key",
             description: "Mail relay provider.",
-            requires_endpoint: *id == "custom_webhook",
+            requires_endpoint: *id == "custom_webhook" || *id == "amazonses",
         })
         .collect();
 
