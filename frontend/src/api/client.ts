@@ -25,14 +25,21 @@ const STORAGE_KEYS = {
 
 
 function loadDB<T>(key: string, fallback: T): T {
-  try {
-    const data = localStorage.getItem(key);
-    return data ? JSON.parse(data) : fallback;
-  } catch { return fallback; }
+  // STRICT PRIVATE DATA POLICY: Only persist auth session and theme.
+  // All other data (emails, domains, contacts) must be fetched from the private backend API and never stored locally.
+  if (key === STORAGE_KEYS.session || key === STORAGE_KEYS.theme || key === 'velismail_token' || key === 'velismail_refresh') {
+    try {
+      const data = localStorage.getItem(key);
+      return data ? JSON.parse(data) : fallback;
+    } catch { return fallback; }
+  }
+  return fallback;
 }
 
 function saveDB<T>(key: string, data: T) {
-  localStorage.setItem(key, JSON.stringify(data));
+  if (key === STORAGE_KEYS.session || key === STORAGE_KEYS.theme || key === 'velismail_token' || key === 'velismail_refresh') {
+    localStorage.setItem(key, JSON.stringify(data));
+  }
 }
 
 // ---- Types ----
