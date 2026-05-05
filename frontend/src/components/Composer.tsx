@@ -84,7 +84,6 @@ export default function Composer({
 
   const execCmd = (cmd: string, value?: string) => {
     document.execCommand(cmd, false, value);
-    editorRef.current?.focus();
   };
 
   const handleEditorChange = () => {

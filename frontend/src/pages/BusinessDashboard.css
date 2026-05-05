@@ -56,6 +56,9 @@
   .mobile-dash-header {
     display: flex;
   }
+  .biz-dash .list-header {
+    display: none !important;
+  }
 }
 
 /* Sidebar Styling */

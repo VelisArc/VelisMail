@@ -939,9 +939,12 @@ export default function BusinessDashboard() {
           <button className="btn btn-icon btn-ghost" onClick={() => setSidebarOpen(true)}>
             <Menu size={20} />
           </button>
-          <div className="mobile-brand">
-            <img src="/ZeeResizer.png" alt="VelisMail" />
-            <span>VelisMail</span>
+          <div className="mobile-brand" style={{ fontSize: '1.05rem' }}>
+            <span style={{ textTransform: 'capitalize' }}>
+              {activeBizTab === 'mail' 
+                ? (BIZ_FOLDERS.find(f => f.id === activeFolder)?.label || 'Mailbox') 
+                : activeBizTab.replace('-', ' ')}
+            </span>
           </div>
           <div style={{ marginLeft: 'auto', display: 'flex', gap: '8px' }}>
             <button className="btn btn-icon btn-ghost" onClick={() => setComposeOpen(true)} title="Compose">
