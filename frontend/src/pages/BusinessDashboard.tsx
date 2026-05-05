@@ -325,7 +325,7 @@ export default function BusinessDashboard() {
     }
   };
 
-  const handleSend = async (toArg: string, subjectArg: string, bodyArg: string) => {
+  const handleSend = async (toArg: string, subjectArg: string, bodyArg: string, attachmentsArg?: File[]) => {
     setComposeTo(toArg);
     setComposeSubject(subjectArg);
     setComposeBody(bodyArg);
@@ -336,9 +336,31 @@ export default function BusinessDashboard() {
       showToast('Select and verify a business domain first.', 'error');
       return;
     }
+
+    // Process attachments to base64
+    let processedAttachments: { filename: string, content: string, contentType: string }[] | undefined = undefined;
+    if (attachmentsArg && attachmentsArg.length > 0) {
+      processedAttachments = await Promise.all(attachmentsArg.map(async (file) => {
+        return new Promise<{ filename: string, content: string, contentType: string }>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => {
+            const result = reader.result as string;
+            const base64Content = result.split(',')[1];
+            resolve({
+              filename: file.name,
+              content: base64Content,
+              contentType: file.type || 'application/octet-stream'
+            });
+          };
+          reader.onerror = reject;
+          reader.readAsDataURL(file);
+        });
+      }));
+    }
+
     const toAddresses = toArg.split(',').map(s => s.trim()).filter(Boolean);
     try {
-      await mail.sendBusiness(domain, toAddresses, subjectArg, bodyArg, selectedFromAddress);
+      await mail.sendBusiness(domain, toAddresses, subjectArg, bodyArg, selectedFromAddress, processedAttachments);
       showToast(`Business email dispatched via ${domain}`);
       setComposeOpen(false);
       setComposeTo('');
