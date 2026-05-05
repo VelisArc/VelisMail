@@ -12,7 +12,7 @@
 .settings-header {
   display: flex;
   align-items: center;
-  height: 64px;
+  height: 48px;
   background: var(--bg-surface);
   border-bottom: 1px solid var(--glass-border);
   position: sticky;
@@ -27,35 +27,35 @@
 }
 
 .settings-header-left h1 {
-  font-size: 1.2rem;
+  font-size: 1rem;
 }
 
 .settings-header-right {
   display: flex;
   align-items: center;
-  gap: 10px;
-  font-size: 0.9rem;
+  gap: 8px;
+  font-size: 0.8rem;
   font-weight: 500;
 }
 
 .settings-body {
   display: flex;
   flex: 1;
-  padding: 40px 0;
-  gap: 40px;
+  padding: 24px 0;
+  gap: 24px;
 }
 
 /* Tabs */
 .settings-tabs {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  width: 240px;
+  gap: 3px;
+  width: 200px;
   flex-shrink: 0;
-  padding: 12px;
+  padding: 10px;
   height: fit-content;
   position: sticky;
-  top: 80px;
+  top: 60px;
   border-radius: var(--radius-lg);
   border: 1px solid var(--glass-border);
   background: var(--bg-surface);
@@ -64,10 +64,10 @@
 .tab-btn {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 10px 14px;
+  gap: 8px;
+  padding: 7px 10px;
   border-radius: var(--radius-sm);
-  font-size: 0.9rem;
+  font-size: 0.8rem;
   font-weight: 500;
   color: var(--text-secondary);
   transition: all 0.15s ease;
@@ -92,17 +92,17 @@
 }
 
 .settings-section-header {
-  margin-bottom: 24px;
+  margin-bottom: 16px;
 }
 
 .settings-section-header h2 {
-  font-size: 1.5rem;
-  margin-bottom: 6px;
+  font-size: 1.1rem;
+  margin-bottom: 4px;
 }
 
 .settings-section-header p {
   color: var(--text-muted);
-  font-size: 0.9rem;
+  font-size: 0.78rem;
 }
 
 /* Add Domain */
@@ -250,19 +250,19 @@
 .profile-row {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 12px;
 }
 
 .profile-avatar-lg {
-  width: 56px;
-  height: 56px;
-  border-radius: 16px;
+  width: 42px;
+  height: 42px;
+  border-radius: 10px;
   background: linear-gradient(135deg, var(--primary), var(--primary-600));
   display: flex;
   align-items: center;
   justify-content: center;
   font-weight: 800;
-  font-size: 1.3rem;
+  font-size: 1rem;
   color: white;
 }
 
@@ -273,25 +273,25 @@
 .profile-fields {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 16px;
-  margin-top: 14px;
+  gap: 12px;
+  margin-top: 10px;
 }
 
 .profile-field {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 4px;
 }
 
 .profile-field label {
-  font-size: 0.82rem;
+  font-size: 0.72rem;
   font-weight: 600;
   color: var(--text-muted);
 }
 
 /* Security */
 .security-card {
-  margin-bottom: 16px;
+  margin-bottom: 12px;
   cursor: default;
 }
 
@@ -300,14 +300,14 @@
 .security-card h3 {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-size: 1rem;
-  margin-bottom: 8px;
+  gap: 6px;
+  font-size: 0.88rem;
+  margin-bottom: 6px;
 }
 
 .security-card p {
   color: var(--text-muted);
-  font-size: 0.88rem;
+  font-size: 0.78rem;
   margin-bottom: 8px;
 }
 

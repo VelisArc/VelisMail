@@ -66,19 +66,19 @@
   --radius-2xl: 0px;
   --radius-full: 0px;
 
-  /* Spacing */
-  --space-1: 0.25rem;
-  --space-2: 0.5rem;
-  --space-3: 0.75rem;
-  --space-4: 1rem;
-  --space-5: 1.25rem;
-  --space-6: 1.5rem;
-  --space-8: 2rem;
-  --space-10: 2.5rem;
-  --space-12: 3rem;
-  --space-16: 4rem;
-  --space-20: 5rem;
-  --space-24: 6rem;
+  /* Spacing — Compact */
+  --space-1: 0.2rem;
+  --space-2: 0.4rem;
+  --space-3: 0.55rem;
+  --space-4: 0.75rem;
+  --space-5: 0.9rem;
+  --space-6: 1.1rem;
+  --space-8: 1.5rem;
+  --space-10: 1.8rem;
+  --space-12: 2.2rem;
+  --space-16: 3rem;
+  --space-20: 3.6rem;
+  --space-24: 4.5rem;
 
   /* Transition - Snappy */
   --transition-fast: 100ms var(--ease-out);
@@ -147,8 +147,8 @@ body {
   background: var(--bg-body);
   color: var(--text-primary);
   font-family: var(--font-sans);
-  font-size: 1rem;
-  line-height: 1.6;
+  font-size: 0.875rem;
+  line-height: 1.55;
   font-weight: 400;
   text-rendering: optimizeLegibility;
   overflow-x: hidden;
@@ -171,12 +171,12 @@ h1, h2, h3, h4, h5, h6 {
   letter-spacing: -0.02em;
 }
 
-h1 { font-size: 3rem; }
-h2 { font-size: 2.25rem; }
-h3 { font-size: 1.875rem; }
-h4 { font-size: 1.5rem; }
-h5 { font-size: 1.25rem; }
-h6 { font-size: 1.125rem; }
+h1 { font-size: 2rem; }
+h2 { font-size: 1.5rem; }
+h3 { font-size: 1.25rem; }
+h4 { font-size: 1.1rem; }
+h5 { font-size: 1rem; }
+h6 { font-size: 0.9rem; }
 
 p {
   margin-bottom: var(--space-4);
@@ -216,23 +216,23 @@ a:hover {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: var(--space-3) var(--space-5);
+  padding: 6px 12px;
   border-radius: var(--radius-md);
   font-weight: 500;
-  font-size: 0.9rem;
+  font-size: 0.8rem;
   line-height: 1.4;
   text-decoration: none;
   border: 1px solid transparent;
   cursor: pointer;
   transition: all var(--transition-normal);
-  gap: var(--space-2);
-  min-height: 36px;
+  gap: 6px;
+  min-height: 30px;
 }
 
 .btn-sm {
-  padding: var(--space-1) var(--space-3);
-  font-size: 0.8rem;
-  min-height: 30px;
+  padding: 3px 8px;
+  font-size: 0.72rem;
+  min-height: 24px;
 }
 
 .btn-primary {
@@ -271,12 +271,12 @@ a:hover {
 /* --- Forms --- */
 .input {
   width: 100%;
-  padding: var(--space-3) var(--space-4);
+  padding: 6px 10px;
   border: 1px solid var(--border-primary);
   border-radius: var(--radius-md);
   background: var(--bg-surface);
   color: var(--text-primary);
-  font-size: 0.9rem;
+  font-size: 0.8rem;
   transition: all var(--transition-fast);
 }
 
@@ -321,7 +321,7 @@ select.input option {
   -webkit-backdrop-filter: blur(24px) saturate(180%);
   border: 1px solid var(--glass-border) !important;
   border-radius: var(--radius-xl);
-  padding: 24px;
+  padding: 16px;
   box-shadow: var(--glass-shadow);
   transition: transform var(--transition-normal), box-shadow var(--transition-normal);
 }
@@ -329,7 +329,7 @@ select.input option {
 .divider {
   height: 1px;
   background: var(--glass-border);
-  margin: var(--space-6) 0;
+  margin: 12px 0;
   border: none;
 }
 

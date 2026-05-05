@@ -6,7 +6,7 @@
 }
 
 .bsetup-nav {
-  height: 48px;
+  height: 40px;
   display: flex;
   align-items: center;
   background: var(--bg-surface);
@@ -24,9 +24,9 @@
 }
 
 .bsetup-container {
-  max-width: 900px;
+  max-width: 740px;
   margin: 0 auto;
-  padding: 48px 24px;
+  padding: 32px 20px;
 }
 
 /* Progress Bar — Modern SaaS style */
@@ -99,7 +99,7 @@
 
 /* Onboarding Card */
 .bsetup-card {
-  padding: 32px;
+  padding: 22px;
   background: var(--glass-bg);
   backdrop-filter: blur(24px) saturate(180%);
   -webkit-backdrop-filter: blur(24px) saturate(180%);
@@ -109,18 +109,18 @@
 }
 
 .bsetup-card h2 {
-  font-size: 1.75rem;
+  font-size: 1.2rem;
   font-weight: 800;
-  margin-bottom: var(--space-3);
+  margin-bottom: 6px;
   letter-spacing: -0.03em;
   display: flex;
   align-items: center;
-  gap: var(--space-4);
+  gap: 8px;
 }
 
 .bsetup-desc {
   color: var(--text-secondary);
-  font-size: 1.05rem;
+  font-size: 0.85rem;
   line-height: 1.6;
   margin-bottom: var(--space-10);
 }
@@ -131,9 +131,9 @@
 }
 
 .bsetup-form .btn-primary {
-  margin-top: var(--space-4);
-  padding: var(--space-3) var(--space-8);
-  font-size: 1.05rem;
+  margin-top: 8px;
+  padding: 6px 16px;
+  font-size: 0.85rem;
 }
 
 /* DNS & Verification Table */
@@ -142,9 +142,9 @@
 }
 
 .dns-instruction-text {
-  font-size: 0.95rem;
+  font-size: 0.8rem;
   color: var(--text-secondary);
-  margin-bottom: var(--space-6);
+  margin-bottom: 12px;
   line-height: 1.5;
 }
 
@@ -194,15 +194,15 @@
 
 /* Verification Scan Success */
 .bsetup-success-icon {
-  width: 100px;
-  height: 100px;
+  width: 72px;
+  height: 72px;
   background: var(--primary-glow);
   border: 2px solid var(--border-accent);
   border-radius: var(--radius-full);
   display: flex;
   align-items: center;
   justify-content: center;
-  margin: 0 auto var(--space-8);
+  margin: 0 auto 16px;
   color: var(--primary-400);
 }
 
@@ -241,12 +241,12 @@
 
 .diag-step-label {
   font-weight: 700;
-  font-size: 0.95rem;
+  font-size: 0.82rem;
   color: var(--text-primary);
 }
 
 .diag-step-detail {
-  font-size: 0.8rem;
+  font-size: 0.72rem;
   color: var(--text-muted);
   word-break: break-all;
 }
