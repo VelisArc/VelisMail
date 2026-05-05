@@ -721,21 +721,24 @@ function loadBusinessMailboxes(domain?: string): BusinessMailbox[] {
     .map((entry) => normalizeBusinessMailboxEntry(entry, entry.domain || normalizedDomain))
     .filter((entry) => entry.domain);
 
+  // Deduplicate by address first to prevent stale duplicates
+  const deduped = Array.from(new Map(normalized.map(m => [m.address, m])).values());
+
   const byDomain = normalizedDomain
-    ? normalized.filter((entry) => entry.domain === normalizedDomain)
-    : normalized;
+    ? deduped.filter((entry) => entry.domain === normalizedDomain)
+    : deduped;
 
   if (!normalizedDomain) {
-    return normalized;
+    return deduped;
   }
 
   const systemMailbox = getSystemBusinessMailbox(normalizedDomain);
   const existingPrimaryIndex = byDomain.findIndex((entry) => entry.kind === 'primary' || entry.address === systemMailbox.address);
   const domainEntries = byDomain.length > 0 ? [...byDomain] : [systemMailbox];
 
-  if (existingPrimaryIndex === -1) {
+  if (existingPrimaryIndex === -1 && !domainEntries.some(e => e.address === systemMailbox.address)) {
     domainEntries.unshift(systemMailbox);
-  } else {
+  } else if (existingPrimaryIndex >= 0) {
     domainEntries[existingPrimaryIndex] = {
       ...domainEntries[existingPrimaryIndex],
       ...systemMailbox,
@@ -752,9 +755,12 @@ function loadBusinessMailboxes(domain?: string): BusinessMailbox[] {
     active: activeExists ? entry.active : index === 0,
   }));
 
-  const untouched = normalized.filter((entry) => entry.domain !== normalizedDomain);
-  saveUserDB(STORAGE_KEYS.businessMailboxes, [...untouched, ...normalizedActiveEntries]);
-  return normalizedActiveEntries;
+  // Final dedup before saving
+  const finalEntries = Array.from(new Map(normalizedActiveEntries.map(m => [m.address, m])).values());
+
+  const untouched = deduped.filter((entry) => entry.domain !== normalizedDomain);
+  saveUserDB(STORAGE_KEYS.businessMailboxes, [...untouched, ...finalEntries]);
+  return finalEntries;
 }
 
 function saveBusinessMailboxes(domain: string, entries: BusinessMailbox[]) {

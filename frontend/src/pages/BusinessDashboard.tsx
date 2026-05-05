@@ -224,6 +224,7 @@ export default function BusinessDashboard() {
   const [teamFilter, setTeamFilter] = useState<string>('all');
   const [auditFilter, setAuditFilter] = useState<string>('all');
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [themeMode, setThemeMode] = useState(() => document.documentElement.getAttribute('data-theme') || 'light');
   const [inviteOpen, setInviteOpen] = useState(false);
   const [inviteName, setInviteName] = useState('');
   const [inviteEmail, setInviteEmail] = useState('');
@@ -603,6 +604,10 @@ export default function BusinessDashboard() {
 
   const handleCreateMailbox = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!mailboxLocalPart.trim()) {
+      showToast('Please enter a mailbox address (local part).', 'error');
+      return;
+    }
     if (!activeDomainName) {
       showToast('Select a business domain first.', 'error');
       return;
@@ -614,7 +619,9 @@ export default function BusinessDashboard() {
         kind: mailboxKind,
       });
       const next = businessMailboxes.getByDomain(activeDomainName);
-      setDomainMailboxes(next);
+      // Deduplicate by address
+      const uniqueNext = Array.from(new Map(next.map(m => [m.address, m])).values());
+      setDomainMailboxes(uniqueNext);
       setMailboxLocalPart('');
       setMailboxDisplayName('');
       setMailboxKind('mailbox');
@@ -794,9 +801,10 @@ export default function BusinessDashboard() {
   };
 
   const toggleTheme = () => {
-    const next = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+    const next = themeMode === 'dark' ? 'light' : 'dark';
     document.documentElement.setAttribute('data-theme', next);
     localStorage.setItem('velismail-theme', next);
+    setThemeMode(next);
   };
 
   if (!user || !user.isBusinessSetupComplete || !user.businessDbUrl?.trim() || !user.businessApiKey?.trim()) return null;
@@ -917,7 +925,7 @@ export default function BusinessDashboard() {
             </button>
 
             <button className="btn btn-ghost btn-sm" onClick={toggleTheme} title="Toggle Theme">
-              {document.documentElement.getAttribute('data-theme') === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
+              {themeMode === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
             </button>
             <button className="btn btn-ghost btn-sm" onClick={() => setShowLogoutConfirm(true)} title="Log out"><LogOut size={16} /></button>
           </div>
@@ -2075,44 +2083,40 @@ export default function BusinessDashboard() {
         </div>
       )}
 
-      {/* Revoke Confirm Modal */}
       {confirmRevokeId && (
         <div className="modal-overlay" onClick={() => setConfirmRevokeId(null)}>
-          <div className="biz-form-modal glass animate-scale" style={{ maxWidth: '400px' }} onClick={e => e.stopPropagation()}>
-            <div style={{ display: 'flex', gap: '16px', alignItems: 'flex-start' }}>
-              <div style={{ width: '40px', height: '40px', borderRadius: '50%', background: 'rgba(239, 68, 68, 0.1)', color: 'var(--danger)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                <AlertTriangle size={24} />
+          <div className="biz-form-modal glass animate-scale" style={{ maxWidth: '440px', padding: '28px' }} onClick={e => e.stopPropagation()}>
+            <div style={{ textAlign: 'center', marginBottom: '20px' }}>
+              <div style={{ width: '56px', height: '56px', borderRadius: '50%', background: 'rgba(239, 68, 68, 0.1)', color: 'var(--danger)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
+                <AlertTriangle size={28} />
               </div>
-              <div>
-                <h3 style={{ marginBottom: '8px', fontSize: '1.1rem' }}>Confirm Disconnect</h3>
-                <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: '20px', lineHeight: 1.5 }}>
-                  Are you absolutely sure you want to revoke this connection? Your application will immediately lose access to this database or API provider, which may cause downtime.
-                </p>
-                <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
-                  <button className="btn btn-ghost" onClick={() => setConfirmRevokeId(null)}>Cancel</button>
-                  <button 
-                    className="btn btn-primary" 
-                    style={{ background: 'var(--danger)', borderColor: 'var(--danger)' }}
-                    onClick={() => {
-                      const revoked = connections.revoke(confirmRevokeId);
-                      if (revoked) {
-                        refreshConnectionUsage();
-                        showToast('Connection access revoked');
-                        // Check if infrastructure is now incomplete — redirect to setup
-                        const updatedUser = auth.getSession();
-                        if (updatedUser && (!updatedUser.businessDbUrl?.trim() || !updatedUser.businessApiKey?.trim())) {
-                          navigate('/business-setup');
-                        }
-                      } else {
-                        showToast('Unable to revoke this connection', 'error');
-                      }
-                      setConfirmRevokeId(null);
-                    }}
-                  >
-                    Yes, Disconnect
-                  </button>
-                </div>
-              </div>
+              <h3 style={{ marginBottom: '10px', fontSize: '1.15rem', fontWeight: 700 }}>Confirm Disconnect</h3>
+              <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', lineHeight: 1.6, margin: 0 }}>
+                Are you absolutely sure you want to revoke this connection? Your application will immediately lose access to this database or API provider, which may cause downtime.
+              </p>
+            </div>
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', paddingTop: '8px', borderTop: '1px solid var(--border-primary)' }}>
+              <button className="btn btn-ghost" style={{ minWidth: '100px' }} onClick={() => setConfirmRevokeId(null)}>Cancel</button>
+              <button 
+                className="btn btn-primary" 
+                style={{ background: 'var(--danger)', borderColor: 'var(--danger)', minWidth: '140px' }}
+                onClick={() => {
+                  const revoked = connections.revoke(confirmRevokeId);
+                  if (revoked) {
+                    refreshConnectionUsage();
+                    showToast('Connection access revoked');
+                    const updatedUser = auth.getSession();
+                    if (updatedUser && (!updatedUser.businessDbUrl?.trim() || !updatedUser.businessApiKey?.trim())) {
+                      navigate('/business-setup');
+                    }
+                  } else {
+                    showToast('Unable to revoke this connection', 'error');
+                  }
+                  setConfirmRevokeId(null);
+                }}
+              >
+                Yes, Disconnect
+              </button>
             </div>
           </div>
         </div>

@@ -799,7 +799,7 @@
 
 /* Biz Panel */
 .biz-panel {
-  padding: var(--space-8) var(--space-10);
+  padding: 24px 32px;
   overflow-y: auto;
   height: 100vh;
 
@@ -1754,15 +1754,15 @@
 .biz-settings-sections {
   display: flex;
   flex-direction: column;
-  gap: var(--space-6);
-  padding: var(--space-4) 0;
+  gap: 20px;
+  padding: 12px 0;
 }
 
 .biz-settings-sections .glass-card {
-  padding: var(--space-6);
+  padding: 20px;
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
+  gap: 14px;
 }
 
 .biz-settings-sections .glass-card h3 {
@@ -1770,17 +1770,17 @@
   font-weight: 700;
   display: flex;
   align-items: center;
-  gap: var(--space-3);
-  margin-bottom: var(--space-2);
+  gap: 10px;
+  margin-bottom: 6px;
   border-bottom: 1px solid var(--border-primary);
-  padding-bottom: var(--space-3);
+  padding-bottom: 12px;
 }
 
 .biz-settings-sections .toggle-row {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: var(--space-3) 0;
+  padding: 10px 0;
   border-bottom: 1px solid var(--border-primary);
 }
 

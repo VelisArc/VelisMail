@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Database, Mail, CheckCircle2, Server, Loader2, Lock, Globe,
-  Zap, Shield, ArrowRight, XCircle, Wifi, LogOut, Copy, Check
+  Zap, Shield, ArrowRight, ArrowLeft, XCircle, Wifi, LogOut, Copy, Check
 } from 'lucide-react';
 import { auth, domains, fetchApiJsonDetailed, fetchApiResponse, getApiAvailabilityHint, type DnsRecord, type User } from '../api/client';
 import {
@@ -129,11 +129,12 @@ export default function BusinessSetup() {
     } else if (session.isBusinessSetupComplete) {
       navigate('/business');
     } else {
-      const existingDomain = session.businessDomain || session.businessProfile?.domain || '';
-      const existingDbUrl = session.businessDbUrl || session.businessProfile?.dbUrl || '';
-      const existingApiKey = session.businessApiKey || session.businessProfile?.apiKey || '';
+      // Only use primary fields for step determination — profile fallbacks can be stale
+      const existingDbUrl = session.businessDbUrl?.trim() || '';
+      const existingApiKey = session.businessApiKey?.trim() || '';
       const existingProvider = session.businessMailProvider || session.businessProfile?.mailProvider || 'sendgrid';
       const existingProviderEndpoint = session.businessMailProviderEndpoint || session.businessProfile?.mailProviderEndpoint || '';
+      const existingDomain = session.businessDomain || '';
       const domainEntry = existingDomain ? domains.getByDomain(existingDomain) : null;
 
       setUser(session);
@@ -147,8 +148,11 @@ export default function BusinessSetup() {
         setCurrentDomainId(domainEntry.id);
         setDnsRecords(domainEntry.dnsRecords);
       }
+      // Only advance to step 2 if BOTH DB and API key are present
       if (existingDbUrl && existingApiKey) {
         setStep(2);
+      } else {
+        setStep(1);
       }
     }
   }, [navigate]);
@@ -553,7 +557,12 @@ export default function BusinessSetup() {
         {/* Step 2: Domain */}
         {step === 2 && (
           <div className="bsetup-card glass animate-fade">
-            <h2><Globe size={22} /> Configure Business Domain</h2>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+              <h2 style={{ margin: 0 }}><Globe size={22} /> Configure Business Domain</h2>
+              <button className="btn btn-ghost btn-sm" onClick={() => { setStep(1); setError(''); }}>
+                <ArrowLeft size={14} /> Back to Infrastructure
+              </button>
+            </div>
             <p className="bsetup-desc">Connect your custom domain to send and receive business emails.</p>
             {error && <div className="form-error">{error}</div>}
 
@@ -664,35 +673,43 @@ export default function BusinessSetup() {
             {providerDnsRecords.length > 0 && (
               <div className="bsetup-dns" style={{ marginTop: 20 }}>
                 <p className="dns-instruction-text">Provider-side DNS records still required before mail can send:</p>
-                <table className="dns-table">
-                  <thead>
-                    <tr><th>Type</th><th>Name</th><th>Value</th><th>Status</th></tr>
-                  </thead>
-                  <tbody>
-                    {providerDnsRecords.map((rec, i) => (
-                      <tr key={`${rec.name}-${i}`}>
-                        <td><span className="dns-type">{rec.recordType}</span></td>
-                        <td className="dns-name">{rec.name}</td>
-                        <td className="dns-value">
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'space-between' }}>
-                            <span>
-                              {rec.value}
-                              {rec.priority ? ` (priority ${rec.priority})` : ''}
-                            </span>
-                            <button
-                              className="btn btn-ghost btn-icon"
-                              onClick={() => handleCopy(`${rec.value}${rec.priority ? ` ${rec.priority}` : ''}`)}
-                              title="Copy value"
-                            >
-                              {copiedValue === `${rec.value}${rec.priority ? ` ${rec.priority}` : ''}` ? <Check size={14} color="var(--success)" /> : <Copy size={14} />}
-                            </button>
-                          </div>
-                        </td>
-                        <td>{rec.status || 'pending'}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                <div className="dns-records-table">
+                  <div className="dns-table-header">
+                    <span className="dns-col-type">Type</span>
+                    <span className="dns-col-name">Host / Name</span>
+                    <span className="dns-col-value">Value / Points To</span>
+                    <span className="dns-col-priority">Priority</span>
+                    <span className="dns-col-ttl">Status</span>
+                  </div>
+                  {providerDnsRecords.map((rec, i) => {
+                    const recordKey = `s3-${i}`;
+                    return (
+                      <div key={recordKey} className="dns-table-row">
+                        <span className="dns-col-type">
+                          <span className={`dns-type-badge dns-type-${rec.recordType.toLowerCase()}`}>{rec.recordType}</span>
+                        </span>
+                        <span className="dns-col-name">
+                          <code className="dns-field-value">{rec.name}</code>
+                          <button className="dns-copy-btn" onClick={() => handleCopy(rec.name)} title="Copy name">
+                            {copiedValue === rec.name ? <Check size={12} color="var(--success)" /> : <Copy size={12} />}
+                          </button>
+                        </span>
+                        <span className="dns-col-value">
+                          <code className="dns-field-value">{rec.value}</code>
+                          <button className="dns-copy-btn" onClick={() => handleCopy(rec.value)} title="Copy value">
+                            {copiedValue === rec.value ? <Check size={12} color="var(--success)" /> : <Copy size={12} />}
+                          </button>
+                        </span>
+                        <span className="dns-col-priority">
+                          {rec.priority ? <code className="dns-field-value">{rec.priority}</code> : <span className="dns-field-na">—</span>}
+                        </span>
+                        <span className="dns-col-ttl">
+                          <span className={`badge badge-sm ${rec.status === 'verified' ? 'badge-accent' : 'badge-secondary'}`}>{rec.status || 'pending'}</span>
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             )}
             <div style={{ display: 'flex', gap: 12, marginTop: 20 }}>

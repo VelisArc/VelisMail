@@ -66,19 +66,19 @@
   --radius-2xl: 0px;
   --radius-full: 0px;
 
-  /* Spacing - Optimized (Zoomed Out ~20%) */
-  --space-1: 0.2rem;
-  --space-2: 0.4rem;
-  --space-3: 0.6rem;
-  --space-4: 0.8rem;
-  --space-5: 1rem;
-  --space-6: 1.2rem;
-  --space-8: 1.6rem;
-  --space-10: 2rem;
-  --space-12: 2.4rem;
-  --space-16: 3.2rem;
-  --space-20: 4rem;
-  --space-24: 4.8rem;
+  /* Spacing */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.25rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --space-10: 2.5rem;
+  --space-12: 3rem;
+  --space-16: 4rem;
+  --space-20: 5rem;
+  --space-24: 6rem;
 
   /* Transition - Snappy */
   --transition-fast: 100ms var(--ease-out);
@@ -306,7 +306,7 @@ select.input option {
   -webkit-backdrop-filter: blur(24px) saturate(180%);
   border: 1px solid var(--glass-border);
   border-radius: var(--radius-xl);
-  padding: var(--space-8);
+  padding: 20px;
   box-shadow: var(--glass-shadow);
 }
 
@@ -592,6 +592,144 @@ select.input option {
   .diag-step-ms {
     grid-column: 2;
   }
+}
+
+/* ===== DNS Records Table — Industry Standard (Global) ===== */
+.dns-records-table {
+  width: 100%;
+  overflow-x: auto;
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+}
+
+.dns-section-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  background: var(--bg-surface-2);
+  border-bottom: 1px solid var(--border-primary);
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.dns-table-header {
+  display: grid;
+  grid-template-columns: 72px 1.5fr 2fr 80px 60px;
+  gap: 0;
+  padding: 10px 16px;
+  background: var(--bg-surface-2);
+  border-bottom: 1px solid var(--border-primary);
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+}
+
+.dns-table-row {
+  display: grid;
+  grid-template-columns: 72px 1.5fr 2fr 80px 60px;
+  gap: 0;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border-primary);
+  align-items: center;
+  transition: background 0.1s ease;
+}
+
+.dns-table-row:last-child { border-bottom: none; }
+.dns-table-row:hover { background: var(--bg-hover); }
+
+.dns-col-type { display: flex; align-items: center; }
+.dns-col-name,
+.dns-col-value {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.dns-col-priority,
+.dns-col-ttl {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.8rem;
+}
+
+.dns-type-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  padding: 3px 8px;
+  border-radius: 4px;
+  text-transform: uppercase;
+  min-width: 42px;
+  text-align: center;
+}
+
+.dns-type-txt { background: rgba(59, 130, 246, 0.12); color: #3b82f6; border: 1px solid rgba(59, 130, 246, 0.2); }
+.dns-type-mx { background: rgba(16, 185, 129, 0.12); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.2); }
+.dns-type-cname { background: rgba(139, 92, 246, 0.12); color: #8b5cf6; border: 1px solid rgba(139, 92, 246, 0.2); }
+.dns-type-a { background: rgba(245, 158, 11, 0.12); color: #f59e0b; border: 1px solid rgba(245, 158, 11, 0.2); }
+.dns-type-aaaa { background: rgba(236, 72, 153, 0.12); color: #ec4899; border: 1px solid rgba(236, 72, 153, 0.2); }
+
+.dns-field-value {
+  font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+  font-size: 0.78rem;
+  color: var(--text-primary);
+  background: var(--bg-surface-2);
+  padding: 3px 8px;
+  border-radius: 4px;
+  border: 1px solid var(--border-primary);
+  word-break: break-all;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dns-field-na { font-size: 0.8rem; color: var(--text-muted); }
+
+.dns-copy-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 4px;
+  color: var(--text-muted);
+  background: transparent;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: all 0.1s ease;
+  flex-shrink: 0;
+}
+
+.dns-copy-btn:hover {
+  background: var(--bg-surface-2);
+  border-color: var(--border-primary);
+  color: var(--primary);
+}
+
+.dns-copy-btn:active { transform: scale(0.92); }
+
+@media (max-width: 768px) {
+  .dns-table-header { display: none; }
+  .dns-table-row {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px 16px;
+  }
+  .dns-col-type { order: -1; }
+  .dns-col-name, .dns-col-value { flex-wrap: wrap; }
+  .dns-field-value { white-space: normal; word-break: break-all; }
 }
 
 ::selection {
