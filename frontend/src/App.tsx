@@ -3,7 +3,6 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import ErrorBoundary from './components/ErrorBoundary';
 import AuthGuard from './components/AuthGuard';
 import LoadingFallback from './components/LoadingFallback';
-import { theme } from './api/client';
 import './App.css';
 
 // ---- Lazy-loaded pages for code splitting ----
@@ -22,8 +21,6 @@ const SecurityPolicy = lazy(() => import('./pages/SecurityPolicy'));
 const Refund = lazy(() => import('./pages/Refund'));
 const Documentation = lazy(() => import('./pages/Documentation'));
 const Status = lazy(() => import('./pages/Status'));
-// Initialize theme on app load
-theme.init();
 
 function App() {
   return (

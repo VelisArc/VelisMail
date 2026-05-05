@@ -29,7 +29,15 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
     <title>VelisMail — Premium Enterprise Mail</title>
-    <script type="module" crossorigin src="/assets/index-Br-13AN5.js"></script>
+    <script>
+      (function() {
+        try {
+          var mode = localStorage.getItem('velismail_theme') || 'light';
+          document.documentElement.setAttribute('data-theme', mode);
+        } catch (e) {}
+      })();
+    </script>
+    <script type="module" crossorigin src="/assets/index-Fvi8KQee.js"></script>
     <link rel="modulepreload" crossorigin href="/assets/rolldown-runtime-jpDsebLB.js">
     <link rel="modulepreload" crossorigin href="/assets/vendor-icons-b0Is_OCQ.js">
     <link rel="modulepreload" crossorigin href="/assets/vendor-query-BSCs4L07.js">
