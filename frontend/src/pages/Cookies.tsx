@@ -1,38 +1,77 @@
 import { Link } from 'react-router-dom';
+import { ArrowLeft } from 'lucide-react';
+import './Legal.css';
 
 export default function Cookies() {
   return (
-    <div style={{ padding: '80px 20px', maxWidth: '900px', margin: '0 auto', color: 'var(--text-secondary)', lineHeight: 1.8 }}>
-      <nav style={{ marginBottom: '40px' }}>
-        <Link to="/" style={{ color: 'var(--primary)', textDecoration: 'none', fontWeight: 600 }}>&larr; Back to Home</Link>
+    <div className="legal-page">
+      <nav className="legal-nav">
+        <div className="container legal-nav-inner">
+          <Link to="/" className="nav-logo">
+            <img src="/ZeeResizer.png" alt="VelisMail" style={{ height: '24px', width: 'auto' }} />
+            <span className="logo-text">VelisMail</span>
+          </Link>
+          <Link to="/" className="btn btn-ghost btn-sm"><ArrowLeft size={16} /> Back</Link>
+        </div>
       </nav>
-      
-      <h1 style={{ color: 'var(--text-primary)', marginBottom: '20px', fontSize: '3rem', letterSpacing: '-0.03em' }}>Cookie Policy</h1>
-      <p style={{ marginBottom: '40px', fontSize: '1.1rem' }}>
-        <strong>Effective Date:</strong> January 1, 2026<br/>
-        VelisMail's enterprise email platform operates on a strict privacy-first methodology. This policy explains our minimalist approach to cookies.
-      </p>
 
-      <h2 style={{ color: 'var(--text-primary)', marginTop: '40px', marginBottom: '16px', fontSize: '1.8rem' }}>1. Essential Session Cookies Only</h2>
-      <p style={{ marginBottom: '20px' }}>
-        Unlike consumer email platforms, VelisMail <strong>does not use third-party tracking cookies, advertising pixels, or analytics trackers</strong> on our webmail interface or business dashboard. We strictly use essential first-party cookies necessary for maintaining your secure Zero-Trust authentication session.
-      </p>
+      <div className="container legal-content animate-slide-up">
+        <div className="legal-header">
+          <span className="section-tag">LEGAL</span>
+          <h1>Cookie Policy</h1>
+          <p className="legal-updated">Effective Date: January 1, 2026</p>
+        </div>
 
-      <h2 style={{ color: 'var(--text-primary)', marginTop: '40px', marginBottom: '16px', fontSize: '1.8rem' }}>2. Types of Cookies We Use</h2>
-      <ul style={{ paddingLeft: '20px', marginBottom: '30px' }}>
-        <li><strong>Authentication Tokens (JWT):</strong> Secure, HttpOnly cookies used to cryptographically verify your identity while navigating the dashboard.</li>
-        <li><strong>Security and Anti-CSRF:</strong> Tokens used exclusively to prevent Cross-Site Request Forgery attacks against your account.</li>
-        <li><strong>Local Storage (Cache):</strong> We use browser localStorage to temporarily cache encrypted ciphertext locally for offline reading and faster rendering. This is wiped upon logout.</li>
-      </ul>
+        <div className="legal-body">
+          <section>
+            <p>
+              VelisMail's enterprise email platform operates on a strict privacy-first methodology. This policy explains our minimalist approach to cookies.
+            </p>
+          </section>
 
-      <h2 style={{ color: 'var(--text-primary)', marginTop: '40px', marginBottom: '16px', fontSize: '1.8rem' }}>3. Managing Cookies</h2>
-      <p style={{ marginBottom: '20px' }}>
-        You can configure your browser to block all cookies. However, because our cookies are strictly tied to cryptographic session management, disabling them will prevent you from logging into the VelisMail Business Dashboard.
-      </p>
+          <section>
+            <h2>1. Essential Session Cookies Only</h2>
+            <p>
+              Unlike consumer email platforms, VelisMail <strong>does not use third-party tracking cookies, advertising pixels, or analytics trackers</strong> on our webmail interface or business dashboard. We strictly use essential first-party cookies necessary for maintaining your secure Zero-Trust authentication session.
+            </p>
+          </section>
 
-      <div style={{ marginTop: '60px', paddingTop: '30px', borderTop: '1px solid var(--border-primary)', textAlign: 'center' }}>
-        <p>If you have concerns about our cookie usage, contact <a href="mailto:privacy@velismail.online" style={{ color: 'var(--primary)' }}>privacy@velismail.online</a></p>
+          <section>
+            <h2>2. Types of Cookies We Use</h2>
+            <ul>
+              <li><strong>Authentication Tokens (JWT):</strong> Secure, HttpOnly cookies used to cryptographically verify your identity while navigating the dashboard.</li>
+              <li><strong>Security and Anti-CSRF:</strong> Tokens used exclusively to prevent Cross-Site Request Forgery attacks against your account.</li>
+              <li><strong>Local Storage (Cache):</strong> We use browser localStorage to temporarily cache encrypted ciphertext locally for offline reading and faster rendering. This is wiped upon logout.</li>
+            </ul>
+          </section>
+
+          <section>
+            <h2>3. Managing Cookies</h2>
+            <p>
+              You can configure your browser to block all cookies. However, because our cookies are strictly tied to cryptographic session management, disabling them will prevent you from logging into the VelisMail Business Dashboard.
+            </p>
+          </section>
+
+          <section>
+            <p style={{ textAlign: 'center', marginTop: '40px' }}>If you have concerns about our cookie usage, contact <a href="mailto:privacy@velismail.online">privacy@velismail.online</a></p>
+          </section>
+        </div>
       </div>
+
+      <footer className="legal-footer">
+        <div className="container legal-footer-inner">
+          <span>© 2026 VelisMail. All rights reserved.</span>
+          <div className="legal-footer-links">
+            <Link to="/privacy">Privacy Policy</Link>
+            <Link to="/terms">Terms of Service</Link>
+            <Link to="/cookies">Cookie Policy</Link>
+            <Link to="/aup">Acceptable Use</Link>
+            <Link to="/security">Security</Link>
+            <Link to="/refund">Refund Policy</Link>
+            <Link to="/about">About</Link>
+          </div>
+        </div>
+      </footer>
     </div>
   );
 }

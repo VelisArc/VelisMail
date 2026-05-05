@@ -343,7 +343,7 @@ export default function Login() {
                     </button>
                   </form>
 
-                  <div className="login-card-footer" style={{ justifyContent: 'space-between', gap: 12 }}>
+                  <div className="login-card-footer row-layout">
                     <button className="login-link" onClick={() => { setForgotMode(true); setError(''); setResetIdentifier(loginIdentifier); }}>
                       Forgot Password?
                     </button>
