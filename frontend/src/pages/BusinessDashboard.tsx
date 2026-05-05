@@ -5,9 +5,9 @@ import {
   Search, Plus, X, Paperclip, RefreshCw, Settings, ArrowLeft,
   Reply, Forward, Loader2, CheckCircle2,
   AlertTriangle, Sun, Moon, BarChart3, Users, Globe, Shield,
-  Server, Activity, Clock, AlertCircle,
+  Server, Activity, Clock, AlertCircle, Database,
   CheckSquare, Square, Tag, Bell, BellOff,
-  ExternalLink, Copy, Zap, Filter,
+  ExternalLink, Copy, Zap, Filter, Check,
   Mail, Volume2, VolumeX, RefreshCcw, Pause,
   Trash, Archive as ArchiveIcon, Edit3, Eye,
   Download, KeyRound, Lock, XCircle,
@@ -164,11 +164,21 @@ export default function BusinessDashboard() {
       navigate('/login');
       return;
     }
-    if (!user.isBusinessSetupComplete) {
+    // Enforce infrastructure connectivity — all 4 must be present
+    const hasDb = Boolean(user.businessDbUrl?.trim());
+    const hasApiKey = Boolean(user.businessApiKey?.trim());
+    const hasDomain = Boolean(user.businessDomain?.trim());
+    const hasProvider = Boolean(user.businessMailProvider?.trim());
+    const infraComplete = hasDb && hasApiKey && hasDomain && hasProvider;
+
+    if (!infraComplete || !user.isBusinessSetupComplete) {
+      if (user.isBusinessSetupComplete) {
+        auth.updateSettings({ isBusinessSetupComplete: false });
+      }
       navigate('/business-setup');
       return;
     }
-    if (!user.businessDomainVerified || !user.businessDomain || storedDomainRecords.length === 0) {
+    if (!user.businessDomainVerified || storedDomainRecords.length === 0) {
       auth.updateSettings({ isBusinessSetupComplete: false });
       navigate('/business-setup');
       return;
@@ -233,13 +243,14 @@ export default function BusinessDashboard() {
   const [domainVerifyOpen, setDomainVerifyOpen] = useState(false);
   const [domainVerifySteps, setDomainVerifySteps] = useState<Array<{ label: string; detail: string; status: 'verified' | 'failed' | 'pending'; recommendation?: string | null }>>([]);
   const [domainVerifyProviderRecords, setDomainVerifyProviderRecords] = useState<ProviderDnsRecord[]>([]);
+  const [copiedField, setCopiedField] = useState<string | null>(null);
   const activeDomainRecord = domainsList.find(d => d.id === activeDomain);
   const activeDomainName = activeDomainRecord?.domain || user?.businessDomain || '';
 
   useEffect(() => {
     if (!user) {
       navigate('/login');
-    } else if (!user.isBusinessSetupComplete) {
+    } else if (!user.isBusinessSetupComplete || !user.businessDbUrl?.trim() || !user.businessApiKey?.trim() || !user.businessMailProvider?.trim()) {
       navigate('/business-setup');
     }
   }, [navigate, user]);
@@ -773,8 +784,12 @@ export default function BusinessDashboard() {
     showToast(`Domain ${record.domain} added. Complete DNS verification before using it.`);
   };
 
-  const copyToClipboard = (text: string) => {
+  const copyToClipboard = (text: string, fieldId?: string) => {
     navigator.clipboard.writeText(text);
+    if (fieldId) {
+      setCopiedField(fieldId);
+      setTimeout(() => setCopiedField(null), 2000);
+    }
     showToast('Copied to clipboard');
   };
 
@@ -784,7 +799,7 @@ export default function BusinessDashboard() {
     localStorage.setItem('velismail-theme', next);
   };
 
-  if (!user || !user.isBusinessSetupComplete) return null;
+  if (!user || !user.isBusinessSetupComplete || !user.businessDbUrl?.trim() || !user.businessApiKey?.trim()) return null;
 
   const businessMailbox = user.businessMailboxAddress || (activeDomainName ? `admin@${activeDomainName}` : user.email);
 
@@ -1165,39 +1180,67 @@ export default function BusinessDashboard() {
                     ))}
                   </div>
 
-                  <div className="domain-dns-hint">
-                    <Tag size={14} /> DNS records for <strong>{domain.domain}</strong>:
-                    {(domains.getById(domain.id)?.dnsRecords || []).map((record, index) => (
-                      <div key={`${record.name}-${index}`} className="dns-record-row">
-                        <span className="dns-type-tag">{record.type}</span>
-                        <code>{record.name} → {record.value}{record.priority ? ` (priority ${record.priority})` : ''}</code>
-                        <button className="btn btn-ghost btn-icon btn-sm" onClick={() => copyToClipboard(record.value)}><Copy size={12} /></button>
+                  <div className="domain-dns-section">
+                    <div className="dns-section-header">
+                      <Tag size={14} />
+                      <span>DNS records for <strong>{domain.domain}</strong></span>
+                    </div>
+                    <div className="dns-records-table">
+                      <div className="dns-table-header">
+                        <span className="dns-col-type">Type</span>
+                        <span className="dns-col-name">Host / Name</span>
+                        <span className="dns-col-value">Value / Points To</span>
+                        <span className="dns-col-priority">Priority</span>
+                        <span className="dns-col-ttl">TTL</span>
                       </div>
-                    ))}
-                  <div className="dns-record-row">
-                      <span className="dns-type-tag">MX</span>
-                      <code>mail.{domain.domain} → 10</code>
-                      <button className="btn btn-ghost btn-icon btn-sm" onClick={() => copyToClipboard(`mail.${domain.domain}`)}><Copy size={12} /></button>
+                      {(domains.getById(domain.id)?.dnsRecords || []).map((record, index) => {
+                        const recordKey = `${domain.id}-${index}`;
+                        return (
+                          <div key={recordKey} className="dns-table-row">
+                            <span className="dns-col-type">
+                              <span className={`dns-type-badge dns-type-${record.type.toLowerCase()}`}>{record.type}</span>
+                            </span>
+                            <span className="dns-col-name">
+                              <code className="dns-field-value">{record.name}</code>
+                              <button
+                                className="dns-copy-btn"
+                                onClick={() => copyToClipboard(record.name, `name-${recordKey}`)}
+                                title="Copy host name"
+                              >
+                                {copiedField === `name-${recordKey}` ? <Check size={12} color="var(--success)" /> : <Copy size={12} />}
+                              </button>
+                            </span>
+                            <span className="dns-col-value">
+                              <code className="dns-field-value">{record.value}</code>
+                              <button
+                                className="dns-copy-btn"
+                                onClick={() => copyToClipboard(record.value, `value-${recordKey}`)}
+                                title="Copy value"
+                              >
+                                {copiedField === `value-${recordKey}` ? <Check size={12} color="var(--success)" /> : <Copy size={12} />}
+                              </button>
+                            </span>
+                            <span className="dns-col-priority">
+                              {record.priority ? (
+                                <>
+                                  <code className="dns-field-value">{record.priority}</code>
+                                  <button
+                                    className="dns-copy-btn"
+                                    onClick={() => copyToClipboard(String(record.priority), `pri-${recordKey}`)}
+                                    title="Copy priority"
+                                  >
+                                    {copiedField === `pri-${recordKey}` ? <Check size={12} color="var(--success)" /> : <Copy size={12} />}
+                                  </button>
+                                </>
+                              ) : <span className="dns-field-na">—</span>}
+                            </span>
+                            <span className="dns-col-ttl">
+                              <code className="dns-field-value">{record.ttl || 3600}</code>
+                            </span>
+                          </div>
+                        );
+                      })}
                     </div>
-                    {(domains.getById(domain.id)?.dnsRecords || []).length === 0 && (
-                      <>
-                    <div className="dns-record-row">
-                      <span className="dns-type-tag">SPF</span>
-                      <code>v=spf1 include:_spf.{domain.domain} ~all</code>
-                      <button className="btn btn-ghost btn-icon btn-sm" onClick={() => copyToClipboard(`v=spf1 include:_spf.${domain.domain} ~all`)}><Copy size={12} /></button>
-                    </div>
-                    <div className="dns-record-row">
-                      <span className="dns-type-tag">DKIM</span>
-                      <code>selector._domainkey.{domain.domain}</code>
-                      <button className="btn btn-ghost btn-icon btn-sm" onClick={() => copyToClipboard(`selector._domainkey.${domain.domain}`)}><Copy size={12} /></button>
-                    </div>
-                    <div className="dns-record-row">
-                      <span className="dns-type-tag">DMARC</span>
-                      <code>v=DMARC1; p=quarantine; rua=mailto:dmarc@{domain.domain}</code>
-                      <button className="btn btn-ghost btn-icon btn-sm" onClick={() => copyToClipboard(`v=DMARC1; p=quarantine; rua=mailto:dmarc@${domain.domain}`)}><Copy size={12} /></button>
-                    </div>
-                      </>
-                    )}
                   </div>
                 </div>
               ))}
@@ -1776,20 +1819,31 @@ export default function BusinessDashboard() {
                 <h3><Server size={16} /> Connected Infrastructure</h3>
                 <div style={{ display: 'grid', gap: 10 }}>
                   {connectionUsage.length === 0 ? (
-                    <p style={{ margin: 0, color: 'var(--text-muted)' }}>No saved database or provider secrets found for this workspace.</p>
+                    <div style={{ padding: '20px', textAlign: 'center', border: '1px dashed var(--danger)', borderRadius: 'var(--radius-md)', background: 'rgba(239, 68, 68, 0.05)' }}>
+                      <AlertTriangle size={32} color="var(--danger)" style={{ marginBottom: 8 }} />
+                      <p style={{ margin: '0 0 4px', fontWeight: 600, color: 'var(--danger)' }}>No Infrastructure Connected</p>
+                      <p style={{ margin: '0 0 16px', color: 'var(--text-muted)', fontSize: '0.85rem' }}>Your database and mail provider API keys are not configured. Dashboard functionality requires connected infrastructure.</p>
+                      <button className="btn btn-primary btn-sm" onClick={() => navigate('/business-setup')}>
+                        <Server size={14} /> Reconfigure Infrastructure
+                      </button>
+                    </div>
                   ) : (
                     connectionUsage.map((usage) => (
                       <div key={usage.id} className="queue-row glass-card" style={{ padding: 12 }}>
-                        <div>
-                          <strong>{usage.label}</strong>
-                          <div style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>{usage.maskedValue}</div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          {usage.type === 'database' ? <Database size={16} color="var(--primary)" /> : <KeyRound size={16} color="var(--accent)" />}
+                          <div>
+                            <strong>{usage.label}</strong>
+                            <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>{usage.maskedValue}</div>
+                          </div>
                         </div>
                         <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
                           {usage.ownerDisplayName}
                           {usage.provider ? ` · ${usage.provider}` : ''}
                         </div>
-                        <button className="btn btn-ghost btn-sm" onClick={() => setConfirmRevokeId(usage.id)}>
-                          Remove Access
+                        <span className="badge badge-accent" style={{ fontSize: '0.7rem' }}>Connected</span>
+                        <button className="btn btn-ghost btn-sm" style={{ color: 'var(--danger)' }} onClick={() => setConfirmRevokeId(usage.id)}>
+                          <XCircle size={14} /> Revoke
                         </button>
                       </div>
                     ))
@@ -1846,21 +1900,55 @@ export default function BusinessDashboard() {
             {domainVerifyProviderRecords.length > 0 && (
               <div className="bsetup-dns" style={{ marginTop: 20 }}>
                 <p className="dns-instruction-text">Provider-specific DNS records:</p>
-                <table className="dns-table">
-                  <thead>
-                    <tr><th>Type</th><th>Name</th><th>Value</th><th>Status</th></tr>
-                  </thead>
-                  <tbody>
-                    {domainVerifyProviderRecords.map((record, index) => (
-                      <tr key={`${record.name}-${index}`}>
-                        <td><span className="dns-type">{record.recordType}</span></td>
-                        <td className="dns-name">{record.name}</td>
-                        <td className="dns-value">{record.value}{record.priority ? ` (priority ${record.priority})` : ''}</td>
-                        <td>{record.status || 'pending'}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                <div className="dns-records-table">
+                  <div className="dns-table-header">
+                    <span className="dns-col-type">Type</span>
+                    <span className="dns-col-name">Host / Name</span>
+                    <span className="dns-col-value">Value / Points To</span>
+                    <span className="dns-col-priority">Priority</span>
+                    <span className="dns-col-ttl">Status</span>
+                  </div>
+                  {domainVerifyProviderRecords.map((record, index) => {
+                    const recordKey = `provider-${index}`;
+                    return (
+                      <div key={recordKey} className="dns-table-row">
+                        <span className="dns-col-type">
+                          <span className={`dns-type-badge dns-type-${record.recordType.toLowerCase()}`}>{record.recordType}</span>
+                        </span>
+                        <span className="dns-col-name">
+                          <code className="dns-field-value">{record.name}</code>
+                          <button
+                            className="dns-copy-btn"
+                            onClick={() => copyToClipboard(record.name, `pname-${recordKey}`)}
+                            title="Copy host name"
+                          >
+                            {copiedField === `pname-${recordKey}` ? <Check size={12} color="var(--success)" /> : <Copy size={12} />}
+                          </button>
+                        </span>
+                        <span className="dns-col-value">
+                          <code className="dns-field-value">{record.value}</code>
+                          <button
+                            className="dns-copy-btn"
+                            onClick={() => copyToClipboard(record.value, `pvalue-${recordKey}`)}
+                            title="Copy value"
+                          >
+                            {copiedField === `pvalue-${recordKey}` ? <Check size={12} color="var(--success)" /> : <Copy size={12} />}
+                          </button>
+                        </span>
+                        <span className="dns-col-priority">
+                          {record.priority ? (
+                            <code className="dns-field-value">{record.priority}</code>
+                          ) : <span className="dns-field-na">—</span>}
+                        </span>
+                        <span className="dns-col-ttl">
+                          <span className={`badge badge-sm ${record.status === 'verified' ? 'badge-accent' : 'badge-secondary'}`}>
+                            {record.status || 'pending'}
+                          </span>
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             )}
             <div className="biz-modal-actions">
@@ -2010,6 +2098,11 @@ export default function BusinessDashboard() {
                       if (revoked) {
                         refreshConnectionUsage();
                         showToast('Connection access revoked');
+                        // Check if infrastructure is now incomplete — redirect to setup
+                        const updatedUser = auth.getSession();
+                        if (updatedUser && (!updatedUser.businessDbUrl?.trim() || !updatedUser.businessApiKey?.trim())) {
+                          navigate('/business-setup');
+                        }
                       } else {
                         showToast('Unable to revoke this connection', 'error');
                       }

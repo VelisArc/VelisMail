@@ -567,35 +567,63 @@ export default function BusinessSetup() {
               </form>
             ) : (
               <div className="bsetup-dns">
-                <p className="dns-instruction-text">Add these DNS records to your domain registrar (GoDaddy, Cloudflare, Namecheap, etc.):</p>
-                <table className="dns-table">
-                  <thead>
-                    <tr><th>Type</th><th>Name</th><th>Value</th></tr>
-                  </thead>
-                  <tbody>
-                    {dnsRecords.map((rec, i) => (
-                      <tr key={i}>
-                        <td><span className="dns-type">{rec.type}</span></td>
-                        <td className="dns-name">{rec.name}</td>
-                        <td className="dns-value">
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'space-between' }}>
-                            <span>
-                              {rec.value}
-                              {rec.priority ? ` (priority ${rec.priority})` : ''}
-                            </span>
-                            <button
-                              className="btn btn-ghost btn-icon"
-                              onClick={() => handleCopy(`${rec.value}${rec.priority ? ` ${rec.priority}` : ''}`)}
-                              title="Copy value"
-                            >
-                              {copiedValue === `${rec.value}${rec.priority ? ` ${rec.priority}` : ''}` ? <Check size={14} color="var(--success)" /> : <Copy size={14} />}
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                <p className="dns-instruction-text">Add these DNS records to your domain registrar (GoDaddy, Cloudflare, Namecheap, etc.). Copy each field individually:</p>
+                <div className="dns-records-table">
+                  <div className="dns-table-header">
+                    <span className="dns-col-type">Type</span>
+                    <span className="dns-col-name">Host / Name</span>
+                    <span className="dns-col-value">Value / Points To</span>
+                    <span className="dns-col-priority">Priority</span>
+                    <span className="dns-col-ttl">TTL</span>
+                  </div>
+                  {dnsRecords.map((rec, i) => {
+                    const recordKey = `setup-${i}`;
+                    return (
+                      <div key={recordKey} className="dns-table-row">
+                        <span className="dns-col-type">
+                          <span className={`dns-type-badge dns-type-${rec.type.toLowerCase()}`}>{rec.type}</span>
+                        </span>
+                        <span className="dns-col-name">
+                          <code className="dns-field-value">{rec.name}</code>
+                          <button
+                            className="dns-copy-btn"
+                            onClick={() => handleCopy(rec.name)}
+                            title="Copy host name"
+                          >
+                            {copiedValue === rec.name ? <Check size={12} color="var(--success)" /> : <Copy size={12} />}
+                          </button>
+                        </span>
+                        <span className="dns-col-value">
+                          <code className="dns-field-value">{rec.value}</code>
+                          <button
+                            className="dns-copy-btn"
+                            onClick={() => handleCopy(rec.value)}
+                            title="Copy value"
+                          >
+                            {copiedValue === rec.value ? <Check size={12} color="var(--success)" /> : <Copy size={12} />}
+                          </button>
+                        </span>
+                        <span className="dns-col-priority">
+                          {rec.priority ? (
+                            <>
+                              <code className="dns-field-value">{rec.priority}</code>
+                              <button
+                                className="dns-copy-btn"
+                                onClick={() => handleCopy(String(rec.priority))}
+                                title="Copy priority"
+                              >
+                                {copiedValue === String(rec.priority) ? <Check size={12} color="var(--success)" /> : <Copy size={12} />}
+                              </button>
+                            </>
+                          ) : <span className="dns-field-na">—</span>}
+                        </span>
+                        <span className="dns-col-ttl">
+                          <code className="dns-field-value">{rec.ttl || 3600}</code>
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
                 <button className="btn btn-primary" onClick={handleDomainVerify} style={{ marginTop: 24 }}>
                   <CheckCircle2 size={16} /> Verify Domain & Configure
                 </button>
