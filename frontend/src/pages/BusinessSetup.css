@@ -23,6 +23,22 @@
   height: 48px;
 }
 
+.mobile-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.mobile-brand img {
+  height: 20px;
+  width: auto;
+}
+
+.mobile-brand span {
+  font-weight: 700;
+  font-size: 0.95rem;
+}
+
 .bsetup-container {
   max-width: 740px;
   margin: 0 auto;
