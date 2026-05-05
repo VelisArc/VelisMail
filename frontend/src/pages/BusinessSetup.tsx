@@ -453,21 +453,18 @@ export default function BusinessSetup() {
   return (
     <div className="bsetup-page">
       <nav className="bsetup-nav">
-        <div className="container bsetup-nav-inner">
-          <div className="dash-brand" onClick={() => navigate('/')}>
-            <img src="/ZeeResizer.png" alt="VelisMail" style={{ height: '20px' }} />
-            <div className="dash-brand-info">
-              <span className="dash-brand-name">VelisMail</span>
-              <span className="badge badge-accent dash-brand-sub" style={{ fontSize: '0.6rem' }}>Onboarding</span>
-            </div>
+        <div className="page-container bsetup-nav-inner">
+          <div className="mobile-brand">
+            <img src="/ZeeResizer.png" alt="VelisMail" />
+            <span>VelisMail</span>
           </div>
-          <button className="btn btn-ghost btn-sm" onClick={() => setShowLogoutConfirm(true)}>
-            <LogOut size={16} /> Save & Exit
+          <button className="btn btn-ghost btn-sm" onClick={() => auth.logout()}>
+            <LogOut size={16} /> Sign Out
           </button>
         </div>
       </nav>
 
-      <div className="bsetup-container">
+      <div className="page-container bsetup-container">
         {/* Progress Bar */}
         <div className="bsetup-progress">
           <div className={`bsetup-progress-step ${step === 1 ? 'active' : step > 1 ? 'done' : ''}`}>

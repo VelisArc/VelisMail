@@ -234,20 +234,23 @@ export default function SettingsPage() {
   return (
     <div className="settings-page">
       <header className="settings-header glass">
-        <div className="settings-header-left">
-          <Link to="/business" className="btn btn-ghost btn-sm">
-            <ArrowLeft size={16} /> Back to Inbox
-          </Link>
-          <h1>Settings</h1>
-        </div>
-        <div className="settings-header-right">
-          <div className="user-avatar">{user.displayName?.charAt(0) || 'U'}</div>
-          <span>{user.displayName}</span>
+        <div className="page-container section-container" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div className="settings-header-left">
+            <Link to="/business" className="btn btn-ghost btn-sm">
+              <ArrowLeft size={16} /> Back to Inbox
+            </Link>
+            <h1>Settings</h1>
+          </div>
+          <div className="settings-header-right">
+            <div className="user-avatar">{user.displayName?.charAt(0) || 'U'}</div>
+            <span>{user.displayName}</span>
+          </div>
         </div>
       </header>
 
-      <div className="settings-body">
-        <nav className="settings-tabs glass">
+      <div className="section-container">
+        <div className="settings-body">
+          <nav className="settings-tabs glass">
           <button className={`tab-btn ${activeTab === 'profile' ? 'active' : ''}`} onClick={() => setActiveTab('profile')}>
             <UserIcon size={18} /> Profile
           </button>
@@ -479,6 +482,7 @@ export default function SettingsPage() {
           )}
         </div>
       </div>
+    </div>
 
       {showLogoutConfirm && (
         <div className="modal-overlay" onClick={() => setShowLogoutConfirm(false)}>
