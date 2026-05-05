@@ -1017,7 +1017,6 @@ function buildSessionUser(params: {
   const email = normalizeMailbox(profile.email || tokenPayload.email || params.email);
   const domain = normalizeDomainInput(params.customDomain || email.split('@')[1] || params.existing?.businessDomain || '');
   const businessMailboxAddress = domain ? `admin@${domain}` : email;
-  const existingBusinessComplete = params.existing?.isBusinessSetupComplete || false;
 
   return normalizeSessionUser({
     ...params.existing,
