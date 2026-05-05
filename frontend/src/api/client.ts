@@ -979,15 +979,24 @@ function decodeJwtPayload(token: string): Record<string, any> {
 async function fetchAuthenticatedProfile(): Promise<Partial<User>> {
   try {
     const profile = await fetchAPI('/auth/me');
-    const raw = profile?.user || {};
+    const raw = profile?.user || profile || {};
     return {
       id: raw.id,
-      tenantId: raw.tenant_id,
+      tenantId: raw.tenant_id || raw.tenantId,
       email: raw.email,
-      displayName: raw.display_name,
-      recoveryEmail: raw.recovery_email || undefined,
-      recoveryEmailVerified: Boolean(raw.recovery_email),
-      createdAt: raw.created_at,
+      displayName: raw.display_name || raw.displayName,
+      recoveryEmail: raw.recovery_email || raw.recoveryEmail || undefined,
+      recoveryEmailVerified: Boolean(raw.recovery_email || raw.recoveryEmail),
+      createdAt: raw.created_at || raw.createdAt,
+      // Pull configuration from server to avoid re-verification
+      businessDbUrl: raw.business_db_url || raw.businessDbUrl,
+      businessApiKey: raw.business_api_key || raw.businessApiKey,
+      businessMailProvider: raw.business_mail_provider || raw.businessMailProvider,
+      businessMailProviderEndpoint: raw.business_mail_provider_endpoint || raw.businessMailProviderEndpoint,
+      businessDomain: raw.business_domain || raw.businessDomain,
+      isBusinessSetupComplete: raw.is_business_setup_complete ?? raw.isBusinessSetupComplete,
+      businessDomainVerified: raw.business_domain_verified ?? raw.businessDomainVerified,
+      businessProfile: raw.business_profile || raw.businessProfile,
     };
   } catch {
     return {};
@@ -1012,6 +1021,7 @@ function buildSessionUser(params: {
 
   return normalizeSessionUser({
     ...params.existing,
+    ...profile,
     id: String(profile.id || tokenPayload.sub || params.existing?.id || `usr_${hashString(email)}`),
     tenantId: String(profile.tenantId || tokenPayload.tenant_id || params.existing?.tenantId || ''),
     email,
@@ -1021,11 +1031,16 @@ function buildSessionUser(params: {
     customDomain: params.customDomain || params.existing?.customDomain,
     recoveryEmail: profile.recoveryEmail || params.recoveryEmail || params.existing?.recoveryEmail,
     recoveryEmailVerified: profile.recoveryEmailVerified ?? params.existing?.recoveryEmailVerified,
-    isSetupComplete: params.existing?.isSetupComplete || false,
-    isBusinessSetupComplete: existingBusinessComplete,
-    businessDomain: params.existing?.businessDomain || domain || undefined,
-    businessMailboxAddress: params.existing?.businessMailboxAddress || businessMailboxAddress,
-    businessDomainVerified: params.existing?.businessDomainVerified || false,
+    isSetupComplete: profile.isSetupComplete ?? params.existing?.isSetupComplete ?? false,
+    isBusinessSetupComplete: profile.isBusinessSetupComplete ?? params.existing?.isBusinessSetupComplete ?? false,
+    businessDomain: profile.businessDomain || params.existing?.businessDomain || domain || undefined,
+    businessDbUrl: profile.businessDbUrl || params.existing?.businessDbUrl,
+    businessApiKey: profile.businessApiKey || params.existing?.businessApiKey,
+    businessMailProvider: profile.businessMailProvider || params.existing?.businessMailProvider,
+    businessMailProviderEndpoint: profile.businessMailProviderEndpoint || params.existing?.businessMailProviderEndpoint,
+    businessMailboxAddress: profile.businessMailboxAddress || params.existing?.businessMailboxAddress || businessMailboxAddress,
+    businessDomainVerified: profile.businessDomainVerified ?? params.existing?.businessDomainVerified ?? false,
+    businessProfile: profile.businessProfile || params.existing?.businessProfile,
     dkimStatus: params.existing?.dkimStatus || 'pending',
     spfStatus: params.existing?.spfStatus || 'pending',
     dmarcStatus: params.existing?.dmarcStatus || 'pending',
@@ -1327,6 +1342,14 @@ export const auth = {
     saveDB(STORAGE_KEYS.session, nextUser);
     saveUserToPersistentStore(nextUser);
     reloadAccountCaches();
+
+    // Push settings to the backend server so the config isn't lost on next login
+    fetchAPI('/auth/account', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(settings),
+    }).catch(err => console.warn('Failed to sync settings to server', err));
+
     return { success: true, user: nextUser };
   },
 
