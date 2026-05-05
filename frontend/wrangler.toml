@@ -1,0 +1,16 @@
+# Cloudflare Pages config for the VelisMail frontend.
+#
+# Deploy locally with:
+#   cd frontend
+#   npm ci && npm run build
+#   npx wrangler pages deploy dist --project-name velismail
+#
+# Or connect the repo in the Cloudflare dashboard and set:
+#   Build command:  npm ci && npm run build
+#   Build output:   frontend/dist
+#   Root directory: frontend
+#   Env vars:       VITE_API_URL (see frontend/.env)
+
+name = "velismail"
+pages_build_output_dir = "dist"
+compatibility_date = "2024-10-01"

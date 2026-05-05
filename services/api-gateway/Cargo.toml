@@ -1,0 +1,25 @@
+[package]
+name = "velismail-api-gateway"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "api-gateway"
+path = "src/main.rs"
+
+[dependencies]
+tokio.workspace = true
+axum.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+anyhow.workspace = true
+reqwest.workspace = true
+tower-http = { version = "0.5", features = ["cors", "trace", "limit", "timeout"] }
+tower = { version = "0.5", features = ["limit"] }
+chrono.workspace = true
+uuid.workspace = true
+aws-sdk-sesv2 = "1.23.0"
+aws-config = "1.2.0"
+velismail-common = { path = "../../libs/common" }
