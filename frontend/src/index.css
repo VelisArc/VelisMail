@@ -42,9 +42,11 @@
   --danger: #ef4444;
   --danger-glow: rgba(239, 68, 68, 0.1);
 
-  /* Warning & Info */
+  /* Warning, Info, Success */
   --warning: #f59e0b;
-  --info: #737373; /* No blue */
+  --info: #737373;
+  --success: #16a34a;
+  --success-glow: rgba(22, 163, 74, 0.1);
 
   /* Text — Soft Contrast */
   --text-primary: #171717;
@@ -117,6 +119,9 @@
 
   --primary: var(--primary-500);
   --primary-glow: rgba(255, 255, 255, 0.08);
+
+  --success: #22c55e;
+  --success-glow: rgba(34, 197, 94, 0.15);
 
   --text-primary: #e5e5e5;
   --text-secondary: #a3a3a3;
@@ -541,12 +546,12 @@ select.input option {
 }
 
 .diag-success {
-  border-color: rgba(217, 119, 6, 0.28);
+  border-color: rgba(34, 197, 94, 0.3);
 }
 
 .diag-success .diag-step-icon {
-  background: rgba(217, 119, 6, 0.14);
-  color: var(--primary);
+  background: var(--success-glow);
+  color: var(--success);
 }
 
 .diag-error {

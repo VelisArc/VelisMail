@@ -24,21 +24,27 @@ const STORAGE_KEYS = {
 };
 
 
+// In-memory store for session-only caching (satisfies private DB policy: no local disk persistence)
+const memoryDB: Record<string, any> = {};
+
 function loadDB<T>(key: string, fallback: T): T {
-  // STRICT PRIVATE DATA POLICY: Only persist auth session and theme.
-  // All other data (emails, domains, contacts) must be fetched from the private backend API and never stored locally.
+  // STRICT PRIVATE DATA POLICY: Only persist auth session and theme to disk.
   if (key === STORAGE_KEYS.session || key === STORAGE_KEYS.theme || key === 'velismail_token' || key === 'velismail_refresh') {
     try {
       const data = localStorage.getItem(key);
       return data ? JSON.parse(data) : fallback;
     } catch { return fallback; }
   }
-  return fallback;
+  // For other keys, use pure memory cache (stateless on refresh, API-reliant)
+  return memoryDB[key] !== undefined ? memoryDB[key] : fallback;
 }
 
 function saveDB<T>(key: string, data: T) {
   if (key === STORAGE_KEYS.session || key === STORAGE_KEYS.theme || key === 'velismail_token' || key === 'velismail_refresh') {
     localStorage.setItem(key, JSON.stringify(data));
+  } else {
+    // Save to memory cache only
+    memoryDB[key] = data;
   }
 }
 

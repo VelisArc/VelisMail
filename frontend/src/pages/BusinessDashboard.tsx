@@ -1181,8 +1181,13 @@ export default function BusinessDashboard() {
                         <div className="health-card-header">
                           <Shield size={16} />
                           <span className="health-label">{h.label}</span>
-                          <span className={`badge badge-sm ${h.status === 'verified' ? 'badge-accent' : h.status === 'failed' ? 'badge-danger' : 'badge-secondary'}`}>
-                            {h.status === 'checking' ? <Loader2 size={12} className="animate-spin" /> : h.status}
+                          <span className={`badge badge-sm`} style={{
+                            display: 'inline-flex', alignItems: 'center', gap: '4px',
+                            backgroundColor: h.status === 'verified' ? 'var(--success-glow)' : h.status === 'failed' ? 'var(--danger-glow)' : 'var(--bg-hover)',
+                            color: h.status === 'verified' ? 'var(--success)' : h.status === 'failed' ? 'var(--danger)' : 'var(--text-muted)'
+                          }}>
+                            {h.status === 'verified' ? <CheckCircle2 size={12} /> : h.status === 'failed' ? <XCircle size={12} /> : <Loader2 size={12} className={h.status === 'checking' ? 'animate-spin' : ''} />}
+                            {h.status}
                           </span>
                         </div>
                         <div className="health-detail">{h.detail}</div>
@@ -1952,7 +1957,12 @@ export default function BusinessDashboard() {
                           ) : <span className="dns-field-na">—</span>}
                         </span>
                         <span className="dns-col-ttl">
-                          <span className={`badge badge-sm ${record.status === 'verified' ? 'badge-accent' : 'badge-secondary'}`}>
+                          <span className={`badge badge-sm`} style={{
+                            display: 'inline-flex', alignItems: 'center', gap: '4px',
+                            backgroundColor: record.status === 'verified' ? 'var(--success-glow)' : record.status === 'failed' ? 'var(--danger-glow)' : 'var(--bg-hover)',
+                            color: record.status === 'verified' ? 'var(--success)' : record.status === 'failed' ? 'var(--danger)' : 'var(--text-muted)'
+                          }}>
+                            {record.status === 'verified' ? <CheckCircle2 size={12} /> : record.status === 'failed' ? <XCircle size={12} /> : <Loader2 size={12} className="animate-spin" />}
                             {record.status || 'pending'}
                           </span>
                         </span>
