@@ -803,7 +803,7 @@ export default function BusinessDashboard() {
   const toggleTheme = () => {
     const next = themeMode === 'dark' ? 'light' : 'dark';
     document.documentElement.setAttribute('data-theme', next);
-    localStorage.setItem('velismail-theme', next);
+    localStorage.setItem('velismail_theme', next);
     setThemeMode(next);
   };
 

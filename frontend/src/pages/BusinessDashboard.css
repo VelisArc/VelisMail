@@ -799,7 +799,7 @@
 
 /* Biz Panel */
 .biz-panel {
-  padding: 16px 20px;
+  padding: 20px 28px;
   overflow-y: auto;
   height: 100vh;
 
@@ -1145,19 +1145,7 @@
   margin-top: 4px;
 }
 
-/* Dashboard Cards & Lists */
-.glass-card {
-  background: var(--glass-bg);
-  border: 1px solid var(--glass-border);
-  border-radius: var(--radius-lg);
-  padding: 0;
-  box-shadow: var(--glass-shadow);
-  transition: transform var(--transition-normal), border-color var(--transition-fast);
-}
 
-.glass-card:hover {
-  border-color: var(--glass-border-light);
-}
 
 /* Mail List & Reader */
 .dash-list, .dash-reader {

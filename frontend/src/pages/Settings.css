@@ -41,21 +41,21 @@
 .settings-body {
   display: flex;
   flex: 1;
-  padding: 24px 0;
-  gap: 24px;
+  padding: 32px 0;
+  gap: 32px;
 }
 
 /* Tabs */
 .settings-tabs {
   display: flex;
   flex-direction: column;
-  gap: 3px;
-  width: 200px;
+  gap: 4px;
+  width: 210px;
   flex-shrink: 0;
-  padding: 10px;
+  padding: 14px;
   height: fit-content;
   position: sticky;
-  top: 60px;
+  top: 64px;
   border-radius: var(--radius-lg);
   border: 1px solid var(--glass-border);
   background: var(--bg-surface);
