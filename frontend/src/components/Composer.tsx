@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, type KeyboardEvent } from 'react';
 import { 
   Bold, Italic, Underline, List, Link as LinkIcon, 
-  Paperclip, Send, X
+  Paperclip, Send, X, Trash2
 } from 'lucide-react';
 import { contacts, type Contact } from '../api/client';
 import './Composer.css';
@@ -217,7 +217,9 @@ export default function Composer({
           </button>
         </div>
         <div className="compose-footer-right">
-          <button className="btn btn-secondary btn-sm" onClick={onClose} disabled={sending}>Discard</button>
+          <button className="btn btn-ghost btn-icon" onClick={onClose} disabled={sending} title="Discard draft">
+            <Trash2 size={16} />
+          </button>
           <button className="btn btn-primary btn-sm" onClick={handleSend} disabled={sending || !to || !subject}>
             <Send size={16} /> Send
           </button>

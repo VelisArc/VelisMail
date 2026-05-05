@@ -7,6 +7,12 @@ export type ProviderOption = {
 
 export const DATABASE_PROVIDERS: ProviderOption[] = [
   {
+    id: 'neon',
+    label: 'Neon',
+    description: 'Serverless Postgres with autoscaling branches.',
+    placeholder: 'postgresql://user:password@ep-example.ap-south-1.aws.neon.tech/neondb?sslmode=require',
+  },
+  {
     id: 'postgresql',
     label: 'PostgreSQL',
     description: 'Self-hosted Postgres or managed clusters.',
@@ -17,12 +23,6 @@ export const DATABASE_PROVIDERS: ProviderOption[] = [
     label: 'Supabase',
     description: 'Managed Postgres with auth, storage, and edge tooling.',
     placeholder: 'postgresql://postgres:[PASSWORD]@db.project.supabase.co:5432/postgres',
-  },
-  {
-    id: 'neon',
-    label: 'Neon',
-    description: 'Serverless Postgres with autoscaling branches.',
-    placeholder: 'postgresql://user:password@ep-example.ap-south-1.aws.neon.tech/neondb?sslmode=require',
   },
   {
     id: 'timescale',
@@ -220,16 +220,16 @@ export const DATABASE_PROVIDERS: ProviderOption[] = [
 
 export const MAIL_PROVIDERS: ProviderOption[] = [
   {
-    id: 'sendgrid',
-    label: 'SendGrid',
-    description: 'Direct API delivery through SendGrid.',
-    placeholder: 'SG.xxxxx',
-  },
-  {
     id: 'resend',
     label: 'Resend',
     description: 'Direct API delivery through Resend.',
     placeholder: 're_xxxxx',
+  },
+  {
+    id: 'sendgrid',
+    label: 'SendGrid',
+    description: 'Direct API delivery through SendGrid.',
+    placeholder: 'SG.xxxxx',
   },
   {
     id: 'postmark',

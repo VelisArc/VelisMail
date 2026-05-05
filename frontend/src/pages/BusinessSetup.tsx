@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Database, Mail, CheckCircle2, Server, Loader2, Lock, Globe,
-  Zap, Shield, ArrowRight, XCircle, Wifi, LogOut
+  Zap, Shield, ArrowRight, XCircle, Wifi, LogOut, Copy, Check
 } from 'lucide-react';
 import { auth, domains, fetchApiJsonDetailed, fetchApiResponse, getApiAvailabilityHint, type DnsRecord, type User } from '../api/client';
 import {
@@ -91,11 +91,19 @@ export default function BusinessSetup() {
   const [step, setStep] = useState(1); // 1: DB+API, 2: Domain, 3: Verify scan, 4: Done
 
   // Step 1 — Infrastructure
-  const [dbProvider, setDbProvider] = useState('postgresql');
+  const [dbProvider, setDbProvider] = useState('neon');
   const [customDbUrl, setCustomDbUrl] = useState('');
-  const [apiProvider, setApiProvider] = useState('sendgrid');
+  const [apiProvider, setApiProvider] = useState('resend');
   const [customApiUrl, setCustomApiUrl] = useState('');
   const [apiKey, setApiKey] = useState('');
+
+  const [copiedValue, setCopiedValue] = useState<string | null>(null);
+
+  const handleCopy = (text: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedValue(text);
+    setTimeout(() => setCopiedValue(null), 2000);
+  };
 
   // Step 2 — Domain
   const [domainInput, setDomainInput] = useState('');
@@ -570,8 +578,19 @@ export default function BusinessSetup() {
                         <td><span className="dns-type">{rec.type}</span></td>
                         <td className="dns-name">{rec.name}</td>
                         <td className="dns-value">
-                          {rec.value}
-                          {rec.priority ? ` (priority ${rec.priority})` : ''}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'space-between' }}>
+                            <span>
+                              {rec.value}
+                              {rec.priority ? ` (priority ${rec.priority})` : ''}
+                            </span>
+                            <button
+                              className="btn btn-ghost btn-icon"
+                              onClick={() => handleCopy(`${rec.value}${rec.priority ? ` ${rec.priority}` : ''}`)}
+                              title="Copy value"
+                            >
+                              {copiedValue === `${rec.value}${rec.priority ? ` ${rec.priority}` : ''}` ? <Check size={14} color="var(--success)" /> : <Copy size={14} />}
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -627,8 +646,19 @@ export default function BusinessSetup() {
                         <td><span className="dns-type">{rec.recordType}</span></td>
                         <td className="dns-name">{rec.name}</td>
                         <td className="dns-value">
-                          {rec.value}
-                          {rec.priority ? ` (priority ${rec.priority})` : ''}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'space-between' }}>
+                            <span>
+                              {rec.value}
+                              {rec.priority ? ` (priority ${rec.priority})` : ''}
+                            </span>
+                            <button
+                              className="btn btn-ghost btn-icon"
+                              onClick={() => handleCopy(`${rec.value}${rec.priority ? ` ${rec.priority}` : ''}`)}
+                              title="Copy value"
+                            >
+                              {copiedValue === `${rec.value}${rec.priority ? ` ${rec.priority}` : ''}` ? <Check size={14} color="var(--success)" /> : <Copy size={14} />}
+                            </button>
+                          </div>
                         </td>
                         <td>{rec.status || 'pending'}</td>
                       </tr>
@@ -662,19 +692,15 @@ export default function BusinessSetup() {
 
       {showLogoutConfirm && (
         <div className="modal-overlay" onClick={() => setShowLogoutConfirm(false)}>
-          <div className="modal-content" onClick={e => e.stopPropagation()}>
-            <div className="modal-header">
-              <h2>Sign Out</h2>
-              <button className="icon-button" onClick={() => setShowLogoutConfirm(false)}>
-                <LogOut size={20} />
-              </button>
+          <div className="logout-confirm-modal glass-card animate-scale" onClick={e => e.stopPropagation()}>
+            <div className="logout-confirm-icon">
+              <LogOut size={40} color="var(--danger)" />
             </div>
-            <div className="modal-body">
-              <p>Are you sure you want to sign out of the workspace setup?</p>
-            </div>
-            <div className="modal-footer">
-              <button className="btn btn-ghost" onClick={() => setShowLogoutConfirm(false)}>Cancel</button>
-              <button className="btn btn-primary" onClick={handleLogout}>Sign Out</button>
+            <h3>Sign Out</h3>
+            <p>Are you sure you want to sign out of the workspace setup?</p>
+            <div className="logout-confirm-actions">
+              <button className="btn btn-secondary" onClick={() => setShowLogoutConfirm(false)}>Cancel</button>
+              <button className="btn btn-danger" onClick={handleLogout}><LogOut size={16} /> Yes, Sign Out</button>
             </div>
           </div>
         </div>

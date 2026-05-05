@@ -858,7 +858,7 @@ export default function BusinessDashboard() {
             </button>
             <button className={`folder-btn ${activeBizTab === 'mailboxes' ? 'active' : ''}`} onClick={() => { setActiveBizTab('mailboxes'); setSidebarOpen(false); }}>
               <Inbox size={17} />
-              <span className="folder-label">Alias Mailboxes</span>
+              <span className="folder-label">Business Mailboxes</span>
             </button>
             <button className={`folder-btn ${activeBizTab === 'groups' ? 'active' : ''}`} onClick={() => { setActiveBizTab('groups'); setSidebarOpen(false); }}>
               <Users size={17} />
@@ -1226,9 +1226,9 @@ export default function BusinessDashboard() {
                 <input className="input" value={mailboxLocalPart} onChange={(e) => setMailboxLocalPart(e.target.value)} placeholder="sales" />
                 <input className="input" value={mailboxDisplayName} onChange={(e) => setMailboxDisplayName(e.target.value)} placeholder="Sales Desk" />
                 <select className="input" value={mailboxKind} onChange={(e) => setMailboxKind(e.target.value as BusinessMailbox['kind'])}>
-                  <option value="mailbox">Mailbox</option>
-                  <option value="alias">Alias</option>
-                  <option value="shared">Shared</option>
+                  <option value="mailbox">User Mailbox</option>
+                  <option value="alias">Alias Address</option>
+                  <option value="shared">Shared Inbox</option>
                 </select>
                 <button className="btn btn-primary" type="submit"><Plus size={16} /> Add</button>
               </form>
