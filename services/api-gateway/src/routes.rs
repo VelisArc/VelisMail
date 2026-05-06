@@ -1931,13 +1931,14 @@ pub async fn send_mail(
 static POOLS: Lazy<Mutex<HashMap<String, PgPool>>> = Lazy::new(|| Mutex::new(HashMap::new()));
 
 async fn get_tenant_pool(db_url: &str) -> Result<PgPool, String> {
-    let pools = POOLS
-        .lock()
-        .map_err(|_| "Tenant pool cache lock poisoned".to_string())?;
-    if let Some(pool) = pools.get(db_url) {
-        return Ok(pool.clone());
+    if let Some(pool) = {
+        let pools = POOLS
+            .lock()
+            .map_err(|_| "Tenant pool cache lock poisoned".to_string())?;
+        pools.get(db_url).cloned()
+    } {
+        return Ok(pool);
     }
-    drop(pools);
 
     let pool = PgPoolOptions::new()
         .max_connections(5)
@@ -1945,10 +1946,13 @@ async fn get_tenant_pool(db_url: &str) -> Result<PgPool, String> {
         .await
         .map_err(|e| e.to_string())?;
 
-    let mut pools = POOLS
-        .lock()
-        .map_err(|_| "Tenant pool cache lock poisoned".to_string())?;
-    pools.insert(db_url.to_string(), pool.clone());
+    {
+        let mut pools = POOLS
+            .lock()
+            .map_err(|_| "Tenant pool cache lock poisoned".to_string())?;
+        pools.insert(db_url.to_string(), pool.clone());
+    }
+
     Ok(pool)
 }
 
