@@ -349,10 +349,10 @@ select.input option {
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
   padding: var(--space-4);
-  animation: fadeIn 0.2s var(--ease-out);
+  animation: overlayFadeIn 0.2s var(--ease-out);
 }
 
-@keyframes fadeIn {
+@keyframes overlayFadeIn {
   from { opacity: 0; }
   to { opacity: 1; }
 }
