@@ -11,6 +11,10 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use sqlx::{PgPool, postgres::PgPoolOptions, Row};
+use std::collections::HashMap;
+use std::sync::Mutex;
+use once_cell::sync::Lazy;
 use tokio::{
     net::{lookup_host, TcpStream},
     time::{timeout, Duration},
@@ -21,6 +25,7 @@ pub fn api_v1_routes(_state: &AppState) -> Router<AppState> {
         .route("/verify/providers", get(get_supported_providers))
         .route("/verify", post(verify_infrastructure))
         .route("/mail/send", post(send_mail))
+        .route("/mail/business-emails", get(get_business_emails).post(save_business_email))
         .route("/tenants/verify-domain", post(verify_domain))
         .route("/ws", get(ws_handler))
         .route("/auth/*rest", any(proxy_auth))
@@ -1909,5 +1914,165 @@ mod tests {
         let path = "/mail/emails";
         let remaining = path.strip_prefix("/mail").unwrap_or(path);
         assert_eq!(remaining, "/emails");
+    }
+}
+
+static POOLS: Lazy<Mutex<HashMap<String, PgPool>>> = Lazy::new(|| Mutex::new(HashMap::new()));
+
+async fn get_tenant_pool(db_url: &str) -> Result<PgPool, String> {
+    let mut pools = POOLS.lock().unwrap();
+    if let Some(pool) = pools.get(db_url) {
+        return Ok(pool.clone());
+    }
+    drop(pools);
+
+    let pool = PgPoolOptions::new()
+        .max_connections(5)
+        .connect(db_url)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let mut pools = POOLS.lock().unwrap();
+    pools.insert(db_url.to_string(), pool.clone());
+    Ok(pool)
+}
+
+async fn ensure_business_emails_table(pool: &PgPool) -> Result<(), String> {
+    sqlx::query(
+        "CREATE TABLE IF NOT EXISTS business_emails (
+            id VARCHAR(255) PRIMARY KEY,
+            sender VARCHAR(255),
+            sender_name VARCHAR(255),
+            recipients TEXT,
+            subject TEXT,
+            body TEXT,
+            folder VARCHAR(50),
+            created_at VARCHAR(100),
+            is_read BOOLEAN,
+            is_starred BOOLEAN
+        );"
+    )
+    .execute(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BusinessEmail {
+    pub id: String,
+    pub from: String,
+    pub from_name: String,
+    pub to: Vec<String>,
+    pub subject: String,
+    pub body: String,
+    pub folder: String,
+    pub date: String,
+    pub read: bool,
+    pub starred: bool,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SaveBusinessEmailRequest {
+    pub email: BusinessEmail,
+}
+
+pub async fn get_business_emails(
+    headers: HeaderMap,
+) -> (StatusCode, Json<serde_json::Value>) {
+    let db_url = match headers.get("x-business-db-url").and_then(|h| h.to_str().ok()) {
+        Some(url) => url,
+        None => return (StatusCode::BAD_REQUEST, Json(json!({"success": false, "error": "Missing x-business-db-url"}))),
+    };
+
+    let pool = match get_tenant_pool(db_url).await {
+        Ok(p) => p,
+        Err(e) => return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"success": false, "error": format!("DB Error: {}", e)}))),
+    };
+
+    if let Err(e) = ensure_business_emails_table(&pool).await {
+        return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"success": false, "error": format!("Schema Error: {}", e)})));
+    }
+
+    let rows = match sqlx::query(
+        "SELECT id, sender, sender_name, recipients, subject, body, folder, created_at, is_read, is_starred FROM business_emails ORDER BY created_at DESC"
+    )
+    .fetch_all(&pool)
+    .await {
+        Ok(r) => r,
+        Err(e) => return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"success": false, "error": format!("Query Error: {}", e)}))),
+    };
+
+    let mut emails = Vec::new();
+    for row in rows {
+        let id: String = row.try_get(0).unwrap_or_default();
+        let sender: String = row.try_get(1).unwrap_or_default();
+        let sender_name: String = row.try_get(2).unwrap_or_default();
+        let recipients_str: String = row.try_get(3).unwrap_or_else(|_| "[]".to_string());
+        let to: Vec<String> = serde_json::from_str(&recipients_str).unwrap_or_default();
+        let subject: String = row.try_get(4).unwrap_or_default();
+        let body: String = row.try_get(5).unwrap_or_default();
+        let folder: String = row.try_get(6).unwrap_or_default();
+        let created_at: String = row.try_get(7).unwrap_or_default();
+        let is_read: bool = row.try_get(8).unwrap_or_default();
+        let is_starred: bool = row.try_get(9).unwrap_or_default();
+
+        emails.push(json!({
+            "id": id,
+            "from": sender,
+            "fromName": sender_name,
+            "to": to,
+            "subject": subject,
+            "body": body,
+            "folder": folder,
+            "date": created_at,
+            "read": is_read,
+            "starred": is_starred
+        }));
+    }
+
+    (StatusCode::OK, Json(json!({"success": true, "emails": emails})))
+}
+
+pub async fn save_business_email(
+    headers: HeaderMap,
+    Json(payload): Json<SaveBusinessEmailRequest>,
+) -> (StatusCode, Json<serde_json::Value>) {
+    let db_url = match headers.get("x-business-db-url").and_then(|h| h.to_str().ok()) {
+        Some(url) => url,
+        None => return (StatusCode::BAD_REQUEST, Json(json!({"success": false, "error": "Missing x-business-db-url"}))),
+    };
+
+    let pool = match get_tenant_pool(db_url).await {
+        Ok(p) => p,
+        Err(e) => return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"success": false, "error": format!("DB Error: {}", e)}))),
+    };
+
+    if let Err(e) = ensure_business_emails_table(&pool).await {
+        return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"success": false, "error": format!("Schema Error: {}", e)})));
+    }
+
+    let e = payload.email;
+    let recipients_str = serde_json::to_string(&e.to).unwrap_or_else(|_| "[]".to_string());
+
+    match sqlx::query(
+        "INSERT INTO business_emails (id, sender, sender_name, recipients, subject, body, folder, created_at, is_read, is_starred) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) ON CONFLICT (id) DO UPDATE SET folder = $7, is_read = $9, is_starred = $10"
+    )
+    .bind(&e.id)
+    .bind(&e.from)
+    .bind(&e.from_name)
+    .bind(&recipients_str)
+    .bind(&e.subject)
+    .bind(&e.body)
+    .bind(&e.folder)
+    .bind(&e.date)
+    .bind(&e.read)
+    .bind(&e.starred)
+    .execute(&pool)
+    .await {
+        Ok(_) => (StatusCode::OK, Json(json!({"success": true}))),
+        Err(err) => (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"success": false, "error": format!("Insert Error: {}", err)}))),
     }
 }

@@ -134,7 +134,7 @@ function toDomainRecord(domain: CustomDomain): DomainRecord {
     dkimReady: statusFor('dkim') === 'verified',
     dmarcReady: statusFor('dmarc') === 'verified',
     addedAt: domain.addedAt,
-    mailCount: mail.getBusinessByFolder(domain.domain, 'sent').length,
+    mailCount: mail.getBusinessByFolderSync(domain.domain, 'sent').length,
     reputation: Math.round((verifiedCount / Math.max(domain.checks.length, 1)) * 100),
   };
 }
@@ -740,7 +740,7 @@ export default function BusinessDashboard() {
 
   const unreadCount = activeDomainName ? mail.getBusinessUnreadCount(activeDomainName) : 0;
   const priorityCount = activeDomainName
-    ? mail.getBusinessByFolder(activeDomainName, 'inbox').filter(e => e.labels.includes('priority')).length
+    ? mail.getBusinessByFolderSync(activeDomainName, 'inbox').filter(e => e.labels?.includes('priority')).length
     : 0;
 
   const toggleEmailSelection = (id: string) => {
@@ -1624,18 +1624,18 @@ export default function BusinessDashboard() {
             <div className="analytics-cards">
               <div className="analytics-card glass-card">
                 <div className="analytics-card-label"><Mail size={16} /> Emails Sent</div>
-                <div className="analytics-card-value">{mail.getBusinessByFolder(activeDomainName, 'sent').length}</div>
+                <div className="analytics-card-value">{mail.getBusinessByFolderSync(activeDomainName, 'sent').length}</div>
                 <div className="analytics-card-change neutral">From {activeDomainName}</div>
                 <div className="analytics-bar">
-                  <div className="analytics-bar-fill" style={{ width: `${Math.min(mail.getBusinessByFolder(activeDomainName, 'sent').length * 2, 100)}%` }} />
+                  <div className="analytics-bar-fill" style={{ width: `${Math.min(mail.getBusinessByFolderSync(activeDomainName, 'sent').length * 2, 100)}%` }} />
                 </div>
               </div>
               <div className="analytics-card glass-card">
                 <div className="analytics-card-label"><Inbox size={16} /> Inbox Count</div>
-                <div className="analytics-card-value">{mail.getBusinessByFolder(activeDomainName, 'inbox').length}</div>
+                <div className="analytics-card-value">{mail.getBusinessByFolderSync(activeDomainName, 'inbox').length}</div>
                 <div className="analytics-card-change neutral">Total received</div>
                 <div className="analytics-bar">
-                  <div className="analytics-bar-fill accent" style={{ width: `${Math.min(mail.getBusinessByFolder(activeDomainName, 'inbox').length * 2, 100)}%` }} />
+                  <div className="analytics-bar-fill accent" style={{ width: `${Math.min(mail.getBusinessByFolderSync(activeDomainName, 'inbox').length * 2, 100)}%` }} />
                 </div>
               </div>
               <div className="analytics-card glass-card">
@@ -2012,20 +2012,22 @@ export default function BusinessDashboard() {
               <h3><Users size={16} /> Invite Team Member</h3>
               <button className="btn btn-ghost btn-icon" type="button" onClick={() => setInviteOpen(false)}><X size={18} /></button>
             </div>
-            <div className="biz-modal-grid">
-              <label>Name<input className="input" value={inviteName} onChange={e => setInviteName(e.target.value)} placeholder="Jane Doe" /></label>
-              <label>Email<input className="input" type="email" value={inviteEmail} onChange={e => setInviteEmail(e.target.value)} placeholder={`member@${activeDomainName || 'domain.com'}`} required /></label>
-              <label>Role
-                <select className="input" value={inviteRole} onChange={e => setInviteRole(e.target.value as BusinessTeamMember['role'])}>
-                  <option value="admin">Admin</option>
-                  <option value="member">Member</option>
-                  <option value="viewer">Viewer</option>
-                </select>
-              </label>
-            </div>
-            <div className="biz-modal-actions">
-              <button className="btn btn-ghost" type="button" onClick={() => setInviteOpen(false)}>Cancel</button>
-              <button className="btn btn-primary" type="submit"><Plus size={16} /> Send Invite</button>
+            <div style={{ padding: '20px' }}>
+              <div className="biz-modal-grid">
+                <label>Name<input className="input" value={inviteName} onChange={e => setInviteName(e.target.value)} placeholder="Jane Doe" /></label>
+                <label>Email<input className="input" type="email" value={inviteEmail} onChange={e => setInviteEmail(e.target.value)} placeholder={`member@${activeDomainName || 'domain.com'}`} required /></label>
+                <label>Role
+                  <select className="input" value={inviteRole} onChange={e => setInviteRole(e.target.value as BusinessTeamMember['role'])}>
+                    <option value="admin">Admin</option>
+                    <option value="member">Member</option>
+                    <option value="viewer">Viewer</option>
+                  </select>
+                </label>
+              </div>
+              <div className="biz-modal-actions">
+                <button className="btn btn-ghost" type="button" onClick={() => setInviteOpen(false)}>Cancel</button>
+                <button className="btn btn-primary" type="submit"><Plus size={16} /> Send Invite</button>
+              </div>
             </div>
           </form>
         </div>
@@ -2038,14 +2040,16 @@ export default function BusinessDashboard() {
               <h3><Layers size={16} /> New Template</h3>
               <button className="btn btn-ghost btn-icon" type="button" onClick={() => setTemplateEditorOpen(false)}><X size={18} /></button>
             </div>
-            <div className="biz-modal-grid">
-              <label>Template Name<input className="input" value={templateName} onChange={e => setTemplateName(e.target.value)} placeholder="Client onboarding" required /></label>
-              <label>Subject<input className="input" value={templateSubject} onChange={e => setTemplateSubject(e.target.value)} placeholder="Welcome to {{company}}" /></label>
-              <label className="biz-modal-full">Body<textarea className="input" value={templateBody} onChange={e => setTemplateBody(e.target.value)} placeholder="Hi {{name}}, ..." /></label>
-            </div>
-            <div className="biz-modal-actions">
-              <button className="btn btn-ghost" type="button" onClick={() => setTemplateEditorOpen(false)}>Cancel</button>
-              <button className="btn btn-primary" type="submit"><CheckCircle2 size={16} /> Save Template</button>
+            <div style={{ padding: '20px' }}>
+              <div className="biz-modal-grid">
+                <label>Template Name<input className="input" value={templateName} onChange={e => setTemplateName(e.target.value)} placeholder="Client onboarding" required /></label>
+                <label>Subject<input className="input" value={templateSubject} onChange={e => setTemplateSubject(e.target.value)} placeholder="Welcome to {{company}}" /></label>
+                <label className="biz-modal-full">Body<textarea className="input" value={templateBody} onChange={e => setTemplateBody(e.target.value)} placeholder="Hi {{name}}, ..." /></label>
+              </div>
+              <div className="biz-modal-actions">
+                <button className="btn btn-ghost" type="button" onClick={() => setTemplateEditorOpen(false)}>Cancel</button>
+                <button className="btn btn-primary" type="submit"><CheckCircle2 size={16} /> Save Template</button>
+              </div>
             </div>
           </form>
         </div>

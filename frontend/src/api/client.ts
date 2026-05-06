@@ -1407,8 +1407,8 @@ export const mail = {
   },
 
   // Business-specific helpers — operate on emails related to a business domain
-  getBusinessByFolder(domain: string, folder: string): Email[] {
-    emailsCache = loadUserDB<Email[]>(STORAGE_KEYS.emails, SEED_EMAILS);
+  getBusinessByFolderSync(domain: string, folder: string): Email[] {
+    const emailsCache = loadUserDB<Email[]>(STORAGE_KEYS.emails, SEED_EMAILS);
     const normalizeDomain = (addr: string) => (addr && addr.includes('@')) ? addr.split('@')[1].toLowerCase() : '';
     return emailsCache.filter(e => {
       const folderMatches = folder === 'spam'
@@ -1417,6 +1417,35 @@ export const mail = {
       if (!folderMatches) return false;
       const fromDomain = normalizeDomain(e.from || '');
       const toDomains = (e.to || []).map(t => normalizeDomain(t));
+      return fromDomain === domain.toLowerCase() || toDomains.includes(domain.toLowerCase());
+    });
+  },
+
+  async getBusinessByFolder(domain: string, folder: string): Promise<Email[]> {
+    const session = auth.getSession();
+    let sourceEmails = loadUserDB<Email[]>(STORAGE_KEYS.emails, SEED_EMAILS);
+    
+    if (session?.businessDbUrl) {
+      try {
+        const response = await fetchAPI('/mail/business-emails', {
+          headers: { 'x-business-db-url': session.businessDbUrl }
+        });
+        if (response.success && Array.isArray(response.emails)) {
+          sourceEmails = response.emails;
+        }
+      } catch (err) {
+        console.error('Failed to fetch from business DB', err);
+      }
+    }
+
+    const normalizeDomain = (addr: string) => (addr && addr.includes('@')) ? addr.split('@')[1].toLowerCase() : '';
+    return sourceEmails.filter((e: Email) => {
+      const folderMatches = folder === 'spam'
+        ? (e.folder === 'spam' || isScamEmail(e)) && e.folder !== 'trash'
+        : e.folder === folder;
+      if (!folderMatches) return false;
+      const fromDomain = normalizeDomain(e.from || '');
+      const toDomains = (e.to || []).map((t: string) => normalizeDomain(t));
       return fromDomain === domain.toLowerCase() || toDomains.includes(domain.toLowerCase());
     });
   },
@@ -1501,6 +1530,14 @@ export const mail = {
     };
     emailsCache.unshift(email);
     saveUserDB(STORAGE_KEYS.emails, emailsCache);
+
+    if (session?.businessDbUrl) {
+      fetchAPI('/mail/business-emails', {
+        method: 'POST',
+        headers: { 'x-business-db-url': session.businessDbUrl },
+        body: JSON.stringify({ email })
+      }).catch(err => console.error('Failed to sync to business DB', err));
+    }
     businessMailboxes.touch(normalizedDomain, fromAddr);
     businessAudit.add({
       action: 'Sent business email',
@@ -1512,7 +1549,14 @@ export const mail = {
   },
 
   getBusinessUnreadCount(domain: string): number {
-    return this.getBusinessByFolder(domain, 'inbox').filter(e => e.unread).length;
+    emailsCache = loadUserDB<Email[]>(STORAGE_KEYS.emails, SEED_EMAILS);
+    const normalizeDomain = (addr: string) => (addr && addr.includes('@')) ? addr.split('@')[1].toLowerCase() : '';
+    return emailsCache.filter(e => {
+      if (e.folder !== 'inbox' || !e.unread) return false;
+      const fromDomain = normalizeDomain(e.from || '');
+      const toDomains = (e.to || []).map(t => normalizeDomain(t));
+      return fromDomain === domain.toLowerCase() || toDomains.includes(domain.toLowerCase());
+    }).length;
   },
 
   async send(to: string[], subject: string, body: string): Promise<Email> {
