@@ -53,7 +53,9 @@ impl JwtManager {
     }
 
     pub fn validate_token(&self, token: &str) -> Result<Claims> {
-        let data = decode::<Claims>(token, &self.decoding_key, &Validation::default())?;
+        let mut validation = Validation::default();
+        validation.validate_aud = false;
+        let data = decode::<Claims>(token, &self.decoding_key, &validation)?;
         Ok(data.claims)
     }
 

@@ -249,10 +249,12 @@ fn ensure_registration_recovery_verified(
         .filter(|value| !value.is_empty())
         .ok_or(StatusCode::UNAUTHORIZED)?;
 
+    let mut validation = Validation::default();
+    validation.validate_aud = false;
     let decoded = decode::<OtpVerificationClaims>(
         token,
         &DecodingKey::from_secret(state.config.otp_signing_secret.as_bytes()),
-        &Validation::default(),
+        &validation,
     )
     .map_err(|_| StatusCode::UNAUTHORIZED)?;
 
@@ -584,10 +586,12 @@ pub async fn verify_otp(
         .clone()
         .unwrap_or_else(|| "register".to_string());
 
+    let mut validation = Validation::default();
+    validation.validate_aud = false;
     let token = decode::<OtpChallengeClaims>(
         &request.challenge_token,
         &DecodingKey::from_secret(state.config.otp_signing_secret.as_bytes()),
-        &Validation::default(),
+        &validation,
     )
     .map_err(|_| StatusCode::UNAUTHORIZED)?;
 
@@ -663,10 +667,12 @@ pub async fn reset_password(
     request.validate().map_err(|_| StatusCode::BAD_REQUEST)?;
 
     let identifier = request.identifier.trim().to_lowercase();
+    let mut validation = Validation::default();
+    validation.validate_aud = false;
     let token = decode::<OtpVerificationClaims>(
         &request.verification_token,
         &DecodingKey::from_secret(state.config.otp_signing_secret.as_bytes()),
-        &Validation::default(),
+        &validation,
     )
     .map_err(|_| StatusCode::UNAUTHORIZED)?;
 
