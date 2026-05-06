@@ -1900,23 +1900,6 @@ pub async fn send_mail(
     (status, Json(response_json))
 }
 
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn nested_auth_path_rewrites_to_upstream_root() {
-        let path = "/auth/send-otp";
-        let remaining = path.strip_prefix("/auth").unwrap_or(path);
-        assert_eq!(remaining, "/send-otp");
-    }
-
-    #[test]
-    fn nested_mail_path_rewrites_to_upstream_root() {
-        let path = "/mail/emails";
-        let remaining = path.strip_prefix("/mail").unwrap_or(path);
-        assert_eq!(remaining, "/emails");
-    }
-}
-
 static POOLS: Lazy<Mutex<HashMap<String, PgPool>>> = Lazy::new(|| Mutex::new(HashMap::new()));
 
 async fn get_tenant_pool(db_url: &str) -> Result<PgPool, String> {
@@ -2078,3 +2061,20 @@ pub async fn save_business_email(
         Err(err) => (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"success": false, "error": format!("Insert Error: {}", err)}))),
     }
 }
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn nested_auth_path_rewrites_to_upstream_root() {
+        let path = "/auth/send-otp";
+        let remaining = path.strip_prefix("/auth").unwrap_or(path);
+        assert_eq!(remaining, "/send-otp");
+    }
+
+    #[test]
+    fn nested_mail_path_rewrites_to_upstream_root() {
+        let path = "/mail/emails";
+        let remaining = path.strip_prefix("/mail").unwrap_or(path);
+        assert_eq!(remaining, "/emails");
+    }
+}
+
