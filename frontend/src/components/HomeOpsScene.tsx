@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import type { BufferGeometry, Material, Mesh, Object3D } from 'three';
+import type { BufferGeometry, Material, Mesh, MeshBasicMaterial, Object3D, Vector3 } from 'three';
 
 export default function HomeOpsScene() {
   const hostRef = useRef<HTMLDivElement | null>(null);
@@ -164,7 +164,7 @@ export default function HomeOpsScene() {
         new THREE.MeshBasicMaterial({ color: 0xa78bfa, transparent: true, opacity: 0.1 }),
       ];
       const trails: Mesh[] = [];
-      packets.forEach((pkt, i) => {
+      packets.forEach((_pkt, i) => {
         const trail = new THREE.Mesh(trailGeometry, trailMaterials[i % 3]);
         root.add(trail);
         trails.push(trail);
@@ -229,7 +229,7 @@ export default function HomeOpsScene() {
       for (let hx = -4; hx <= 4; hx += 1.4) {
         for (let hy = -3; hy <= 3; hy += 1.2) {
           const offsetX = (Math.floor(hy / 1.2) % 2) * 0.7;
-          const hexPoints: THREE.Vector3[] = [];
+          const hexPoints: Vector3[] = [];
           for (let a = 0; a < 7; a++) {
             const angle = (a / 6) * Math.PI * 2;
             hexPoints.push(new THREE.Vector3(
@@ -379,7 +379,7 @@ export default function HomeOpsScene() {
         rings.forEach((ring, index) => {
           const scale = 1 + Math.sin(frame * 2.5 + index * 0.8) * 0.3;
           ring.scale.setScalar(scale);
-          const mat = ring.material as THREE.MeshBasicMaterial;
+          const mat = ring.material as MeshBasicMaterial;
           mat.opacity = 0.1 + Math.sin(frame * 2.5 + index * 0.8) * 0.06;
           ring.lookAt(camera.position);
         });
