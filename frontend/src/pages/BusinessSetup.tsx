@@ -4,6 +4,7 @@ import {
   Database, Mail, CheckCircle2, Server, Loader2, Lock, Globe,
   Zap, Shield, ArrowRight, ArrowLeft, XCircle, Wifi, LogOut, Copy, Check
 } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { auth, domains, fetchApiJsonDetailed, fetchApiResponse, getApiAvailabilityHint, type DnsRecord, type User } from '../api/client';
 import {
   DATABASE_PROVIDERS,
@@ -21,7 +22,7 @@ import './BusinessSetup.css';
 
 type VerifyStep = {
   label: string;
-  icon: any;
+  icon: LucideIcon;
   status: 'pending' | 'running' | 'success' | 'error';
   detail?: string;
   ms?: number;
@@ -70,7 +71,7 @@ function mapCheckToStep(check: RemoteVerificationCheck): VerifyStep {
 }
 
 function mapRuntimeCheckToStep(check: RuntimeVerificationCheck): VerifyStep {
-  const iconByKey: Record<string, any> = {
+  const iconByKey: Record<string, LucideIcon> = {
     request: Shield,
     database: Database,
     mailProvider: Mail,

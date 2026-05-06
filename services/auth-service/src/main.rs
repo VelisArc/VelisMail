@@ -8,7 +8,6 @@ use axum::{
     Router,
 };
 use tokio::net::TcpListener;
-use tower_http::cors::CorsLayer;
 use tracing::info;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
@@ -71,7 +70,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/change-password", post(handlers::change_password))
         .route("/token/refresh", post(handlers::refresh_token))
         .merge(protected_routes)
-        .layer(CorsLayer::permissive())
+        .layer(middleware::cors_layer())
         .layer(tower_http::trace::TraceLayer::new_for_http())
         .with_state(state);
 

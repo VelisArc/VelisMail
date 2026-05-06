@@ -809,7 +809,9 @@ async fn dispatch_via_provider(
                             "disposition": "attachment"
                         })
                     }).collect();
-                    req_body.as_object_mut().unwrap().insert("attachments".to_string(), json!(sg_atts));
+                    if let Some(object) = req_body.as_object_mut() {
+                        object.insert("attachments".to_string(), json!(sg_atts));
+                    }
                 }
             }
             client
@@ -842,7 +844,9 @@ async fn dispatch_via_provider(
                             "filename": a.filename
                         })
                     }).collect();
-                    req_body.as_object_mut().unwrap().insert("attachments".to_string(), json!(rs_atts));
+                    if let Some(object) = req_body.as_object_mut() {
+                        object.insert("attachments".to_string(), json!(rs_atts));
+                    }
                 }
             }
             client
@@ -874,7 +878,9 @@ async fn dispatch_via_provider(
                             "ContentType": a.mime_type
                         })
                     }).collect();
-                    req_body.as_object_mut().unwrap().insert("Attachments".to_string(), json!(pm_atts));
+                    if let Some(object) = req_body.as_object_mut() {
+                        object.insert("Attachments".to_string(), json!(pm_atts));
+                    }
                 }
             }
             client
@@ -908,7 +914,9 @@ async fn dispatch_via_provider(
                             "content": content
                         })
                     }).collect();
-                    req_body.as_object_mut().unwrap().insert("attachment".to_string(), json!(br_atts));
+                    if let Some(object) = req_body.as_object_mut() {
+                        object.insert("attachment".to_string(), json!(br_atts));
+                    }
                 }
             }
             client
@@ -965,25 +973,45 @@ async fn dispatch_via_provider(
                     }
                     raw_message.push_str(&format!("--{}--\n", boundary));
 
+                    let raw = aws_sdk_sesv2::types::RawMessage::builder()
+                        .data(aws_sdk_sesv2::primitives::Blob::new(raw_message.into_bytes()))
+                        .build()
+                        .map_err(|err| err.to_string())?;
                     aws_sdk_sesv2::types::EmailContent::builder()
-                        .raw(aws_sdk_sesv2::types::RawMessage::builder().data(aws_sdk_sesv2::primitives::Blob::new(raw_message.into_bytes())).build().unwrap())
+                        .raw(raw)
                         .build()
                 } else {
+                    let subject = aws_sdk_sesv2::types::Content::builder()
+                        .data(payload.subject.trim())
+                        .build()
+                        .map_err(|err| err.to_string())?;
+                    let text = aws_sdk_sesv2::types::Content::builder()
+                        .data(payload.body.clone())
+                        .build()
+                        .map_err(|err| err.to_string())?;
                     let message_builder = aws_sdk_sesv2::types::Message::builder()
-                        .subject(aws_sdk_sesv2::types::Content::builder().data(payload.subject.trim()).build().unwrap())
+                        .subject(subject)
                         .body(
                             aws_sdk_sesv2::types::Body::builder()
-                                .text(aws_sdk_sesv2::types::Content::builder().data(payload.body.clone()).build().unwrap())
+                                .text(text)
                                 .build()
                         );
                     aws_sdk_sesv2::types::EmailContent::builder().simple(message_builder.build()).build()
                 }
             } else {
+                let subject = aws_sdk_sesv2::types::Content::builder()
+                    .data(payload.subject.trim())
+                    .build()
+                    .map_err(|err| err.to_string())?;
+                let text = aws_sdk_sesv2::types::Content::builder()
+                    .data(payload.body.clone())
+                    .build()
+                    .map_err(|err| err.to_string())?;
                 let message_builder = aws_sdk_sesv2::types::Message::builder()
-                    .subject(aws_sdk_sesv2::types::Content::builder().data(payload.subject.trim()).build().unwrap())
+                    .subject(subject)
                     .body(
                         aws_sdk_sesv2::types::Body::builder()
-                            .text(aws_sdk_sesv2::types::Content::builder().data(payload.body.clone()).build().unwrap())
+                            .text(text)
                             .build()
                     );
                 aws_sdk_sesv2::types::EmailContent::builder().simple(message_builder.build()).build()
@@ -1903,7 +1931,9 @@ pub async fn send_mail(
 static POOLS: Lazy<Mutex<HashMap<String, PgPool>>> = Lazy::new(|| Mutex::new(HashMap::new()));
 
 async fn get_tenant_pool(db_url: &str) -> Result<PgPool, String> {
-    let pools = POOLS.lock().unwrap();
+    let pools = POOLS
+        .lock()
+        .map_err(|_| "Tenant pool cache lock poisoned".to_string())?;
     if let Some(pool) = pools.get(db_url) {
         return Ok(pool.clone());
     }
@@ -1915,7 +1945,9 @@ async fn get_tenant_pool(db_url: &str) -> Result<PgPool, String> {
         .await
         .map_err(|e| e.to_string())?;
 
-    let mut pools = POOLS.lock().unwrap();
+    let mut pools = POOLS
+        .lock()
+        .map_err(|_| "Tenant pool cache lock poisoned".to_string())?;
     pools.insert(db_url.to_string(), pool.clone());
     Ok(pool)
 }

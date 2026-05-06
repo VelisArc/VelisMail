@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 //! SMTP client for sending emails
 
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use lettre::{
     message::{header::ContentType, Mailbox},
     transport::smtp::authentication::Credentials,
@@ -41,12 +41,15 @@ impl SmtpClient {
         html_body: Option<String>,
         from: Option<String>,
     ) -> Result<()> {
+        let first_recipient = to
+            .first()
+            .ok_or_else(|| anyhow!("At least one recipient is required"))?;
         let from_addr = from.unwrap_or_else(|| self.from_email.clone());
         let from_mailbox = Mailbox::new(None, from_addr.parse()?);
 
         let mut builder = Message::builder()
             .from(from_mailbox)
-            .to(to.first().unwrap().parse()?)
+            .to(first_recipient.parse()?)
             .subject(&subject);
 
         // Add multiple recipients (simplified for sync transport)

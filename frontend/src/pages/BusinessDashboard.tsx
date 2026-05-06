@@ -14,6 +14,7 @@ import {
   Layers,
   List, Grid, SortAsc, SortDesc, Menu
 } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import {
   auth,
   businessAudit,
@@ -44,7 +45,7 @@ import './BusinessDashboard.css';
 type BizFolder = {
   id: string;
   label: string;
-  icon: any;
+  icon: LucideIcon;
   badge?: string;
 };
 

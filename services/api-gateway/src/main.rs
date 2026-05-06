@@ -21,8 +21,7 @@ use config::GatewayConfig;
 use state::AppState;
 
 /// Build a restrictive CORS layer from the configured FRONTEND_URL.
-/// Accepts comma-separated origins. Falls back to permissive ONLY when
-/// FRONTEND_URL is empty (local development).
+/// Accepts comma-separated origins and keeps localhost available for development.
 fn build_cors_layer(frontend_url: &str) -> CorsLayer {
     use axum::http::Method;
 
@@ -37,7 +36,20 @@ fn build_cors_layer(frontend_url: &str) -> CorsLayer {
 
     if frontend_url.is_empty() {
         tracing::warn!("FRONTEND_URL not set — CORS is permissive (development mode only)");
-        return CorsLayer::permissive();
+        return CorsLayer::new()
+            .allow_origin(AllowOrigin::list(vec![
+                HeaderValue::from_static("https://velismail.online"),
+                HeaderValue::from_static("http://localhost:5173"),
+                HeaderValue::from_static("http://127.0.0.1:5173"),
+            ]))
+            .allow_methods(methods)
+            .allow_headers(vec![
+                axum::http::header::AUTHORIZATION,
+                axum::http::header::ACCEPT,
+                axum::http::header::CONTENT_TYPE,
+            ])
+            .allow_credentials(true)
+            .max_age(std::time::Duration::from_secs(3600));
     }
 
     let origins: Vec<HeaderValue> = frontend_url
@@ -47,7 +59,16 @@ fn build_cors_layer(frontend_url: &str) -> CorsLayer {
 
     if origins.is_empty() {
         tracing::warn!("No valid CORS origins parsed from FRONTEND_URL — falling back to permissive");
-        return CorsLayer::permissive();
+        return CorsLayer::new()
+            .allow_origin(AllowOrigin::exact(HeaderValue::from_static("https://velismail.online")))
+            .allow_methods(methods)
+            .allow_headers(vec![
+                axum::http::header::AUTHORIZATION,
+                axum::http::header::ACCEPT,
+                axum::http::header::CONTENT_TYPE,
+            ])
+            .allow_credentials(true)
+            .max_age(std::time::Duration::from_secs(3600));
     }
 
     info!("CORS restricted to origins: {}", frontend_url);

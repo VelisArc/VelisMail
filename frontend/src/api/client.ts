@@ -25,7 +25,7 @@ const STORAGE_KEYS = {
 
 
 // In-memory store for session-only caching (satisfies private DB policy: no local disk persistence)
-const memoryDB: Record<string, any> = {};
+const memoryDB: Record<string, unknown> = {};
 
 function loadDB<T>(key: string, fallback: T): T {
   // STRICT PRIVATE DATA POLICY: Only persist auth session and theme to disk.
@@ -36,7 +36,7 @@ function loadDB<T>(key: string, fallback: T): T {
     } catch { return fallback; }
   }
   // For other keys, use pure memory cache (stateless on refresh, API-reliant)
-  return memoryDB[key] !== undefined ? memoryDB[key] : fallback;
+  return memoryDB[key] !== undefined ? memoryDB[key] as T : fallback;
 }
 
 function saveDB<T>(key: string, data: T) {
@@ -364,7 +364,7 @@ export function getPrimaryApiBase(): string {
   return getApiBaseCandidates()[0] || '';
 }
 
-export type ApiJsonDetailedResult<T = any> = {
+export type ApiJsonDetailedResult<T = unknown> = {
   ok: boolean;
   status: number;
   baseUrl: string;
@@ -473,7 +473,7 @@ export async function fetchApiResponse(endpoint: string, options: RequestInit = 
   throw lastError || new Error('Unable to reach the VelisMail API.');
 }
 
-export async function fetchApiJsonDetailed<T = any>(endpoint: string, options: RequestInit = {}): Promise<ApiJsonDetailedResult<T>> {
+export async function fetchApiJsonDetailed<T = unknown>(endpoint: string, options: RequestInit = {}): Promise<ApiJsonDetailedResult<T>> {
   const apiBaseCandidates = getApiBaseCandidates();
 
   if (apiBaseCandidates.length === 0) {
@@ -965,7 +965,7 @@ function normalizeSessionUser(session: User): User {
   return normalized;
 }
 
-function decodeJwtPayload(token: string): Record<string, any> {
+function decodeJwtPayload(token: string): Record<string, unknown> {
   try {
     const payload = token.split('.')[1] || '';
     const normalized = payload.replace(/-/g, '+').replace(/_/g, '/');
@@ -974,6 +974,11 @@ function decodeJwtPayload(token: string): Record<string, any> {
   } catch {
     return {};
   }
+}
+
+function stringFromRecord(record: Record<string, unknown>, key: string): string | undefined {
+  const value = record[key];
+  return typeof value === 'string' ? value : undefined;
 }
 
 async function fetchAuthenticatedProfile(): Promise<Partial<User>> {
@@ -1015,15 +1020,18 @@ function buildSessionUser(params: {
 }): User {
   const tokenPayload = decodeJwtPayload(params.token);
   const profile = params.profile || {};
-  const email = normalizeMailbox(profile.email || tokenPayload.email || params.email);
+  const tokenEmail = stringFromRecord(tokenPayload, 'email');
+  const tokenSubject = stringFromRecord(tokenPayload, 'sub');
+  const tokenTenantId = stringFromRecord(tokenPayload, 'tenant_id');
+  const email = normalizeMailbox(profile.email || tokenEmail || params.email);
   const domain = normalizeDomainInput(params.customDomain || email.split('@')[1] || params.existing?.businessDomain || '');
   const businessMailboxAddress = domain ? `admin@${domain}` : email;
 
   return normalizeSessionUser({
     ...params.existing,
     ...profile,
-    id: String(profile.id || tokenPayload.sub || params.existing?.id || `usr_${hashString(email)}`),
-    tenantId: String(profile.tenantId || tokenPayload.tenant_id || params.existing?.tenantId || ''),
+    id: String(profile.id || tokenSubject || params.existing?.id || `usr_${hashString(email)}`),
+    tenantId: String(profile.tenantId || tokenTenantId || params.existing?.tenantId || ''),
     email,
     displayName: String(profile.displayName || params.displayName || params.existing?.displayName || email.split('@')[0] || 'Business User'),
     plan: params.existing?.plan || 'Starter',

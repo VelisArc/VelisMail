@@ -204,7 +204,9 @@ impl CircuitBreaker {
                 if let Some(last_opened) = self.last_opened {
                     let now = Utc::now();
                     let elapsed = now - last_opened;
-                    if elapsed >= chrono::Duration::from_std(self.reset_timeout).unwrap() {
+                    let reset_timeout = chrono::Duration::from_std(self.reset_timeout)
+                        .unwrap_or_else(|_| chrono::Duration::seconds(i64::MAX));
+                    if elapsed >= reset_timeout {
                         // Transition to half-open
                         self.state = CircuitState::HalfOpen;
                         self.success_count = 0;

@@ -254,16 +254,17 @@ impl FolderManager {
 
     /// Delete a folder
     pub fn delete_folder(&mut self, folder_id: Uuid) -> Result<(), String> {
-        if let Some(folder) = self.folders.get(&folder_id) {
+        let parent_id = if let Some(folder) = self.folders.get(&folder_id) {
             if !folder.children.is_empty() {
                 return Err("Cannot delete folder with children".to_string());
             }
+            folder.parent_id
         } else {
             return Err("Folder not found".to_string());
-        }
+        };
 
         // Remove from parent
-        if let Some(parent_id) = self.folders.get(&folder_id).unwrap().parent_id {
+        if let Some(parent_id) = parent_id {
             if let Some(parent) = self.folders.get_mut(&parent_id) {
                 parent.children.retain(|id| id != &folder_id);
             }
@@ -354,4 +355,3 @@ impl LabelManager {
         self.labels.values().cloned().collect()
     }
 }
-

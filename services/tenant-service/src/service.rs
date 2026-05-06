@@ -20,6 +20,10 @@ impl TenantService {
         Self { pool }
     }
 
+    fn current_period_start() -> chrono::NaiveDateTime {
+        Utc::now().date_naive().and_time(chrono::NaiveTime::MIN)
+    }
+
     /// Create a new tenant with isolation mechanisms
     pub async fn create_tenant(&self, request: CreateTenantRequest) -> Result<Tenant> {
         info!(
@@ -345,8 +349,7 @@ impl TenantService {
         resource_type: &str,
         amount: i64,
     ) -> Result<()> {
-        let now = Utc::now();
-        let period_start = now.date_naive().and_hms_opt(0, 0, 0).unwrap();
+        let period_start = Self::current_period_start();
         let period_end = period_start + Duration::days(1);
 
         // Set tenant context for RLS
@@ -410,8 +413,7 @@ impl TenantService {
             serde_json::from_value(tenant.limits).context("Failed to parse tenant limits")?;
 
         // Get current usage for today
-        let now = Utc::now();
-        let period_start = now.date_naive().and_hms_opt(0, 0, 0).unwrap();
+        let period_start = Self::current_period_start();
 
         let usage = sqlx::query_as::<_, ResourceUsage>(
             "SELECT * FROM resource_usage WHERE tenant_id = $1 AND period_start = $2",
@@ -455,8 +457,7 @@ impl TenantService {
             .await
             .context("Failed to set tenant context")?;
 
-        let now = Utc::now();
-        let period_start = now.date_naive().and_hms_opt(0, 0, 0).unwrap();
+        let period_start = Self::current_period_start();
 
         // Get resource usage for today
         let usage = sqlx::query_as::<_, ResourceUsage>(

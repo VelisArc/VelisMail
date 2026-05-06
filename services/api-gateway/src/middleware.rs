@@ -4,7 +4,7 @@ use crate::state::AppState;
 use axum::{
     body::Body,
     extract::{Request, State},
-    http::StatusCode,
+    http::{HeaderValue, StatusCode},
     middleware::Next,
     response::Response,
 };
@@ -80,27 +80,27 @@ pub async fn security_headers(
     // Prevent MIME-type sniffing
     headers.insert(
         axum::http::header::X_CONTENT_TYPE_OPTIONS,
-        "nosniff".parse().unwrap(),
+        HeaderValue::from_static("nosniff"),
     );
     // Prevent clickjacking
     headers.insert(
         axum::http::header::HeaderName::from_static("x-frame-options"),
-        "DENY".parse().unwrap(),
+        HeaderValue::from_static("DENY"),
     );
     // XSS protection for legacy browsers
     headers.insert(
         axum::http::header::HeaderName::from_static("x-xss-protection"),
-        "1; mode=block".parse().unwrap(),
+        HeaderValue::from_static("1; mode=block"),
     );
     // Referrer policy — don't leak full URLs on cross-origin requests
     headers.insert(
         axum::http::header::HeaderName::from_static("referrer-policy"),
-        "strict-origin-when-cross-origin".parse().unwrap(),
+        HeaderValue::from_static("strict-origin-when-cross-origin"),
     );
     // Permissions policy — disable unnecessary browser features
     headers.insert(
         axum::http::header::HeaderName::from_static("permissions-policy"),
-        "camera=(), microphone=(), geolocation=(), payment=()".parse().unwrap(),
+        HeaderValue::from_static("camera=(), microphone=(), geolocation=(), payment=()"),
     );
     // Remove server identity header
     headers.remove(axum::http::header::SERVER);
