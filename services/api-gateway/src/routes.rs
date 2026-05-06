@@ -1980,6 +1980,7 @@ pub struct SaveBusinessEmailRequest {
 }
 
 pub async fn get_business_emails(
+    State(_state): State<AppState>,
     headers: HeaderMap,
 ) -> impl IntoResponse {
     let db_url = match headers.get("x-business-db-url").and_then(|h| h.to_str().ok()) {
@@ -2037,6 +2038,7 @@ pub async fn get_business_emails(
 }
 
 pub async fn save_business_email(
+    State(_state): State<AppState>,
     headers: HeaderMap,
     Json(payload): Json<SaveBusinessEmailRequest>,
 ) -> impl IntoResponse {
