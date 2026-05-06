@@ -28,6 +28,7 @@ import {
   fetchApiJsonDetailed,
   isScamEmail,
   mail,
+  teamAccess,
   type BusinessAuditEntry,
   type BusinessGroup,
   type BusinessMailbox,
@@ -36,6 +37,7 @@ import {
   type ConnectionUsage,
   type CustomDomain,
   type Email,
+  type TeamAccessInvite,
 } from '../api/client';
 import Composer from '../components/Composer';
 import { useNavigation, useSessionStore } from '../store/sessionStore';
@@ -151,11 +153,25 @@ function formatRelative(iso: string): string {
 
 type BizTab = 'mail' | 'domains' | 'mailboxes' | 'groups' | 'team' | 'queue' | 'analytics' | 'audit' | 'templates' | 'settings';
 
+const ROLE_ALLOWED_TABS: Record<BusinessTeamMember['role'], BizTab[]> = {
+  admin: ['mail', 'domains', 'mailboxes', 'groups', 'team', 'queue', 'analytics', 'audit', 'templates', 'settings'],
+  member: ['mail', 'team', 'queue', 'analytics', 'templates'],
+  viewer: ['mail', 'team', 'analytics'],
+};
+
+function hasRoleAccess(role: BusinessTeamMember['role'], tab: BizTab): boolean {
+  return ROLE_ALLOWED_TABS[role].includes(tab);
+}
+
 export default function BusinessDashboard() {
   const navigate = useNavigate();
   const navigation = useNavigation();
   const updateNavigation = useSessionStore(state => state.updateNavigation);
   const user = auth.getSession();
+  const currentRole: BusinessTeamMember['role'] = user?.teamAccessRole || 'admin';
+  const canCompose = currentRole !== 'viewer';
+  const canManageWorkspace = currentRole === 'admin';
+  const canManageTemplates = currentRole === 'admin' || currentRole === 'member';
   const storedDomainRecords = domains.getAll().map(toDomainRecord);
   const initialDomainRecords = storedDomainRecords;
   const initialDomainId = initialDomainRecords.find(d => d.domain === user?.businessDomain)?.id || initialDomainRecords[0]?.id || '';
@@ -226,6 +242,8 @@ export default function BusinessDashboard() {
   const [inviteName, setInviteName] = useState('');
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState<'admin' | 'member' | 'viewer'>('member');
+  const [inviteExpiresHours, setInviteExpiresHours] = useState(24);
+  const [issuedInvite, setIssuedInvite] = useState<TeamAccessInvite | null>(null);
   const [templateEditorOpen, setTemplateEditorOpen] = useState(false);
   const [templateName, setTemplateName] = useState('');
   const [templateSubject, setTemplateSubject] = useState('');
@@ -252,6 +270,13 @@ export default function BusinessDashboard() {
       navigate('/business-setup');
     }
   }, [navigate, user]);
+
+  useEffect(() => {
+    if (!hasRoleAccess(currentRole, activeBizTab)) {
+      setActiveBizTab(ROLE_ALLOWED_TABS[currentRole][0]);
+      setSelectedEmail(null);
+    }
+  }, [activeBizTab, currentRole]);
 
   const { data: rawEmails = [], refetch: refetchEmails } = useEmails(activeDomainName, activeFolder);
 
@@ -335,6 +360,10 @@ export default function BusinessDashboard() {
   };
 
   const handleSend = async (toArg: string, subjectArg: string, bodyArg: string, attachmentsArg?: File[]) => {
+    if (!canCompose) {
+      showToast('Viewer access can read mail but cannot send messages.', 'error');
+      return;
+    }
     setComposeTo(toArg);
     setComposeSubject(subjectArg);
     setComposeBody(bodyArg);
@@ -387,6 +416,10 @@ export default function BusinessDashboard() {
 
   const handleReply = () => {
     if (!selectedEmail) return;
+    if (!canCompose) {
+      showToast('Viewer access cannot reply to messages.', 'error');
+      return;
+    }
     setComposeOpen(true);
     setComposeTo(selectedEmail.from);
     setComposeSubject(`Re: ${selectedEmail.subject.replace(/^Re:\s*/i, '')}`);
@@ -395,6 +428,10 @@ export default function BusinessDashboard() {
 
   const handleForward = () => {
     if (!selectedEmail) return;
+    if (!canCompose) {
+      showToast('Viewer access cannot forward messages.', 'error');
+      return;
+    }
     setComposeOpen(true);
     setComposeTo('');
     setComposeSubject(`Fwd: ${selectedEmail.subject.replace(/^Fwd:\s*/i, '')}`);
@@ -419,12 +456,32 @@ export default function BusinessDashboard() {
     showToast('Email moved to trash');
   };
 
-  const handleInviteMember = (email: string, name: string, role: 'admin' | 'member' | 'viewer') => {
+  const handleInviteMember = async (email: string, name: string, role: 'admin' | 'member' | 'viewer') => {
+    if (!user || !canManageWorkspace) {
+      showToast('Only admins can invite team members.', 'error');
+      return false;
+    }
+    let invite: TeamAccessInvite;
+    try {
+      invite = await teamAccess.createInvite({
+        issuer: user,
+        email,
+        name,
+        role,
+        expiresInHours: inviteExpiresHours,
+      });
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Unable to generate team access key.', 'error');
+      return false;
+    }
     const newMember: BusinessTeamMember = {
-      id: crypto.randomUUID(),
+      id: invite.id,
       name,
-      email,
+      email: invite.email,
       role,
+      status: 'pending',
+      inviteToken: invite.token,
+      inviteExpiresAt: invite.expiresAt,
       addedAt: new Date().toISOString(),
       lastActive: new Date().toISOString(),
     };
@@ -434,32 +491,44 @@ export default function BusinessDashboard() {
     businessAudit.add({
       action: 'Invited team member',
       actor: user?.email || 'current user',
-      target: email,
+      target: invite.email,
       severity: 'info',
     });
     setAuditLog(businessAudit.getAll());
-    showToast(`Invitation sent to ${email}`);
+    setIssuedInvite(invite);
+    navigator.clipboard.writeText(invite.token).catch(() => undefined);
+    showToast(`Access key generated for ${invite.email}`);
+    return true;
   };
 
-  const handleInviteSubmit = (e: React.FormEvent) => {
+  const handleInviteSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!inviteEmail.trim()) {
       showToast('Member email is required.', 'error');
       return;
     }
-    handleInviteMember(inviteEmail.trim(), inviteName.trim() || inviteEmail.split('@')[0], inviteRole);
+    const invited = await handleInviteMember(inviteEmail.trim(), inviteName.trim() || inviteEmail.split('@')[0], inviteRole);
+    if (!invited) return;
     setInviteOpen(false);
     setInviteName('');
     setInviteEmail('');
     setInviteRole('member');
+    setInviteExpiresHours(24);
   };
 
   const handleRemoveMember = (id: string) => {
+    if (!canManageWorkspace) {
+      showToast('Only admins can remove team members.', 'error');
+      return;
+    }
     const member = teamMembers.find((entry) => entry.id === id);
     const next = teamMembers.filter(m => m.id !== id);
     setTeamMembers(next);
     businessTeam.save(next);
     if (member) {
+      if (member.inviteToken) {
+        void teamAccess.revoke(member.inviteToken);
+      }
       businessAudit.add({
         action: 'Removed team member',
         actor: user?.email || 'current user',
@@ -472,6 +541,10 @@ export default function BusinessDashboard() {
   };
 
   const handleUpdateMemberRole = (id: string, role: 'admin' | 'member' | 'viewer') => {
+    if (!canManageWorkspace) {
+      showToast('Only admins can update team roles.', 'error');
+      return;
+    }
     const next = teamMembers.map(m => m.id === id ? { ...m, role } : m);
     setTeamMembers(next);
     businessTeam.save(next);
@@ -493,6 +566,10 @@ export default function BusinessDashboard() {
   };
 
   const handleRetryQueueItem = async (id: string) => {
+    if (!canCompose) {
+      showToast('Viewer access cannot retry deliveries.', 'error');
+      return;
+    }
     const item = mailQueue.find((entry) => entry.id === id);
     if (!item || !item.domain || !item.body) {
       showToast('Queue item is missing delivery details.', 'error');
@@ -519,18 +596,30 @@ export default function BusinessDashboard() {
   };
 
   const handlePauseQueueItem = (id: string) => {
+    if (!canManageWorkspace) {
+      showToast('Only admins can pause queued messages.', 'error');
+      return;
+    }
     businessQueue.mark(id, { status: 'deferred', error: 'Paused by workspace admin.' });
     refreshQueue();
     showToast('Message paused');
   };
 
   const handleDeleteQueueItem = (id: string) => {
+    if (!canManageWorkspace) {
+      showToast('Only admins can delete queued messages.', 'error');
+      return;
+    }
     businessQueue.remove(id);
     refreshQueue();
     showToast('Message deleted from queue');
   };
 
   const handleCreateTemplate = () => {
+    if (!canManageTemplates) {
+      showToast('Your role cannot create templates.', 'error');
+      return;
+    }
     setTemplateName('');
     setTemplateSubject('');
     setTemplateBody('');
@@ -539,6 +628,10 @@ export default function BusinessDashboard() {
 
   const handleTemplateSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!canManageTemplates) {
+      showToast('Your role cannot create templates.', 'error');
+      return;
+    }
     if (!templateName.trim()) {
       showToast('Template name is required.', 'error');
       return;
@@ -565,6 +658,10 @@ export default function BusinessDashboard() {
   };
 
   const handleUseTemplate = (template: BusinessTemplate) => {
+    if (!canCompose) {
+      showToast('Viewer access cannot compose from templates.', 'error');
+      return;
+    }
     setComposeOpen(true);
     setComposeSubject(template.subject);
     setComposeBody(template.body.replace(/\{\{name\}\}/g, ''));
@@ -579,6 +676,10 @@ export default function BusinessDashboard() {
   };
 
   const handleDeleteTemplate = (id: string) => {
+    if (!canManageTemplates) {
+      showToast('Your role cannot delete templates.', 'error');
+      return;
+    }
     const template = templates.find((entry) => entry.id === id);
     const next = templates.filter(t => t.id !== id);
     setTemplates(next);
@@ -601,6 +702,10 @@ export default function BusinessDashboard() {
 
   const handleCreateMailbox = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!canManageWorkspace) {
+      showToast('Only admins can create mailboxes.', 'error');
+      return;
+    }
     if (!mailboxLocalPart.trim()) {
       showToast('Please enter a mailbox address (local part).', 'error');
       return;
@@ -637,6 +742,10 @@ export default function BusinessDashboard() {
 
   const handleCreateGroup = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!canManageWorkspace) {
+      showToast('Only admins can create groups.', 'error');
+      return;
+    }
     if (!activeDomainName) {
       showToast('Select a business domain first.', 'error');
       return;
@@ -665,6 +774,10 @@ export default function BusinessDashboard() {
   };
 
   const handleRunDomainVerification = async (domainId: string) => {
+    if (!canManageWorkspace) {
+      showToast('Only admins can verify domains.', 'error');
+      return;
+    }
     const selectedDomain = domains.getById(domainId);
     if (!selectedDomain || !user?.businessDbUrl || !user.businessApiKey || !user.businessMailProvider) {
       showToast('Domain, database, or provider configuration is incomplete.', 'error');
@@ -767,6 +880,10 @@ export default function BusinessDashboard() {
 
   const handleAddDomain = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!canManageWorkspace) {
+      showToast('Only admins can add domains.', 'error');
+      return;
+    }
     if (!newDomainInput.trim()) return;
     setAddingDomain(true);
     const created = domains.addDomain(newDomainInput);
@@ -822,16 +939,20 @@ export default function BusinessDashboard() {
             </div>
           </div>
 
-          <button className="btn btn-primary compose-btn" onClick={() => setComposeOpen(true)}>
+          <button className="btn btn-primary compose-btn" onClick={() => canCompose ? setComposeOpen(true) : showToast('Viewer access cannot compose messages.', 'error')} disabled={!canCompose}>
             <Plus size={18} /> <span>Compose</span>
           </button>
 
           <nav className="sidebar-folders">
-            <div className="sidebar-section-title">Management</div>
-            <button className="folder-btn add-domain-shortcut" onClick={() => { setActiveBizTab('domains'); setShowAddDomain(true); setSidebarOpen(false); }}>
-              <Plus size={17} />
-              <span className="folder-label">Add Domain</span>
-            </button>
+            {canManageWorkspace && (
+              <>
+                <div className="sidebar-section-title">Management</div>
+                <button className="folder-btn add-domain-shortcut" onClick={() => { setActiveBizTab('domains'); setShowAddDomain(true); setSidebarOpen(false); }}>
+                  <Plus size={17} />
+                  <span className="folder-label">Add Domain</span>
+                </button>
+              </>
+            )}
             {/* Mail & Communications */}
             <div className="sidebar-section-title">Mail & Communications</div>
             <button className={`folder-btn ${activeBizTab === 'mail' && !activeFolder ? 'active' : ''}`} onClick={() => { setActiveBizTab('mail'); setSidebarOpen(false); }}>
@@ -858,51 +979,67 @@ export default function BusinessDashboard() {
                 })}
               </div>
             )}
-            <button className={`folder-btn ${activeBizTab === 'templates' ? 'active' : ''}`} onClick={() => { setActiveBizTab('templates'); setSidebarOpen(false); }}>
-              <Layers size={17} />
-              <span className="folder-label">Templates</span>
-            </button>
-            <button className={`folder-btn ${activeBizTab === 'queue' ? 'active' : ''}`} onClick={() => { setActiveBizTab('queue'); setSidebarOpen(false); }}>
-              <Server size={17} />
-              <span className="folder-label">Mail Queue</span>
-              {mailQueue.filter(q => q.status === 'queued' || q.status === 'sending').length > 0 && (
-                <span className="folder-count">{mailQueue.filter(q => q.status === 'queued' || q.status === 'sending').length}</span>
-              )}
-            </button>
+            {hasRoleAccess(currentRole, 'templates') && (
+              <button className={`folder-btn ${activeBizTab === 'templates' ? 'active' : ''}`} onClick={() => { setActiveBizTab('templates'); setSidebarOpen(false); }}>
+                <Layers size={17} />
+                <span className="folder-label">Templates</span>
+              </button>
+            )}
+            {hasRoleAccess(currentRole, 'queue') && (
+              <button className={`folder-btn ${activeBizTab === 'queue' ? 'active' : ''}`} onClick={() => { setActiveBizTab('queue'); setSidebarOpen(false); }}>
+                <Server size={17} />
+                <span className="folder-label">Mail Queue</span>
+                {mailQueue.filter(q => q.status === 'queued' || q.status === 'sending').length > 0 && (
+                  <span className="folder-count">{mailQueue.filter(q => q.status === 'queued' || q.status === 'sending').length}</span>
+                )}
+              </button>
+            )}
 
-            {/* Organization */}
-            <div className="sidebar-section-title" style={{ marginTop: '16px' }}>Organization</div>
-            <button className={`folder-btn ${activeBizTab === 'domains' ? 'active' : ''}`} onClick={() => { setActiveBizTab('domains'); setSidebarOpen(false); }}>
-              <Globe size={17} />
-              <span className="folder-label">Domains</span>
-            </button>
-            <button className={`folder-btn ${activeBizTab === 'mailboxes' ? 'active' : ''}`} onClick={() => { setActiveBizTab('mailboxes'); setSidebarOpen(false); }}>
-              <Inbox size={17} />
-              <span className="folder-label">Business Mailboxes</span>
-            </button>
-            <button className={`folder-btn ${activeBizTab === 'groups' ? 'active' : ''}`} onClick={() => { setActiveBizTab('groups'); setSidebarOpen(false); }}>
-              <Users size={17} />
-              <span className="folder-label">Groups</span>
-            </button>
-            <button className={`folder-btn ${activeBizTab === 'team' ? 'active' : ''}`} onClick={() => { setActiveBizTab('team'); setSidebarOpen(false); }}>
-              <Shield size={17} />
-              <span className="folder-label">Team Access</span>
-            </button>
+            {(canManageWorkspace || hasRoleAccess(currentRole, 'team')) && (
+              <div className="sidebar-section-title" style={{ marginTop: '16px' }}>Organization</div>
+            )}
+            {canManageWorkspace && (
+              <>
+                <button className={`folder-btn ${activeBizTab === 'domains' ? 'active' : ''}`} onClick={() => { setActiveBizTab('domains'); setSidebarOpen(false); }}>
+                  <Globe size={17} />
+                  <span className="folder-label">Domains</span>
+                </button>
+                <button className={`folder-btn ${activeBizTab === 'mailboxes' ? 'active' : ''}`} onClick={() => { setActiveBizTab('mailboxes'); setSidebarOpen(false); }}>
+                  <Inbox size={17} />
+                  <span className="folder-label">Business Mailboxes</span>
+                </button>
+                <button className={`folder-btn ${activeBizTab === 'groups' ? 'active' : ''}`} onClick={() => { setActiveBizTab('groups'); setSidebarOpen(false); }}>
+                  <Users size={17} />
+                  <span className="folder-label">Groups</span>
+                </button>
+              </>
+            )}
+            {hasRoleAccess(currentRole, 'team') && (
+              <button className={`folder-btn ${activeBizTab === 'team' ? 'active' : ''}`} onClick={() => { setActiveBizTab('team'); setSidebarOpen(false); }}>
+                <Shield size={17} />
+                <span className="folder-label">Team Access</span>
+              </button>
+            )}
 
-            {/* Administration */}
             <div className="sidebar-section-title" style={{ marginTop: '16px' }}>Administration</div>
-            <button className={`folder-btn ${activeBizTab === 'analytics' ? 'active' : ''}`} onClick={() => { setActiveBizTab('analytics'); setSidebarOpen(false); }}>
-              <BarChart3 size={17} />
-              <span className="folder-label">Analytics</span>
-            </button>
-            <button className={`folder-btn ${activeBizTab === 'audit' ? 'active' : ''}`} onClick={() => { setActiveBizTab('audit'); setSidebarOpen(false); }}>
-              <Activity size={17} />
-              <span className="folder-label">Audit Log</span>
-            </button>
-            <button className={`folder-btn ${activeBizTab === 'settings' ? 'active' : ''}`} onClick={() => { setActiveBizTab('settings'); setSidebarOpen(false); }}>
-              <Settings size={17} />
-              <span className="folder-label">Settings</span>
-            </button>
+            {hasRoleAccess(currentRole, 'analytics') && (
+              <button className={`folder-btn ${activeBizTab === 'analytics' ? 'active' : ''}`} onClick={() => { setActiveBizTab('analytics'); setSidebarOpen(false); }}>
+                <BarChart3 size={17} />
+                <span className="folder-label">Analytics</span>
+              </button>
+            )}
+            {canManageWorkspace && (
+              <>
+                <button className={`folder-btn ${activeBizTab === 'audit' ? 'active' : ''}`} onClick={() => { setActiveBizTab('audit'); setSidebarOpen(false); }}>
+                  <Activity size={17} />
+                  <span className="folder-label">Audit Log</span>
+                </button>
+                <button className={`folder-btn ${activeBizTab === 'settings' ? 'active' : ''}`} onClick={() => { setActiveBizTab('settings'); setSidebarOpen(false); }}>
+                  <Settings size={17} />
+                  <span className="folder-label">Settings</span>
+                </button>
+              </>
+            )}
 
 
           </nav>
@@ -944,7 +1081,7 @@ export default function BusinessDashboard() {
             </span>
           </div>
           <div style={{ marginLeft: 'auto', display: 'flex', gap: '8px' }}>
-            <button className="btn btn-icon btn-ghost" onClick={() => setComposeOpen(true)} title="Compose">
+            <button className="btn btn-icon btn-ghost" onClick={() => canCompose ? setComposeOpen(true) : showToast('Viewer access cannot compose messages.', 'error')} title="Compose" disabled={!canCompose}>
               <Plus size={20} />
             </button>
             <button className="btn btn-icon btn-ghost" onClick={() => setActiveBizTab('analytics')} title="Analytics">
@@ -1425,7 +1562,9 @@ export default function BusinessDashboard() {
                 </h2>
                 <p>Manage your organization team, roles, and access permissions.</p>
               </div>
-              <button className="btn btn-primary" onClick={() => setInviteOpen(true)}><Plus size={16} /> Invite Member</button>
+              {canManageWorkspace && (
+                <button className="btn btn-primary" onClick={() => { setIssuedInvite(null); setInviteOpen(true); }}><Plus size={16} /> Invite Member</button>
+              )}
             </div>
 
             <div className="team-filter-bar">
@@ -1447,16 +1586,25 @@ export default function BusinessDashboard() {
                   </div>
                   <div className="team-meta">
                     <div className="team-last-active"><Clock size={12} /> Active {formatRelative(member.lastActive)}</div>
-                    <div className="team-joined">Joined {formatRelative(member.addedAt)}</div>
+                    <div className="team-joined">
+                      {member.status === 'pending' && member.inviteExpiresAt
+                        ? `Invite expires ${formatRelative(member.inviteExpiresAt)}`
+                        : `Joined ${formatRelative(member.addedAt)}`}
+                    </div>
                   </div>
                   <span className={`badge ${member.role === 'admin' ? 'badge-accent' : member.role === 'member' ? 'badge-primary' : 'badge-secondary'}`}>{member.role}</span>
                   <div className="team-actions">
-                    <select className="input input-sm role-select" value={member.role} onChange={e => handleUpdateMemberRole(member.id, e.target.value as BusinessTeamMember['role'])}>
-                      <option value="admin">Admin</option>
-                      <option value="member">Member</option>
-                      <option value="viewer">Viewer</option>
-                    </select>
-                    <button className="btn btn-ghost btn-sm" onClick={() => handleRemoveMember(member.id)}><XCircle size={14} /></button>
+                    {member.inviteToken && <button className="btn btn-ghost btn-sm" onClick={() => copyToClipboard(member.inviteToken || '')}><Copy size={14} /></button>}
+                    {canManageWorkspace && (
+                      <>
+                        <select className="input input-sm role-select" value={member.role} onChange={e => handleUpdateMemberRole(member.id, e.target.value as BusinessTeamMember['role'])}>
+                          <option value="admin">Admin</option>
+                          <option value="member">Member</option>
+                          <option value="viewer">Viewer</option>
+                        </select>
+                        <button className="btn btn-ghost btn-sm" onClick={() => handleRemoveMember(member.id)}><XCircle size={14} /></button>
+                      </>
+                    )}
                   </div>
                 </div>
               ))}
@@ -2024,6 +2172,24 @@ export default function BusinessDashboard() {
                     <option value="viewer">Viewer</option>
                   </select>
                 </label>
+                <label>Expires
+                  <select className="input" value={inviteExpiresHours} onChange={e => setInviteExpiresHours(Number(e.target.value))}>
+                    <option value={1}>1 hour</option>
+                    <option value={24}>24 hours</option>
+                    <option value={72}>3 days</option>
+                    <option value={168}>7 days</option>
+                  </select>
+                </label>
+                {issuedInvite && (
+                  <label className="biz-modal-full">Generated Access Key
+                    <div className="invite-token-row">
+                      <code>{issuedInvite.token}</code>
+                      <button className="btn btn-ghost btn-sm" type="button" onClick={() => copyToClipboard(issuedInvite.token)}>
+                        <Copy size={14} /> Copy
+                      </button>
+                    </div>
+                  </label>
+                )}
               </div>
               <div className="biz-modal-actions">
                 <button className="btn btn-ghost" type="button" onClick={() => setInviteOpen(false)}>Cancel</button>

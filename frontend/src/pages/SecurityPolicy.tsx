@@ -41,6 +41,9 @@ export default function SecurityPolicy() {
             <p>
               We utilize Zero-Knowledge Proofs (ZKP) to authenticate your credentials. Passwords are never sent to our servers. Instead, your client generates a cryptographic proof of your password, which our Rust-backend verifies without ever learning the actual string. This makes server-side credential stuffing impossible.
             </p>
+            <p>
+              Team Access sessions require a scoped invite key, exact email match, OTP verification, and role-based authorization before dashboard access is granted. Invited users inherit only the workspace configuration and permissions assigned by the administrator.
+            </p>
           </section>
 
           <section>

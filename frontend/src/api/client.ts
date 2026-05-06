@@ -23,6 +23,8 @@ const STORAGE_KEYS = {
   signatures: 'velismail_signatures',
 };
 
+const TEAM_INVITES_KEY = 'velismail_team_access_invites';
+
 
 // In-memory store for session-only caching (satisfies private DB policy: no local disk persistence)
 const memoryDB: Record<string, unknown> = {};
@@ -77,6 +79,9 @@ export type User = {
   businessMailProvider?: string;
   businessMailProviderEndpoint?: string;
   businessDomainVerified?: boolean;
+  teamAccessRole?: 'admin' | 'member' | 'viewer';
+  teamAccessInviteId?: string;
+  teamAccessOwnerEmail?: string;
   dkimStatus?: 'pending' | 'verified' | 'failed';
   spfStatus?: 'pending' | 'verified' | 'failed';
   dmarcStatus?: 'pending' | 'verified' | 'failed';
@@ -171,8 +176,37 @@ export type BusinessTeamMember = {
   name: string;
   email: string;
   role: 'admin' | 'member' | 'viewer';
+  status?: 'pending' | 'active' | 'expired' | 'revoked';
+  inviteToken?: string;
+  inviteExpiresAt?: string;
   addedAt: string;
   lastActive: string;
+};
+
+export type TeamAccessInvite = {
+  id: string;
+  token: string;
+  email: string;
+  name: string;
+  role: 'admin' | 'member' | 'viewer';
+  status: 'pending' | 'accepted' | 'expired' | 'revoked';
+  createdAt: string;
+  expiresAt: string;
+  acceptedAt?: string;
+  issuerEmail: string;
+  workspace: Pick<User,
+    'tenantId' |
+    'displayName' |
+    'businessDomain' |
+    'businessDbUrl' |
+    'businessApiKey' |
+    'businessMailProvider' |
+    'businessMailProviderEndpoint' |
+    'businessMailboxAddress' |
+    'businessDomainVerified' |
+    'businessProfile' |
+    'isBusinessSetupComplete'
+  >;
 };
 
 export type BusinessTemplate = {
@@ -594,6 +628,127 @@ function saveUserDB<T>(key: string, data: T) {
   saveDB(userScopedKey(key), data);
 }
 
+function loadTeamAccessInvites(): TeamAccessInvite[] {
+  try {
+    const raw = sessionStorage.getItem(TEAM_INVITES_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveTeamAccessInvites(invites: TeamAccessInvite[]) {
+  sessionStorage.setItem(TEAM_INVITES_KEY, JSON.stringify(invites));
+}
+
+function generateTeamAccessToken(): string {
+  const bytes = new Uint8Array(24);
+  crypto.getRandomValues(bytes);
+  const encoded = btoa(String.fromCharCode(...bytes))
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '');
+  return `vmt_${encoded}`;
+}
+
+type TeamAccessApiResponse = {
+  success?: boolean;
+  invite?: TeamAccessInvite;
+  message?: string;
+  error?: string;
+};
+
+type CreateTeamAccessInviteParams = {
+  issuer: User;
+  email: string;
+  name: string;
+  role: BusinessTeamMember['role'];
+  expiresInHours: number;
+};
+
+function buildTeamAccessInvite(params: CreateTeamAccessInviteParams): TeamAccessInvite {
+  const email = normalizeMailbox(params.email);
+  const now = new Date();
+  return {
+    id: crypto.randomUUID(),
+    token: generateTeamAccessToken(),
+    email,
+    name: params.name.trim() || email.split('@')[0],
+    role: params.role,
+    status: 'pending',
+    createdAt: now.toISOString(),
+    expiresAt: new Date(now.getTime() + Math.max(params.expiresInHours, 1) * 60 * 60 * 1000).toISOString(),
+    issuerEmail: params.issuer.email,
+    workspace: {
+      tenantId: params.issuer.tenantId,
+      displayName: params.issuer.displayName,
+      businessDomain: params.issuer.businessDomain,
+      businessDbUrl: params.issuer.businessDbUrl,
+      businessApiKey: params.issuer.businessApiKey,
+      businessMailProvider: params.issuer.businessMailProvider,
+      businessMailProviderEndpoint: params.issuer.businessMailProviderEndpoint,
+      businessMailboxAddress: params.issuer.businessMailboxAddress,
+      businessDomainVerified: params.issuer.businessDomainVerified,
+      businessProfile: params.issuer.businessProfile,
+      isBusinessSetupComplete: params.issuer.isBusinessSetupComplete,
+    },
+  };
+}
+
+function cacheTeamAccessInvite(invite: TeamAccessInvite) {
+  const next = [
+    invite,
+    ...loadTeamAccessInvites().filter((entry) => entry.token !== invite.token && entry.email !== invite.email),
+  ];
+  saveTeamAccessInvites(next);
+}
+
+function hasTeamAccessWorkspace(invite?: TeamAccessInvite): invite is TeamAccessInvite {
+  return Boolean(invite?.workspace?.businessDbUrl && invite.workspace.businessApiKey && invite.workspace.businessMailProvider);
+}
+
+function validateCachedTeamAccessToken(token: string): { ok: boolean; invite?: TeamAccessInvite; error?: string } {
+  const normalized = token.trim();
+  const invites = loadTeamAccessInvites();
+  const invite = invites.find((entry) => entry.token === normalized);
+  if (!invite) {
+    return { ok: false, error: 'Invalid team access key.' };
+  }
+  if (invite.status === 'revoked') {
+    return { ok: false, error: 'This team access key was revoked.' };
+  }
+  if (new Date(invite.expiresAt).getTime() < Date.now()) {
+    invite.status = 'expired';
+    saveTeamAccessInvites(invites);
+    return { ok: false, error: 'This team access key has expired.' };
+  }
+  return { ok: true, invite };
+}
+
+async function postTeamAccess(endpoint: string, body: unknown): Promise<{
+  ok: boolean;
+  status: number;
+  data: TeamAccessApiResponse | null;
+} | null> {
+  try {
+    const response = await fetchApiJsonDetailed<TeamAccessApiResponse>(endpoint, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+    return {
+      ok: response.ok,
+      status: response.status,
+      data: response.data,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function teamAccessApiError(response: TeamAccessApiResponse | null, fallback: string): string {
+  return response?.message || response?.error || fallback;
+}
+
 function saveUserToPersistentStore(user: User) {
   const users = loadDB<Record<string, User>>('velismail_users_db', {});
   users[user.email] = user;
@@ -928,6 +1083,7 @@ function normalizeStoredDomain(domain: Partial<CustomDomain> & { id: string; dom
 
 function sessionHasMismatch(session: User | null): boolean {
   if (!session) return false;
+  if (session.teamAccessRole) return false;
   if (session.accountType === 'business') {
     // Only check mismatch if user has completed business setup.
     // New users or users mid-setup won't have domains stored yet — that's NOT a mismatch.
@@ -1406,6 +1562,44 @@ export const auth = {
 };
 
 // ---- Email Functions ----
+function normalizeBusinessEmailFromDb(raw: Partial<Email> & {
+  read?: boolean;
+  fromName?: string;
+  from_name?: string;
+  createdAt?: string;
+}): Email {
+  return {
+    id: String(raw.id || `bem_${Date.now()}`),
+    from: normalizeMailbox(raw.from || ''),
+    fromName: String(raw.fromName || raw.from_name || raw.from || 'Business Mail'),
+    to: Array.isArray(raw.to) ? raw.to.map(normalizeMailbox).filter(Boolean) : [],
+    subject: String(raw.subject || '(No subject)'),
+    body: String(raw.body || ''),
+    date: String(raw.date || raw.createdAt || new Date().toISOString()),
+    folder: String(raw.folder || 'inbox'),
+    unread: typeof raw.unread === 'boolean' ? raw.unread : !raw.read,
+    starred: Boolean(raw.starred),
+    labels: Array.isArray(raw.labels) ? raw.labels : [],
+    hasAttachment: Boolean(raw.hasAttachment),
+  };
+}
+
+function syncBusinessEmailToDb(email: Email) {
+  const session = auth.getSession();
+  if (!session?.businessDbUrl) return;
+  fetchAPI('/mail/business-emails', {
+    method: 'POST',
+    headers: { 'x-business-db-url': session.businessDbUrl },
+    body: JSON.stringify({
+      email: {
+        ...email,
+        read: !email.unread,
+        starred: email.starred,
+      },
+    }),
+  }).catch(err => console.error('Failed to sync business email to DB', err));
+}
+
 export const mail = {
   getByFolder(folder: string): Email[] {
     emailsCache = loadUserDB<Email[]>(STORAGE_KEYS.emails, SEED_EMAILS);
@@ -1439,7 +1633,8 @@ export const mail = {
           headers: { 'x-business-db-url': session.businessDbUrl }
         });
         if (response.success && Array.isArray(response.emails)) {
-          sourceEmails = response.emails;
+          sourceEmails = response.emails.map((entry: Partial<Email> & { read?: boolean }) => normalizeBusinessEmailFromDb(entry));
+          saveUserDB(STORAGE_KEYS.emails, sourceEmails);
         }
       } catch (err) {
         console.error('Failed to fetch from business DB', err);
@@ -1540,11 +1735,7 @@ export const mail = {
     saveUserDB(STORAGE_KEYS.emails, emailsCache);
 
     if (session?.businessDbUrl) {
-      fetchAPI('/mail/business-emails', {
-        method: 'POST',
-        headers: { 'x-business-db-url': session.businessDbUrl },
-        body: JSON.stringify({ email })
-      }).catch(err => console.error('Failed to sync to business DB', err));
+      syncBusinessEmailToDb(email);
     }
     businessMailboxes.touch(normalizedDomain, fromAddr);
     businessAudit.add({
@@ -1597,38 +1788,56 @@ export const mail = {
 
   delete(id: string) {
     const e = emailsCache.find(e => e.id === id);
-    if (e) e.folder = 'trash';
+    if (e) {
+      e.folder = 'trash';
+      syncBusinessEmailToDb(e);
+    }
     saveUserDB(STORAGE_KEYS.emails, emailsCache);
   },
 
   toggleStar(id: string): boolean {
     const e = emailsCache.find(e => e.id === id);
-    if (e) e.starred = !e.starred;
+    if (e) {
+      e.starred = !e.starred;
+      syncBusinessEmailToDb(e);
+    }
     saveUserDB(STORAGE_KEYS.emails, emailsCache);
     return e?.starred ?? false;
   },
 
   markRead(id: string) {
     const e = emailsCache.find(e => e.id === id);
-    if (e) e.unread = false;
+    if (e) {
+      e.unread = false;
+      syncBusinessEmailToDb(e);
+    }
     saveUserDB(STORAGE_KEYS.emails, emailsCache);
   },
 
   markUnread(id: string) {
     const e = emailsCache.find(e => e.id === id);
-    if (e) e.unread = true;
+    if (e) {
+      e.unread = true;
+      syncBusinessEmailToDb(e);
+    }
     saveUserDB(STORAGE_KEYS.emails, emailsCache);
   },
 
   archive(id: string) {
     const e = emailsCache.find(e => e.id === id);
-    if (e) e.folder = 'archive';
+    if (e) {
+      e.folder = 'archive';
+      syncBusinessEmailToDb(e);
+    }
     saveUserDB(STORAGE_KEYS.emails, emailsCache);
   },
 
   moveFolder(id: string, folder: string) {
     const e = emailsCache.find(e => e.id === id);
-    if (e) e.folder = folder;
+    if (e) {
+      e.folder = folder;
+      syncBusinessEmailToDb(e);
+    }
     saveUserDB(STORAGE_KEYS.emails, emailsCache);
   },
 
@@ -1854,6 +2063,160 @@ export const businessTeam = {
   },
   save(entries: BusinessTeamMember[]) {
     saveBusinessTeamMembers(entries);
+  },
+};
+
+export const teamAccess = {
+  async createInvite(params: CreateTeamAccessInviteParams): Promise<TeamAccessInvite> {
+    const localInvite = buildTeamAccessInvite(params);
+    const response = await postTeamAccess('/team/invites', {
+      email: localInvite.email,
+      name: localInvite.name,
+      role: localInvite.role,
+      expiresInHours: params.expiresInHours,
+      issuerEmail: localInvite.issuerEmail,
+      workspace: localInvite.workspace,
+    });
+
+    if (response?.ok && response.data?.invite) {
+      cacheTeamAccessInvite(response.data.invite);
+      return response.data.invite;
+    }
+    if (response && response.status !== 404) {
+      throw new Error(teamAccessApiError(response.data, 'Unable to create team access key.'));
+    }
+
+    cacheTeamAccessInvite(localInvite);
+    return localInvite;
+  },
+
+  async validateToken(token: string, email?: string): Promise<{ ok: boolean; invite?: TeamAccessInvite; error?: string }> {
+    const response = await postTeamAccess('/team/invites/validate', {
+      token: token.trim(),
+      email: email ? normalizeMailbox(email) : undefined,
+    });
+
+    if (response?.ok && response.data?.invite) {
+      if (hasTeamAccessWorkspace(response.data.invite)) {
+        cacheTeamAccessInvite(response.data.invite);
+      }
+      return { ok: true, invite: response.data.invite };
+    }
+    if (response && response.status !== 404) {
+      return { ok: false, error: teamAccessApiError(response.data, 'Invalid team access key.') };
+    }
+
+    return validateCachedTeamAccessToken(token);
+  },
+
+  async requestOtp(token: string, email: string): Promise<OtpSendResponse> {
+    const validation = await this.validateToken(token, email);
+    if (!validation.ok || !validation.invite) {
+      throw new Error(validation.error || 'Invalid team access key.');
+    }
+    const normalizedEmail = normalizeMailbox(email);
+    if (normalizedEmail !== validation.invite.email) {
+      throw new Error('This email is not assigned to the provided team access key.');
+    }
+    return auth.sendOtp({
+      email: normalizedEmail,
+      displayName: validation.invite.name,
+      purpose: 'register',
+    });
+  },
+
+  async completeLogin(params: {
+    token: string;
+    email: string;
+    otp: string;
+    challengeToken: string;
+  }): Promise<{ success: boolean; user?: User; error?: string }> {
+    try {
+      const validation = await this.validateToken(params.token, params.email);
+      if (!validation.ok || !validation.invite) {
+        throw new Error(validation.error || 'Invalid team access key.');
+      }
+      const normalizedEmail = normalizeMailbox(params.email);
+      if (normalizedEmail !== validation.invite.email) {
+        throw new Error('Team access key and email do not match.');
+      }
+      const otpResponse = await auth.verifyOtp({
+        email: normalizedEmail,
+        otp: params.otp,
+        challengeToken: params.challengeToken,
+        purpose: 'register',
+      });
+
+      let invite = validation.invite;
+      const completion = await postTeamAccess('/team/invites/complete', {
+        token: params.token.trim(),
+        email: normalizedEmail,
+        verificationToken: otpResponse.verificationToken,
+      });
+
+      if (completion?.ok && completion.data?.invite) {
+        invite = completion.data.invite;
+        if (hasTeamAccessWorkspace(invite)) {
+          cacheTeamAccessInvite(invite);
+        }
+      } else if (completion && completion.status !== 404) {
+        throw new Error(teamAccessApiError(completion.data, 'Unable to complete team access login.'));
+      }
+
+      if (!hasTeamAccessWorkspace(invite)) {
+        throw new Error('Team workspace configuration is unavailable. Ask the admin to generate a fresh access key.');
+      }
+
+      const user: User = normalizeSessionUser({
+        id: `team_${hashString(`${invite.id}:${normalizedEmail}`)}`,
+        tenantId: invite.workspace.tenantId,
+        email: normalizedEmail,
+        displayName: invite.name,
+        plan: 'Team Access',
+        accountType: 'business',
+        isSetupComplete: true,
+        isBusinessSetupComplete: true,
+        customDomain: invite.workspace.businessDomain,
+        businessDomain: invite.workspace.businessDomain,
+        businessDbUrl: invite.workspace.businessDbUrl,
+        businessApiKey: invite.workspace.businessApiKey,
+        businessMailProvider: invite.workspace.businessMailProvider,
+        businessMailProviderEndpoint: invite.workspace.businessMailProviderEndpoint,
+        businessMailboxAddress: normalizedEmail,
+        businessDomainVerified: invite.workspace.businessDomainVerified ?? true,
+        businessProfile: invite.workspace.businessProfile,
+        teamAccessRole: invite.role,
+        teamAccessInviteId: invite.id,
+        teamAccessOwnerEmail: invite.issuerEmail,
+        createdAt: new Date().toISOString(),
+      });
+
+      saveDB(STORAGE_KEYS.session, user);
+      saveUserToPersistentStore(user);
+      reloadAccountCaches();
+
+      const invites = loadTeamAccessInvites();
+      const saved = invites.find((entry) => entry.id === invite.id);
+      if (saved) {
+        saved.status = 'accepted';
+        saved.acceptedAt = new Date().toISOString();
+        saveTeamAccessInvites(invites);
+      }
+
+      return { success: true, user };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Team access login failed.' };
+    }
+  },
+
+  async revoke(token: string) {
+    await postTeamAccess('/team/invites/revoke', { token });
+    const invites = loadTeamAccessInvites();
+    const invite = invites.find((entry) => entry.token === token);
+    if (invite) {
+      invite.status = 'revoked';
+      saveTeamAccessInvites(invites);
+    }
   },
 };
 

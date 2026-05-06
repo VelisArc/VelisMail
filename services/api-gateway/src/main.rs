@@ -47,6 +47,7 @@ fn build_cors_layer(frontend_url: &str) -> CorsLayer {
                 axum::http::header::AUTHORIZATION,
                 axum::http::header::ACCEPT,
                 axum::http::header::CONTENT_TYPE,
+                axum::http::HeaderName::from_static("x-business-db-url"),
             ])
             .allow_credentials(true)
             .max_age(std::time::Duration::from_secs(3600));
@@ -66,6 +67,7 @@ fn build_cors_layer(frontend_url: &str) -> CorsLayer {
                 axum::http::header::AUTHORIZATION,
                 axum::http::header::ACCEPT,
                 axum::http::header::CONTENT_TYPE,
+                axum::http::HeaderName::from_static("x-business-db-url"),
             ])
             .allow_credentials(true)
             .max_age(std::time::Duration::from_secs(3600));
@@ -77,6 +79,7 @@ fn build_cors_layer(frontend_url: &str) -> CorsLayer {
         axum::http::header::AUTHORIZATION,
         axum::http::header::ACCEPT,
         axum::http::header::CONTENT_TYPE,
+        axum::http::HeaderName::from_static("x-business-db-url"),
     ];
 
     CorsLayer::new()

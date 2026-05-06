@@ -62,6 +62,7 @@ export default function Privacy() {
             </p>
             <ul>
               <li><strong>Account Data:</strong> Email addresses and domain names used to provision your workspace.</li>
+              <li><strong>Team Access Data:</strong> Invite email addresses, role assignments, token expiry timestamps, and OTP verification state required to enforce delegated access.</li>
               <li><strong>Payment Data:</strong> Processed entirely by Stripe; we do not store your credit card information.</li>
               <li><strong>Routing Metadata:</strong> Sender, recipient, and timestamps necessary for the SMTP/IMAP protocols to deliver messages.</li>
             </ul>

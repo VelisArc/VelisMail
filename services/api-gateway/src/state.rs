@@ -4,9 +4,11 @@ use crate::config::GatewayConfig;
 use anyhow::Result;
 use axum::extract::FromRef;
 use reqwest::Client;
-use std::sync::Arc;
+use serde_json::Value;
+use std::{collections::HashMap, sync::Arc};
 use std::time::Duration;
 use tokio::sync::Semaphore;
+use tokio::sync::RwLock;
 
 #[derive(Clone, FromRef)]
 pub struct AppState {
@@ -14,6 +16,7 @@ pub struct AppState {
     pub http_client: Client,
     pub rate_limiter: Arc<Semaphore>,
     pub rate_limit_capacity: usize,
+    pub team_invites: Arc<RwLock<HashMap<String, Value>>>,
 }
 
 impl AppState {
@@ -47,6 +50,7 @@ impl AppState {
             http_client,
             rate_limiter,
             rate_limit_capacity,
+            team_invites: Arc::new(RwLock::new(HashMap::new())),
         })
     }
 }

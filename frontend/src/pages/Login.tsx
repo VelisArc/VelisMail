@@ -1,11 +1,13 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { Mail, Lock, Building2, ArrowRight, Eye, Loader2, ArrowLeft, Globe, Fingerprint } from 'lucide-react';
-import { auth } from '../api/client';
+import { Mail, Lock, Building2, ArrowRight, Eye, Loader2, ArrowLeft, Globe, Fingerprint, KeyRound, ShieldCheck } from 'lucide-react';
+import { auth, teamAccess, type TeamAccessInvite } from '../api/client';
 import './Login.css';
 
 type Mode = 'login' | 'register';
 type RegisterStep = 'form' | 'otp';
+type LoginAccessMode = 'password' | 'team';
+type TeamAccessStep = 'key' | 'email' | 'otp';
 function nextRouteForUser(user: { email?: string; isBusinessSetupComplete?: boolean }) {
   return user.isBusinessSetupComplete ? '/business' : '/business-setup';
 }
@@ -23,6 +25,7 @@ function normalizeDomain(value: string) {
 
 export default function Login() {
   const [mode, setMode] = useState<Mode>('login');
+  const [loginAccessMode, setLoginAccessMode] = useState<LoginAccessMode>('password');
   const [registerStep, setRegisterStep] = useState<RegisterStep>('form');
   const [forgotMode, setForgotMode] = useState(false);
 
@@ -34,6 +37,13 @@ export default function Login() {
   const [resetVerificationToken, setResetVerificationToken] = useState('');
   const [resetPassword, setResetPassword] = useState('');
   const [resetHint, setResetHint] = useState('');
+  const [teamStep, setTeamStep] = useState<TeamAccessStep>('key');
+  const [teamToken, setTeamToken] = useState('');
+  const [teamEmail, setTeamEmail] = useState('');
+  const [teamOtp, setTeamOtp] = useState('');
+  const [teamChallengeToken, setTeamChallengeToken] = useState('');
+  const [teamInvite, setTeamInvite] = useState<TeamAccessInvite | null>(null);
+  const [teamHint, setTeamHint] = useState('');
 
   const [regName, setRegName] = useState('');
   const [regRecoveryEmail, setRegRecoveryEmail] = useState('');
@@ -68,6 +78,67 @@ export default function Login() {
       }
     }
     setLoading(false);
+  };
+
+  const handleTeamKeySubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+    try {
+      const validation = await teamAccess.validateToken(teamToken);
+      if (!validation.ok || !validation.invite) {
+        throw new Error(validation.error || 'Invalid team access key.');
+      }
+      setTeamInvite(validation.invite);
+      setTeamEmail('');
+      setTeamOtp('');
+      setTeamChallengeToken('');
+      setTeamHint(`Key accepted for ${validation.invite.role} access. Verify the assigned email to continue.`);
+      setTeamStep('email');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Invalid team access key.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleTeamEmailSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+    try {
+      const response = await teamAccess.requestOtp(teamToken, teamEmail);
+      setTeamChallengeToken(response.challengeToken);
+      setTeamOtp('');
+      setTeamHint(`Verification code sent to ${response.maskedEmail} via ${response.provider}.`);
+      setTeamStep('otp');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unable to send team access OTP.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleTeamOtpSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+    try {
+      const res = await teamAccess.completeLogin({
+        token: teamToken,
+        email: teamEmail,
+        otp: teamOtp,
+        challengeToken: teamChallengeToken,
+      });
+      if (!res.success || !res.user) {
+        throw new Error(res.error || 'Team access login failed.');
+      }
+      navigate('/business');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Invalid team access OTP.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const sendRegistrationOtp = async () => {
@@ -276,6 +347,14 @@ export default function Login() {
     setResetVerificationToken('');
     setResetPassword('');
     setResetHint('');
+    setLoginAccessMode('password');
+    setTeamStep('key');
+    setTeamToken('');
+    setTeamEmail('');
+    setTeamOtp('');
+    setTeamChallengeToken('');
+    setTeamInvite(null);
+    setTeamHint('');
   };
 
   return (
@@ -324,24 +403,93 @@ export default function Login() {
 
               {!forgotMode ? (
                 <>
-              <form onSubmit={handleLogin} className="login-form" autoComplete="off">
-                <div className="form-group">
-                  <label htmlFor="login-email">Workspace Email</label>
-                  <input id="login-email" type="text" className="input" placeholder="admin@yourcompany.com"
-                    name="velismail-login-identifier" autoComplete="username" required value={loginIdentifier} onChange={e => setLoginIdentifier(e.target.value)} autoFocus />
-                </div>
-                <div className="form-group">
-                  <label htmlFor="login-pass">Password</label>
-                  <input id="login-pass" type="password" className="input" placeholder="Enter password"
-                    name="velismail-login-password" autoComplete="current-password" required value={loginPassword} onChange={e => setLoginPassword(e.target.value)} />
-                </div>
-
-                    {error && <div className="form-error">{error}</div>}
-
-                    <button type="submit" className="btn btn-primary w-full" disabled={loading}>
-                      {loading ? <Loader2 size={18} className="animate-spin" /> : <>Sign In <ArrowRight size={18} /></>}
+                  <div className="access-mode-switch">
+                    <button
+                      type="button"
+                      className={loginAccessMode === 'password' ? 'active' : ''}
+                      onClick={() => { setLoginAccessMode('password'); setError(''); }}
+                    >
+                      <Lock size={15} /> Password
                     </button>
-                  </form>
+                    <button
+                      type="button"
+                      className={loginAccessMode === 'team' ? 'active' : ''}
+                      onClick={() => { setLoginAccessMode('team'); setError(''); }}
+                    >
+                      <KeyRound size={15} /> Team Access
+                    </button>
+                  </div>
+
+                  {loginAccessMode === 'password' ? (
+                    <form onSubmit={handleLogin} className="login-form" autoComplete="off">
+                      <div className="form-group">
+                        <label htmlFor="login-email">Workspace Email</label>
+                        <input id="login-email" type="text" className="input" placeholder="admin@yourcompany.com"
+                          name="velismail-login-identifier" autoComplete="username" required value={loginIdentifier} onChange={e => setLoginIdentifier(e.target.value)} autoFocus />
+                      </div>
+                      <div className="form-group">
+                        <label htmlFor="login-pass">Password</label>
+                        <input id="login-pass" type="password" className="input" placeholder="Enter password"
+                          name="velismail-login-password" autoComplete="current-password" required value={loginPassword} onChange={e => setLoginPassword(e.target.value)} />
+                      </div>
+
+                      {error && <div className="form-error">{error}</div>}
+
+                      <button type="submit" className="btn btn-primary w-full" disabled={loading}>
+                        {loading ? <Loader2 size={18} className="animate-spin" /> : <>Sign In <ArrowRight size={18} /></>}
+                      </button>
+                    </form>
+                  ) : (
+                    <>
+                      {teamHint && <div className="form-success team-access-hint"><ShieldCheck size={15} /> {teamHint}</div>}
+                      {teamInvite && (
+                        <div className="team-invite-summary">
+                          <span>{teamInvite.name}</span>
+                          <strong>{teamInvite.role}</strong>
+                        </div>
+                      )}
+                      {teamStep === 'key' && (
+                        <form onSubmit={handleTeamKeySubmit} className="login-form" autoComplete="off">
+                          <div className="form-group">
+                            <label htmlFor="team-token">Team Access Key</label>
+                            <input id="team-token" type="password" className="input" placeholder="vmt_..."
+                              name="velismail-team-token" autoComplete="off" required value={teamToken} onChange={e => setTeamToken(e.target.value.trim())} autoFocus />
+                          </div>
+                          {error && <div className="form-error">{error}</div>}
+                          <button type="submit" className="btn btn-primary w-full">
+                            Continue <ArrowRight size={18} />
+                          </button>
+                        </form>
+                      )}
+                      {teamStep === 'email' && (
+                        <form onSubmit={handleTeamEmailSubmit} className="login-form" autoComplete="off">
+                          <div className="form-group">
+                            <label htmlFor="team-email">Assigned Email</label>
+                            <input id="team-email" type="email" className="input" placeholder="member@company.com"
+                              name="velismail-team-email" autoComplete="email" required value={teamEmail} onChange={e => setTeamEmail(e.target.value)} autoFocus />
+                          </div>
+                          {error && <div className="form-error">{error}</div>}
+                          <button type="submit" className="btn btn-primary w-full" disabled={loading}>
+                            {loading ? <Loader2 size={18} className="animate-spin" /> : <>Send OTP <ArrowRight size={18} /></>}
+                          </button>
+                        </form>
+                      )}
+                      {teamStep === 'otp' && (
+                        <form onSubmit={handleTeamOtpSubmit} className="login-form" autoComplete="off">
+                          <div className="form-group">
+                            <label htmlFor="team-otp">Verification Code</label>
+                            <input id="team-otp" type="text" className="input" placeholder="000000"
+                              name="velismail-team-otp" autoComplete="one-time-code" inputMode="numeric" maxLength={6}
+                              required value={teamOtp} onChange={e => setTeamOtp(e.target.value.replace(/\D/g, ''))} autoFocus />
+                          </div>
+                          {error && <div className="form-error">{error}</div>}
+                          <button type="submit" className="btn btn-primary w-full" disabled={loading}>
+                            {loading ? <Loader2 size={18} className="animate-spin" /> : <>Open Team Dashboard <ArrowRight size={18} /></>}
+                          </button>
+                        </form>
+                      )}
+                    </>
+                  )}
 
                   <div className="login-card-footer row-layout">
                     <button className="login-link" onClick={() => { setForgotMode(true); setError(''); setResetIdentifier(loginIdentifier); }}>

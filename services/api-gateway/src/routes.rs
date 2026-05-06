@@ -9,6 +9,7 @@ use axum::{
     routing::{any, get, post},
     Json, Router,
 };
+use jsonwebtoken::{decode, DecodingKey, Validation};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sqlx::{PgPool, postgres::PgPoolOptions, Row};
@@ -26,6 +27,10 @@ pub fn api_v1_routes(_state: &AppState) -> Router<AppState> {
         .route("/verify", post(verify_infrastructure))
         .route("/mail/send", post(send_mail))
         .route("/mail/business-emails", get(get_business_emails).post(save_business_email))
+        .route("/team/invites", post(create_team_invite))
+        .route("/team/invites/validate", post(validate_team_invite))
+        .route("/team/invites/complete", post(complete_team_invite))
+        .route("/team/invites/revoke", post(revoke_team_invite))
         .route("/tenants/verify-domain", post(verify_domain))
         .route("/ws", get(ws_handler))
         .route("/auth/*rest", any(proxy_auth))
@@ -1926,6 +1931,424 @@ pub async fn send_mail(
     };
 
     (status, Json(response_json))
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct TeamInviteWorkspace {
+    pub tenant_id: Option<String>,
+    pub display_name: Option<String>,
+    pub business_domain: Option<String>,
+    pub business_db_url: Option<String>,
+    pub business_api_key: Option<String>,
+    pub business_mail_provider: Option<String>,
+    pub business_mail_provider_endpoint: Option<String>,
+    pub business_mailbox_address: Option<String>,
+    pub business_domain_verified: Option<bool>,
+    pub business_profile: Option<Value>,
+    pub is_business_setup_complete: Option<bool>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateTeamInviteRequest {
+    pub email: String,
+    pub name: String,
+    pub role: String,
+    pub expires_in_hours: Option<i64>,
+    pub issuer_email: String,
+    pub workspace: TeamInviteWorkspace,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ValidateTeamInviteRequest {
+    pub token: String,
+    pub email: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CompleteTeamInviteRequest {
+    pub token: String,
+    pub email: String,
+    pub verification_token: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RevokeTeamInviteRequest {
+    pub token: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct TeamInviteRecord {
+    pub id: String,
+    pub token: String,
+    pub email: String,
+    pub name: String,
+    pub role: String,
+    pub status: String,
+    pub created_at: String,
+    pub expires_at: String,
+    pub accepted_at: Option<String>,
+    pub issuer_email: String,
+    pub workspace: TeamInviteWorkspace,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct TeamOtpVerificationClaims {
+    sub: String,
+    purpose: String,
+    verified_at: i64,
+    exp: i64,
+}
+
+fn normalize_team_email(value: &str) -> String {
+    value.trim().to_lowercase()
+}
+
+fn valid_team_role(value: &str) -> bool {
+    matches!(value, "admin" | "member" | "viewer")
+}
+
+async fn load_team_invite(state: &AppState, token: &str) -> Option<TeamInviteRecord> {
+    let value = {
+        let invites = state.team_invites.read().await;
+        invites.get(token).cloned()
+    }?;
+    serde_json::from_value(value).ok()
+}
+
+async fn set_team_invite_status(state: &AppState, token: &str, status: &str) {
+    let mut invites = state.team_invites.write().await;
+    if let Some(value) = invites.get_mut(token) {
+        value["status"] = Value::String(status.to_string());
+        if status == "accepted" {
+            value["acceptedAt"] = Value::String(chrono::Utc::now().to_rfc3339());
+        }
+    }
+}
+
+fn team_invite_expired(invite: &TeamInviteRecord) -> bool {
+    chrono::DateTime::parse_from_rfc3339(&invite.expires_at)
+        .map(|value| value.with_timezone(&chrono::Utc) < chrono::Utc::now())
+        .unwrap_or(true)
+}
+
+fn public_team_invite(invite: &TeamInviteRecord) -> Value {
+    json!({
+        "id": invite.id,
+        "token": invite.token,
+        "email": invite.email,
+        "name": invite.name,
+        "role": invite.role,
+        "status": invite.status,
+        "createdAt": invite.created_at,
+        "expiresAt": invite.expires_at,
+        "acceptedAt": invite.accepted_at,
+        "issuerEmail": invite.issuer_email
+    })
+}
+
+fn verify_team_otp_token(
+    state: &AppState,
+    email: &str,
+    verification_token: &str,
+) -> Result<(), StatusCode> {
+    if state.config.otp_signing_secret.trim().is_empty() {
+        tracing::error!("OTP_SIGNING_SECRET is required for Team Access completion");
+        return Err(StatusCode::SERVICE_UNAVAILABLE);
+    }
+
+    let mut validation = Validation::default();
+    validation.validate_aud = false;
+    let decoded = decode::<TeamOtpVerificationClaims>(
+        verification_token.trim(),
+        &DecodingKey::from_secret(state.config.otp_signing_secret.as_bytes()),
+        &validation,
+    )
+    .map_err(|_| StatusCode::UNAUTHORIZED)?;
+
+    if decoded.claims.purpose != "register" || decoded.claims.sub != email {
+        return Err(StatusCode::UNAUTHORIZED);
+    }
+
+    Ok(())
+}
+
+pub async fn create_team_invite(
+    State(state): State<AppState>,
+    Json(payload): Json<CreateTeamInviteRequest>,
+) -> (StatusCode, Json<Value>) {
+    let email = normalize_team_email(&payload.email);
+    let issuer_email = normalize_team_email(&payload.issuer_email);
+    let role = payload.role.trim().to_lowercase();
+
+    if !email.contains('@') || !issuer_email.contains('@') {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({
+                "success": false,
+                "message": "A valid invite email and issuer email are required."
+            })),
+        );
+    }
+    if !valid_team_role(&role) {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({
+                "success": false,
+                "message": "Role must be admin, member, or viewer."
+            })),
+        );
+    }
+
+    let now = chrono::Utc::now();
+    let expires_in_hours = payload.expires_in_hours.unwrap_or(24).clamp(1, 168);
+    let token = format!(
+        "vmt_{}{}",
+        uuid::Uuid::new_v4().simple(),
+        uuid::Uuid::new_v4().simple()
+    );
+    let invite = TeamInviteRecord {
+        id: uuid::Uuid::new_v4().to_string(),
+        token: token.clone(),
+        email,
+        name: if payload.name.trim().is_empty() {
+            payload.email
+                .split('@')
+                .next()
+                .unwrap_or("Team member")
+                .to_string()
+        } else {
+            payload.name.trim().to_string()
+        },
+        role,
+        status: "pending".to_string(),
+        created_at: now.to_rfc3339(),
+        expires_at: (now + chrono::Duration::hours(expires_in_hours)).to_rfc3339(),
+        accepted_at: None,
+        issuer_email,
+        workspace: payload.workspace,
+    };
+
+    let serialized = match serde_json::to_value(&invite) {
+        Ok(value) => value,
+        Err(err) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({
+                    "success": false,
+                    "message": format!("Failed to serialize invite: {err}")
+                })),
+            )
+        }
+    };
+
+    {
+        let mut invites = state.team_invites.write().await;
+        invites.insert(token, serialized);
+    }
+
+    (
+        StatusCode::OK,
+        Json(json!({
+            "success": true,
+            "invite": invite
+        })),
+    )
+}
+
+pub async fn validate_team_invite(
+    State(state): State<AppState>,
+    Json(payload): Json<ValidateTeamInviteRequest>,
+) -> (StatusCode, Json<Value>) {
+    let token = payload.token.trim();
+    if token.is_empty() {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({
+                "success": false,
+                "message": "Team access key is required."
+            })),
+        );
+    }
+
+    let invite = match load_team_invite(&state, token).await {
+        Some(value) => value,
+        None => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(json!({
+                    "success": false,
+                    "message": "Invalid team access key."
+                })),
+            )
+        }
+    };
+
+    if invite.status == "revoked" {
+        return (
+            StatusCode::FORBIDDEN,
+            Json(json!({
+                "success": false,
+                "message": "This team access key was revoked."
+            })),
+        );
+    }
+    if team_invite_expired(&invite) {
+        set_team_invite_status(&state, token, "expired").await;
+        return (
+            StatusCode::GONE,
+            Json(json!({
+                "success": false,
+                "message": "This team access key has expired."
+            })),
+        );
+    }
+
+    if let Some(email) = payload.email {
+        if normalize_team_email(&email) != invite.email {
+            return (
+                StatusCode::FORBIDDEN,
+                Json(json!({
+                    "success": false,
+                    "message": "This email is not assigned to the provided team access key."
+                })),
+            );
+        }
+    }
+
+    (
+        StatusCode::OK,
+        Json(json!({
+            "success": true,
+            "invite": public_team_invite(&invite)
+        })),
+    )
+}
+
+pub async fn complete_team_invite(
+    State(state): State<AppState>,
+    Json(payload): Json<CompleteTeamInviteRequest>,
+) -> (StatusCode, Json<Value>) {
+    let token = payload.token.trim();
+    let email = normalize_team_email(&payload.email);
+    if token.is_empty() || email.is_empty() {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({
+                "success": false,
+                "message": "Team access key and email are required."
+            })),
+        );
+    }
+
+    let invite = match load_team_invite(&state, token).await {
+        Some(value) => value,
+        None => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(json!({
+                    "success": false,
+                    "message": "Invalid team access key."
+                })),
+            )
+        }
+    };
+
+    if invite.status == "revoked" {
+        return (
+            StatusCode::FORBIDDEN,
+            Json(json!({
+                "success": false,
+                "message": "This team access key was revoked."
+            })),
+        );
+    }
+    if team_invite_expired(&invite) {
+        set_team_invite_status(&state, token, "expired").await;
+        return (
+            StatusCode::GONE,
+            Json(json!({
+                "success": false,
+                "message": "This team access key has expired."
+            })),
+        );
+    }
+    if email != invite.email {
+        return (
+            StatusCode::FORBIDDEN,
+            Json(json!({
+                "success": false,
+                "message": "Team access key and email do not match."
+            })),
+        );
+    }
+
+    if let Err(status) = verify_team_otp_token(&state, &email, &payload.verification_token) {
+        return (
+            status,
+            Json(json!({
+                "success": false,
+                "message": "OTP verification token is invalid or expired."
+            })),
+        );
+    }
+
+    set_team_invite_status(&state, token, "accepted").await;
+    let mut accepted_invite = invite;
+    accepted_invite.status = "accepted".to_string();
+    accepted_invite.accepted_at = Some(chrono::Utc::now().to_rfc3339());
+
+    (
+        StatusCode::OK,
+        Json(json!({
+            "success": true,
+            "invite": accepted_invite
+        })),
+    )
+}
+
+pub async fn revoke_team_invite(
+    State(state): State<AppState>,
+    Json(payload): Json<RevokeTeamInviteRequest>,
+) -> (StatusCode, Json<Value>) {
+    let token = payload.token.trim();
+    if token.is_empty() {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({
+                "success": false,
+                "message": "Team access key is required."
+            })),
+        );
+    }
+
+    let exists = {
+        let invites = state.team_invites.read().await;
+        invites.contains_key(token)
+    };
+    if !exists {
+        return (
+            StatusCode::NOT_FOUND,
+            Json(json!({
+                "success": false,
+                "message": "Team access key was not found."
+            })),
+        );
+    }
+
+    set_team_invite_status(&state, token, "revoked").await;
+
+    (
+        StatusCode::OK,
+        Json(json!({
+            "success": true
+        })),
+    )
 }
 
 static POOLS: Lazy<Mutex<HashMap<String, PgPool>>> = Lazy::new(|| Mutex::new(HashMap::new()));

@@ -42,6 +42,8 @@ export default function Cookies() {
               <li><strong>Authentication Tokens (JWT):</strong> Secure, HttpOnly cookies used to cryptographically verify your identity while navigating the dashboard.</li>
               <li><strong>Security and Anti-CSRF:</strong> Tokens used exclusively to prevent Cross-Site Request Forgery attacks against your account.</li>
               <li><strong>Local Storage (Cache):</strong> We use browser localStorage to temporarily cache encrypted ciphertext locally for offline reading and faster rendering. This is wiped upon logout.</li>
+              <li><strong>Team Access State:</strong> Short-lived invite keys, role metadata, and OTP challenge state may be stored in first-party browser storage so delegated sessions can be validated.</li>
+              <li><strong>Progressive Web App Cache:</strong> The service worker stores static application assets for installability and faster startup, but it does not cache private cross-origin mail API responses.</li>
             </ul>
           </section>
 

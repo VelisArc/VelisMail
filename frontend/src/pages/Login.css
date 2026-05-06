@@ -121,6 +121,62 @@
   font-size: 0.9rem; 
 }
 
+.access-mode-switch {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  padding: 6px;
+  margin-bottom: 20px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-lg);
+  background: var(--bg-surface-2);
+}
+
+.access-mode-switch button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 38px;
+  border-radius: var(--radius-md);
+  color: var(--text-muted);
+  font-weight: 700;
+  font-size: 0.86rem;
+}
+
+.access-mode-switch button.active {
+  color: var(--text-primary);
+  background: var(--bg-surface);
+  box-shadow: var(--shadow-sm);
+}
+
+.team-access-hint {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.team-invite-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-lg);
+  background: var(--bg-surface-2);
+  color: var(--text-secondary);
+}
+
+.team-invite-summary strong {
+  text-transform: uppercase;
+  color: var(--primary);
+  font-size: 0.76rem;
+  letter-spacing: 0.06em;
+}
+
 /* Form Styling */
 .login-form { 
   display: flex; 

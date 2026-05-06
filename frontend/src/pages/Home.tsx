@@ -21,6 +21,7 @@ import {
   ChevronDown
 } from 'lucide-react';
 import { auth, fetchApiResponse } from '../api/client';
+import HomeOpsScene from '../components/HomeOpsScene';
 import './Home.css';
 
 const features = [
@@ -215,6 +216,7 @@ export default function Home() {
               ))}
             </div>
           </div>
+          <HomeOpsScene />
         </div>
       </section>
 

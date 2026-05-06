@@ -11,6 +11,8 @@ pub struct GatewayConfig {
     pub frontend_url: String,
     /// JWT secret for gateway-level token verification on protected routes.
     pub jwt_secret: String,
+    /// Shared OTP signing secret used to validate auth-service OTP verification tokens.
+    pub otp_signing_secret: String,
     // Internal service URLs
     pub auth_service_url: String,
     pub mail_service_url: String,
@@ -27,6 +29,10 @@ impl GatewayConfig {
             .or_else(|| std::env::var("GATEWAY_PORT").ok().and_then(|p| p.parse().ok()))
             .unwrap_or(3000);
 
+        let jwt_secret = std::env::var("JWT_SECRET").unwrap_or_default();
+        let otp_signing_secret = std::env::var("OTP_SIGNING_SECRET")
+            .unwrap_or_else(|_| jwt_secret.clone());
+
         Ok(Self {
             host: std::env::var("GATEWAY_HOST").unwrap_or_else(|_| "0.0.0.0".to_string()),
             port,
@@ -36,7 +42,8 @@ impl GatewayConfig {
                 .unwrap_or(100),
             frontend_url: std::env::var("FRONTEND_URL")
                 .unwrap_or_else(|_| "https://velismail.online".to_string()),
-            jwt_secret: std::env::var("JWT_SECRET").unwrap_or_default(),
+            jwt_secret,
+            otp_signing_secret,
             auth_service_url: std::env::var("AUTH_SERVICE_URL")
                 .unwrap_or_else(|_| "http://auth-service:3001".to_string()),
             mail_service_url: std::env::var("MAIL_SERVICE_URL")

@@ -29,6 +29,9 @@ export interface User {
   businessMailProvider?: string;
   businessMailProviderEndpoint?: string;
   businessDomainVerified?: boolean;
+  teamAccessRole?: 'admin' | 'member' | 'viewer';
+  teamAccessInviteId?: string;
+  teamAccessOwnerEmail?: string;
   dkimStatus?: 'pending' | 'verified' | 'failed';
   spfStatus?: 'pending' | 'verified' | 'failed';
   dmarcStatus?: 'pending' | 'verified' | 'failed';

@@ -26,6 +26,7 @@ export default defineConfig({
     },
     // Enable source maps for production debugging
     sourcemap: true,
+    chunkSizeWarningLimit: 650,
     // Target modern browsers for smaller bundles
     target: 'es2020',
   },

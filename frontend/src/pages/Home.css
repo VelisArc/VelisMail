@@ -132,6 +132,51 @@
   max-width: 720px;
 }
 
+.hero-ops-scene {
+  position: relative;
+  min-height: 460px;
+  border-radius: 28px;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 50% 45%, rgba(216, 115, 0, 0.18), transparent 34%),
+    linear-gradient(145deg, rgba(255, 255, 255, 0.72), rgba(255, 255, 255, 0.18));
+  border: 1px solid rgba(216, 115, 0, 0.16);
+  box-shadow: 0 28px 80px rgba(15, 23, 42, 0.12);
+}
+
+.hero-ops-scene canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.hero-ops-caption {
+  position: absolute;
+  left: 22px;
+  bottom: 22px;
+  display: grid;
+  gap: 4px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.78);
+  border: 1px solid rgba(216, 115, 0, 0.14);
+  backdrop-filter: blur(18px);
+  box-shadow: 0 16px 40px rgba(15, 23, 42, 0.12);
+}
+
+.hero-ops-caption span {
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 700;
+}
+
+.hero-ops-caption strong {
+  color: var(--text-primary);
+  font-size: 0.96rem;
+}
+
 .hero-badge {
   display: inline-flex;
   align-items: center;
@@ -437,6 +482,7 @@
 @media (max-width: 768px) {
   .hero-grid { grid-template-columns: 1fr; text-align: center; }
   .hero-copy { margin: 0 auto; }
+  .hero-ops-scene { min-height: 320px; border-radius: 20px; }
   .hero-actions { justify-content: center; }
   .hero-proof-row { flex-wrap: wrap; justify-content: center; }
   .hero-title { font-size: 2.75rem; }
