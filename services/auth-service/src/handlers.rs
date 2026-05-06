@@ -850,7 +850,7 @@ pub async fn get_current_user(
     let user_id = claims.sub.0;
 
     let user = sqlx::query(
-        "SELECT id, tenant_id, email, recovery_email, display_name, status, created_at, updated_at, last_login
+        "SELECT id, tenant_id, email, recovery_email, display_name, status, settings, created_at, updated_at, last_login
          FROM users
          WHERE id = $1"
     )
@@ -869,6 +869,7 @@ pub async fn get_current_user(
     let recovery_email: Option<String> = user.try_get("recovery_email").ok();
     let display_name: String = user.try_get("display_name").map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     let status: String = user.try_get("status").map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let settings: Option<serde_json::Value> = user.try_get("settings").ok();
     let created_at: chrono::DateTime<chrono::Utc> = user.try_get("created_at").map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     let updated_at: chrono::DateTime<chrono::Utc> = user.try_get("updated_at").map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     let last_login: Option<chrono::DateTime<chrono::Utc>> = user.try_get("last_login").ok();
@@ -882,10 +883,36 @@ pub async fn get_current_user(
             "recovery_email": recovery_email,
             "display_name": display_name,
             "status": status,
+            "settings": settings.unwrap_or_else(|| json!({})),
             "created_at": created_at,
             "updated_at": updated_at,
             "last_login": last_login,
         }
+    })))
+}
+
+pub async fn update_account(
+    State(state): State<AuthState>,
+    Extension(claims): Extension<velismail_common::Claims>,
+    Json(request): Json<serde_json::Value>,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    let user_id = claims.sub.0;
+
+    let settings_json = serde_json::to_string(&request).unwrap_or_else(|_| "{}".to_string());
+
+    sqlx::query("UPDATE users SET settings = COALESCE(settings, '{}'::jsonb) || $1::jsonb, updated_at = NOW() WHERE id = $2")
+        .bind(settings_json)
+        .bind(user_id)
+        .execute(&state.db)
+        .await
+        .map_err(|e| {
+            tracing::error!("update_account failed: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+
+    Ok(Json(json!({
+        "success": true,
+        "message": "Account updated successfully"
     })))
 }
 

@@ -41,6 +41,7 @@ async fn main() -> anyhow::Result<()> {
 
     let protected_routes = Router::new()
         .route("/me", get(handlers::get_current_user))
+        .route("/account", axum::routing::patch(handlers::update_account))
         .route("/sessions", get(handlers::list_sessions))
         .route("/sessions/:id", delete(handlers::revoke_session))
         .route("/device/register", post(handlers::register_device))

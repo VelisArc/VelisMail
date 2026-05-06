@@ -980,6 +980,7 @@ async function fetchAuthenticatedProfile(): Promise<Partial<User>> {
   try {
     const profile = await fetchAPI('/auth/me');
     const raw = profile?.user || profile || {};
+    const settings = raw.settings || {};
     return {
       id: raw.id,
       tenantId: raw.tenant_id || raw.tenantId,
@@ -988,15 +989,15 @@ async function fetchAuthenticatedProfile(): Promise<Partial<User>> {
       recoveryEmail: raw.recovery_email || raw.recoveryEmail || undefined,
       recoveryEmailVerified: Boolean(raw.recovery_email || raw.recoveryEmail),
       createdAt: raw.created_at || raw.createdAt,
-      // Pull configuration from server to avoid re-verification
-      businessDbUrl: raw.business_db_url || raw.businessDbUrl,
-      businessApiKey: raw.business_api_key || raw.businessApiKey,
-      businessMailProvider: raw.business_mail_provider || raw.businessMailProvider,
-      businessMailProviderEndpoint: raw.business_mail_provider_endpoint || raw.businessMailProviderEndpoint,
-      businessDomain: raw.business_domain || raw.businessDomain,
-      isBusinessSetupComplete: raw.is_business_setup_complete ?? raw.isBusinessSetupComplete,
-      businessDomainVerified: raw.business_domain_verified ?? raw.businessDomainVerified,
-      businessProfile: raw.business_profile || raw.businessProfile,
+      // Pull configuration from server settings JSON object to avoid re-verification
+      businessDbUrl: settings.businessDbUrl || settings.business_db_url || raw.business_db_url || raw.businessDbUrl,
+      businessApiKey: settings.businessApiKey || settings.business_api_key || raw.business_api_key || raw.businessApiKey,
+      businessMailProvider: settings.businessMailProvider || settings.business_mail_provider || raw.business_mail_provider || raw.businessMailProvider,
+      businessMailProviderEndpoint: settings.businessMailProviderEndpoint || settings.business_mail_provider_endpoint || raw.business_mail_provider_endpoint || raw.businessMailProviderEndpoint,
+      businessDomain: settings.businessDomain || settings.business_domain || raw.business_domain || raw.businessDomain,
+      isBusinessSetupComplete: settings.isBusinessSetupComplete ?? settings.is_business_setup_complete ?? raw.is_business_setup_complete ?? raw.isBusinessSetupComplete,
+      businessDomainVerified: settings.businessDomainVerified ?? settings.business_domain_verified ?? raw.business_domain_verified ?? raw.businessDomainVerified,
+      businessProfile: settings.businessProfile || settings.business_profile || raw.business_profile || raw.businessProfile,
     };
   } catch {
     return {};
