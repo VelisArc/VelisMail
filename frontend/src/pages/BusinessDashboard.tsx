@@ -172,14 +172,10 @@ export default function BusinessDashboard() {
     const infraComplete = hasDb && hasApiKey && hasDomain && hasProvider;
 
     if (!infraComplete || !user.isBusinessSetupComplete) {
-      if (user.isBusinessSetupComplete) {
-        auth.updateSettings({ isBusinessSetupComplete: false });
-      }
       navigate('/business-setup');
       return;
     }
     if (!user.businessDomainVerified || storedDomainRecords.length === 0) {
-      auth.updateSettings({ isBusinessSetupComplete: false });
       navigate('/business-setup');
       return;
     }

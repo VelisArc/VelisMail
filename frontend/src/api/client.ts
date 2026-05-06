@@ -1953,6 +1953,31 @@ export const domains = {
     const storedDomains = loadUserDB<(Partial<CustomDomain> & { id: string; domain: string; status?: 'pending' | 'verified' | 'failed' })[]>(STORAGE_KEYS.domains, []);
     const normalizedDomains = storedDomains.map(normalizeStoredDomain);
 
+    const session = getSessionSafe();
+    if (session?.businessDomain && session?.businessDomainVerified) {
+      const normalizedDomainInput = normalizeDomainInput(session.businessDomain);
+      if (!normalizedDomains.find(d => d.domain === normalizedDomainInput)) {
+        const tokenHash = hashString(`domain-verify:${session.tenantId || 'local'}:${normalizedDomainInput}`).padStart(12, '0').slice(0, 12);
+        const verificationToken = `velismail-verify=${tokenHash}`;
+        const autoHydratedDomain: CustomDomain = {
+          id: `dom_${hashString(normalizedDomainInput)}`,
+          domain: normalizedDomainInput,
+          status: 'verified',
+          verificationToken,
+          dnsRecords: buildDnsRecords(normalizedDomainInput, verificationToken),
+          checks: buildDomainChecks(normalizedDomainInput, verificationToken).map(check => ({
+            ...check,
+            status: 'verified',
+            actual: check.expected,
+          })),
+          addedAt: session.createdAt || new Date().toISOString(),
+          lastCheckedAt: new Date().toISOString(),
+          verifiedAt: new Date().toISOString(),
+        };
+        normalizedDomains.push(autoHydratedDomain);
+      }
+    }
+
     if (JSON.stringify(storedDomains) !== JSON.stringify(normalizedDomains)) {
       saveUserDB(STORAGE_KEYS.domains, normalizedDomains);
     }

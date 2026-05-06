@@ -32,10 +32,6 @@ export default function AuthGuard({ children, requireSetup = false }: AuthGuardP
     const infraComplete = hasDb && hasApiKey && hasDomain && hasProvider;
 
     if (!infraComplete) {
-      // If the flag says setup is complete but infra is missing, reset it
-      if (user.isBusinessSetupComplete) {
-        auth.updateSettings({ isBusinessSetupComplete: false });
-      }
       return <Navigate to="/business-setup" replace />;
     }
 
