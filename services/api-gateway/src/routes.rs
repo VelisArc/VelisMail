@@ -1982,7 +1982,7 @@ pub struct SaveBusinessEmailRequest {
 pub async fn get_business_emails(
     State(_state): State<AppState>,
     headers: HeaderMap,
-) -> impl IntoResponse {
+) -> (StatusCode, Json<Value>) {
     let db_url = match headers.get("x-business-db-url").and_then(|h| h.to_str().ok()) {
         Some(url) => url,
         None => return (StatusCode::BAD_REQUEST, Json(json!({"success": false, "error": "Missing x-business-db-url"}))),
@@ -2041,7 +2041,7 @@ pub async fn save_business_email(
     State(_state): State<AppState>,
     headers: HeaderMap,
     Json(payload): Json<SaveBusinessEmailRequest>,
-) -> impl IntoResponse {
+) -> (StatusCode, Json<Value>) {
     let db_url = match headers.get("x-business-db-url").and_then(|h| h.to_str().ok()) {
         Some(url) => url,
         None => return (StatusCode::BAD_REQUEST, Json(json!({"success": false, "error": "Missing x-business-db-url"}))),
