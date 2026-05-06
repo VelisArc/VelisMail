@@ -1977,9 +1977,11 @@ export const domains = {
       return existing;
     }
 
-    const verificationToken = 'velismail-verify=' + Math.random().toString(36).slice(2, 14);
+    const session = auth.getSession();
+    const tokenHash = hashString(`domain-verify:${session?.tenantId || 'local'}:${normalizedDomain}`).padStart(12, '0').slice(0, 12);
+    const verificationToken = `velismail-verify=${tokenHash}`;
     const newDomain: CustomDomain = {
-      id: 'dom_' + Math.random().toString(36).slice(2, 8),
+      id: `dom_${hashString(normalizedDomain)}`,
       domain: normalizedDomain,
       status: 'pending',
       verificationToken,
@@ -1991,7 +1993,6 @@ export const domains = {
     saveUserDB(STORAGE_KEYS.domains, allDomains);
 
     // Bridge: Async call to backend
-    const session = auth.getSession();
     if (session?.tenantId) {
       fetchAPI(`/tenants/${session.tenantId}/domains`, {
         method: 'POST',
