@@ -1468,7 +1468,11 @@ export const mail = {
           provider: session?.businessMailProvider,
           apiKey: session?.businessApiKey,
           providerEndpoint: session?.businessMailProviderEndpoint,
-          attachments,
+          attachments: attachments?.map(a => ({
+            filename: a.filename,
+            content: a.content,
+            mimeType: a.contentType,
+          })),
         }),
       });
       businessQueue.mark(queueEntry.id, { status: 'sent', error: undefined });
