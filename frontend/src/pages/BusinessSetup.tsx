@@ -132,13 +132,13 @@ export default function BusinessSetup() {
       // Only use primary fields for step determination — profile fallbacks can be stale
       const existingDbUrl = session.businessDbUrl?.trim() || '';
       const existingApiKey = session.businessApiKey?.trim() || '';
-      const existingProvider = session.businessMailProvider || session.businessProfile?.mailProvider || 'sendgrid';
+      const existingProvider = session.businessMailProvider || session.businessProfile?.mailProvider || 'resend';
       const existingProviderEndpoint = session.businessMailProviderEndpoint || session.businessProfile?.mailProviderEndpoint || '';
       const existingDomain = session.businessDomain || '';
       const domainEntry = existingDomain ? domains.getByDomain(existingDomain) : null;
 
       setUser(session);
-      setDbProvider(inferDatabaseProviderFromUrl(existingDbUrl));
+      setDbProvider(existingDbUrl ? inferDatabaseProviderFromUrl(existingDbUrl) : 'neon');
       setCustomDbUrl(existingDbUrl);
       setApiKey(existingApiKey);
       setApiProvider(existingProvider);
