@@ -1920,7 +1920,7 @@ mod tests {
 static POOLS: Lazy<Mutex<HashMap<String, PgPool>>> = Lazy::new(|| Mutex::new(HashMap::new()));
 
 async fn get_tenant_pool(db_url: &str) -> Result<PgPool, String> {
-    let mut pools = POOLS.lock().unwrap();
+    let pools = POOLS.lock().unwrap();
     if let Some(pool) = pools.get(db_url) {
         return Ok(pool.clone());
     }
@@ -1981,7 +1981,7 @@ pub struct SaveBusinessEmailRequest {
 
 pub async fn get_business_emails(
     headers: HeaderMap,
-) -> (StatusCode, Json<serde_json::Value>) {
+) -> impl IntoResponse {
     let db_url = match headers.get("x-business-db-url").and_then(|h| h.to_str().ok()) {
         Some(url) => url,
         None => return (StatusCode::BAD_REQUEST, Json(json!({"success": false, "error": "Missing x-business-db-url"}))),
@@ -2039,7 +2039,7 @@ pub async fn get_business_emails(
 pub async fn save_business_email(
     headers: HeaderMap,
     Json(payload): Json<SaveBusinessEmailRequest>,
-) -> (StatusCode, Json<serde_json::Value>) {
+) -> impl IntoResponse {
     let db_url = match headers.get("x-business-db-url").and_then(|h| h.to_str().ok()) {
         Some(url) => url,
         None => return (StatusCode::BAD_REQUEST, Json(json!({"success": false, "error": "Missing x-business-db-url"}))),
