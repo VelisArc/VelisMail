@@ -143,12 +143,20 @@ function toDomainRecord(domain: CustomDomain): DomainRecord {
 }
 
 function formatRelative(iso: string): string {
-  const diff = Date.now() - new Date(iso).getTime();
-  if (diff < 60000) return 'just now';
-  if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`;
-  if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`;
-  if (diff < 604800000) return `${Math.floor(diff / 86400000)}d ago`;
+  const target = new Date(iso).getTime();
+  if (Number.isNaN(target)) return 'unknown';
+  const diff = Date.now() - target;
+  const abs = Math.abs(diff);
+  const suffix = diff >= 0 ? 'ago' : 'from now';
+  if (abs < 60000) return diff >= 0 ? 'just now' : 'in less than 1m';
+  if (abs < 3600000) return `${Math.floor(abs / 60000)}m ${suffix}`;
+  if (abs < 86400000) return `${Math.floor(abs / 3600000)}h ${suffix}`;
+  if (abs < 604800000) return `${Math.floor(abs / 86400000)}d ${suffix}`;
   return new Date(iso).toLocaleDateString();
+}
+
+function formatInviteExpiry(expiresAt?: string | null): string {
+  return expiresAt ? `Expires ${formatRelative(expiresAt)}` : 'Never expires';
 }
 
 type BizTab = 'mail' | 'domains' | 'mailboxes' | 'groups' | 'team' | 'queue' | 'analytics' | 'audit' | 'templates' | 'settings';
@@ -1587,14 +1595,18 @@ export default function BusinessDashboard() {
                   <div className="team-meta">
                     <div className="team-last-active"><Clock size={12} /> Active {formatRelative(member.lastActive)}</div>
                     <div className="team-joined">
-                      {member.status === 'pending' && member.inviteExpiresAt
-                        ? `Invite expires ${formatRelative(member.inviteExpiresAt)}`
+                      {member.status === 'pending'
+                        ? `Invite ${formatInviteExpiry(member.inviteExpiresAt).toLowerCase()}`
                         : `Joined ${formatRelative(member.addedAt)}`}
                     </div>
                   </div>
                   <span className={`badge ${member.role === 'admin' ? 'badge-accent' : member.role === 'member' ? 'badge-primary' : 'badge-secondary'}`}>{member.role}</span>
                   <div className="team-actions">
-                    {member.inviteToken && <button className="btn btn-ghost btn-sm" onClick={() => copyToClipboard(member.inviteToken || '')}><Copy size={14} /></button>}
+                    {member.inviteToken && (
+                      <button className="btn btn-ghost btn-sm team-api-copy-btn" onClick={() => copyToClipboard(member.inviteToken || '')}>
+                        <KeyRound size={14} /> Copy API Key
+                      </button>
+                    )}
                     {canManageWorkspace && (
                       <>
                         <select className="input input-sm role-select" value={member.role} onChange={e => handleUpdateMemberRole(member.id, e.target.value as BusinessTeamMember['role'])}>
@@ -2178,15 +2190,23 @@ export default function BusinessDashboard() {
                     <option value={24}>24 hours</option>
                     <option value={72}>3 days</option>
                     <option value={168}>7 days</option>
+                    <option value={720}>30 days</option>
+                    <option value={0}>No expiry</option>
                   </select>
                 </label>
                 {issuedInvite && (
-                  <label className="biz-modal-full">Generated Access Key
-                    <div className="invite-token-row">
-                      <code>{issuedInvite.token}</code>
-                      <button className="btn btn-ghost btn-sm" type="button" onClick={() => copyToClipboard(issuedInvite.token)}>
-                        <Copy size={14} /> Copy
-                      </button>
+                  <label className="biz-modal-full">Team Access API Key
+                    <div className="invite-token-panel">
+                      <div className="invite-token-header">
+                        <span><KeyRound size={14} /> API key for {issuedInvite.email}</span>
+                        <strong>{formatInviteExpiry(issuedInvite.expiresAt)}</strong>
+                      </div>
+                      <div className="invite-token-row">
+                        <code>{issuedInvite.token}</code>
+                        <button className="btn btn-primary btn-sm" type="button" onClick={() => copyToClipboard(issuedInvite.token)}>
+                          <Copy size={14} /> Copy API Key
+                        </button>
+                      </div>
                     </div>
                   </label>
                 )}

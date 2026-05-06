@@ -178,7 +178,7 @@ export type BusinessTeamMember = {
   role: 'admin' | 'member' | 'viewer';
   status?: 'pending' | 'active' | 'expired' | 'revoked';
   inviteToken?: string;
-  inviteExpiresAt?: string;
+  inviteExpiresAt?: string | null;
   addedAt: string;
   lastActive: string;
 };
@@ -191,7 +191,7 @@ export type TeamAccessInvite = {
   role: 'admin' | 'member' | 'viewer';
   status: 'pending' | 'accepted' | 'expired' | 'revoked';
   createdAt: string;
-  expiresAt: string;
+  expiresAt: string | null;
   acceptedAt?: string;
   issuerEmail: string;
   workspace: Pick<User,
@@ -630,7 +630,7 @@ function saveUserDB<T>(key: string, data: T) {
 
 function loadTeamAccessInvites(): TeamAccessInvite[] {
   try {
-    const raw = sessionStorage.getItem(TEAM_INVITES_KEY);
+    const raw = localStorage.getItem(TEAM_INVITES_KEY) || sessionStorage.getItem(TEAM_INVITES_KEY);
     return raw ? JSON.parse(raw) : [];
   } catch {
     return [];
@@ -638,6 +638,7 @@ function loadTeamAccessInvites(): TeamAccessInvite[] {
 }
 
 function saveTeamAccessInvites(invites: TeamAccessInvite[]) {
+  localStorage.setItem(TEAM_INVITES_KEY, JSON.stringify(invites));
   sessionStorage.setItem(TEAM_INVITES_KEY, JSON.stringify(invites));
 }
 
@@ -669,6 +670,9 @@ type CreateTeamAccessInviteParams = {
 function buildTeamAccessInvite(params: CreateTeamAccessInviteParams): TeamAccessInvite {
   const email = normalizeMailbox(params.email);
   const now = new Date();
+  const expiresAt = params.expiresInHours <= 0
+    ? null
+    : new Date(now.getTime() + Math.max(params.expiresInHours, 1) * 60 * 60 * 1000).toISOString();
   return {
     id: crypto.randomUUID(),
     token: generateTeamAccessToken(),
@@ -677,7 +681,7 @@ function buildTeamAccessInvite(params: CreateTeamAccessInviteParams): TeamAccess
     role: params.role,
     status: 'pending',
     createdAt: now.toISOString(),
-    expiresAt: new Date(now.getTime() + Math.max(params.expiresInHours, 1) * 60 * 60 * 1000).toISOString(),
+    expiresAt,
     issuerEmail: params.issuer.email,
     workspace: {
       tenantId: params.issuer.tenantId,
@@ -717,7 +721,7 @@ function validateCachedTeamAccessToken(token: string): { ok: boolean; invite?: T
   if (invite.status === 'revoked') {
     return { ok: false, error: 'This team access key was revoked.' };
   }
-  if (new Date(invite.expiresAt).getTime() < Date.now()) {
+  if (invite.expiresAt && new Date(invite.expiresAt).getTime() < Date.now()) {
     invite.status = 'expired';
     saveTeamAccessInvites(invites);
     return { ok: false, error: 'This team access key has expired.' };
@@ -1589,8 +1593,8 @@ function syncBusinessEmailToDb(email: Email) {
   if (!session?.businessDbUrl) return;
   fetchAPI('/mail/business-emails', {
     method: 'POST',
-    headers: { 'x-business-db-url': session.businessDbUrl },
     body: JSON.stringify({
+      dbUrl: session.businessDbUrl,
       email: {
         ...email,
         read: !email.unread,
@@ -1629,8 +1633,9 @@ export const mail = {
     
     if (session?.businessDbUrl) {
       try {
-        const response = await fetchAPI('/mail/business-emails', {
-          headers: { 'x-business-db-url': session.businessDbUrl }
+        const response = await fetchAPI('/mail/business-emails/query', {
+          method: 'POST',
+          body: JSON.stringify({ dbUrl: session.businessDbUrl }),
         });
         if (response.success && Array.isArray(response.emails)) {
           sourceEmails = response.emails.map((entry: Partial<Email> & { read?: boolean }) => normalizeBusinessEmailFromDb(entry));
@@ -2091,6 +2096,18 @@ export const teamAccess = {
   },
 
   async validateToken(token: string, email?: string): Promise<{ ok: boolean; invite?: TeamAccessInvite; error?: string }> {
+    const cached = validateCachedTeamAccessToken(token);
+    if (cached.ok && cached.invite) {
+      const normalizedEmail = email ? normalizeMailbox(email) : '';
+      if (normalizedEmail && normalizedEmail !== cached.invite.email) {
+        return { ok: false, error: 'This email is not assigned to the provided team access key.' };
+      }
+      return cached;
+    }
+    if (cached.error && cached.error !== 'Invalid team access key.') {
+      return cached;
+    }
+
     const response = await postTeamAccess('/team/invites/validate', {
       token: token.trim(),
       email: email ? normalizeMailbox(email) : undefined,

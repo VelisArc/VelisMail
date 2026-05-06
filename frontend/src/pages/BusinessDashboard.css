@@ -272,18 +272,57 @@
   grid-template-columns: 1fr auto;
   gap: 10px;
   align-items: center;
-  padding: 10px;
-  border: 1px solid var(--glass-border);
-  border-radius: var(--radius-md);
-  background: var(--bg-surface-2);
 }
 
 .invite-token-row code {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 0.78rem;
+  font-size: 0.8rem;
   color: var(--text-primary);
+  padding: 10px 12px;
+  border: 1px solid rgba(216, 115, 0, 0.22);
+  border-radius: var(--radius-sm);
+  background: rgba(216, 115, 0, 0.06);
+}
+
+.invite-token-panel {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid rgba(216, 115, 0, 0.24);
+  border-radius: var(--radius-md);
+  background:
+    linear-gradient(135deg, rgba(216, 115, 0, 0.08), rgba(45, 212, 191, 0.06)),
+    var(--bg-surface-2);
+}
+
+.invite-token-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+}
+
+.invite-token-header span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-primary);
+  font-weight: 700;
+}
+
+.invite-token-header strong {
+  color: var(--primary);
+  font-size: 0.76rem;
+  white-space: nowrap;
+}
+
+.team-api-copy-btn {
+  min-width: 128px;
+  justify-content: center;
 }
 
 .biz-modal-actions {

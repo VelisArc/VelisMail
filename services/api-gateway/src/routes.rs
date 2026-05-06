@@ -3,7 +3,7 @@
 use crate::state::AppState;
 use axum::{
     body::Body,
-    extract::{State, ws::{WebSocketUpgrade, WebSocket}},
+    extract::{Query, State, ws::{WebSocketUpgrade, WebSocket}},
     http::{HeaderMap, HeaderValue, Method, Request, StatusCode, Uri},
     response::{IntoResponse, Response},
     routing::{any, get, post},
@@ -27,6 +27,7 @@ pub fn api_v1_routes(_state: &AppState) -> Router<AppState> {
         .route("/verify", post(verify_infrastructure))
         .route("/mail/send", post(send_mail))
         .route("/mail/business-emails", get(get_business_emails).post(save_business_email))
+        .route("/mail/business-emails/query", post(query_business_emails))
         .route("/team/invites", post(create_team_invite))
         .route("/team/invites/validate", post(validate_team_invite))
         .route("/team/invites/complete", post(complete_team_invite))
@@ -1991,7 +1992,7 @@ pub struct TeamInviteRecord {
     pub role: String,
     pub status: String,
     pub created_at: String,
-    pub expires_at: String,
+    pub expires_at: Option<String>,
     pub accepted_at: Option<String>,
     pub issuer_email: String,
     pub workspace: TeamInviteWorkspace,
@@ -2032,23 +2033,26 @@ async fn set_team_invite_status(state: &AppState, token: &str, status: &str) {
 }
 
 fn team_invite_expired(invite: &TeamInviteRecord) -> bool {
-    chrono::DateTime::parse_from_rfc3339(&invite.expires_at)
+    invite
+        .expires_at
+        .as_deref()
+        .and_then(|value| chrono::DateTime::parse_from_rfc3339(value).ok())
         .map(|value| value.with_timezone(&chrono::Utc) < chrono::Utc::now())
-        .unwrap_or(true)
+        .unwrap_or(false)
 }
 
 fn public_team_invite(invite: &TeamInviteRecord) -> Value {
     json!({
-        "id": invite.id,
-        "token": invite.token,
-        "email": invite.email,
-        "name": invite.name,
-        "role": invite.role,
-        "status": invite.status,
-        "createdAt": invite.created_at,
-        "expiresAt": invite.expires_at,
-        "acceptedAt": invite.accepted_at,
-        "issuerEmail": invite.issuer_email
+        "id": invite.id.clone(),
+        "token": invite.token.clone(),
+        "email": invite.email.clone(),
+        "name": invite.name.clone(),
+        "role": invite.role.clone(),
+        "status": invite.status.clone(),
+        "createdAt": invite.created_at.clone(),
+        "expiresAt": invite.expires_at.clone(),
+        "acceptedAt": invite.accepted_at.clone(),
+        "issuerEmail": invite.issuer_email.clone()
     })
 }
 
@@ -2106,7 +2110,12 @@ pub async fn create_team_invite(
     }
 
     let now = chrono::Utc::now();
-    let expires_in_hours = payload.expires_in_hours.unwrap_or(24).clamp(1, 168);
+    let requested_expiry = payload.expires_in_hours.unwrap_or(24);
+    let expires_at = if requested_expiry <= 0 {
+        None
+    } else {
+        Some((now + chrono::Duration::hours(requested_expiry.clamp(1, 720))).to_rfc3339())
+    };
     let token = format!(
         "vmt_{}{}",
         uuid::Uuid::new_v4().simple(),
@@ -2128,7 +2137,7 @@ pub async fn create_team_invite(
         role,
         status: "pending".to_string(),
         created_at: now.to_rfc3339(),
-        expires_at: (now + chrono::Duration::hours(expires_in_hours)).to_rfc3339(),
+        expires_at,
         accepted_at: None,
         issuer_email,
         workspace: payload.workspace,
@@ -2418,18 +2427,36 @@ pub struct BusinessEmail {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SaveBusinessEmailRequest {
+    pub db_url: Option<String>,
     pub email: BusinessEmail,
 }
 
-pub async fn get_business_emails(
-    State(_state): State<AppState>,
-    headers: HeaderMap,
-) -> (StatusCode, Json<Value>) {
-    let db_url = match headers.get("x-business-db-url").and_then(|h| h.to_str().ok()) {
-        Some(url) => url,
-        None => return (StatusCode::BAD_REQUEST, Json(json!({"success": false, "error": "Missing x-business-db-url"}))),
-    };
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BusinessEmailsQuery {
+    pub db_url: Option<String>,
+}
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BusinessEmailsRequest {
+    pub db_url: String,
+}
+
+fn business_db_url_from_parts(
+    headers: &HeaderMap,
+    query_url: Option<&str>,
+    body_url: Option<&str>,
+) -> Option<String> {
+    body_url
+        .or(query_url)
+        .or_else(|| headers.get("x-business-db-url").and_then(|h| h.to_str().ok()))
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
+}
+
+async fn read_business_emails(db_url: &str) -> (StatusCode, Json<Value>) {
     let pool = match get_tenant_pool(db_url).await {
         Ok(p) => p,
         Err(e) => return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"success": false, "error": format!("DB Error: {}", e)}))),
@@ -2479,17 +2506,43 @@ pub async fn get_business_emails(
     (StatusCode::OK, Json(json!({"success": true, "emails": emails})))
 }
 
+pub async fn get_business_emails(
+    State(_state): State<AppState>,
+    Query(query): Query<BusinessEmailsQuery>,
+    headers: HeaderMap,
+) -> (StatusCode, Json<Value>) {
+    let db_url = match business_db_url_from_parts(&headers, query.db_url.as_deref(), None) {
+        Some(url) => url,
+        None => return (StatusCode::BAD_REQUEST, Json(json!({"success": false, "error": "Missing business database URL"}))),
+    };
+
+    read_business_emails(&db_url).await
+}
+
+pub async fn query_business_emails(
+    State(_state): State<AppState>,
+    Json(payload): Json<BusinessEmailsRequest>,
+) -> (StatusCode, Json<Value>) {
+    let db_url = payload.db_url.trim();
+    if db_url.is_empty() {
+        return (StatusCode::BAD_REQUEST, Json(json!({"success": false, "error": "Missing business database URL"})));
+    }
+
+    read_business_emails(db_url).await
+}
+
 pub async fn save_business_email(
     State(_state): State<AppState>,
+    Query(query): Query<BusinessEmailsQuery>,
     headers: HeaderMap,
     Json(payload): Json<SaveBusinessEmailRequest>,
 ) -> (StatusCode, Json<Value>) {
-    let db_url = match headers.get("x-business-db-url").and_then(|h| h.to_str().ok()) {
+    let db_url = match business_db_url_from_parts(&headers, query.db_url.as_deref(), payload.db_url.as_deref()) {
         Some(url) => url,
-        None => return (StatusCode::BAD_REQUEST, Json(json!({"success": false, "error": "Missing x-business-db-url"}))),
+        None => return (StatusCode::BAD_REQUEST, Json(json!({"success": false, "error": "Missing business database URL"}))),
     };
 
-    let pool = match get_tenant_pool(db_url).await {
+    let pool = match get_tenant_pool(&db_url).await {
         Ok(p) => p,
         Err(e) => return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"success": false, "error": format!("DB Error: {}", e)}))),
     };
