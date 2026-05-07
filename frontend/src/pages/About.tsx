@@ -2,11 +2,10 @@ import { Link } from 'react-router-dom';
 import { Lock, Zap, Globe, Users, ArrowRight, Shield } from 'lucide-react';
 import './About.css';
 
-const team = [
-  { name: 'Mangal Patel', role: 'Founder & CEO', bio: 'Building the future of secure communication.' },
-  { name: 'Priya Sharma', role: 'Head of Engineering', bio: 'Rust enthusiast. Distributed systems architect.' },
-  { name: 'Rahul Dev', role: 'Lead Cryptographer', bio: 'PhD in Applied Cryptography. ZKP researcher.' },
-  { name: 'Ananya Rao', role: 'Head of Design', bio: 'Making security beautiful and accessible.' },
+const operatingPrinciples = [
+  { title: 'Verified information only', desc: 'We keep public company details clean and remove placeholder profiles until they can be verified.' },
+  { title: 'Security-first engineering', desc: 'Every product decision is reviewed through authentication, data handling, and operational safety.' },
+  { title: 'User-led roadmap', desc: 'Dashboard polish, mailbox workflows, and reliability fixes are prioritized from real workspace feedback.' },
 ];
 
 const milestones = [
@@ -114,21 +113,21 @@ export default function About() {
         </div>
       </section>
 
-      {/* Team */}
+      {/* Operating Principles */}
       <section className="about-team">
         <div className="container">
           <div className="section-header">
-            <span className="section-tag">THE TEAM</span>
-            <h2>People behind VelisMail</h2>
-            <p>A small team with big ambitions for privacy.</p>
+            <span className="section-tag">HOW WE WORK</span>
+            <h2>Built with verified trust</h2>
+            <p>We keep this page clean and only publish real, confirmed people or company details.</p>
           </div>
           <div className="team-grid">
-            {team.map((member, i) => (
+            {operatingPrinciples.map((item, i) => (
               <div key={i} className="glass-card team-card">
-                <div className="team-avatar">{member.name.split(' ').map(n => n[0]).join('')}</div>
-                <h3>{member.name}</h3>
-                <span className="team-role">{member.role}</span>
-                <p>{member.bio}</p>
+                <div className="team-avatar"><Shield size={20} /></div>
+                <h3>{item.title}</h3>
+                <span className="team-role">VelisMail standard</span>
+                <p>{item.desc}</p>
               </div>
             ))}
           </div>

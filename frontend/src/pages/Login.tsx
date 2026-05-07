@@ -104,6 +104,10 @@ export default function Login() {
 
   const handleTeamEmailSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    await requestTeamOtp();
+  };
+
+  const requestTeamOtp = async () => {
     setLoading(true);
     setError('');
     try {
@@ -117,6 +121,10 @@ export default function Login() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleTeamOtpResend = async () => {
+    await requestTeamOtp();
   };
 
   const handleTeamOtpSubmit = async (e: React.FormEvent) => {
@@ -189,7 +197,7 @@ export default function Login() {
     }
   };
 
-  const handlePasswordResetRequest = async (e: React.FormEvent) => {
+  const handlePasswordResetRequest = async (e: React.SyntheticEvent) => {
     e.preventDefault();
     setLoading(true);
     setError('');
@@ -452,8 +460,15 @@ export default function Login() {
                         <form onSubmit={handleTeamKeySubmit} className="login-form" autoComplete="off">
                           <div className="form-group">
                             <label htmlFor="team-token">Team Access Key</label>
-                            <input id="team-token" type="password" className="input" placeholder="vmt_..."
-                              name="velismail-team-token" autoComplete="off" required value={teamToken} onChange={e => setTeamToken(e.target.value.trim())} autoFocus />
+                            <input id="team-token" type="text" className="input secret-input" placeholder="vmt_..."
+                              name="velismail-access-key"
+                              autoComplete="new-password"
+                              autoCapitalize="none"
+                              autoCorrect="off"
+                              spellCheck={false}
+                              data-1p-ignore="true"
+                              data-lpignore="true"
+                              required value={teamToken} onChange={e => setTeamToken(e.target.value.trim())} autoFocus />
                           </div>
                           {error && <div className="form-error">{error}</div>}
                           <button type="submit" className="btn btn-primary w-full">
@@ -466,7 +481,7 @@ export default function Login() {
                           <div className="form-group">
                             <label htmlFor="team-email">Assigned Email</label>
                             <input id="team-email" type="email" className="input" placeholder="member@company.com"
-                              name="velismail-team-email" autoComplete="email" required value={teamEmail} onChange={e => setTeamEmail(e.target.value)} autoFocus />
+                              name="velismail-team-assigned-email" autoComplete="off" required value={teamEmail} onChange={e => setTeamEmail(e.target.value)} autoFocus />
                           </div>
                           {error && <div className="form-error">{error}</div>}
                           <button type="submit" className="btn btn-primary w-full" disabled={loading}>
@@ -485,6 +500,9 @@ export default function Login() {
                           {error && <div className="form-error">{error}</div>}
                           <button type="submit" className="btn btn-primary w-full" disabled={loading}>
                             {loading ? <Loader2 size={18} className="animate-spin" /> : <>Open Team Dashboard <ArrowRight size={18} /></>}
+                          </button>
+                          <button type="button" className="login-link resend-inline" onClick={handleTeamOtpResend} disabled={loading || !teamEmail.trim()}>
+                            Resend OTP
                           </button>
                         </form>
                       )}
@@ -542,6 +560,9 @@ export default function Login() {
                       </div>
                       <button type="submit" className="btn btn-secondary w-full" disabled={loading || !!resetVerificationToken}>
                         {loading ? <Loader2 size={18} className="animate-spin" /> : 'Verify OTP'}
+                      </button>
+                      <button type="button" className="login-link resend-inline" onClick={(event) => handlePasswordResetRequest(event)} disabled={loading || !resetIdentifier.trim()}>
+                        Resend OTP
                       </button>
                     </form>
                   )}

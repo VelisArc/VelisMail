@@ -452,6 +452,9 @@ function friendlyApiError(endpoint: string, status: number, fallback: string): s
     return fallback || 'Requested VelisMail service route was not found on the backend.';
   }
   if (status === 429) {
+    if (route.includes('/auth/send-otp') || route.includes('/auth/otp/send') || route.includes('/auth/password-reset/request')) {
+      return 'Daily OTP limit reached. You can request up to 3 verification codes per email per day.';
+    }
     return 'Too many attempts. Wait a moment and try again.';
   }
   if (status >= 500) {
@@ -1267,6 +1270,30 @@ function scopedExistingSession(email: string): User | null {
 }
 
 // ---- Auth Functions ----
+function getLocalOtpUsage(email: string, purpose: string) {
+  const normalizedEmail = normalizeMailbox(email);
+  const today = new Date().toISOString().slice(0, 10);
+  const key = `velismail_otp_daily_${today}`;
+  const usage = loadDB<Record<string, number>>(key, {});
+  const usageKey = `${purpose}:${normalizedEmail}`;
+  return { normalizedEmail, key, usage, usageKey };
+}
+
+function assertLocalOtpLimit(email: string, purpose: string) {
+  const { normalizedEmail, usage, usageKey } = getLocalOtpUsage(email, purpose);
+  if (!normalizedEmail) return;
+  if ((usage[usageKey] || 0) >= 3) {
+    throw new Error('Daily OTP limit reached. You can request up to 3 verification codes per email per day.');
+  }
+}
+
+function recordLocalOtpSend(email: string, purpose: string) {
+  const { normalizedEmail, key, usage, usageKey } = getLocalOtpUsage(email, purpose);
+  if (!normalizedEmail) return;
+  usage[usageKey] = (usage[usageKey] || 0) + 1;
+  saveDB(key, usage);
+}
+
 export const auth = {
   async sendOtp(data: {
     email?: string;
@@ -1282,6 +1309,8 @@ export const auth = {
       identifier: normalizedEmail,
       purpose: data.purpose || 'register',
     });
+    const purpose = data.purpose || 'register';
+    assertLocalOtpLimit(normalizedEmail, purpose);
     const endpoints = [
       '/auth/send-otp',
       '/auth/otp/send',
@@ -1290,10 +1319,12 @@ export const auth = {
     let lastError: Error | null = null;
     for (const endpoint of endpoints) {
       try {
-        return await fetchAPI(endpoint, {
+        const response = await fetchAPI(endpoint, {
           method: 'POST',
           body: payload,
         });
+        recordLocalOtpSend(normalizedEmail, purpose);
+        return response;
       } catch (error) {
         lastError = error instanceof Error ? error : new Error('OTP request failed.');
         if (!lastError.message.includes('OTP service is not') && !lastError.message.includes('route was not found')) {

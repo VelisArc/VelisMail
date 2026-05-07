@@ -1190,7 +1190,7 @@ export default function BusinessDashboard() {
       </aside>
 
       {/* Main Content */}
-      <main className="biz-main">
+      <main className={`biz-main ${selectedEmail ? 'reader-open' : ''}`}>
         {/* Mobile Global Header */}
         <div className="mobile-dash-header">
           <button className="btn btn-icon btn-ghost" onClick={() => setSidebarOpen(true)}>
@@ -1302,6 +1302,18 @@ export default function BusinessDashboard() {
                 </div>
 
                 <div className="list-search">
+                  <button
+                    className="btn btn-ghost btn-sm select-all-btn"
+                    onClick={() => {
+                      const allSelected = emails.length > 0 && emails.every(email => selectedEmails.has(email.id));
+                      setSelectedEmails(allSelected ? new Set() : new Set(emails.map(email => email.id)));
+                    }}
+                    disabled={emails.length === 0}
+                    title="Select all visible emails"
+                  >
+                    {emails.length > 0 && emails.every(email => selectedEmails.has(email.id)) ? <CheckSquare size={16} /> : <Square size={16} />}
+                    Select all
+                  </button>
                   <Search size={16} />
                   <input type="text" placeholder="Search sender, subject, body, labels..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} />
                   <select className="input input-sm mail-filter-select" value={mailStatusFilter} onChange={e => setMailStatusFilter(e.target.value as typeof mailStatusFilter)}>

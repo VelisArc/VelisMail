@@ -161,6 +161,46 @@ fn send_otp_email(
     Ok(())
 }
 
+async fn reserve_daily_otp_send(
+    state: &AuthState,
+    email: &str,
+    purpose: &str,
+) -> Result<(), StatusCode> {
+    sqlx::query(
+        "CREATE TABLE IF NOT EXISTS otp_rate_limits (
+            email TEXT NOT NULL,
+            purpose TEXT NOT NULL,
+            day DATE NOT NULL,
+            count INTEGER NOT NULL DEFAULT 0,
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            PRIMARY KEY (email, purpose, day)
+        )",
+    )
+    .execute(&state.db)
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let row = sqlx::query(
+        "INSERT INTO otp_rate_limits (email, purpose, day, count, updated_at)
+         VALUES ($1, $2, CURRENT_DATE, 1, NOW())
+         ON CONFLICT (email, purpose, day)
+         DO UPDATE SET count = otp_rate_limits.count + 1, updated_at = NOW()
+         WHERE otp_rate_limits.count < 3
+         RETURNING count",
+    )
+    .bind(email)
+    .bind(purpose)
+    .fetch_optional(&state.db)
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    if row.is_none() {
+        return Err(StatusCode::TOO_MANY_REQUESTS);
+    }
+
+    Ok(())
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 struct OtpChallengeClaims {
     sub: String,
@@ -533,6 +573,8 @@ pub async fn send_otp(
         }
         (normalized_email, display_name)
     };
+
+    reserve_daily_otp_send(&state, &normalized_email, &purpose).await?;
 
     let otp = format!("{:06}", (uuid::Uuid::new_v4().as_u128() % 900_000) + 100_000);
     let salt = Uuid::new_v4().to_string();

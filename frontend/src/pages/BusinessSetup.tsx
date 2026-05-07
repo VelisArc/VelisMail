@@ -534,7 +534,11 @@ export default function BusinessSetup() {
               <div className="form-group">
                 <label>Secret API Key</label>
                 <input type="text" 
-                  autoComplete="off" 
+                  name="velismail-provider-api-key"
+                  autoComplete="new-password"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
                   data-1p-ignore="true" 
                   data-lpignore="true" 
                   className="input" 
