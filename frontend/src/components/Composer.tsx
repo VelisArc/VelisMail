@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, type KeyboardEvent } from 'react';
 import { 
   Bold, Italic, Underline, List, Link as LinkIcon, 
-  Paperclip, Send, X, Trash2
+  Clock, Paperclip, Send, X, Trash2
 } from 'lucide-react';
 import { contacts, type Contact } from '../api/client';
 import './Composer.css';
@@ -12,7 +12,7 @@ interface ComposerProps {
   initialBody?: string;
   fromBadge?: React.ReactNode;
   fromControl?: React.ReactNode;
-  onSend: (to: string, subject: string, body: string, attachments?: File[]) => void;
+  onSend: (to: string, subject: string, body: string, attachments?: File[], scheduledAt?: string) => void;
   onClose: () => void;
   sending?: boolean;
 }
@@ -30,6 +30,8 @@ export default function Composer({
   const [to, setTo] = useState(initialTo);
   const [subject, setSubject] = useState(initialSubject);
   const [bodyHtml, setBodyHtml] = useState(initialBody);
+  const [deliveryMode, setDeliveryMode] = useState<'now' | 'scheduled'>('now');
+  const [scheduledAt, setScheduledAt] = useState('');
   
   // Auto-complete state
   const [showAutoComplete, setShowAutoComplete] = useState(false);
@@ -107,7 +109,7 @@ export default function Composer({
 
   const handleSend = () => {
     if (!to || !subject) return;
-    onSend(to, subject, bodyHtml, attachments);
+    onSend(to, subject, bodyHtml, attachments, deliveryMode === 'scheduled' ? scheduledAt : undefined);
   };
 
   return (
@@ -144,6 +146,25 @@ export default function Composer({
               ))}
             </div>
           )}
+        </div>
+
+        <div className="compose-field schedule-field">
+          <label>Delivery</label>
+          <div className="schedule-controls">
+            <select className="input" value={deliveryMode} onChange={e => setDeliveryMode(e.target.value as 'now' | 'scheduled')}>
+              <option value="now">Send now</option>
+              <option value="scheduled">Schedule send</option>
+            </select>
+            {deliveryMode === 'scheduled' && (
+              <input
+                className="input"
+                type="datetime-local"
+                value={scheduledAt}
+                min={new Date(Date.now() + 5 * 60 * 1000).toISOString().slice(0, 16)}
+                onChange={e => setScheduledAt(e.target.value)}
+              />
+            )}
+          </div>
         </div>
         
         <div className="compose-field">
@@ -219,8 +240,9 @@ export default function Composer({
           <button className="btn btn-ghost btn-icon" onClick={onClose} disabled={sending} title="Discard draft">
             <Trash2 size={16} />
           </button>
-          <button className="btn btn-primary btn-sm" onClick={handleSend} disabled={sending || !to || !subject}>
-            <Send size={16} /> Send
+          <button className="btn btn-primary btn-sm" onClick={handleSend} disabled={sending || !to || !subject || (deliveryMode === 'scheduled' && !scheduledAt)}>
+            {deliveryMode === 'scheduled' ? <Clock size={16} /> : <Send size={16} />}
+            {deliveryMode === 'scheduled' ? 'Schedule' : 'Send'}
           </button>
         </div>
       </div>

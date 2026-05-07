@@ -72,6 +72,7 @@ type MailQueueItem = {
   updatedAt?: string;
   retryCount: number;
   error?: string;
+  scheduledAt?: string;
 };
 
 type DomainRecord = {
@@ -219,6 +220,7 @@ export default function BusinessDashboard() {
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [confirmRevokeId, setConfirmRevokeId] = useState<string | null>(null);
+  const [pendingRoleChange, setPendingRoleChange] = useState<{ id: string; role: BusinessTeamMember['role']; step: 1 | 2 } | null>(null);
 
   const [activeDomain, setActiveDomain] = useState<string>(initialDomainId);
   const [domainsList, setDomainsList] = useState<DomainRecord[]>(initialDomainRecords);
@@ -234,6 +236,7 @@ export default function BusinessDashboard() {
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
   const [selectedEmails, setSelectedEmails] = useState<Set<string>>(new Set());
   const [bulkAction, setBulkAction] = useState('');
+  const [mailStatusFilter, setMailStatusFilter] = useState<'all' | 'unread' | 'read' | 'starred' | 'priority' | 'attachments'>('all');
   const [notificationEnabled, setNotificationEnabled] = useState(true);
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [showQueueFilters, setShowQueueFilters] = useState(false);
@@ -291,21 +294,30 @@ export default function BusinessDashboard() {
   const emails = useMemo(() => {
     if (activeBizTab !== 'mail') return [];
     
+    const statusFiltered = rawEmails.filter(e => {
+      if (mailStatusFilter === 'unread') return e.unread;
+      if (mailStatusFilter === 'read') return !e.unread;
+      if (mailStatusFilter === 'starred') return e.starred;
+      if (mailStatusFilter === 'priority') return e.labels?.includes('priority');
+      if (mailStatusFilter === 'attachments') return e.hasAttachment;
+      return true;
+    });
+
     const filtered = searchQuery
-      ? rawEmails.filter(e =>
+      ? statusFiltered.filter(e =>
           e.subject.toLowerCase().includes(searchQuery.toLowerCase()) ||
           e.from.toLowerCase().includes(searchQuery.toLowerCase()) ||
           e.fromName.toLowerCase().includes(searchQuery.toLowerCase()) ||
           e.body.toLowerCase().includes(searchQuery.toLowerCase()) ||
           (e.labels || []).join(' ').toLowerCase().includes(searchQuery.toLowerCase())
         )
-      : rawEmails;
+      : statusFiltered;
       
     return [...filtered].sort((a, b) => {
       const diff = new Date(b.date).getTime() - new Date(a.date).getTime();
       return sortOrder === 'desc' ? diff : -diff;
     });
-  }, [rawEmails, activeBizTab, searchQuery, sortOrder]);
+  }, [rawEmails, activeBizTab, searchQuery, sortOrder, mailStatusFilter]);
 
   useEffect(() => {
     if (!activeDomainName) {
@@ -367,7 +379,7 @@ export default function BusinessDashboard() {
     }
   };
 
-  const handleSend = async (toArg: string, subjectArg: string, bodyArg: string, attachmentsArg?: File[]) => {
+  const handleSend = async (toArg: string, subjectArg: string, bodyArg: string, attachmentsArg?: File[], scheduledAt?: string) => {
     if (!canCompose) {
       showToast('Viewer access can read mail but cannot send messages.', 'error');
       return;
@@ -406,8 +418,8 @@ export default function BusinessDashboard() {
 
     const toAddresses = toArg.split(',').map(s => s.trim()).filter(Boolean);
     try {
-      await mail.sendBusiness(domain, toAddresses, subjectArg, bodyArg, selectedFromAddress, processedAttachments);
-      showToast(`Business email dispatched via ${domain}`);
+      await mail.sendBusiness(domain, toAddresses, subjectArg, bodyArg, selectedFromAddress, processedAttachments, scheduledAt);
+      showToast(scheduledAt ? `Business email scheduled for ${new Date(scheduledAt).toLocaleString()}` : `Business email dispatched via ${domain}`);
       setComposeOpen(false);
       setComposeTo('');
       setComposeSubject('');
@@ -549,7 +561,7 @@ export default function BusinessDashboard() {
     showToast('Team member removed');
   };
 
-  const handleUpdateMemberRole = (id: string, role: 'admin' | 'member' | 'viewer') => {
+  const applyMemberRoleChange = (id: string, role: 'admin' | 'member' | 'viewer') => {
     if (!canManageWorkspace) {
       showToast('Only admins can update team roles.', 'error');
       return;
@@ -568,6 +580,22 @@ export default function BusinessDashboard() {
       setAuditLog(businessAudit.getAll());
     }
     showToast('Member role updated');
+  };
+
+  const handleUpdateMemberRole = (id: string, role: 'admin' | 'member' | 'viewer') => {
+    const member = teamMembers.find((entry) => entry.id === id);
+    if (!member || member.role === role) return;
+    setPendingRoleChange({ id, role, step: 1 });
+  };
+
+  const confirmRoleChangeStep = () => {
+    if (!pendingRoleChange) return;
+    if (pendingRoleChange.step === 1) {
+      setPendingRoleChange({ ...pendingRoleChange, step: 2 });
+      return;
+    }
+    applyMemberRoleChange(pendingRoleChange.id, pendingRoleChange.role);
+    setPendingRoleChange(null);
   };
 
   const refreshQueue = () => {
@@ -880,6 +908,11 @@ export default function BusinessDashboard() {
       if (bulkAction === 'delete') mail.delete(emailId);
       else if (bulkAction === 'archive') mail.archive(emailId);
       else if (bulkAction === 'read') mail.markRead(emailId);
+      else if (bulkAction === 'unread') mail.markUnread(emailId);
+      else if (bulkAction === 'unarchive') mail.moveFolder(emailId, 'inbox');
+      else if (bulkAction === 'spam') mail.moveFolder(emailId, 'spam');
+      else if (bulkAction === 'priority') mail.togglePriority(emailId);
+      else if (bulkAction === 'star') mail.toggleStar(emailId);
     });
     refetchEmails();
     showToast(`Bulk action "${bulkAction}" applied to ${selectedEmails.size} emails`);
@@ -1159,7 +1192,7 @@ export default function BusinessDashboard() {
                     {unreadCount > 0 && <span className="badge badge-primary">{unreadCount}</span>}
                   </h2>
                   <div className="list-actions">
-                    <button className="btn btn-icon btn-ghost" title="Refresh"><RefreshCw size={16} /></button>
+                    <button className="btn btn-icon btn-ghost" title="Refresh" onClick={() => refetchEmails()}><RefreshCw size={16} /></button>
                     <button className="btn btn-icon btn-ghost" title={viewMode === 'list' ? 'Grid View' : 'List View'} onClick={() => setViewMode(v => v === 'list' ? 'grid' : 'list')}>
                       {viewMode === 'list' ? <Grid size={16} /> : <List size={16} />}
                     </button>
@@ -1172,6 +1205,14 @@ export default function BusinessDashboard() {
                 <div className="list-search">
                   <Search size={16} />
                   <input type="text" placeholder="Search sender, subject, body, labels..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} />
+                  <select className="input input-sm mail-filter-select" value={mailStatusFilter} onChange={e => setMailStatusFilter(e.target.value as typeof mailStatusFilter)}>
+                    <option value="all">All mail</option>
+                    <option value="unread">Unread</option>
+                    <option value="read">Read</option>
+                    <option value="starred">Starred</option>
+                    <option value="priority">Priority</option>
+                    <option value="attachments">Attachments</option>
+                  </select>
                   {searchQuery && <button className="search-clear" onClick={() => setSearchQuery('')}><X size={14} /></button>}
                 </div>
 
@@ -1181,7 +1222,12 @@ export default function BusinessDashboard() {
                     <select className="input input-sm" value={bulkAction} onChange={e => setBulkAction(e.target.value)}>
                       <option value="">Bulk Action</option>
                       <option value="read">Mark as read</option>
+                      <option value="unread">Mark as unread</option>
+                      <option value="star">Toggle star</option>
+                      <option value="priority">Toggle priority</option>
                       <option value="archive">Archive</option>
+                      <option value="unarchive">Move to inbox</option>
+                      <option value="spam">Mark as spam</option>
                       <option value="delete">Delete</option>
                     </select>
                     <button className="btn btn-primary btn-sm" onClick={handleBulkAction} disabled={!bulkAction}>Apply</button>
@@ -1205,7 +1251,7 @@ export default function BusinessDashboard() {
                         <button className="select-btn" onClick={(e) => { e.stopPropagation(); toggleEmailSelection(email.id); }}>
                           {selectedEmails.has(email.id) ? <CheckSquare size={16} /> : <Square size={16} />}
                         </button>
-                        <button className={`star-btn ${email.starred ? 'starred' : ''}`} onClick={(e) => { e.stopPropagation(); }}>
+                        <button className={`star-btn ${email.starred ? 'starred' : ''}`} onClick={(e) => { e.stopPropagation(); mail.toggleStar(email.id); refetchEmails(); }}>
                           <Star size={15} fill={email.starred ? '#facc15' : 'none'} color={email.starred ? '#facc15' : 'var(--text-muted)'} />
                         </button>
                         <div className="mail-row-body">
@@ -1740,7 +1786,7 @@ export default function BusinessDashboard() {
                       </td>
                       <td className="queue-to">{item.to}</td>
                       <td className="queue-subject">{item.subject}</td>
-                      <td className="queue-time">{formatRelative(item.queuedAt)}</td>
+                      <td className="queue-time">{item.scheduledAt ? `Scheduled ${formatRelative(item.scheduledAt)}` : formatRelative(item.queuedAt)}</td>
                       <td className="queue-retries">{item.retryCount}/{item.retryCount >= 3 ? 'MAX' : '3'}</td>
                       <td className="queue-error">{item.error || '—'}</td>
                       <td className="queue-actions">
@@ -2256,6 +2302,32 @@ export default function BusinessDashboard() {
             </div>
             <div className="biz-modal-actions">
               <button className="btn btn-primary" onClick={() => { handleUseTemplate(previewTemplate); setPreviewTemplate(null); }}>Use Template</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {pendingRoleChange && (
+        <div className="modal-overlay" onClick={() => setPendingRoleChange(null)}>
+          <div className="biz-form-modal glass animate-scale" style={{ maxWidth: '460px', padding: '28px' }} onClick={e => e.stopPropagation()}>
+            <div style={{ textAlign: 'center', marginBottom: '20px' }}>
+              <div style={{ width: '56px', height: '56px', borderRadius: '50%', background: 'rgba(245, 158, 11, 0.12)', color: 'var(--warning)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
+                <Shield size={28} />
+              </div>
+              <h3 style={{ marginBottom: '10px', fontSize: '1.15rem', fontWeight: 700 }}>
+                {pendingRoleChange.step === 1 ? 'Review role change' : 'Final confirmation'}
+              </h3>
+              <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', lineHeight: 1.6, margin: 0 }}>
+                {pendingRoleChange.step === 1
+                  ? `You are changing this user to ${pendingRoleChange.role}. Review permissions before continuing.`
+                  : `This is the second confirmation. Apply ${pendingRoleChange.role} access now?`}
+              </p>
+            </div>
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', paddingTop: '8px', borderTop: '1px solid var(--border-primary)' }}>
+              <button className="btn btn-ghost" onClick={() => setPendingRoleChange(null)}>Cancel</button>
+              <button className="btn btn-primary" onClick={confirmRoleChangeStep}>
+                {pendingRoleChange.step === 1 ? 'Continue' : 'Apply Role'}
+              </button>
             </div>
           </div>
         </div>

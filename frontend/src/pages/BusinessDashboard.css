@@ -497,6 +497,12 @@
   font-size: 0.95rem;
 }
 
+.biz-dash .mail-filter-select {
+  width: 150px;
+  min-height: 34px;
+  background: var(--bg-surface);
+}
+
 .biz-dash .search-clear {
   color: var(--text-muted);
   padding: 4px;

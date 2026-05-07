@@ -52,6 +52,19 @@
   outline: none;
 }
 
+.schedule-controls {
+  display: grid;
+  grid-template-columns: minmax(150px, 0.8fr) minmax(190px, 1fr);
+  gap: 10px;
+  flex: 1;
+}
+
+.schedule-controls .input {
+  border: 1px solid var(--border-primary);
+  background: var(--bg-surface);
+  min-height: 36px;
+}
+
 .to-field-container {
   position: relative;
 }

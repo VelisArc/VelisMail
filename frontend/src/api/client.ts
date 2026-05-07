@@ -25,13 +25,30 @@ const STORAGE_KEYS = {
 
 const TEAM_INVITES_KEY = 'velismail_team_access_invites';
 
+const DURABLE_STORAGE_KEYS = new Set<string>([
+  STORAGE_KEYS.session,
+  STORAGE_KEYS.theme,
+  STORAGE_KEYS.users,
+  STORAGE_KEYS.emails,
+  STORAGE_KEYS.domains,
+  STORAGE_KEYS.businessMailboxes,
+  STORAGE_KEYS.businessGroups,
+  STORAGE_KEYS.businessTeam,
+  STORAGE_KEYS.businessTemplates,
+  STORAGE_KEYS.businessQueue,
+  STORAGE_KEYS.businessAudit,
+  STORAGE_KEYS.contacts,
+  STORAGE_KEYS.signatures,
+  'velismail_token',
+  'velismail_refresh',
+  'velismail_users_db',
+]);
 
 // In-memory store for session-only caching (satisfies private DB policy: no local disk persistence)
 const memoryDB: Record<string, unknown> = {};
 
 function loadDB<T>(key: string, fallback: T): T {
-  // STRICT PRIVATE DATA POLICY: Only persist auth session and theme to disk.
-  if (key === STORAGE_KEYS.session || key === STORAGE_KEYS.theme || key === 'velismail_token' || key === 'velismail_refresh') {
+  if (DURABLE_STORAGE_KEYS.has(key) || key.startsWith(`${STORAGE_KEYS.emails}_`) || key.startsWith(`${STORAGE_KEYS.domains}_`) || key.startsWith(`${STORAGE_KEYS.businessMailboxes}_`) || key.startsWith(`${STORAGE_KEYS.businessGroups}_`) || key.startsWith(`${STORAGE_KEYS.businessTeam}_`) || key.startsWith(`${STORAGE_KEYS.businessTemplates}_`) || key.startsWith(`${STORAGE_KEYS.businessQueue}_`) || key.startsWith(`${STORAGE_KEYS.businessAudit}_`) || key.startsWith(`${STORAGE_KEYS.contacts}_`) || key.startsWith(`${STORAGE_KEYS.signatures}_`)) {
     try {
       const data = localStorage.getItem(key);
       return data ? JSON.parse(data) : fallback;
@@ -42,7 +59,7 @@ function loadDB<T>(key: string, fallback: T): T {
 }
 
 function saveDB<T>(key: string, data: T) {
-  if (key === STORAGE_KEYS.session || key === STORAGE_KEYS.theme || key === 'velismail_token' || key === 'velismail_refresh') {
+  if (DURABLE_STORAGE_KEYS.has(key) || key.startsWith(`${STORAGE_KEYS.emails}_`) || key.startsWith(`${STORAGE_KEYS.domains}_`) || key.startsWith(`${STORAGE_KEYS.businessMailboxes}_`) || key.startsWith(`${STORAGE_KEYS.businessGroups}_`) || key.startsWith(`${STORAGE_KEYS.businessTeam}_`) || key.startsWith(`${STORAGE_KEYS.businessTemplates}_`) || key.startsWith(`${STORAGE_KEYS.businessQueue}_`) || key.startsWith(`${STORAGE_KEYS.businessAudit}_`) || key.startsWith(`${STORAGE_KEYS.contacts}_`) || key.startsWith(`${STORAGE_KEYS.signatures}_`)) {
     localStorage.setItem(key, JSON.stringify(data));
   } else {
     // Save to memory cache only
@@ -231,6 +248,7 @@ export type BusinessMailQueueItem = {
   updatedAt: string;
   retryCount: number;
   error?: string;
+  scheduledAt?: string;
 };
 
 export type BusinessAuditEntry = {
@@ -271,6 +289,7 @@ export type Email = {
   starred: boolean;
   labels: string[];
   hasAttachment: boolean;
+  scheduledAt?: string;
 };
 
 export type OtpSendResponse = {
@@ -751,6 +770,11 @@ async function postTeamAccess(endpoint: string, body: unknown): Promise<{
 
 function teamAccessApiError(response: TeamAccessApiResponse | null, fallback: string): string {
   return response?.message || response?.error || fallback;
+}
+
+function warnBackendSyncFailure(err: unknown) {
+  if (err instanceof Error && err.message.includes('route was not found')) return;
+  console.warn('Backend sync failed:', err);
 }
 
 function saveUserToPersistentStore(user: User) {
@@ -1616,12 +1640,32 @@ function syncBusinessEmailToDb(email: Email) {
 
 let businessEmailDbRouteUnavailable = false;
 
+function folderMatchesBusinessView(email: Email, folder: string): boolean {
+  if (folder === 'starred') return email.starred && email.folder !== 'trash';
+  if (folder === 'spam') return (email.folder === 'spam' || isScamEmail(email)) && email.folder !== 'trash';
+  if (folder === 'priority') return (email.labels || []).includes('priority') && email.folder !== 'trash';
+  if (folder === 'scheduled') return email.folder === 'scheduled';
+  return email.folder === folder;
+}
+
+function mutateEmail(id: string, updater: (email: Email) => Email | void): Email | undefined {
+  emailsCache = loadUserDB<Email[]>(STORAGE_KEYS.emails, SEED_EMAILS);
+  let changed: Email | undefined;
+  emailsCache = emailsCache.map((entry) => {
+    if (entry.id !== id) return entry;
+    const updated = updater({ ...entry }) || entry;
+    changed = updated;
+    return updated;
+  });
+  saveUserDB(STORAGE_KEYS.emails, emailsCache);
+  if (changed) syncBusinessEmailToDb(changed);
+  return changed;
+}
+
 export const mail = {
   getByFolder(folder: string): Email[] {
     emailsCache = loadUserDB<Email[]>(STORAGE_KEYS.emails, SEED_EMAILS);
-    if (folder === 'starred') return emailsCache.filter(e => e.starred && e.folder !== 'trash');
-    if (folder === 'spam') return emailsCache.filter(e => (e.folder === 'spam' || isScamEmail(e)) && e.folder !== 'trash');
-    return emailsCache.filter(e => e.folder === folder);
+    return emailsCache.filter(e => folderMatchesBusinessView(e, folder));
   },
 
   // Business-specific helpers — operate on emails related to a business domain
@@ -1629,10 +1673,7 @@ export const mail = {
     const emailsCache = loadUserDB<Email[]>(STORAGE_KEYS.emails, SEED_EMAILS);
     const normalizeDomain = (addr: string) => (addr && addr.includes('@')) ? addr.split('@')[1].toLowerCase() : '';
     return emailsCache.filter(e => {
-      const folderMatches = folder === 'spam'
-        ? (e.folder === 'spam' || isScamEmail(e)) && e.folder !== 'trash'
-        : e.folder === folder;
-      if (!folderMatches) return false;
+      if (!folderMatchesBusinessView(e, folder)) return false;
       const fromDomain = normalizeDomain(e.from || '');
       const toDomains = (e.to || []).map(t => normalizeDomain(t));
       return fromDomain === domain.toLowerCase() || toDomains.includes(domain.toLowerCase());
@@ -1666,17 +1707,14 @@ export const mail = {
 
     const normalizeDomain = (addr: string) => (addr && addr.includes('@')) ? addr.split('@')[1].toLowerCase() : '';
     return sourceEmails.filter((e: Email) => {
-      const folderMatches = folder === 'spam'
-        ? (e.folder === 'spam' || isScamEmail(e)) && e.folder !== 'trash'
-        : e.folder === folder;
-      if (!folderMatches) return false;
+      if (!folderMatchesBusinessView(e, folder)) return false;
       const fromDomain = normalizeDomain(e.from || '');
       const toDomains = (e.to || []).map((t: string) => normalizeDomain(t));
       return fromDomain === domain.toLowerCase() || toDomains.includes(domain.toLowerCase());
     });
   },
 
-  async sendBusiness(domain: string, to: string[], subject: string, body: string, fromAddress?: string, attachments?: { filename: string, content: string, contentType: string }[]): Promise<Email> {
+  async sendBusiness(domain: string, to: string[], subject: string, body: string, fromAddress?: string, attachments?: { filename: string, content: string, contentType: string }[], scheduledAt?: string): Promise<Email> {
     const session = auth.getSession();
     const normalizedDomain = normalizeDomainInput(domain);
     const availableMailboxes = loadBusinessMailboxes(normalizedDomain);
@@ -1702,6 +1740,7 @@ export const mail = {
     if (!subject.trim() || !body.trim()) {
       throw new Error('Subject and message body are required.');
     }
+    const normalizedSchedule = scheduledAt ? new Date(scheduledAt).toISOString() : '';
     const queueEntry = businessQueue.enqueue({
       domain: normalizedDomain,
       fromAddress: fromAddr,
@@ -1709,8 +1748,38 @@ export const mail = {
       recipients: expandedRecipients,
       subject,
       body,
-      status: 'sending',
+      status: normalizedSchedule ? 'queued' : 'sending',
+      scheduledAt: normalizedSchedule || undefined,
     });
+
+    if (normalizedSchedule && new Date(normalizedSchedule).getTime() > Date.now()) {
+      const email: Email = {
+        id: 'bem_' + Math.random().toString(36).slice(2, 8),
+        from: fromAddr,
+        fromName: selectedMailbox.displayName || session?.displayName || 'Business',
+        to: expandedRecipients,
+        subject,
+        body,
+        date: new Date().toISOString(),
+        folder: 'scheduled',
+        unread: false,
+        starred: false,
+        labels: ['scheduled'],
+        hasAttachment: attachments && attachments.length > 0 ? true : false,
+        scheduledAt: normalizedSchedule,
+      };
+      emailsCache = loadUserDB<Email[]>(STORAGE_KEYS.emails, SEED_EMAILS);
+      emailsCache.unshift(email);
+      saveUserDB(STORAGE_KEYS.emails, emailsCache);
+      businessAudit.add({
+        action: 'Scheduled business email',
+        actor: fromAddr,
+        target: expandedRecipients.join(', '),
+        severity: 'info',
+      });
+      return email;
+    }
+
     try {
       await fetchAPI('/mail/send', {
         method: 'POST',
@@ -1812,69 +1881,48 @@ export const mail = {
   },
 
   delete(id: string) {
-    const e = emailsCache.find(e => e.id === id);
-    if (e) {
-      e.folder = 'trash';
-      syncBusinessEmailToDb(e);
-    }
-    saveUserDB(STORAGE_KEYS.emails, emailsCache);
+    mutateEmail(id, e => ({ ...e, folder: 'trash' }));
   },
 
   toggleStar(id: string): boolean {
-    const e = emailsCache.find(e => e.id === id);
-    if (e) {
-      e.starred = !e.starred;
-      syncBusinessEmailToDb(e);
-    }
-    saveUserDB(STORAGE_KEYS.emails, emailsCache);
+    const e = mutateEmail(id, entry => ({ ...entry, starred: !entry.starred }));
     return e?.starred ?? false;
   },
 
   markRead(id: string) {
-    const e = emailsCache.find(e => e.id === id);
-    if (e) {
-      e.unread = false;
-      syncBusinessEmailToDb(e);
-    }
-    saveUserDB(STORAGE_KEYS.emails, emailsCache);
+    mutateEmail(id, e => ({ ...e, unread: false }));
   },
 
   markUnread(id: string) {
-    const e = emailsCache.find(e => e.id === id);
-    if (e) {
-      e.unread = true;
-      syncBusinessEmailToDb(e);
-    }
-    saveUserDB(STORAGE_KEYS.emails, emailsCache);
+    mutateEmail(id, e => ({ ...e, unread: true }));
   },
 
   archive(id: string) {
-    const e = emailsCache.find(e => e.id === id);
-    if (e) {
-      e.folder = 'archive';
-      syncBusinessEmailToDb(e);
-    }
-    saveUserDB(STORAGE_KEYS.emails, emailsCache);
+    mutateEmail(id, e => ({ ...e, folder: 'archive' }));
   },
 
   moveFolder(id: string, folder: string) {
-    const e = emailsCache.find(e => e.id === id);
-    if (e) {
-      e.folder = folder;
-      syncBusinessEmailToDb(e);
-    }
-    saveUserDB(STORAGE_KEYS.emails, emailsCache);
+    mutateEmail(id, e => ({ ...e, folder }));
+  },
+
+  togglePriority(id: string): boolean {
+    const updated = mutateEmail(id, e => {
+      const labels = new Set(e.labels || []);
+      if (labels.has('priority')) labels.delete('priority'); else labels.add('priority');
+      return { ...e, labels: Array.from(labels) };
+    });
+    return Boolean(updated?.labels?.includes('priority'));
   },
 
   permanentDelete(id: string) {
+    emailsCache = loadUserDB<Email[]>(STORAGE_KEYS.emails, SEED_EMAILS);
     emailsCache = emailsCache.filter(e => e.id !== id);
     saveUserDB(STORAGE_KEYS.emails, emailsCache);
   },
 
   markAllRead(folder: string) {
-    emailsCache.forEach(e => {
-      if (e.folder === folder) e.unread = false;
-    });
+    emailsCache = loadUserDB<Email[]>(STORAGE_KEYS.emails, SEED_EMAILS);
+    emailsCache = emailsCache.map(e => folderMatchesBusinessView(e, folder) ? { ...e, unread: false } : e);
     saveUserDB(STORAGE_KEYS.emails, emailsCache);
   },
 
@@ -1928,7 +1976,7 @@ export const businessMailboxes = {
       fetchAPI(`/tenants/${session.tenantId}/mailboxes`, {
         method: 'POST',
         body: JSON.stringify(mailbox),
-      }).catch(err => console.warn('Backend sync failed:', err));
+      }).catch(warnBackendSyncFailure);
     }
 
     businessAudit.add({
@@ -2023,7 +2071,7 @@ export const businessGroups = {
       fetchAPI(`/tenants/${session.tenantId}/groups`, {
         method: 'POST',
         body: JSON.stringify(group),
-      }).catch(err => console.warn('Backend sync failed:', err));
+      }).catch(warnBackendSyncFailure);
     }
 
     businessAudit.add({
@@ -2050,7 +2098,7 @@ export const businessGroups = {
       fetchAPI(`/tenants/${session.tenantId}/groups/${id}`, {
         method: 'PUT',
         body: JSON.stringify(updated.find(e => e.id === id)),
-      }).catch(err => console.warn('Backend sync failed:', err));
+      }).catch(warnBackendSyncFailure);
     }
   },
 
@@ -2065,7 +2113,7 @@ export const businessGroups = {
     if (session?.tenantId) {
       fetchAPI(`/tenants/${session.tenantId}/groups/${id}`, {
         method: 'DELETE',
-      }).catch(err => console.warn('Backend sync failed:', err));
+      }).catch(warnBackendSyncFailure);
     }
     if (group) {
       businessAudit.add({
@@ -2379,7 +2427,7 @@ export const connections = {
     if (session.tenantId) {
       fetchAPI(`/tenants/${session.tenantId}/connections/${id}`, {
         method: 'DELETE',
-      }).catch(err => console.warn('Backend sync failed:', err));
+      }).catch(warnBackendSyncFailure);
     }
 
     return true;
@@ -2478,7 +2526,7 @@ export const domains = {
       fetchAPI(`/tenants/${session.tenantId}/domains`, {
         method: 'POST',
         body: JSON.stringify({ domain_name: normalizedDomain, verification_method: 'dns' }),
-      }).catch(err => console.warn('Backend sync failed:', err));
+      }).catch(warnBackendSyncFailure);
     }
 
     return newDomain;
@@ -2523,7 +2571,7 @@ export const domains = {
     if (session?.tenantId && domain.status === 'verified') {
       fetchAPI(`/tenants/${session.tenantId}/domains/${domain.domain}/verify`, {
         method: 'POST',
-      }).catch(err => console.warn('Backend sync failed:', err));
+      }).catch(warnBackendSyncFailure);
     }
 
     return domain;
@@ -2600,7 +2648,7 @@ export const domains = {
     if (session?.tenantId && domainToDelete) {
       fetchAPI(`/tenants/${session.tenantId}/domains/${domainToDelete.domain}`, {
         method: 'DELETE',
-      }).catch(err => console.warn('Backend sync failed:', err));
+      }).catch(warnBackendSyncFailure);
     }
   },
 };
@@ -2629,7 +2677,7 @@ export const contacts = {
       fetchAPI(`/tenants/${session.tenantId}/contacts`, {
         method: 'POST',
         body: JSON.stringify(c),
-      }).catch(err => console.warn('Backend sync failed:', err));
+      }).catch(warnBackendSyncFailure);
     }
 
     return c;
@@ -2648,7 +2696,7 @@ export const contacts = {
         fetchAPI(`/tenants/${session.tenantId}/contacts/${id}`, {
           method: 'PUT',
           body: JSON.stringify(all[idx]),
-        }).catch(err => console.warn('Backend sync failed:', err));
+        }).catch(warnBackendSyncFailure);
       }
     }
   },
@@ -2663,7 +2711,7 @@ export const contacts = {
     if (session?.tenantId) {
       fetchAPI(`/tenants/${session.tenantId}/contacts/${id}`, {
         method: 'DELETE',
-      }).catch(err => console.warn('Backend sync failed:', err));
+      }).catch(warnBackendSyncFailure);
     }
   },
 
@@ -2707,7 +2755,7 @@ export const signatures = {
       fetchAPI(`/tenants/${session.tenantId}/signatures`, {
         method: 'POST',
         body: JSON.stringify(sig),
-      }).catch(err => console.warn('Backend sync failed:', err));
+      }).catch(warnBackendSyncFailure);
     }
 
     return sig;
@@ -2726,7 +2774,7 @@ export const signatures = {
         fetchAPI(`/tenants/${session.tenantId}/signatures/${id}`, {
           method: 'PUT',
           body: JSON.stringify(all[idx]),
-        }).catch(err => console.warn('Backend sync failed:', err));
+        }).catch(warnBackendSyncFailure);
       }
     }
   },
@@ -2741,7 +2789,7 @@ export const signatures = {
     if (session?.tenantId) {
       fetchAPI(`/tenants/${session.tenantId}/signatures/${id}`, {
         method: 'DELETE',
-      }).catch(err => console.warn('Backend sync failed:', err));
+      }).catch(warnBackendSyncFailure);
     }
   },
 

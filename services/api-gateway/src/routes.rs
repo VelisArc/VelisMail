@@ -2068,6 +2068,7 @@ fn verify_team_otp_token(
 
     let mut validation = Validation::default();
     validation.validate_aud = false;
+    validation.leeway = 120;
     let decoded = decode::<TeamOtpVerificationClaims>(
         verification_token.trim(),
         &DecodingKey::from_secret(state.config.otp_signing_secret.as_bytes()),

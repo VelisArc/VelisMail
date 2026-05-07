@@ -87,7 +87,8 @@ impl AuthConfig {
             otp_ttl_seconds: std::env::var("OTP_TTL_SECONDS")
                 .ok()
                 .and_then(|p| p.parse().ok())
-                .unwrap_or(600),
+                .unwrap_or(1800)
+                .clamp(600, 3600),
             smtp_host: required_env("SMTP_HOST")?,
             smtp_port: std::env::var("SMTP_PORT")
                 .ok()

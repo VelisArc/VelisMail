@@ -251,6 +251,7 @@ fn ensure_registration_recovery_verified(
 
     let mut validation = Validation::default();
     validation.validate_aud = false;
+    validation.leeway = 120;
     let decoded = decode::<OtpVerificationClaims>(
         token,
         &DecodingKey::from_secret(state.config.otp_signing_secret.as_bytes()),
@@ -647,7 +648,7 @@ pub async fn verify_otp(
             sub: verification_email,
             purpose,
             verified_at: chrono::Utc::now().timestamp(),
-            exp: chrono::Utc::now().timestamp() + 900,
+            exp: chrono::Utc::now().timestamp() + 1800,
         },
         &EncodingKey::from_secret(state.config.otp_signing_secret.as_bytes()),
     )
@@ -656,7 +657,7 @@ pub async fn verify_otp(
     Ok(Json(json!({
         "success": true,
         "verificationToken": verification_token,
-        "expiresIn": 900
+        "expiresIn": 1800
     })))
 }
 
