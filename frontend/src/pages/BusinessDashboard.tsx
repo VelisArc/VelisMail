@@ -260,6 +260,9 @@ export default function BusinessDashboard() {
   const [templateSubject, setTemplateSubject] = useState('');
   const [templateBody, setTemplateBody] = useState('');
   const [previewTemplate, setPreviewTemplate] = useState<BusinessTemplate | null>(null);
+  const [domainDetails, setDomainDetails] = useState<DomainRecord | null>(null);
+  const [mailboxDetails, setMailboxDetails] = useState<BusinessMailbox | null>(null);
+  const [groupDetails, setGroupDetails] = useState<BusinessGroup | null>(null);
   const [mailboxLocalPart, setMailboxLocalPart] = useState('');
   const [mailboxDisplayName, setMailboxDisplayName] = useState('');
   const [mailboxKind, setMailboxKind] = useState<BusinessMailbox['kind']>('mailbox');
@@ -475,6 +478,41 @@ export default function BusinessDashboard() {
     refetchEmails();
     setSelectedEmail(null);
     showToast('Email moved to trash');
+  };
+
+  const handleMoveToInbox = (id?: string) => {
+    const emailId = id || selectedEmail?.id;
+    if (!emailId) return;
+    mail.moveFolder(emailId, 'inbox');
+    refetchEmails();
+    setSelectedEmail(null);
+    showToast('Email restored to inbox');
+  };
+
+  const handlePermanentDelete = (id?: string) => {
+    const emailId = id || selectedEmail?.id;
+    if (!emailId) return;
+    mail.permanentDelete(emailId);
+    refetchEmails();
+    setSelectedEmail(null);
+    showToast('Email permanently deleted');
+  };
+
+  const handleMarkSpam = (id?: string) => {
+    const emailId = id || selectedEmail?.id;
+    if (!emailId) return;
+    mail.moveFolder(emailId, 'spam');
+    refetchEmails();
+    setSelectedEmail(null);
+    showToast('Email moved to spam');
+  };
+
+  const handleTogglePriority = (id?: string) => {
+    const emailId = id || selectedEmail?.id;
+    if (!emailId) return;
+    const isPriority = mail.togglePriority(emailId);
+    refetchEmails();
+    showToast(isPriority ? 'Marked as priority' : 'Priority removed');
   };
 
   const handleInviteMember = async (email: string, name: string, role: 'admin' | 'member' | 'viewer') => {
@@ -913,6 +951,7 @@ export default function BusinessDashboard() {
       else if (bulkAction === 'spam') mail.moveFolder(emailId, 'spam');
       else if (bulkAction === 'priority') mail.togglePriority(emailId);
       else if (bulkAction === 'star') mail.toggleStar(emailId);
+      else if (bulkAction === 'permanentDelete') mail.permanentDelete(emailId);
     });
     refetchEmails();
     showToast(`Bulk action "${bulkAction}" applied to ${selectedEmails.size} emails`);
@@ -1146,8 +1185,18 @@ export default function BusinessDashboard() {
                       <button className="btn btn-ghost btn-icon" title="Reply" onClick={handleReply}><Reply size={16} /></button>
                       <button className="btn btn-ghost btn-icon" title="Forward" onClick={handleForward}><Forward size={16} /></button>
                       <button className="btn btn-ghost btn-icon" title="Print" onClick={() => { window.print(); showToast('Preparing print view...'); }}><ExternalLink size={16} /></button>
-                      <button className="btn btn-ghost btn-icon" title="Archive" onClick={() => { handleArchive(); showToast('Email archived'); }}><ArchiveIcon size={16} /></button>
-                      <button className="btn btn-danger btn-icon btn-sm" title="Delete" onClick={() => { handleDeleteEmail(); showToast('Email deleted'); }}><Trash size={16} /></button>
+                      <button className="btn btn-ghost btn-icon" title="Toggle Priority" onClick={() => handleTogglePriority()}><Zap size={16} /></button>
+                      {selectedEmail.folder === 'archive' || selectedEmail.folder === 'trash' || selectedEmail.folder === 'spam' ? (
+                        <button className="btn btn-ghost btn-icon" title="Move to Inbox" onClick={() => handleMoveToInbox()}><Inbox size={16} /></button>
+                      ) : (
+                        <button className="btn btn-ghost btn-icon" title="Archive" onClick={() => handleArchive()}><ArchiveIcon size={16} /></button>
+                      )}
+                      {selectedEmail.folder !== 'spam' && <button className="btn btn-ghost btn-icon" title="Mark as Spam" onClick={() => handleMarkSpam()}><AlertCircle size={16} /></button>}
+                      {selectedEmail.folder === 'trash' ? (
+                        <button className="btn btn-danger btn-icon btn-sm" title="Delete permanently" onClick={() => handlePermanentDelete()}><Trash size={16} /></button>
+                      ) : (
+                        <button className="btn btn-danger btn-icon btn-sm" title="Move to Trash" onClick={() => handleDeleteEmail()}><Trash size={16} /></button>
+                      )}
                     </div>
                   </div>
                   <div className="reader-header">
@@ -1229,6 +1278,7 @@ export default function BusinessDashboard() {
                       <option value="unarchive">Move to inbox</option>
                       <option value="spam">Mark as spam</option>
                       <option value="delete">Delete</option>
+                      <option value="permanentDelete">Delete permanently</option>
                     </select>
                     <button className="btn btn-primary btn-sm" onClick={handleBulkAction} disabled={!bulkAction}>Apply</button>
                     <button className="btn btn-ghost btn-sm" onClick={() => setSelectedEmails(new Set())}>Clear</button>
@@ -1360,7 +1410,7 @@ export default function BusinessDashboard() {
                         {verifyingDomainId === domain.id ? <Loader2 size={14} className="animate-spin" /> : <RefreshCcw size={14} />}
                         Live Verify
                       </button>
-                      <button className="btn btn-ghost btn-sm"><Settings size={14} /></button>
+                      <button className="btn btn-ghost btn-sm" onClick={() => setDomainDetails(domain)}><Settings size={14} /> Manage</button>
                     </div>
                   </div>
 
@@ -1501,6 +1551,7 @@ export default function BusinessDashboard() {
                     <button className="btn btn-ghost btn-sm" onClick={() => { businessMailboxes.setPrimary(activeDomainName, mailbox.address); setDomainMailboxes(businessMailboxes.getByDomain(activeDomainName)); setSelectedFromAddress(mailbox.address); showToast(`${mailbox.address} is now the active sender.`); }}>
                       {mailbox.active ? 'Active Sender' : 'Set Sender'}
                     </button>
+                    <button className="btn btn-ghost btn-sm" onClick={() => setMailboxDetails(mailbox)}><Eye size={14} /> Manage</button>
                     {mailbox.source !== 'system' && (
                       <button className="btn btn-ghost btn-sm" onClick={() => { businessMailboxes.remove(activeDomainName, mailbox.address); setDomainMailboxes(businessMailboxes.getByDomain(activeDomainName)); showToast('Mailbox removed'); }}>
                         <Trash size={14} />
@@ -1577,6 +1628,9 @@ export default function BusinessDashboard() {
                           <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>{group.address}</span>
                         </div>
                       </div>
+                      <button className="btn btn-icon btn-ghost btn-sm" onClick={() => setGroupDetails(group)} title="Manage group">
+                        <Eye size={14} />
+                      </button>
                       <button className="btn btn-icon btn-ghost btn-sm" style={{ color: 'var(--danger)' }} onClick={() => { businessGroups.remove(activeDomainName, group.id); setDomainGroups(businessGroups.getByDomain(activeDomainName)); showToast('Group removed'); }}>
                         <Trash size={14} />
                       </button>
@@ -2302,6 +2356,93 @@ export default function BusinessDashboard() {
             </div>
             <div className="biz-modal-actions">
               <button className="btn btn-primary" onClick={() => { handleUseTemplate(previewTemplate); setPreviewTemplate(null); }}>Use Template</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {domainDetails && (
+        <div className="modal-overlay" onClick={() => setDomainDetails(null)}>
+          <div className="biz-form-modal glass animate-scale detail-modal" onClick={e => e.stopPropagation()}>
+            <div className="compose-header">
+              <h3><Globe size={16} /> {domainDetails.domain}</h3>
+              <button className="btn btn-ghost btn-icon" onClick={() => setDomainDetails(null)}><X size={18} /></button>
+            </div>
+            <div className="detail-modal-body">
+              <div className="detail-summary-grid">
+                <div><span>Status</span><strong>{domainDetails.status}</strong></div>
+                <div><span>Reputation</span><strong>{domainDetails.reputation}/100</strong></div>
+                <div><span>Sent</span><strong>{domainDetails.mailCount}</strong></div>
+                <div><span>Added</span><strong>{formatRelative(domainDetails.addedAt)}</strong></div>
+              </div>
+              <div className="detail-list">
+                {domainDetails.health.map(item => (
+                  <div key={item.key} className={`detail-row ${item.status}`}>
+                    <Shield size={15} />
+                    <div><strong>{item.label}</strong><span>{item.detail}</span></div>
+                    <span className="badge badge-sm">{item.status}</span>
+                  </div>
+                ))}
+              </div>
+              <div className="biz-modal-actions">
+                <button className="btn btn-ghost" onClick={() => copyToClipboard(domainDetails.domain)}><Copy size={14} /> Copy Domain</button>
+                <button className="btn btn-primary" onClick={() => handleRunDomainVerification(domainDetails.id)}><RefreshCcw size={14} /> Verify</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {mailboxDetails && (
+        <div className="modal-overlay" onClick={() => setMailboxDetails(null)}>
+          <div className="biz-form-modal glass animate-scale detail-modal" onClick={e => e.stopPropagation()}>
+            <div className="compose-header">
+              <h3><Mail size={16} /> {mailboxDetails.displayName}</h3>
+              <button className="btn btn-ghost btn-icon" onClick={() => setMailboxDetails(null)}><X size={18} /></button>
+            </div>
+            <div className="detail-modal-body">
+              <div className="detail-summary-grid">
+                <div><span>Address</span><strong>{mailboxDetails.address}</strong></div>
+                <div><span>Type</span><strong>{mailboxDetails.kind}</strong></div>
+                <div><span>Active</span><strong>{mailboxDetails.active ? 'Yes' : 'No'}</strong></div>
+                <div><span>Created</span><strong>{formatRelative(mailboxDetails.createdAt)}</strong></div>
+              </div>
+              <div className="biz-modal-actions">
+                <button className="btn btn-ghost" onClick={() => copyToClipboard(mailboxDetails.address)}><Copy size={14} /> Copy</button>
+                <button className="btn btn-primary" onClick={() => { businessMailboxes.setPrimary(activeDomainName, mailboxDetails.address); setDomainMailboxes(businessMailboxes.getByDomain(activeDomainName)); setSelectedFromAddress(mailboxDetails.address); setMailboxDetails(null); }}><CheckCircle2 size={14} /> Set Sender</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {groupDetails && (
+        <div className="modal-overlay" onClick={() => setGroupDetails(null)}>
+          <div className="biz-form-modal glass animate-scale detail-modal" onClick={e => e.stopPropagation()}>
+            <div className="compose-header">
+              <h3><Users size={16} /> {groupDetails.name}</h3>
+              <button className="btn btn-ghost btn-icon" onClick={() => setGroupDetails(null)}><X size={18} /></button>
+            </div>
+            <div className="detail-modal-body">
+              <div className="detail-summary-grid">
+                <div><span>Address</span><strong>{groupDetails.address}</strong></div>
+                <div><span>Members</span><strong>{groupDetails.members.length}</strong></div>
+                <div><span>Created</span><strong>{formatRelative(groupDetails.createdAt)}</strong></div>
+                <div><span>Updated</span><strong>{formatRelative(groupDetails.updatedAt)}</strong></div>
+              </div>
+              <div className="detail-list">
+                {groupDetails.members.map(member => (
+                  <div key={member} className="detail-row">
+                    <Mail size={15} />
+                    <div><strong>{member}</strong><span>Distribution recipient</span></div>
+                    <button className="btn btn-ghost btn-sm" onClick={() => copyToClipboard(member)}><Copy size={12} /></button>
+                  </div>
+                ))}
+              </div>
+              <div className="biz-modal-actions">
+                <button className="btn btn-ghost" onClick={() => copyToClipboard(groupDetails.address)}><Copy size={14} /> Copy Group</button>
+                <button className="btn btn-primary" onClick={() => { setComposeOpen(true); setComposeTo(groupDetails.address); setGroupDetails(null); }}><Send size={14} /> Email Group</button>
+              </div>
             </div>
           </div>
         </div>

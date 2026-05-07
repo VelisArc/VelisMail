@@ -55,12 +55,45 @@ const features = [
     title: 'Bring your own infrastructure',
     desc: 'Connect your database and provider stack while keeping operational workflows centralized inside the VelisMail workspace.',
   },
+  {
+    icon: Users,
+    title: 'Role-aware team operations',
+    desc: 'Invite admins, members, and viewers with scoped access, audit history, and confirmation flows for sensitive permission changes.',
+  },
+  {
+    icon: Briefcase,
+    title: 'Mailbox governance',
+    desc: 'Manage primary senders, aliases, shared inboxes, distribution groups, and domain-specific identities from one console.',
+  },
+  {
+    icon: Settings,
+    title: 'Delivery workflow controls',
+    desc: 'Use templates, mail queue inspection, scheduled send, retry controls, bulk actions, and message filters for daily operations.',
+  },
+  {
+    icon: CheckCircle2,
+    title: 'DNS verification diagnostics',
+    desc: 'Run guided checks for MX, SPF, DKIM, DMARC, provider credentials, and sender-domain readiness with actionable results.',
+  },
+  {
+    icon: Sparkles,
+    title: 'Professional operator experience',
+    desc: 'Clean dashboard patterns, focused modals, searchable folders, readable message views, and fast navigation for busy teams.',
+  },
+  {
+    icon: Cloud,
+    title: 'Provider flexibility',
+    desc: 'Work with supported mail providers and custom infrastructure while keeping the VelisMail UX consistent for every workspace.',
+  },
 ];
 
 const stats = [
   { value: '256-bit', label: 'Encryption', icon: Key },
   { value: '99.99%', label: 'Uptime SLA', icon: Cloud },
   { value: '<50ms', label: 'Routing', icon: Zap },
+  { value: '30m', label: 'OTP Window', icon: Fingerprint },
+  { value: '9+', label: 'Mail Views', icon: Server },
+  { value: 'Zero Trust', label: 'Access', icon: Shield },
 ];
 
 type SubmissionState = {

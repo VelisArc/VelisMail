@@ -85,7 +85,9 @@ export default function Composer({
   };
 
   const execCmd = (cmd: string, value?: string) => {
+    editorRef.current?.focus();
     document.execCommand(cmd, false, value);
+    handleEditorChange();
   };
 
   const handleEditorChange = () => {
@@ -179,12 +181,12 @@ export default function Composer({
 
         <div className="rich-text-container">
           <div className="rich-text-toolbar">
-            <button className="toolbar-btn" onMouseDown={e => { e.preventDefault(); execCmd('bold'); }} title="Bold"><Bold size={14} /></button>
-            <button className="toolbar-btn" onMouseDown={e => { e.preventDefault(); execCmd('italic'); }} title="Italic"><Italic size={14} /></button>
-            <button className="toolbar-btn" onMouseDown={e => { e.preventDefault(); execCmd('underline'); }} title="Underline"><Underline size={14} /></button>
+            <button type="button" className="toolbar-btn" onMouseDown={e => { e.preventDefault(); execCmd('bold'); }} title="Bold"><Bold size={14} /></button>
+            <button type="button" className="toolbar-btn" onMouseDown={e => { e.preventDefault(); execCmd('italic'); }} title="Italic"><Italic size={14} /></button>
+            <button type="button" className="toolbar-btn" onMouseDown={e => { e.preventDefault(); execCmd('underline'); }} title="Underline"><Underline size={14} /></button>
             <div className="toolbar-divider" />
-            <button className="toolbar-btn" onMouseDown={e => { e.preventDefault(); execCmd('insertUnorderedList'); }} title="Bullet List"><List size={14} /></button>
-            <button className="toolbar-btn" onMouseDown={e => { 
+            <button type="button" className="toolbar-btn" onMouseDown={e => { e.preventDefault(); execCmd('insertUnorderedList'); }} title="Bullet List"><List size={14} /></button>
+            <button type="button" className="toolbar-btn" onMouseDown={e => {
               e.preventDefault(); 
               const selection = window.getSelection();
               if (selection && selection.rangeCount > 0) {
@@ -201,7 +203,14 @@ export default function Composer({
             ref={editorRef}
             className="rich-text-editor" 
             contentEditable 
+            data-placeholder="Write your message..."
             onInput={handleEditorChange}
+            onPaste={(event) => {
+              event.preventDefault();
+              const text = event.clipboardData.getData('text/plain');
+              document.execCommand('insertText', false, text.slice(0, 100000));
+              handleEditorChange();
+            }}
             aria-label="Write your email here"
           />
         </div>

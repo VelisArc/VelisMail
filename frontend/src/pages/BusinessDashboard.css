@@ -1,7 +1,7 @@
 /* Business Dashboard Layout */
 .biz-dash {
   display: grid;
-  grid-template-columns: 240px 1fr;
+  grid-template-columns: 220px 1fr;
   height: 100vh;
   background: var(--bg-body);
   overflow: hidden;
@@ -347,6 +347,74 @@
   white-space: pre-wrap;
 }
 
+.detail-modal {
+  width: min(760px, calc(100vw - 32px));
+}
+
+.detail-modal-body {
+  display: grid;
+  gap: 18px;
+  padding: 20px;
+  overflow-y: auto;
+}
+
+.detail-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.detail-summary-grid > div {
+  display: grid;
+  gap: 6px;
+  padding: 12px;
+  border: 1px solid var(--border-primary);
+  background: var(--bg-surface-2);
+}
+
+.detail-summary-grid span,
+.detail-row span {
+  color: var(--text-muted);
+  font-size: 0.75rem;
+}
+
+.detail-summary-grid strong {
+  overflow-wrap: anywhere;
+}
+
+.detail-list {
+  display: grid;
+  gap: 8px;
+  max-height: 340px;
+  overflow-y: auto;
+}
+
+.detail-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 12px;
+  align-items: center;
+  padding: 12px;
+  border: 1px solid var(--border-primary);
+  background: var(--bg-surface);
+}
+
+.detail-row > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.detail-row strong {
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 720px) {
+  .detail-summary-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
 .biz-sidebar .folder-label {
   flex: 1;
 }
@@ -539,7 +607,7 @@
   display: flex;
   align-items: flex-start;
   gap: 12px;
-  padding: 10px 14px;
+  padding: 8px 12px;
   margin-bottom: 4px;
   background: var(--bg-surface);
   border: 1px solid transparent;
@@ -588,7 +656,7 @@
 }
 
 .biz-dash .mail-sender {
-  font-size: 0.95rem;
+  font-size: 0.9rem;
   font-weight: 500;
   color: var(--text-primary);
   overflow: hidden;
@@ -603,7 +671,7 @@
 }
 
 .biz-dash .mail-subject {
-  font-size: 0.9rem;
+  font-size: 0.84rem;
   color: var(--text-secondary);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -612,7 +680,7 @@
 }
 
 .biz-dash .mail-preview {
-  font-size: 0.85rem;
+  font-size: 0.78rem;
   color: var(--text-muted);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -718,14 +786,19 @@
   flex-direction: column;
   overflow: hidden;
   height: 100vh;
+  min-height: 0;
+  background: var(--bg-surface);
 }
 
 .biz-dash .reader-content {
   padding: 20px 24px;
   flex: 1;
   overflow-y: auto;
+  overscroll-behavior: contain;
   margin: 0;
   width: 100%;
+  max-width: 980px;
+  min-height: 0;
 }
 
 .biz-dash .reader-toolbar {
@@ -733,11 +806,18 @@
   align-items: center;
   justify-content: space-between;
   margin-bottom: 16px;
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  padding: 10px 0;
+  background: var(--bg-surface);
 }
 
 .biz-dash .reader-toolbar-actions {
   display: flex;
   gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 .biz-dash .reader-subject {
@@ -795,6 +875,7 @@
 .biz-dash .reader-sender-email {
   font-size: 0.85rem;
   color: var(--text-muted);
+  overflow-wrap: anywhere;
 }
 
 .biz-dash .reader-date {
@@ -807,6 +888,9 @@
   font-size: 1rem;
   line-height: 1.8;
   color: var(--text-secondary);
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  white-space: pre-wrap;
 }
 
 .biz-dash .reader-body p {
@@ -826,13 +910,14 @@
 
 /* Compose */
 .biz-dash .compose-modal {
-  width: 700px;
-  max-width: 90vw;
-  max-height: 85vh;
+  width: min(700px, calc(100vw - 28px));
+  max-width: calc(100vw - 28px);
+  height: min(78vh, 620px);
+  max-height: calc(100vh - 56px);
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-sm);
   box-shadow: 0 20px 60px rgba(0,0,0,0.15);
 }
 
@@ -843,6 +928,27 @@
   padding: 16px 20px;
   border-bottom: 1px solid var(--border-primary);
   background: var(--bg-surface);
+  flex-shrink: 0;
+}
+
+@media (max-width: 720px) {
+  .biz-dash .compose-modal {
+    width: 100vw;
+    max-width: 100vw;
+    height: 100dvh;
+    max-height: 100dvh;
+    border-radius: 0;
+  }
+
+  .biz-dash .reader-content {
+    padding: 14px;
+  }
+
+  .biz-dash .reader-meta {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 10px;
+  }
 }
 
 .biz-dash .compose-header h3 {
