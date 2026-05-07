@@ -91,7 +91,7 @@ const stats = [
   { value: '256-bit', label: 'Encryption', icon: Key },
   { value: '99.99%', label: 'Uptime SLA', icon: Cloud },
   { value: '<50ms', label: 'Routing', icon: Zap },
-  { value: '30m', label: 'OTP Window', icon: Fingerprint },
+  { value: '10m', label: 'OTP Window', icon: Fingerprint },
   { value: '9+', label: 'Mail Views', icon: Server },
   { value: 'Zero Trust', label: 'Access', icon: Shield },
 ];

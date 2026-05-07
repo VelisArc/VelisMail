@@ -1021,6 +1021,7 @@ function normalizeBusinessQueueEntry(entry: Partial<BusinessMailQueueItem>): Bus
     updatedAt: entry.updatedAt || now,
     retryCount: Number(entry.retryCount || 0),
     error: entry.error,
+    scheduledAt: entry.scheduledAt,
   };
 }
 
@@ -1754,7 +1755,7 @@ export const mail = {
 
     if (normalizedSchedule && new Date(normalizedSchedule).getTime() > Date.now()) {
       const email: Email = {
-        id: 'bem_' + Math.random().toString(36).slice(2, 8),
+        id: queueEntry.id,
         from: fromAddr,
         fromName: selectedMailbox.displayName || session?.displayName || 'Business',
         to: expandedRecipients,
@@ -1905,6 +1906,15 @@ export const mail = {
     mutateEmail(id, e => ({ ...e, folder }));
   },
 
+  markSafe(id: string) {
+    mutateEmail(id, e => ({
+      ...e,
+      folder: 'inbox',
+      labels: Array.from(new Set((e.labels || []).filter(label => label !== 'spam' && label !== 'scam').concat('safe'))),
+      unread: false,
+    }));
+  },
+
   togglePriority(id: string): boolean {
     const updated = mutateEmail(id, e => {
       const labels = new Set(e.labels || []);
@@ -1924,6 +1934,77 @@ export const mail = {
     emailsCache = loadUserDB<Email[]>(STORAGE_KEYS.emails, SEED_EMAILS);
     emailsCache = emailsCache.map(e => folderMatchesBusinessView(e, folder) ? { ...e, unread: false } : e);
     saveUserDB(STORAGE_KEYS.emails, emailsCache);
+  },
+
+  async dispatchScheduledDue(domain?: string): Promise<number> {
+    const session = auth.getSession();
+    const dueItems = businessQueue.getAll(domain)
+      .filter(item => item.status === 'queued' && item.scheduledAt && new Date(item.scheduledAt).getTime() <= Date.now());
+    let delivered = 0;
+
+    for (const item of dueItems) {
+      businessQueue.mark(item.id, { status: 'sending', error: undefined });
+      try {
+        const recipients = item.recipients || item.to.split(',').map(recipient => recipient.trim()).filter(Boolean);
+        await fetchAPI('/mail/send', {
+          method: 'POST',
+          body: JSON.stringify({
+            to: recipients,
+            subject: item.subject,
+            body: item.body || '',
+            from: item.fromAddress,
+            fromName: session?.displayName || 'Business',
+            provider: session?.businessMailProvider,
+            apiKey: session?.businessApiKey,
+            providerEndpoint: session?.businessMailProviderEndpoint,
+          }),
+        });
+        businessQueue.mark(item.id, { status: 'sent', error: undefined });
+        const sentEmail = mutateEmail(item.id, e => ({
+          ...e,
+          folder: 'sent',
+          date: new Date().toISOString(),
+          labels: (e.labels || []).filter(label => label !== 'scheduled'),
+          scheduledAt: item.scheduledAt,
+        }));
+        if (!sentEmail) {
+          const fallbackEmail: Email = {
+            id: item.id,
+            from: item.fromAddress,
+            fromName: session?.displayName || 'Business',
+            to: recipients,
+            subject: item.subject,
+            body: item.body || '',
+            date: new Date().toISOString(),
+            folder: 'sent',
+            unread: false,
+            starred: false,
+            labels: [],
+            hasAttachment: false,
+            scheduledAt: item.scheduledAt,
+          };
+          emailsCache = loadUserDB<Email[]>(STORAGE_KEYS.emails, SEED_EMAILS);
+          emailsCache.unshift(fallbackEmail);
+          saveUserDB(STORAGE_KEYS.emails, emailsCache);
+          syncBusinessEmailToDb(fallbackEmail);
+        }
+        businessAudit.add({
+          action: 'Delivered scheduled email',
+          actor: item.fromAddress,
+          target: item.to,
+          severity: 'info',
+        });
+        delivered += 1;
+      } catch (error) {
+        businessQueue.mark(item.id, {
+          status: item.retryCount >= 2 ? 'failed' : 'deferred',
+          retryCount: item.retryCount + 1,
+          error: error instanceof Error ? error.message : 'Scheduled delivery failed.',
+        });
+      }
+    }
+
+    return delivered;
   },
 
   getUnreadCount(): number {

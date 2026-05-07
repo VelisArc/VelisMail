@@ -4,7 +4,7 @@ import {
   Inbox, Send, FileEdit, Star, Archive, Trash2, LogOut,
   Search, Plus, X, Paperclip, RefreshCw, Settings, ArrowLeft,
   Reply, Forward, Loader2, CheckCircle2,
-  AlertTriangle, Sun, Moon, BarChart3, Users, Globe, Shield,
+  AlertTriangle, Sun, Moon, BarChart3, Users, Globe, Shield, ShieldCheck,
   Server, Activity, Clock, AlertCircle, Database,
   CheckSquare, Square, Tag, Bell, BellOff,
   ExternalLink, Copy, Zap, Filter, Check,
@@ -507,6 +507,15 @@ export default function BusinessDashboard() {
     showToast('Email moved to spam');
   };
 
+  const handleMarkSafe = (id?: string) => {
+    const emailId = id || selectedEmail?.id;
+    if (!emailId) return;
+    mail.markSafe(emailId);
+    refetchEmails();
+    setSelectedEmail(null);
+    showToast('Message marked safe and moved to Inbox');
+  };
+
   const handleTogglePriority = (id?: string) => {
     const emailId = id || selectedEmail?.id;
     if (!emailId) return;
@@ -640,6 +649,26 @@ export default function BusinessDashboard() {
     setMailQueue(businessQueue.getAll(activeDomainName));
   };
 
+  useEffect(() => {
+    if (!activeDomainName) return;
+    let cancelled = false;
+    const runDueScheduledMail = async () => {
+      const delivered = await mail.dispatchScheduledDue(activeDomainName);
+      if (!cancelled && delivered > 0) {
+        setMailQueue(businessQueue.getAll(activeDomainName));
+        refetchEmails();
+        setAuditLog(businessAudit.getAll());
+        showToast(`${delivered} scheduled email${delivered === 1 ? '' : 's'} delivered`);
+      }
+    };
+    void runDueScheduledMail();
+    const timer = window.setInterval(runDueScheduledMail, 60000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [activeDomainName, refetchEmails]);
+
   const handleRetryQueueItem = async (id: string) => {
     if (!canCompose) {
       showToast('Viewer access cannot retry deliveries.', 'error');
@@ -688,6 +717,18 @@ export default function BusinessDashboard() {
     businessQueue.remove(id);
     refreshQueue();
     showToast('Message deleted from queue');
+  };
+
+  const handleRunScheduledQueue = async () => {
+    if (!canCompose) {
+      showToast('Viewer access cannot dispatch scheduled mail.', 'error');
+      return;
+    }
+    const delivered = await mail.dispatchScheduledDue(activeDomainName);
+    refreshQueue();
+    refetchEmails();
+    setAuditLog(businessAudit.getAll());
+    showToast(delivered > 0 ? `${delivered} scheduled email${delivered === 1 ? '' : 's'} delivered` : 'No scheduled emails are due yet');
   };
 
   const handleCreateTemplate = () => {
@@ -949,6 +990,7 @@ export default function BusinessDashboard() {
       else if (bulkAction === 'unread') mail.markUnread(emailId);
       else if (bulkAction === 'unarchive') mail.moveFolder(emailId, 'inbox');
       else if (bulkAction === 'spam') mail.moveFolder(emailId, 'spam');
+      else if (bulkAction === 'safe') mail.markSafe(emailId);
       else if (bulkAction === 'priority') mail.togglePriority(emailId);
       else if (bulkAction === 'star') mail.toggleStar(emailId);
       else if (bulkAction === 'permanentDelete') mail.permanentDelete(emailId);
@@ -1192,6 +1234,9 @@ export default function BusinessDashboard() {
                         <button className="btn btn-ghost btn-icon" title="Archive" onClick={() => handleArchive()}><ArchiveIcon size={16} /></button>
                       )}
                       {selectedEmail.folder !== 'spam' && <button className="btn btn-ghost btn-icon" title="Mark as Spam" onClick={() => handleMarkSpam()}><AlertCircle size={16} /></button>}
+                      {(selectedEmail.folder === 'spam' || isScamEmail(selectedEmail)) && (
+                        <button className="btn btn-ghost btn-icon" title="Mark Safe" onClick={() => handleMarkSafe()}><ShieldCheck size={16} /></button>
+                      )}
                       {selectedEmail.folder === 'trash' ? (
                         <button className="btn btn-danger btn-icon btn-sm" title="Delete permanently" onClick={() => handlePermanentDelete()}><Trash size={16} /></button>
                       ) : (
@@ -1212,7 +1257,12 @@ export default function BusinessDashboard() {
                       <div className="reader-avatar biz-reader-avatar">{(selectedEmail.fromName || selectedEmail.from).charAt(0)}</div>
                       <div>
                         <div className="reader-sender-name">{selectedEmail.fromName || selectedEmail.from}</div>
-                        <div className="reader-sender-email">{selectedEmail.from} → {selectedEmail.to?.join(', ')}</div>
+                        <div className="reader-sender-email">{selectedEmail.from} -&gt; {selectedEmail.to?.join(', ')}</div>
+                        {selectedEmail.scheduledAt && (
+                          <div className="reader-schedule">
+                            <Clock size={13} /> Scheduled for {new Date(selectedEmail.scheduledAt).toLocaleString()}
+                          </div>
+                        )}
                       </div>
                     </div>
                     <div className="reader-date">{new Date(selectedEmail.date).toLocaleString()}</div>
@@ -1277,6 +1327,7 @@ export default function BusinessDashboard() {
                       <option value="archive">Archive</option>
                       <option value="unarchive">Move to inbox</option>
                       <option value="spam">Mark as spam</option>
+                      <option value="safe">Mark safe</option>
                       <option value="delete">Delete</option>
                       <option value="permanentDelete">Delete permanently</option>
                     </select>
@@ -1308,6 +1359,7 @@ export default function BusinessDashboard() {
                           <div className="mail-row-top">
                             <span className="mail-sender">{email.fromName || email.from}</span>
                             {isScamEmail(email) && <span className="badge badge-danger" style={{ marginLeft: 8 }}>Scam</span>}
+                            {email.scheduledAt && <span className="badge badge-warning" style={{ marginLeft: 8 }}>Scheduled {formatRelative(email.scheduledAt)}</span>}
                             <span className="mail-date">{formatRelative(email.date)}</span>
                           </div>
                           <div className="mail-subject">{email.subject}</div>
@@ -1338,6 +1390,7 @@ export default function BusinessDashboard() {
                             </div>
                             {email.starred && <Star size={14} fill="#facc15" color="#facc15" />}
                           </div>
+                          {email.scheduledAt && <span className="badge badge-warning">Scheduled {formatRelative(email.scheduledAt)}</span>}
                           <div className="mail-card-subject">{email.subject}</div>
                           <div className="mail-card-preview">{email.body.slice(0, 60)}…</div>
                           {email.labels.length > 0 && (
@@ -1777,6 +1830,7 @@ export default function BusinessDashboard() {
                   <Filter size={16} /> Filters
                 </button>
                 <button className="btn btn-ghost btn-sm" onClick={refreshQueue}><RefreshCcw size={16} /> Refresh</button>
+                <button className="btn btn-ghost btn-sm" onClick={handleRunScheduledQueue}><Clock size={16} /> Run Due</button>
                 <button className="btn btn-ghost btn-sm" onClick={() => { businessQueue.clearSent(); refreshQueue(); }}>
                   <Trash2 size={16} /> Clear Sent
                 </button>
@@ -1803,6 +1857,10 @@ export default function BusinessDashboard() {
                 <div className="queue-stat-label">Queued</div>
               </div>
               <div className="queue-stat glass-card">
+                <div className="queue-stat-value">{mailQueue.filter(q => q.status === 'queued' && q.scheduledAt).length}</div>
+                <div className="queue-stat-label">Scheduled</div>
+              </div>
+              <div className="queue-stat glass-card">
                 <div className="queue-stat-value">{mailQueue.filter(q => q.status === 'sending').length}</div>
                 <div className="queue-stat-label">Sending</div>
               </div>
@@ -1824,6 +1882,7 @@ export default function BusinessDashboard() {
                     <th>To</th>
                     <th>Subject</th>
                     <th>Queued</th>
+                    <th>Scheduled For</th>
                     <th>Retries</th>
                     <th>Error</th>
                     <th>Actions</th>
@@ -1840,7 +1899,14 @@ export default function BusinessDashboard() {
                       </td>
                       <td className="queue-to">{item.to}</td>
                       <td className="queue-subject">{item.subject}</td>
-                      <td className="queue-time">{item.scheduledAt ? `Scheduled ${formatRelative(item.scheduledAt)}` : formatRelative(item.queuedAt)}</td>
+                      <td className="queue-time">{formatRelative(item.queuedAt)}</td>
+                      <td className="queue-time">
+                        {item.scheduledAt ? (
+                          <span className="queue-schedule">
+                            <Clock size={12} /> {new Date(item.scheduledAt).toLocaleString()} ({formatRelative(item.scheduledAt)})
+                          </span>
+                        ) : 'Send now'}
+                      </td>
                       <td className="queue-retries">{item.retryCount}/{item.retryCount >= 3 ? 'MAX' : '3'}</td>
                       <td className="queue-error">{item.error || '—'}</td>
                       <td className="queue-actions">
@@ -1853,7 +1919,7 @@ export default function BusinessDashboard() {
                   ))}
                   {mailQueue.filter(q => queueStatusFilter === 'all' || q.status === queueStatusFilter).length === 0 && (
                     <tr>
-                      <td colSpan={7} className="queue-empty">
+                      <td colSpan={8} className="queue-empty">
                         No messages match this queue view.
                       </td>
                     </tr>

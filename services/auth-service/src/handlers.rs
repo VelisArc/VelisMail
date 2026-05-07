@@ -648,7 +648,7 @@ pub async fn verify_otp(
             sub: verification_email,
             purpose,
             verified_at: chrono::Utc::now().timestamp(),
-            exp: chrono::Utc::now().timestamp() + 1800,
+            exp: chrono::Utc::now().timestamp() + state.config.otp_ttl_seconds,
         },
         &EncodingKey::from_secret(state.config.otp_signing_secret.as_bytes()),
     )
@@ -657,7 +657,7 @@ pub async fn verify_otp(
     Ok(Json(json!({
         "success": true,
         "verificationToken": verification_token,
-        "expiresIn": 1800
+        "expiresIn": state.config.otp_ttl_seconds
     })))
 }
 
