@@ -297,3 +297,32 @@
 .attachment-chip button:hover {
   color: var(--danger);
 }
+
+/* Final compact composer polish */
+.compose-modal {
+  border-radius: var(--radius-md);
+  box-shadow: none;
+}
+
+.compose-header,
+.compose-footer {
+  padding: 12px 14px;
+}
+
+.compose-body {
+  gap: 8px;
+}
+
+.compose-field {
+  padding: 6px 14px;
+}
+
+.rich-text-container {
+  margin: 8px 14px;
+  border-radius: var(--radius-sm);
+  box-shadow: none;
+}
+
+.rich-text-editor {
+  min-height: 170px;
+}

@@ -794,3 +794,75 @@ main {
   background-color: var(--accent-600);
   color: var(--text-primary);
 }
+
+/* Final production polish: compact, background-integrated UI */
+:root {
+  --radius-xl: 8px;
+  --radius-2xl: 8px;
+  --glass-shadow: none;
+}
+
+.glass {
+  background: color-mix(in srgb, var(--bg-surface) 92%, transparent);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.card,
+.glass-card,
+.biz-form-modal {
+  background: color-mix(in srgb, var(--bg-surface) 94%, var(--bg-body));
+  border: 1px solid var(--border-primary) !important;
+  border-radius: var(--radius-md);
+  box-shadow: none;
+  padding: 16px;
+}
+
+.card:hover,
+.glass-card:hover {
+  transform: none;
+  box-shadow: none;
+}
+
+.btn {
+  border-radius: var(--radius-sm);
+  min-height: 36px;
+  padding: 8px 12px;
+}
+
+.btn-sm {
+  min-height: 32px;
+  padding: 6px 10px;
+}
+
+.btn-icon {
+  width: 36px;
+  height: 36px;
+}
+
+.input,
+input.input,
+select.input,
+textarea.input {
+  min-height: 36px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface);
+}
+
+.modal-overlay {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+@media (max-width: 640px) {
+  .card,
+  .glass-card,
+  .biz-form-modal {
+    padding: 12px;
+  }
+
+  .btn {
+    min-height: 36px;
+    padding: 8px 11px;
+  }
+}

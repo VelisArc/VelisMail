@@ -68,3 +68,43 @@
 
 /* Responsive */
 @media(max-width:768px){.contacts-page{grid-template-columns:1fr}.contacts-detail{display:none}}
+
+/* Final compact contacts polish */
+.contacts-sidebar,
+.contacts-detail {
+  background: var(--bg-body);
+}
+
+.contacts-sidebar-header,
+.contacts-search,
+.contacts-groups,
+.modal-header,
+.modal-footer {
+  padding-block: 10px;
+}
+
+.contacts-add-btn {
+  margin: 8px 12px;
+  width: calc(100% - 24px);
+}
+
+.contact-row {
+  padding: 10px 14px;
+}
+
+.contact-detail-content,
+.contact-edit-form {
+  padding: 22px;
+}
+
+.detail-field,
+.add-contact-modal,
+.group-btn {
+  border-radius: var(--radius-sm);
+}
+
+@media(max-width:768px){
+  .contacts-sidebar-header{padding:10px 14px}
+  .contacts-search{padding:8px 14px}
+  .contacts-groups{padding:8px 12px}
+}

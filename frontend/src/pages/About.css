@@ -361,3 +361,53 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* Final compact about polish */
+.about-nav {
+  padding: 10px 0;
+  background: var(--bg-body);
+}
+
+.about-hero {
+  padding: 86px 0 38px;
+}
+
+.about-hero-orb {
+  display: none;
+}
+
+.about-mission,
+.about-values,
+.about-team,
+.about-timeline {
+  padding: 42px 0;
+}
+
+.value-card,
+.team-card,
+.timeline-content,
+.about-cta-box {
+  border-radius: var(--radius-md);
+  box-shadow: none;
+}
+
+.about-cta {
+  padding: 34px 0 48px;
+}
+
+.about-cta-box {
+  padding: 34px 24px;
+}
+
+@media (max-width: 768px) {
+  .about-hero {
+    padding: 72px 0 28px;
+  }
+
+  .about-mission,
+  .about-values,
+  .about-team,
+  .about-timeline {
+    padding: 30px 0;
+  }
+}

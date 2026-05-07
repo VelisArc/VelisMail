@@ -2679,3 +2679,55 @@
     grid-column: 1 / -1;
   }
 }
+
+/* Final compact dashboard polish */
+.biz-sidebar,
+.biz-main,
+.dash-list,
+.dash-reader,
+.biz-panel {
+  background: var(--bg-body);
+}
+
+.biz-sidebar {
+  padding: 14px 10px;
+}
+
+.sidebar-top {
+  padding-bottom: 12px;
+  margin-bottom: 12px;
+}
+
+.folder-btn {
+  min-height: 34px;
+  padding: 7px 10px;
+  border-radius: var(--radius-sm);
+}
+
+.biz-dash .mail-row {
+  padding: 8px 10px;
+}
+
+.biz-dash .reader-meta,
+.biz-dash .domain-card-full,
+.biz-dash .health-card,
+.biz-dash .queue-stat,
+.biz-dash .analytics-card,
+.biz-dash .template-card,
+.biz-dash .team-row {
+  box-shadow: none;
+}
+
+.biz-dash .panel-header {
+  margin-bottom: 10px;
+}
+
+@media (max-width: 768px) {
+  .biz-sidebar {
+    padding: 12px;
+  }
+
+  .biz-dash .mail-row {
+    padding: 9px 8px;
+  }
+}

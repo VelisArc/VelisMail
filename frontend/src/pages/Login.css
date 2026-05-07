@@ -397,3 +397,61 @@
     letter-spacing: 0.02em;
   }
 }
+
+/* Final compact integrated login polish */
+.login-page {
+  padding: 56px 14px 36px;
+}
+
+.login-bg-orb {
+  display: none;
+}
+
+.login-container {
+  gap: 28px;
+}
+
+.login-card {
+  padding: 22px;
+  border-radius: var(--radius-md);
+  box-shadow: none;
+}
+
+.login-card-header {
+  margin-bottom: 18px;
+}
+
+.login-icon-wrap {
+  width: 52px;
+  height: 52px;
+  border-radius: var(--radius-md);
+}
+
+.access-mode-switch,
+.team-invite-summary,
+.account-type-card {
+  border-radius: var(--radius-sm);
+}
+
+.login-form {
+  gap: 14px;
+}
+
+.login-card-footer {
+  margin-top: 18px;
+  padding-top: 14px;
+}
+
+@media (max-width: 768px) {
+  .login-page {
+    padding: 46px 12px 28px;
+  }
+
+  .login-card {
+    padding: 16px;
+  }
+
+  .login-features {
+    gap: 8px;
+  }
+}

@@ -273,3 +273,49 @@
   .bsetup-progress::before { left: var(--space-8); right: var(--space-8); }
   .bsetup-progress-step span { display: none; }
 }
+
+/* Final compact setup polish */
+.bsetup-nav {
+  min-height: 52px;
+  background: var(--bg-body);
+}
+
+.bsetup-container {
+  padding: 22px 16px;
+}
+
+.bsetup-progress {
+  margin-bottom: 22px;
+}
+
+.bsetup-card {
+  padding: 18px;
+  border-radius: var(--radius-md);
+  box-shadow: none;
+}
+
+.bsetup-desc {
+  margin-bottom: 18px;
+}
+
+.bsetup-form {
+  gap: 12px;
+}
+
+.bsetup-dns {
+  border-radius: var(--radius-md);
+}
+
+@media (max-width: 768px) {
+  .bsetup-container {
+    padding: 14px 12px;
+  }
+
+  .bsetup-card {
+    padding: 14px;
+  }
+
+  .bsetup-progress {
+    margin-bottom: 16px;
+  }
+}

@@ -377,3 +377,64 @@
     flex-direction: column;
   }
 }
+
+/* Final compact settings polish */
+.settings-header {
+  height: 44px;
+  background: var(--bg-body);
+}
+
+.settings-body {
+  padding: 18px 0;
+  gap: 18px;
+}
+
+.settings-tabs {
+  padding: 8px;
+  border-radius: var(--radius-md);
+  background: transparent;
+}
+
+.settings-section-header {
+  margin-bottom: 10px;
+}
+
+.add-domain-card,
+.security-card,
+.appearance-card,
+.profile-card {
+  box-shadow: none;
+  border-radius: var(--radius-md);
+}
+
+.security-card {
+  margin-bottom: 10px;
+}
+
+.theme-option {
+  border-radius: var(--radius-sm);
+  padding: 12px 18px;
+}
+
+@media (max-width: 768px) {
+  .settings-body {
+    padding: 12px 0;
+    gap: 12px;
+  }
+
+  .settings-tabs {
+    position: static;
+    width: 100%;
+    flex-direction: row;
+    overflow-x: auto;
+  }
+
+  .tab-btn {
+    white-space: nowrap;
+    flex: 0 0 auto;
+  }
+
+  .settings-section-header p {
+    display: none;
+  }
+}
