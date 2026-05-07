@@ -2382,10 +2382,11 @@
 
 .biz-dash .select-all-btn {
   flex-shrink: 0;
-  min-width: 118px;
-  min-height: 40px;
+  min-width: 102px;
+  min-height: 34px;
   justify-content: center;
   font-weight: 700;
+  padding: 6px 10px;
 }
 
 .biz-dash .list-actions .btn-icon,
@@ -2397,10 +2398,12 @@
 
 .biz-dash .list-search {
   display: grid;
-  grid-template-columns: auto 22px minmax(180px, 1fr) minmax(150px, 190px) auto;
+  grid-template-columns: auto 18px minmax(150px, 1fr) minmax(112px, 140px) auto;
   align-items: center;
-  gap: 10px;
-  padding: 12px 14px;
+  gap: 8px;
+  margin: 10px 24px;
+  padding: 8px 10px;
+  min-height: 50px;
 }
 
 .biz-dash .list-search > svg {
@@ -2409,13 +2412,15 @@
 }
 
 .biz-dash .list-search input {
-  min-height: 40px;
+  min-height: 34px;
   padding: 0 2px;
+  font-size: 0.9rem;
 }
 
 .biz-dash .mail-filter-select {
   width: 100%;
-  min-height: 40px;
+  min-height: 34px;
+  padding: 0 10px;
 }
 
 @media (max-width: 900px) {
@@ -2432,15 +2437,18 @@
 
 @media (max-width: 760px) {
   .biz-dash .list-search {
-    grid-template-columns: 24px minmax(0, 1fr);
-    margin: 12px 16px;
-    padding: 12px;
-    gap: 10px;
+    grid-template-columns: auto 18px minmax(0, 1fr) minmax(92px, 116px);
+    margin: 8px 14px;
+    padding: 7px 8px;
+    gap: 6px;
+    min-height: 46px;
   }
 
   .biz-dash .select-all-btn {
-    grid-column: 1 / -1;
-    width: 100%;
+    grid-column: auto;
+    width: auto;
+    min-width: 88px;
+    font-size: 0.78rem;
   }
 
   .biz-dash .list-search input {
@@ -2448,7 +2456,8 @@
   }
 
   .biz-dash .list-search .mail-filter-select {
-    grid-column: 1 / -1;
+    grid-column: auto;
+    font-size: 0.82rem;
   }
 
   .biz-dash .search-clear {
@@ -2469,5 +2478,14 @@
   .biz-dash .list-actions .btn-icon {
     width: 42px;
     height: 42px;
+  }
+
+  .biz-dash .list-search {
+    grid-template-columns: auto 16px minmax(0, 1fr) 96px;
+  }
+
+  .biz-dash .select-all-btn {
+    min-width: 82px;
+    padding: 5px 7px;
   }
 }
