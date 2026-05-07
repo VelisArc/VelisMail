@@ -2362,19 +2362,30 @@ pub async fn revoke_team_invite(
 
 static POOLS: Lazy<Mutex<HashMap<String, PgPool>>> = Lazy::new(|| Mutex::new(HashMap::new()));
 
+fn normalize_business_db_url(db_url: &str) -> String {
+    let trimmed = db_url.trim();
+    if trimmed.contains("neon.tech") && !trimmed.to_ascii_lowercase().contains("sslmode=") {
+        let separator = if trimmed.contains('?') { '&' } else { '?' };
+        return format!("{trimmed}{separator}sslmode=require");
+    }
+    trimmed.to_string()
+}
+
 async fn get_tenant_pool(db_url: &str) -> Result<PgPool, String> {
+    let normalized_url = normalize_business_db_url(db_url);
+
     if let Some(pool) = {
         let pools = POOLS
             .lock()
             .map_err(|_| "Tenant pool cache lock poisoned".to_string())?;
-        pools.get(db_url).cloned()
+        pools.get(&normalized_url).cloned()
     } {
         return Ok(pool);
     }
 
     let pool = PgPoolOptions::new()
         .max_connections(5)
-        .connect(db_url)
+        .connect(&normalized_url)
         .await
         .map_err(|e| e.to_string())?;
 
@@ -2382,7 +2393,7 @@ async fn get_tenant_pool(db_url: &str) -> Result<PgPool, String> {
         let mut pools = POOLS
             .lock()
             .map_err(|_| "Tenant pool cache lock poisoned".to_string())?;
-        pools.insert(db_url.to_string(), pool.clone());
+        pools.insert(normalized_url, pool.clone());
     }
 
     Ok(pool)

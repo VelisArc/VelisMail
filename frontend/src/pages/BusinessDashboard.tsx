@@ -414,6 +414,7 @@ export default function BusinessDashboard() {
       setComposeBody('');
       setAuditLog(businessAudit.getAll());
       setMailQueue(businessQueue.getAll(domain));
+      refetchEmails();
     } catch (error) {
       showToast(error instanceof Error ? error.message : 'Business email send failed', 'error');
       setMailQueue(businessQueue.getAll(domain));

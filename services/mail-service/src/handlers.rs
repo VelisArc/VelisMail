@@ -21,23 +21,34 @@ use uuid::Uuid;
 static BUSINESS_POOLS: std::sync::LazyLock<Mutex<HashMap<String, PgPool>>> =
     std::sync::LazyLock::new(|| Mutex::new(HashMap::new()));
 
+fn normalize_business_db_url(db_url: &str) -> String {
+    let trimmed = db_url.trim();
+    if trimmed.contains("neon.tech") && !trimmed.to_ascii_lowercase().contains("sslmode=") {
+        let separator = if trimmed.contains('?') { '&' } else { '?' };
+        return format!("{trimmed}{separator}sslmode=require");
+    }
+    trimmed.to_string()
+}
+
 async fn get_business_pool(db_url: &str) -> Result<PgPool, String> {
+    let normalized_url = normalize_business_db_url(db_url);
+
     if let Ok(pools) = BUSINESS_POOLS.lock() {
-        if let Some(pool) = pools.get(db_url) {
+        if let Some(pool) = pools.get(&normalized_url) {
             return Ok(pool.clone());
         }
     }
 
     let pool = PgPoolOptions::new()
         .max_connections(5)
-        .connect(db_url)
+        .connect(&normalized_url)
         .await
         .map_err(|e| e.to_string())?;
 
     let mut pools = BUSINESS_POOLS
         .lock()
         .map_err(|_| "Business pool cache lock poisoned".to_string())?;
-    pools.insert(db_url.to_string(), pool.clone());
+    pools.insert(normalized_url, pool.clone());
     Ok(pool)
 }
 

@@ -1610,7 +1610,7 @@ function syncBusinessEmailToDb(email: Email) {
       businessEmailDbRouteUnavailable = true;
       return;
     }
-    console.error('Failed to sync business email to DB', err);
+    console.warn('Business email database sync failed; the sent message remains available in the local dashboard cache.', err);
   });
 }
 
@@ -1754,6 +1754,8 @@ export const mail = {
       date: new Date().toISOString(),
       folder: 'sent', unread: false, starred: false, labels: [], hasAttachment: attachments && attachments.length > 0 ? true : false,
     };
+    emailsCache = loadUserDB<Email[]>(STORAGE_KEYS.emails, SEED_EMAILS);
+    emailsCache = emailsCache.filter(existing => existing.id !== email.id);
     emailsCache.unshift(email);
     saveUserDB(STORAGE_KEYS.emails, emailsCache);
 
