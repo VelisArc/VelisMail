@@ -83,7 +83,8 @@
 
 /* Login Card */
 .login-card {
-  width: 440px; 
+  width: 100%;
+  max-width: 440px;
   flex-shrink: 0; 
   padding: var(--space-10);
   background: var(--bg-surface);
@@ -263,6 +264,9 @@
 
 /* Responsive */
 @media (max-width: 1024px) {
+  .login-brand > p {
+    text-align: left;
+  }
   .login-container { 
     flex-direction: column; 
     gap: var(--space-10);

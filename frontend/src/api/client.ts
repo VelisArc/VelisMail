@@ -430,7 +430,7 @@ function friendlyApiError(endpoint: string, status: number, fallback: string): s
     if (route.includes('/auth/send-otp') || route.includes('/auth/otp/send') || route.includes('/auth/password-reset/request')) {
       return 'OTP service is not yet available. The backend auth service may still be deploying, or the OTP routes have not been configured. Please try again in a few minutes or contact support@velismail.online.';
     }
-    return 'Requested VelisMail service route was not found on the backend.';
+    return fallback || 'Requested VelisMail service route was not found on the backend.';
   }
   if (status === 429) {
     return 'Too many attempts. Wait a moment and try again.';
@@ -1591,8 +1591,12 @@ function normalizeBusinessEmailFromDb(raw: Partial<Email> & {
 function syncBusinessEmailToDb(email: Email) {
   const session = auth.getSession();
   if (!session?.businessDbUrl) return;
+  const headers: Record<string, string> = {
+    'x-business-db-url': session.businessDbUrl
+  };
   fetchAPI('/mail/business-emails', {
     method: 'POST',
+    headers,
     body: JSON.stringify({
       dbUrl: session.businessDbUrl,
       email: {
@@ -1633,8 +1637,12 @@ export const mail = {
     
     if (session?.businessDbUrl) {
       try {
+        const headers: Record<string, string> = {
+          'x-business-db-url': session.businessDbUrl
+        };
         const response = await fetchAPI('/mail/business-emails/query', {
           method: 'POST',
+          headers,
           body: JSON.stringify({ dbUrl: session.businessDbUrl }),
         });
         if (response.success && Array.isArray(response.emails)) {
