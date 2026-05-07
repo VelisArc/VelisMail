@@ -3,8 +3,8 @@
 use crate::models::{BatchLabelRequest, BatchMoveRequest, CreateEmailRequest};
 use crate::state::MailState;
 use axum::{
-    extract::{Path, State},
-    http::StatusCode,
+    extract::{Path, Query, State},
+    http::{HeaderMap, StatusCode},
     Json,
 };
 use lettre::{
@@ -12,8 +12,158 @@ use lettre::{
     transport::smtp::authentication::Credentials,
     Message, SmtpTransport, Transport,
 };
-use serde_json::json;
+use serde::{Deserialize, Serialize};
+use serde_json::{json, Value};
+use sqlx::{postgres::PgPoolOptions, PgPool, Row};
+use std::{collections::HashMap, sync::Mutex};
 use uuid::Uuid;
+
+static BUSINESS_POOLS: std::sync::LazyLock<Mutex<HashMap<String, PgPool>>> =
+    std::sync::LazyLock::new(|| Mutex::new(HashMap::new()));
+
+async fn get_business_pool(db_url: &str) -> Result<PgPool, String> {
+    if let Ok(pools) = BUSINESS_POOLS.lock() {
+        if let Some(pool) = pools.get(db_url) {
+            return Ok(pool.clone());
+        }
+    }
+
+    let pool = PgPoolOptions::new()
+        .max_connections(5)
+        .connect(db_url)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let mut pools = BUSINESS_POOLS
+        .lock()
+        .map_err(|_| "Business pool cache lock poisoned".to_string())?;
+    pools.insert(db_url.to_string(), pool.clone());
+    Ok(pool)
+}
+
+async fn ensure_business_emails_table(pool: &PgPool) -> Result<(), String> {
+    sqlx::query(
+        "CREATE TABLE IF NOT EXISTS business_emails (
+            id VARCHAR(255) PRIMARY KEY,
+            sender VARCHAR(255),
+            sender_name VARCHAR(255),
+            recipients TEXT,
+            subject TEXT,
+            body TEXT,
+            folder VARCHAR(50),
+            created_at VARCHAR(100),
+            is_read BOOLEAN,
+            is_starred BOOLEAN
+        );",
+    )
+    .execute(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BusinessEmail {
+    pub id: String,
+    pub from: String,
+    pub from_name: String,
+    pub to: Vec<String>,
+    pub subject: String,
+    pub body: String,
+    pub folder: String,
+    pub date: String,
+    pub read: bool,
+    pub starred: bool,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SaveBusinessEmailRequest {
+    pub db_url: Option<String>,
+    pub email: BusinessEmail,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BusinessEmailsQuery {
+    pub db_url: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BusinessEmailsRequest {
+    pub db_url: String,
+}
+
+fn business_db_url_from_parts(
+    headers: &HeaderMap,
+    query_url: Option<&str>,
+    body_url: Option<&str>,
+) -> Option<String> {
+    body_url
+        .or(query_url)
+        .or_else(|| headers.get("x-business-db-url").and_then(|h| h.to_str().ok()))
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
+}
+
+async fn read_business_emails(db_url: &str) -> (StatusCode, Json<Value>) {
+    let pool = match get_business_pool(db_url).await {
+        Ok(pool) => pool,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"success": false, "error": format!("DB Error: {}", e)})),
+            )
+        }
+    };
+
+    if let Err(e) = ensure_business_emails_table(&pool).await {
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"success": false, "error": format!("Schema Error: {}", e)})),
+        );
+    }
+
+    let rows = match sqlx::query(
+        "SELECT id, sender, sender_name, recipients, subject, body, folder, created_at, is_read, is_starred FROM business_emails ORDER BY created_at DESC",
+    )
+    .fetch_all(&pool)
+    .await
+    {
+        Ok(rows) => rows,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"success": false, "error": format!("Query Error: {}", e)})),
+            )
+        }
+    };
+
+    let emails: Vec<Value> = rows
+        .into_iter()
+        .map(|row| {
+            let recipients: String = row.try_get(3).unwrap_or_else(|_| "[]".to_string());
+            let to: Vec<String> = serde_json::from_str(&recipients).unwrap_or_default();
+            json!({
+                "id": row.try_get::<String, _>(0).unwrap_or_default(),
+                "from": row.try_get::<String, _>(1).unwrap_or_default(),
+                "fromName": row.try_get::<String, _>(2).unwrap_or_default(),
+                "to": to,
+                "subject": row.try_get::<String, _>(4).unwrap_or_default(),
+                "body": row.try_get::<String, _>(5).unwrap_or_default(),
+                "folder": row.try_get::<String, _>(6).unwrap_or_default(),
+                "date": row.try_get::<String, _>(7).unwrap_or_default(),
+                "read": row.try_get::<bool, _>(8).unwrap_or_default(),
+                "starred": row.try_get::<bool, _>(9).unwrap_or_default()
+            })
+        })
+        .collect();
+
+    (StatusCode::OK, Json(json!({"success": true, "emails": emails})))
+}
 
 /// Health check
 pub async fn health_check() -> Json<serde_json::Value> {
@@ -37,6 +187,105 @@ pub async fn list_emails(
             "total": 0
         }
     })))
+}
+
+pub async fn get_business_emails(
+    State(_state): State<MailState>,
+    Query(query): Query<BusinessEmailsQuery>,
+    headers: HeaderMap,
+) -> (StatusCode, Json<Value>) {
+    let db_url = match business_db_url_from_parts(&headers, query.db_url.as_deref(), None) {
+        Some(url) => url,
+        None => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(json!({"success": false, "error": "Missing business database URL"})),
+            )
+        }
+    };
+
+    read_business_emails(&db_url).await
+}
+
+pub async fn query_business_emails(
+    State(_state): State<MailState>,
+    Json(payload): Json<BusinessEmailsRequest>,
+) -> (StatusCode, Json<Value>) {
+    let db_url = payload.db_url.trim();
+    if db_url.is_empty() {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({"success": false, "error": "Missing business database URL"})),
+        );
+    }
+
+    read_business_emails(db_url).await
+}
+
+pub async fn save_business_email(
+    State(_state): State<MailState>,
+    Query(query): Query<BusinessEmailsQuery>,
+    headers: HeaderMap,
+    Json(payload): Json<SaveBusinessEmailRequest>,
+) -> (StatusCode, Json<Value>) {
+    let db_url = match business_db_url_from_parts(
+        &headers,
+        query.db_url.as_deref(),
+        payload.db_url.as_deref(),
+    ) {
+        Some(url) => url,
+        None => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(json!({"success": false, "error": "Missing business database URL"})),
+            )
+        }
+    };
+
+    let pool = match get_business_pool(&db_url).await {
+        Ok(pool) => pool,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"success": false, "error": format!("DB Error: {}", e)})),
+            )
+        }
+    };
+
+    if let Err(e) = ensure_business_emails_table(&pool).await {
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"success": false, "error": format!("Schema Error: {}", e)})),
+        );
+    }
+
+    let email = payload.email;
+    let recipients = serde_json::to_string(&email.to).unwrap_or_else(|_| "[]".to_string());
+
+    match sqlx::query(
+        "INSERT INTO business_emails (id, sender, sender_name, recipients, subject, body, folder, created_at, is_read, is_starred)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+         ON CONFLICT (id) DO UPDATE SET folder = $7, is_read = $9, is_starred = $10",
+    )
+    .bind(&email.id)
+    .bind(&email.from)
+    .bind(&email.from_name)
+    .bind(&recipients)
+    .bind(&email.subject)
+    .bind(&email.body)
+    .bind(&email.folder)
+    .bind(&email.date)
+    .bind(email.read)
+    .bind(email.starred)
+    .execute(&pool)
+    .await
+    {
+        Ok(_) => (StatusCode::OK, Json(json!({"success": true}))),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"success": false, "error": format!("Insert Error: {}", e)})),
+        ),
+    }
 }
 
 /// Send an email

@@ -16,11 +16,7 @@
 }
 
 .login-bg-orb {
-  position: absolute;
-  border-radius: 50%;
-  filter: blur(120px);
-  pointer-events: none;
-  z-index: 0;
+  display: none;
 }
 
 .login-orb-1 {
@@ -287,27 +283,107 @@
 
 @media (max-width: 768px) {
   .login-page {
-    padding: 80px 16px 40px;
+    justify-content: flex-start;
+    padding: 72px 14px 72px;
   }
+
+  .login-container {
+    gap: 24px;
+    margin-top: 0;
+  }
+
+  .login-brand {
+    width: 100%;
+  }
+
   .login-card {
-    padding: var(--space-6);
+    max-width: 100%;
+    padding: 22px 18px;
   }
+
+  .login-card-header {
+    margin-bottom: 22px;
+  }
+
+  .login-icon-wrap {
+    width: 52px;
+    height: 52px;
+  }
+
   .login-brand h1 {
     font-size: 2rem;
+    letter-spacing: 0;
   }
+
   .login-brand > p {
     font-size: 1rem;
+    margin-bottom: 22px;
   }
+
   .login-features {
     gap: 12px;
+    align-items: stretch;
   }
+
   .login-feature {
+    justify-content: center;
     font-size: 0.9rem;
   }
+
+  .access-mode-switch {
+    grid-template-columns: 1fr;
+  }
+
+  .team-invite-summary {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
   .login-card-footer.row-layout {
     flex-direction: column;
     gap: 12px;
   }
+
+  .account-type-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .login-footer-links {
+    position: static;
+    margin-top: 28px;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+
+  .login-back-link {
+    top: 18px;
+    left: 14px;
+    font-size: 1rem;
+  }
 }
 
 .login-back-link { position: absolute; top: var(--space-6); left: var(--space-6); display: flex; align-items: center; gap: 8px; color: var(--text-primary); font-weight: 700; text-decoration: none; z-index: 10; font-size: 1.2rem; }
+
+@media (max-width: 420px) {
+  .login-page {
+    padding-left: 10px;
+    padding-right: 10px;
+  }
+
+  .login-card {
+    padding: 18px 14px;
+  }
+
+  .login-card-header h2 {
+    font-size: 1.25rem;
+  }
+
+  .login-form {
+    gap: 16px;
+  }
+
+  .form-group label {
+    letter-spacing: 0.02em;
+  }
+}

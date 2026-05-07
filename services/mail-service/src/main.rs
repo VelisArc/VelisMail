@@ -53,6 +53,14 @@ async fn main() -> anyhow::Result<()> {
         .route("/emails", post(handlers::send_email))
         .route("/emails/:id", get(handlers::get_email))
         .route("/emails/:id", delete(handlers::delete_email))
+        // Business mailbox persistence used by the dashboard. The API gateway
+        // exposes these as /mail/business-emails* and older gateways proxy the
+        // stripped path here, so keep first-class handlers in the mail service.
+        .route(
+            "/business-emails",
+            get(handlers::get_business_emails).post(handlers::save_business_email),
+        )
+        .route("/business-emails/query", post(handlers::query_business_emails))
         // Folders
         .route("/folders", get(handlers::list_folders))
         .route("/folders", post(handlers::create_folder))

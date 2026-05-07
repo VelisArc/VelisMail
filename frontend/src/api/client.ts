@@ -1590,7 +1590,7 @@ function normalizeBusinessEmailFromDb(raw: Partial<Email> & {
 
 function syncBusinessEmailToDb(email: Email) {
   const session = auth.getSession();
-  if (!session?.businessDbUrl) return;
+  if (!session?.businessDbUrl || businessEmailDbRouteUnavailable) return;
   const headers: Record<string, string> = {
     'x-business-db-url': session.businessDbUrl
   };
@@ -1605,8 +1605,16 @@ function syncBusinessEmailToDb(email: Email) {
         starred: email.starred,
       },
     }),
-  }).catch(err => console.error('Failed to sync business email to DB', err));
+  }).catch(err => {
+    if (err instanceof Error && err.message.includes('route was not found')) {
+      businessEmailDbRouteUnavailable = true;
+      return;
+    }
+    console.error('Failed to sync business email to DB', err);
+  });
 }
+
+let businessEmailDbRouteUnavailable = false;
 
 export const mail = {
   getByFolder(folder: string): Email[] {
@@ -1635,22 +1643,24 @@ export const mail = {
     const session = auth.getSession();
     let sourceEmails = loadUserDB<Email[]>(STORAGE_KEYS.emails, SEED_EMAILS);
     
-    if (session?.businessDbUrl) {
-      try {
-        const headers: Record<string, string> = {
-          'x-business-db-url': session.businessDbUrl
-        };
-        const response = await fetchAPI('/mail/business-emails/query', {
-          method: 'POST',
-          headers,
-          body: JSON.stringify({ dbUrl: session.businessDbUrl }),
-        });
-        if (response.success && Array.isArray(response.emails)) {
-          sourceEmails = response.emails.map((entry: Partial<Email> & { read?: boolean }) => normalizeBusinessEmailFromDb(entry));
-          saveUserDB(STORAGE_KEYS.emails, sourceEmails);
-        }
-      } catch (err) {
-        console.error('Failed to fetch from business DB', err);
+    if (session?.businessDbUrl && !businessEmailDbRouteUnavailable) {
+      const headers: Record<string, string> = {
+        'x-business-db-url': session.businessDbUrl
+      };
+      const response = await fetchApiJsonDetailed<{ success?: boolean; emails?: Array<Partial<Email> & { read?: boolean }> }>('/mail/business-emails/query', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ dbUrl: session.businessDbUrl }),
+      });
+
+      if (response.ok && response.data?.success && Array.isArray(response.data.emails)) {
+        sourceEmails = response.data.emails.map((entry) => normalizeBusinessEmailFromDb(entry));
+        saveUserDB(STORAGE_KEYS.emails, sourceEmails);
+      } else if (response.status === 404) {
+        businessEmailDbRouteUnavailable = true;
+        console.warn('Business email database route is unavailable; using local mailbox cache until the backend deploy catches up.');
+      } else if (!response.ok) {
+        console.warn(`Business email database fetch failed with status ${response.status}; using local mailbox cache.`);
       }
     }
 
