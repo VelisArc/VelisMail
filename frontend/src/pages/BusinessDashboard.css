@@ -2489,3 +2489,193 @@
     padding: 5px 7px;
   }
 }
+
+/* Mobile section polish: remove the second header-slot feel across org/admin pages */
+@media (max-width: 900px) {
+  .biz-dash .biz-panel {
+    padding: 10px 12px 18px;
+  }
+
+  .biz-dash .panel-header {
+    align-items: center;
+    gap: 10px;
+    margin: 0 0 12px;
+    padding: 0 0 10px;
+    border-bottom: 1px solid var(--border-primary);
+  }
+
+  .biz-dash .panel-header .mobile-menu-btn {
+    display: none;
+  }
+
+  .biz-dash .panel-header h2 {
+    font-size: 1.05rem;
+    line-height: 1.15;
+    letter-spacing: 0;
+    gap: 8px;
+    margin: 0;
+  }
+
+  .biz-dash .panel-header h2 svg {
+    width: 17px;
+    height: 17px;
+  }
+
+  .biz-dash .panel-header p {
+    display: none;
+  }
+
+  .biz-dash .panel-header > div:first-child {
+    min-width: 0;
+    flex: 1;
+  }
+
+  .biz-dash .panel-header > div:last-child,
+  .biz-dash .panel-header form {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .biz-dash .panel-header .btn,
+  .biz-dash .panel-header .input,
+  .biz-dash .panel-header select {
+    min-height: 36px;
+    font-size: 0.82rem;
+  }
+
+  .biz-dash .panel-header .btn {
+    padding: 7px 10px;
+  }
+
+  .biz-dash .panel-header form .input {
+    width: min(42vw, 180px);
+  }
+
+  .biz-dash .domain-card-full,
+  .biz-dash .team-row,
+  .biz-dash .analytics-card,
+  .biz-dash .biz-settings-sections .glass-card {
+    border-radius: var(--radius-sm);
+  }
+
+  .biz-dash .domain-card-full {
+    padding: 12px;
+  }
+
+  .biz-dash .domain-card-header {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+
+  .biz-dash .domain-card-title {
+    gap: 8px;
+  }
+
+  .biz-dash .domain-name-lg {
+    font-size: 1rem;
+  }
+
+  .biz-dash .domain-meta {
+    font-size: 0.78rem;
+  }
+
+  .biz-dash .domain-card-actions {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+  }
+
+  .biz-dash .domain-card-actions .btn {
+    min-width: 0;
+    padding: 7px 6px;
+    font-size: 0.74rem;
+  }
+
+  .biz-dash .domain-health-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+
+  .biz-dash .health-card {
+    padding: 9px;
+  }
+
+  .biz-dash .health-detail {
+    font-size: 0.74rem;
+    padding: 7px;
+  }
+
+  .biz-dash .queue-filters {
+    padding: 10px 12px;
+    margin-bottom: 10px !important;
+  }
+
+  .biz-dash .analytics-cards,
+  .biz-dash .biz-settings-sections {
+    gap: 10px;
+  }
+
+  .biz-dash .biz-settings-sections .glass-card {
+    padding: 12px;
+  }
+
+  .biz-dash .biz-settings-sections .toggle-row {
+    gap: 10px;
+    align-items: flex-start;
+  }
+}
+
+@media (max-width: 560px) {
+  .biz-dash .panel-header {
+    display: grid;
+    grid-template-columns: 1fr auto;
+  }
+
+  .biz-dash .panel-header h2 {
+    font-size: 1rem;
+  }
+
+  .biz-dash .panel-header > div:last-child,
+  .biz-dash .panel-header form {
+    justify-content: flex-end;
+  }
+
+  .biz-dash .panel-header form {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: 1fr 1fr auto;
+    width: 100%;
+  }
+
+  .biz-dash .panel-header form .input,
+  .biz-dash .panel-header form select {
+    width: 100%;
+  }
+
+  .biz-dash .domain-card-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .biz-dash .domain-health-grid,
+  .biz-dash .analytics-cards,
+  .biz-dash .queue-stats {
+    grid-template-columns: 1fr;
+  }
+
+  .biz-dash .team-row,
+  .biz-dash .biz-settings-sections .toggle-row {
+    display: grid;
+    grid-template-columns: 1fr auto;
+  }
+
+  .biz-dash .team-meta,
+  .biz-dash .team-actions {
+    grid-column: 1 / -1;
+  }
+}
