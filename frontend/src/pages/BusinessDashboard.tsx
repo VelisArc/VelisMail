@@ -458,6 +458,18 @@ export default function BusinessDashboard() {
   const activeDomainName = activeDomainRecord?.domain || user?.businessDomain || '';
 
   useEffect(() => {
+    let timer: ReturnType<typeof setTimeout>;
+    if (toast) timer = setTimeout(() => setToast(null), 3000);
+    return () => clearTimeout(timer);
+  }, [toast]);
+
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout>;
+    if (copiedField) timer = setTimeout(() => setCopiedField(null), 2000);
+    return () => clearTimeout(timer);
+  }, [copiedField]);
+
+  useEffect(() => {
     if (!user) {
       navigate('/login');
     } else if (!user.isBusinessSetupComplete || !user.businessDbUrl?.trim() || !user.businessApiKey?.trim() || !user.businessMailProvider?.trim()) {
@@ -545,7 +557,6 @@ export default function BusinessDashboard() {
 
   const showToast = (msg: string, type: 'success' | 'error' = 'success') => {
     setToast({ msg, type });
-    setTimeout(() => setToast(null), 3000);
   };
 
   const handleLogout = () => {
@@ -1093,7 +1104,7 @@ export default function BusinessDashboard() {
     }
   };
 
-  const handleCloudflareConnect = (domainId: string) => {
+  const handleCloudflareConnect = async (domainId: string) => {
     if (!canManageWorkspace) {
       showToast('Only admins can configure DNS.', 'error');
       return;
@@ -1101,33 +1112,32 @@ export default function BusinessDashboard() {
     setCloudflareConnecting(domainId);
     showToast('Redirecting to Cloudflare OAuth...');
     
-    setTimeout(() => {
-      showToast('Authenticating with Cloudflare...', 'success');
-      
-      setTimeout(() => {
-        showToast('Adding DNS records to Cloudflare zone...', 'success');
-        
-        setTimeout(() => {
-          const next = domainsList.map(d => 
-            d.id === domainId 
-              ? { ...d, status: 'active' as const } 
-              : d
-          );
-          setDomainsList(next);
-          
-          businessAudit.add({
-            action: 'Cloudflare DNS Auto-Configured',
-            actor: user?.email || 'system',
-            target: next.find(d => d.id === domainId)?.domain || domainId,
-            severity: 'info',
-          });
-          setAuditLog(businessAudit.getAll());
-          
-          setCloudflareConnecting('');
-          showToast('All DNS records added and verified successfully!', 'success');
-        }, 2000);
-      }, 1500);
-    }, 1500);
+    const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+    
+    await sleep(1500);
+    showToast('Authenticating with Cloudflare...', 'success');
+    
+    await sleep(1500);
+    showToast('Adding DNS records to Cloudflare zone...', 'success');
+    
+    await sleep(2000);
+    const next = domainsList.map(d => 
+      d.id === domainId 
+        ? { ...d, status: 'active' as const } 
+        : d
+    );
+    setDomainsList(next);
+    
+    businessAudit.add({
+      action: 'Cloudflare DNS Auto-Configured',
+      actor: user?.email || 'system',
+      target: next.find(d => d.id === domainId)?.domain || domainId,
+      severity: 'info',
+    });
+    setAuditLog(businessAudit.getAll());
+    
+    setCloudflareConnecting('');
+    showToast('All DNS records added and verified successfully!', 'success');
   };
 
   const handleRunDomainVerification = async (domainId: string) => {
@@ -1269,13 +1279,14 @@ export default function BusinessDashboard() {
     showToast(`Domain ${record.domain} added. Complete DNS verification before using it.`);
   };
 
-  const copyToClipboard = (text: string, fieldId?: string) => {
-    navigator.clipboard.writeText(text);
-    if (fieldId) {
-      setCopiedField(fieldId);
-      setTimeout(() => setCopiedField(null), 2000);
+  const copyToClipboard = async (text: string, fieldId?: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      if (fieldId) setCopiedField(fieldId);
+      showToast('Copied to clipboard');
+    } catch {
+      showToast('Failed to copy', 'error');
     }
-    showToast('Copied to clipboard');
   };
 
   const toggleTheme = () => {

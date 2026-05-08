@@ -777,7 +777,7 @@ function teamAccessApiError(response: TeamAccessApiResponse | null, fallback: st
 
 function warnBackendSyncFailure(err: unknown) {
   if (err instanceof Error && err.message.includes('route was not found')) return;
-  console.warn('Backend sync failed:', err);
+  // Intentionally swallowed backend sync failure for local-first gracefully degraded UI
 }
 
 function saveUserToPersistentStore(user: User) {

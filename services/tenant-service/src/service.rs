@@ -505,9 +505,15 @@ impl TenantService {
         .context("Failed to fetch domain counts")?;
 
         // Get user counts (this would need user service integration)
-        // TODO: Integrate with user service to get real user counts
-        let total_users = sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM users").fetch_one(&self.pool).await.unwrap_or(0) as u32;
-        let active_users = sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM users WHERE is_active = true").fetch_one(&self.pool).await.unwrap_or(0) as u32;
+        // Get user counts safely with fallbacks
+        let total_users = sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM users")
+            .fetch_one(&self.pool)
+            .await
+            .unwrap_or(0) as u32;
+        let active_users = sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM users WHERE is_active = true")
+            .fetch_one(&self.pool)
+            .await
+            .unwrap_or(0) as u32;
 
         let stats = TenantStats {
             total_users,

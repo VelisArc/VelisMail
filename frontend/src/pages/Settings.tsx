@@ -48,9 +48,16 @@ export default function SettingsPage() {
     setRecoveryEmailDraft(session.recoveryEmail || '');
   }, [navigate]);
 
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout>;
+    if (toast) {
+      timer = setTimeout(() => setToast(null), 3000);
+    }
+    return () => clearTimeout(timer);
+  }, [toast]);
+
   const showToast = (message: string, type: 'success' | 'error' = 'success') => {
     setToast({ message, type });
-    setTimeout(() => setToast(null), 3000);
   };
 
   const handleProfileSave = (e: React.FormEvent) => {
@@ -61,18 +68,17 @@ export default function SettingsPage() {
     }
     setProfileSaving(true);
     setProfileError(null);
-    setTimeout(() => {
-      const result = auth.updateSettings({ displayName: profileName.trim() });
-      if (!result.success || !result.user) {
-        setProfileSaving(false);
-        setProfileError('Profile update failed. Please try again.');
-        showToast('Profile update failed', 'error');
-        return;
-      }
-      setUser(result.user);
+    
+    const result = auth.updateSettings({ displayName: profileName.trim() });
+    if (!result.success || !result.user) {
       setProfileSaving(false);
-      showToast('Profile updated successfully');
-    }, 400);
+      setProfileError('Profile update failed. Please try again.');
+      showToast('Profile update failed', 'error');
+      return;
+    }
+    setUser(result.user);
+    setProfileSaving(false);
+    showToast('Profile updated successfully');
   };
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {

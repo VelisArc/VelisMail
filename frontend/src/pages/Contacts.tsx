@@ -39,9 +39,16 @@ export default function Contacts() {
     setContactList(contacts.getAll());
   }, []);
 
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout>;
+    if (toast) {
+      timer = setTimeout(() => setToast(null), 3000);
+    }
+    return () => clearTimeout(timer);
+  }, [toast]);
+
   const showToast = (msg: string, type: 'success' | 'error' = 'success') => {
     setToast({ msg, type });
-    setTimeout(() => setToast(null), 3000);
   };
 
   const resetForm = () => {
