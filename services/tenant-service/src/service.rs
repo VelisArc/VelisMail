@@ -61,7 +61,7 @@ impl TenantService {
             "starter" => json!({
                 "max_users": 15,
                 "max_storage_mb": 10240,
-                "max_emails_per_day": 5000,
+                "max_emails_per_day": 150000,
                 "monthly_email_limit": 150000,
                 "max_attachment_size_mb": 25,
                 "api_rate_limit_per_minute": 120,
@@ -72,7 +72,7 @@ impl TenantService {
             "business" => json!({
                 "max_users": 75,
                 "max_storage_mb": 51200,
-                "max_emails_per_day": 25000,
+                "max_emails_per_day": 750000,
                 "monthly_email_limit": 750000,
                 "max_attachment_size_mb": 50,
                 "api_rate_limit_per_minute": 500,
@@ -83,7 +83,7 @@ impl TenantService {
             "enterprise" => json!({
                 "max_users": 9999,
                 "max_storage_mb": 512000,
-                "max_emails_per_day": 100000,
+                "max_emails_per_day": 3000000,
                 "monthly_email_limit": 3000000,
                 "max_attachment_size_mb": 100,
                 "api_rate_limit_per_minute": 2000,

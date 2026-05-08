@@ -12,7 +12,8 @@ import {
   Trash, Archive as ArchiveIcon, Edit3, Eye,
   Download, KeyRound, Lock, XCircle,
   Layers, CreditCard,
-  List, Grid, SortAsc, SortDesc, Menu
+  List, Grid, SortAsc, SortDesc, Menu,
+  Rocket, Briefcase, Building2, ChevronDown
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import {
@@ -43,6 +44,7 @@ import Composer from '../components/Composer';
 import { useNavigation, useSessionStore } from '../store/sessionStore';
 import { useEmails } from '../hooks/useMail';
 import './BusinessDashboard.css';
+import './Pricing.css';
 
 type BizFolder = {
   id: string;
@@ -172,6 +174,126 @@ function hasRoleAccess(role: BusinessTeamMember['role'], tab: BizTab): boolean {
   return ROLE_ALLOWED_TABS[role].includes(tab);
 }
 
+function formatINR(amount: number): string {
+  if (amount === 0) return '0';
+  return amount.toLocaleString('en-IN');
+}
+
+const plans = [
+  {
+    id: 'free',
+    name: 'Free',
+    icon: Zap,
+    desc: 'For individuals & testing. Get started instantly.',
+    monthlyPrice: 0,
+    annualPrice: 0,
+    popular: false,
+    cta: 'Current Plan',
+    ctaStyle: 'cta-outline' as const,
+    features: [
+      { text: '3,000 emails/mo', highlight: true },
+      { text: '500MB Storage', highlight: false },
+      { text: '3 team members', highlight: false },
+      { text: '1 custom domain', highlight: false },
+      { text: 'SPF, DKIM, DMARC', highlight: false },
+      { text: 'E2E encryption', highlight: false },
+      { text: 'Passkey authentication', highlight: false },
+      { text: '3 mail templates', highlight: false },
+      { text: '7 days audit logs', highlight: false },
+    ],
+    disabledFeatures: [
+      'Custom branding',
+      'Priority support',
+      'Webhooks',
+    ],
+  },
+  {
+    id: 'starter',
+    name: 'Starter',
+    icon: Rocket,
+    desc: 'For small teams getting serious about email.',
+    monthlyPrice: 799,
+    annualPrice: 7999,
+    popular: false,
+    cta: 'Upgrade to Starter',
+    ctaStyle: 'cta-outline' as const,
+    features: [
+      { text: '150,000 emails/mo', highlight: true },
+      { text: '10GB Storage', highlight: false },
+      { text: '15 team members', highlight: false },
+      { text: '3 custom domains', highlight: false },
+      { text: 'SPF, DKIM, DMARC', highlight: false },
+      { text: 'E2E encryption', highlight: false },
+      { text: 'Passkey authentication', highlight: false },
+      { text: '25 mail templates', highlight: false },
+      { text: '30 days audit logs', highlight: false },
+      { text: '2 webhook integrations', highlight: false },
+      { text: 'Email support', highlight: false },
+      { text: '99.5% platform SLA', highlight: false },
+    ],
+    disabledFeatures: [
+      'Custom branding',
+    ],
+  },
+  {
+    id: 'business',
+    name: 'Business',
+    icon: Briefcase,
+    desc: 'For growing companies needing advanced controls.',
+    monthlyPrice: 2499,
+    annualPrice: 24999,
+    popular: true,
+    cta: 'Upgrade to Business',
+    ctaStyle: 'cta-primary' as const,
+    features: [
+      { text: '750,000 emails/mo', highlight: true },
+      { text: '50GB Storage', highlight: false },
+      { text: '75 team members', highlight: false },
+      { text: '10 custom domains', highlight: false },
+      { text: 'SPF, DKIM, DMARC', highlight: false },
+      { text: 'E2E encryption', highlight: false },
+      { text: 'Passkey authentication', highlight: false },
+      { text: 'Unlimited mail templates', highlight: false },
+      { text: '90 days audit logs', highlight: false },
+      { text: '10 webhook integrations', highlight: false },
+      { text: 'Custom branding', highlight: true },
+      { text: 'IP whitelisting', highlight: false },
+      { text: 'Email + chat support', highlight: false },
+      { text: '99.9% platform SLA', highlight: false },
+    ],
+    disabledFeatures: [],
+  },
+  {
+    id: 'enterprise',
+    name: 'Enterprise',
+    icon: Building2,
+    desc: 'For large organizations with premium needs.',
+    monthlyPrice: 6999,
+    annualPrice: 69999,
+    popular: false,
+    cta: 'Upgrade to Enterprise',
+    ctaStyle: 'cta-gradient' as const,
+    features: [
+      { text: 'Unlimited emails', highlight: true },
+      { text: 'Unlimited Storage', highlight: false },
+      { text: 'Unlimited team members', highlight: false },
+      { text: 'Unlimited custom domains', highlight: false },
+      { text: 'SPF, DKIM, DMARC', highlight: false },
+      { text: 'E2E encryption', highlight: false },
+      { text: 'Passkey authentication', highlight: false },
+      { text: 'Unlimited mail templates', highlight: false },
+      { text: '1 year audit logs', highlight: false },
+      { text: 'Unlimited webhooks', highlight: false },
+      { text: 'Custom branding', highlight: false },
+      { text: 'IP whitelisting', highlight: false },
+      { text: 'SSO / SAML', highlight: true },
+      { text: 'Dedicated Account Manager', highlight: false },
+      { text: '99.99% platform SLA', highlight: false },
+    ],
+    disabledFeatures: [],
+  },
+];
+
 export default function BusinessDashboard() {
   const navigate = useNavigate();
   const navigation = useNavigation();
@@ -217,6 +339,65 @@ export default function BusinessDashboard() {
   const [composeBody, setComposeBody] = useState('');
   const [sending, setSending] = useState(false);
   const [selectedFromAddress, setSelectedFromAddress] = useState('');
+
+  // Payment State
+  const [annual, setAnnual] = useState(false);
+  const [loadingPayment, setLoadingPayment] = useState<string | null>(null);
+
+  useEffect(() => {
+    const script = document.createElement('script');
+    script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+    script.async = true;
+    document.body.appendChild(script);
+    return () => {
+      if (document.body.contains(script)) {
+        document.body.removeChild(script);
+      }
+    };
+  }, []);
+
+  const handleUpgrade = (plan: typeof plans[0]) => {
+    if (plan.id === 'free') return;
+    
+    setLoadingPayment(plan.id);
+    
+    const amountInPaise = (annual ? plan.annualPrice : plan.monthlyPrice) * 100;
+    
+    const options = {
+      key: import.meta.env.VITE_RAZORPAY_KEY_ID || 'rzp_live_SA0FP7UH9KHLNQ',
+      amount: amountInPaise,
+      currency: 'INR',
+      name: 'VelisMail',
+      description: `Upgrade to ${plan.name} Plan`,
+      handler: function (response: any) {
+        showToast(`${plan.name} upgrade successful! Verification ID: ${response.razorpay_payment_id}`);
+        setLoadingPayment(null);
+      },
+      prefill: {
+        name: user?.name || '',
+        email: user?.email || '',
+      },
+      theme: {
+        color: '#7b61ff'
+      },
+      modal: {
+        ondismiss: function() {
+          setLoadingPayment(null);
+        }
+      }
+    };
+
+    // @ts-ignore
+    if (window.Razorpay) {
+      // @ts-ignore
+      const rzp = new window.Razorpay(options);
+      rzp.open();
+    } else {
+      showToast('Payment gateway not loaded. Please try again.', 'error');
+      setLoadingPayment(null);
+    }
+  };
+
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [confirmRevokeId, setConfirmRevokeId] = useState<string | null>(null);
@@ -2235,39 +2416,67 @@ export default function BusinessDashboard() {
               <p>Manage your workspace subscription and upgrade to premium features.</p>
             </div>
             
-            <div className="glass-card" style={{ padding: '32px', textAlign: 'center', marginBottom: '24px' }}>
-              <div style={{ marginBottom: '24px' }}>
-                <span className="badge badge-accent" style={{ fontSize: '0.9rem', padding: '6px 12px', marginBottom: '16px', display: 'inline-block' }}>Current Plan: Free</span>
-                <h3 style={{ fontSize: '1.8rem', margin: '0 0 16px' }}>Upgrade to Premium</h3>
-                <p style={{ color: 'var(--text-secondary)', maxWidth: '600px', margin: '0 auto', fontSize: '1.1rem', lineHeight: 1.6 }}>
-                  Upgrade your plan to unlock higher email volumes, expanded storage capacity, and advanced software features like custom branding, unlimited team members, SSO, and extended audit logs.
-                </p>
-              </div>
-              
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', maxWidth: '800px', margin: '0 auto 32px', textAlign: 'left' }}>
-                <div style={{ background: 'var(--bg-surface-2)', padding: '16px', borderRadius: 'var(--radius-md)' }}>
-                  <CheckCircle2 size={20} color="var(--primary)" style={{ marginBottom: '8px' }} />
-                  <h4 style={{ margin: '0 0 4px' }}>Unlimited Routing</h4>
-                  <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-muted)' }}>Remove restrictions on custom domains and routing rules.</p>
-                </div>
-                <div style={{ background: 'var(--bg-surface-2)', padding: '16px', borderRadius: 'var(--radius-md)' }}>
-                  <CheckCircle2 size={20} color="var(--primary)" style={{ marginBottom: '8px' }} />
-                  <h4 style={{ margin: '0 0 4px' }}>Team Expansion</h4>
-                  <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-muted)' }}>Add your entire organization with granular role access.</p>
-                </div>
-                <div style={{ background: 'var(--bg-surface-2)', padding: '16px', borderRadius: 'var(--radius-md)' }}>
-                  <CheckCircle2 size={20} color="var(--primary)" style={{ marginBottom: '8px' }} />
-                  <h4 style={{ margin: '0 0 4px' }}>Security & Audit</h4>
-                  <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-muted)' }}>Extended audit log retention and SAML/SSO integrations.</p>
+            <div className="billing-pricing-container" style={{ paddingBottom: '40px' }}>
+              <div className="billing-toggle-wrapper" style={{ display: 'flex', justifyContent: 'center', margin: '32px 0' }}>
+                <div className="billing-toggle">
+                  <span className={!annual ? 'active' : ''}>Monthly</span>
+                  <button 
+                    className={`toggle-switch ${annual ? 'on' : 'off'}`}
+                    onClick={() => setAnnual(!annual)}
+                  >
+                    <div className="knob" />
+                  </button>
+                  <span className={annual ? 'active' : ''}>
+                    Annually <span className="save-badge">Save 16%</span>
+                  </span>
                 </div>
               </div>
 
-              <button className="btn btn-primary" style={{ fontSize: '1.1rem', padding: '12px 32px', height: 'auto' }} onClick={() => navigate('/pricing')}>
-                View Pricing & Upgrade
-              </button>
-              <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginTop: '16px' }}>
-                Upgrade to the Enterprise plan for unlimited volume and storage.
-              </p>
+              <div className="pricing-grid" style={{ maxWidth: '1200px', margin: '0 auto' }}>
+                {plans.map((plan) => (
+                  <div key={plan.id} className={`pricing-card ${plan.popular ? 'popular' : ''}`}>
+                    {plan.popular && <div className="popular-badge">Most Popular</div>}
+                    
+                    <div className="plan-header">
+                      <div className="plan-icon">
+                        <plan.icon size={24} />
+                      </div>
+                      <h3>{plan.name}</h3>
+                      <p className="plan-desc">{plan.desc}</p>
+                    </div>
+
+                    <div className="plan-price">
+                      <span className="currency">₹</span>
+                      <span className="amount">{formatINR(annual ? plan.annualPrice : plan.monthlyPrice)}</span>
+                      <span className="period">/{annual ? 'yr' : 'mo'}</span>
+                    </div>
+
+                    <button 
+                      className={`btn ${plan.ctaStyle} btn-block`}
+                      onClick={() => handleUpgrade(plan)}
+                      disabled={plan.id === 'free' || loadingPayment === plan.id}
+                      style={{ height: '48px', fontSize: '1.05rem', fontWeight: 600, marginBottom: '24px' }}
+                    >
+                      {loadingPayment === plan.id ? 'Processing...' : plan.cta}
+                    </button>
+
+                    <ul className="plan-features">
+                      {plan.features.map((feature, idx) => (
+                        <li key={idx} className={feature.highlight ? 'highlight' : ''}>
+                          <Check size={16} />
+                          <span>{feature.text}</span>
+                        </li>
+                      ))}
+                      {plan.disabledFeatures.map((feat, idx) => (
+                        <li key={`disabled-${idx}`} className="disabled">
+                          <X size={16} />
+                          <span>{feat}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         )}
