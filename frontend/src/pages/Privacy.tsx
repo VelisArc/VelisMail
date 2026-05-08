@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { Shield, Database, ArrowLeft } from 'lucide-react';
+import { Shield, Database, ArrowLeft, Lock, Eye } from 'lucide-react';
 import './Legal.css';
 
 export default function Privacy() {
@@ -19,25 +19,35 @@ export default function Privacy() {
         <div className="legal-header">
           <span className="section-tag">LEGAL</span>
           <h1>Privacy Policy</h1>
-          <p className="legal-updated">Effective Date: January 1, 2026</p>
+          <p className="legal-updated">Effective Date: January 1, 2026 · Last Updated: May 1, 2026</p>
         </div>
 
         <div className="legal-body">
           <section>
             <p>
-              At VelisMail, we believe privacy is a fundamental human right. This Privacy Policy details how our Zero-Knowledge Enterprise Email Hosting platform protects your data.
+              At VelisMail, we believe privacy is a fundamental human right. This Privacy Policy details how our Zero-Knowledge Enterprise Email Hosting platform collects, uses, protects, and shares your information. By using VelisMail, you agree to the practices described in this policy.
             </p>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '40px', marginTop: '40px' }}>
-              <div className="glass-card" style={{ padding: '24px' }}>
-                <Shield size={24} color="var(--primary)" style={{ marginBottom: '12px' }} />
-                <h3 style={{ margin: '0 0 8px 0', borderBottom: 'none', paddingBottom: 0 }}>Zero-Knowledge Architecture</h3>
-                <p style={{ margin: 0, fontSize: '0.9rem' }}>We physically cannot read your emails. Your data is encrypted on your device before it ever reaches our servers.</p>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px', marginBottom: '40px', marginTop: '40px' }}>
+              <div className="glass-card" style={{ padding: '20px' }}>
+                <Shield size={22} color="var(--primary)" style={{ marginBottom: '10px' }} />
+                <h3 style={{ margin: '0 0 6px 0', borderBottom: 'none', paddingBottom: 0, fontSize: '1rem' }}>Zero-Knowledge Architecture</h3>
+                <p style={{ margin: 0, fontSize: '0.85rem' }}>We physically cannot read your emails. Your data is encrypted before it reaches our servers.</p>
               </div>
-              <div className="glass-card" style={{ padding: '24px' }}>
-                <Database size={24} color="var(--primary)" style={{ marginBottom: '12px' }} />
-                <h3 style={{ margin: '0 0 8px 0', borderBottom: 'none', paddingBottom: 0 }}>Data Sovereignty</h3>
-                <p style={{ margin: 0, fontSize: '0.9rem' }}>Your data is isolated in secure, compliant enterprise vaults. We never sell, share, or analyze your business communications.</p>
+              <div className="glass-card" style={{ padding: '20px' }}>
+                <Database size={22} color="var(--primary)" style={{ marginBottom: '10px' }} />
+                <h3 style={{ margin: '0 0 6px 0', borderBottom: 'none', paddingBottom: 0, fontSize: '1rem' }}>Data Sovereignty</h3>
+                <p style={{ margin: 0, fontSize: '0.85rem' }}>Your data is isolated in secure, compliant vaults. We never sell, share, or analyze your communications.</p>
+              </div>
+              <div className="glass-card" style={{ padding: '20px' }}>
+                <Lock size={22} color="var(--primary)" style={{ marginBottom: '10px' }} />
+                <h3 style={{ margin: '0 0 6px 0', borderBottom: 'none', paddingBottom: 0, fontSize: '1rem' }}>No Advertising</h3>
+                <p style={{ margin: 0, fontSize: '0.85rem' }}>We do not serve ads, track browsing, or build advertising profiles from your data. Ever.</p>
+              </div>
+              <div className="glass-card" style={{ padding: '20px' }}>
+                <Eye size={22} color="var(--primary)" style={{ marginBottom: '10px' }} />
+                <h3 style={{ margin: '0 0 6px 0', borderBottom: 'none', paddingBottom: 0, fontSize: '1rem' }}>Full Transparency</h3>
+                <p style={{ margin: 0, fontSize: '0.85rem' }}>We publish exactly what we collect and why. No hidden data pipelines or third-party analytics.</p>
               </div>
             </div>
           </section>
@@ -52,38 +62,113 @@ export default function Privacy() {
               <li>Your encryption keys or passkeys.</li>
               <li>Your browsing history across the web.</li>
               <li>Advertising IDs or tracking pixels.</li>
+              <li>Social media profiles or contact lists from external services.</li>
+              <li>Location data, device identifiers, or biometric information.</li>
             </ul>
           </section>
 
           <section>
             <h2>2. Information We Must Collect</h2>
             <p>
-              To operate a reliable, sub-50ms latency enterprise email routing network, we must process certain metadata. This includes:
+              To operate a reliable enterprise email routing network, we must process certain metadata:
             </p>
             <ul>
               <li><strong>Account Data:</strong> Email addresses and domain names used to provision your workspace.</li>
               <li><strong>Team Access Data:</strong> Invite email addresses, role assignments, token expiry timestamps, and OTP verification state required to enforce delegated access.</li>
-              <li><strong>Payment Data:</strong> Processed entirely by our secure payment partners (Stripe/Razorpay); we do not store your credit card, UPI, or banking information on our servers.</li>
+              <li><strong>Payment Data:</strong> Processed entirely by our secure payment partner (Razorpay). We do not store your credit card, UPI, or banking information on our servers. We only retain transaction IDs and plan tier information.</li>
               <li><strong>Routing Metadata:</strong> Sender, recipient, and timestamps necessary for the SMTP/IMAP protocols to deliver messages.</li>
+              <li><strong>Audit Logs:</strong> Workspace activity logs (login events, configuration changes, permission modifications) retained according to your plan tier for security and compliance purposes.</li>
+              <li><strong>Infrastructure Connection Data:</strong> Database connection strings and API keys you provide via BYOI, stored in encrypted format and used solely to route your email operations.</li>
             </ul>
           </section>
 
           <section>
-            <h2>3. Compliance and Law Enforcement</h2>
+            <h2>3. How We Use Your Information</h2>
+            <p>Information collected is used exclusively for:</p>
+            <ul>
+              <li>Provisioning, maintaining, and securing your workspace.</li>
+              <li>Processing subscription payments and managing billing cycles.</li>
+              <li>Enforcing plan-based usage limits (email volume, storage, team size).</li>
+              <li>Generating workspace audit logs for administrator review.</li>
+              <li>Sending essential service communications (security alerts, billing confirmations, policy updates).</li>
+              <li>Investigating and preventing abuse, fraud, or violations of our Terms of Service.</li>
+            </ul>
+            <p>We do <strong>not</strong> use your data for marketing, profiling, or any purpose unrelated to delivering the VelisMail service.</p>
+          </section>
+
+          <section>
+            <h2>4. Data Retention</h2>
             <p>
-              VelisMail complies with lawful requests. However, because we utilize <strong>End-to-End Encryption (E2EE)</strong>, we cannot hand over plaintext message contents to any third party, including governments, because we do not possess the decryption keys. All we can provide is cryptographically scrambled ciphertext.
+              <strong>Active Accounts:</strong> Your workspace data is retained for as long as your account is active and in good standing.
+            </p>
+            <p>
+              <strong>Cancelled Accounts:</strong> Upon cancellation, your workspace configuration and metadata are retained for 30 days to allow for reactivation. After 30 days, all data associated with your workspace is permanently and irreversibly deleted from our systems.
+            </p>
+            <p>
+              <strong>Audit Logs:</strong> Retained according to your plan tier (Free: 7 days, Starter: 30 days, Business: 90 days, Enterprise: 1 year). Logs are automatically purged after the retention window.
             </p>
           </section>
 
           <section>
-            <h2>4. Your Rights Under GDPR & CCPA</h2>
+            <h2>5. Third-Party Services</h2>
+            <p>We integrate with the following third-party services, each bound by their own privacy policies:</p>
+            <ul>
+              <li><strong>Razorpay:</strong> Payment processing for subscription management.</li>
+              <li><strong>Cloudflare:</strong> DNS resolution, DDoS protection, and CDN services.</li>
+              <li><strong>Your BYOI Providers:</strong> The PostgreSQL database and Email API providers you connect are entirely under your control and subject to your own agreements with those providers.</li>
+            </ul>
+            <p>We do not share any of your data with advertisers, data brokers, or analytics companies.</p>
+          </section>
+
+          <section>
+            <h2>6. Compliance and Law Enforcement</h2>
             <p>
-              We extend the strict protections of the General Data Protection Regulation (GDPR) and the California Consumer Privacy Act (CCPA) to all our users globally. You have the right to request a complete export of your encrypted data, or to demand the permanent cryptographic deletion of your account at any time via your Business Dashboard.
+              VelisMail complies with lawful requests from authorized government agencies. However, because we utilize <strong>End-to-End Encryption (E2EE)</strong>, we cannot hand over plaintext message contents to any third party, including governments, because we do not possess the decryption keys. All we can provide is encrypted ciphertext and routing metadata.
+            </p>
+            <p>
+              We will notify affected users of any data requests unless prohibited by law from doing so. We publish an annual transparency report detailing the number and nature of government requests received.
             </p>
           </section>
 
           <section>
-            <p style={{ textAlign: 'center', marginTop: '40px' }}>Questions about our privacy architecture? Contact our security team at <a href="mailto:privacy@velismail.online">privacy@velismail.online</a></p>
+            <h2>7. International Data Transfers</h2>
+            <p>
+              VelisMail infrastructure is distributed across multiple regions. If your data is transferred across borders, we ensure it is protected by appropriate safeguards including encryption in transit (TLS 1.3) and at rest (AES-256). All transfers comply with applicable data protection laws, including GDPR Standard Contractual Clauses where applicable.
+            </p>
+          </section>
+
+          <section>
+            <h2>8. Your Rights</h2>
+            <p>
+              We extend the protections of the <strong>General Data Protection Regulation (GDPR)</strong>, the <strong>California Consumer Privacy Act (CCPA)</strong>, and India's <strong>Digital Personal Data Protection Act (DPDPA)</strong> to all our users globally. You have the right to:
+            </p>
+            <ul>
+              <li><strong>Access:</strong> Request a complete export of your workspace data.</li>
+              <li><strong>Rectification:</strong> Correct any inaccurate personal information.</li>
+              <li><strong>Deletion:</strong> Demand the permanent deletion of your account and all associated data.</li>
+              <li><strong>Portability:</strong> Receive your data in a standard, machine-readable format.</li>
+              <li><strong>Objection:</strong> Object to any processing of your data that you believe is unlawful.</li>
+              <li><strong>Restriction:</strong> Request that we limit the processing of your data in certain circumstances.</li>
+            </ul>
+            <p>To exercise any of these rights, contact us at <a href="mailto:support@velismail.online">support@velismail.online</a>.</p>
+          </section>
+
+          <section>
+            <h2>9. Children's Privacy</h2>
+            <p>
+              VelisMail is designed for business use and is not intended for individuals under the age of 18. We do not knowingly collect personal information from children. If we discover that a child under 18 has provided us with personal information, we will promptly delete it.
+            </p>
+          </section>
+
+          <section>
+            <h2>10. Changes to This Policy</h2>
+            <p>
+              We may update this Privacy Policy from time to time to reflect changes in our practices, technology, or legal requirements. We will notify you of any material changes by posting the updated policy on this page and, for significant changes, by sending an email to your registered workspace administrator email. Your continued use of VelisMail after changes constitutes acceptance of the updated policy.
+            </p>
+          </section>
+
+          <section>
+            <p style={{ textAlign: 'center', marginTop: '40px' }}>Questions about our privacy practices? Contact us at <a href="mailto:support@velismail.online">support@velismail.online</a></p>
           </section>
         </div>
       </div>
