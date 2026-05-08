@@ -1502,7 +1502,7 @@ export default function BusinessDashboard() {
       <main className={`biz-main ${selectedEmail ? 'reader-open' : ''}`}>
         {/* Mobile Global Header */}
         <div className="mobile-dash-header">
-          <button className="btn btn-icon btn-ghost" onClick={() => setSidebarOpen(true)}>
+          <button aria-label="Open menu" className="btn btn-icon btn-ghost" onClick={() => setSidebarOpen(true)}>
             <Menu size={20} />
           </button>
           <div className="mobile-brand" style={{ fontSize: '1.05rem' }}>
@@ -1513,10 +1513,10 @@ export default function BusinessDashboard() {
             </span>
           </div>
           <div style={{ marginLeft: 'auto', display: 'flex', gap: '8px' }}>
-            <button className="btn btn-icon btn-ghost" onClick={() => canCompose ? setComposeOpen(true) : showToast('Viewer access cannot compose messages.', 'error')} title="Compose" disabled={!canCompose}>
+            <button aria-label="Compose" className="btn btn-icon btn-ghost" onClick={() => canCompose ? setComposeOpen(true) : showToast('Viewer access cannot compose messages.', 'error')} title="Compose" disabled={!canCompose}>
               <Plus size={20} />
             </button>
-            <button className="btn btn-icon btn-ghost" onClick={() => setActiveBizTab('analytics')} title="Analytics">
+            <button aria-label="Analytics" className="btn btn-icon btn-ghost" onClick={() => setActiveBizTab('analytics')} title="Analytics">
               <BarChart3 size={20} />
             </button>
           </div>
@@ -1533,23 +1533,23 @@ export default function BusinessDashboard() {
                       <ArrowLeft size={16} /> Back
                     </button>
                     <div className="reader-toolbar-actions" style={{ display: 'flex', gap: '8px' }}>
-                      <button className="btn btn-ghost btn-icon" title="Reply" onClick={handleReply} style={{ width: '42px', height: '42px' }}><Reply size={22} /></button>
-                      <button className="btn btn-ghost btn-icon" title="Forward" onClick={handleForward} style={{ width: '42px', height: '42px' }}><Forward size={22} /></button>
-                      <button className="btn btn-ghost btn-icon" title="Print" onClick={() => { window.print(); showToast('Preparing print view...'); }} style={{ width: '42px', height: '42px' }}><ExternalLink size={22} /></button>
-                      <button className="btn btn-ghost btn-icon" title="Toggle Priority" onClick={() => handleTogglePriority()} style={{ width: '42px', height: '42px' }}><Zap size={22} /></button>
+                      <button aria-label="Reply" className="btn btn-ghost btn-icon" title="Reply" onClick={handleReply} style={{ width: '42px', height: '42px' }}><Reply size={22} /></button>
+                      <button aria-label="Forward" className="btn btn-ghost btn-icon" title="Forward" onClick={handleForward} style={{ width: '42px', height: '42px' }}><Forward size={22} /></button>
+                      <button aria-label="Print" className="btn btn-ghost btn-icon" title="Print" onClick={() => { window.print(); showToast('Preparing print view...'); }} style={{ width: '42px', height: '42px' }}><ExternalLink size={22} /></button>
+                      <button aria-label="Toggle Priority" className="btn btn-ghost btn-icon" title="Toggle Priority" onClick={() => handleTogglePriority()} style={{ width: '42px', height: '42px' }}><Zap size={22} /></button>
                       {selectedEmail.folder === 'archive' || selectedEmail.folder === 'trash' || selectedEmail.folder === 'spam' ? (
-                        <button className="btn btn-ghost btn-icon" title="Move to Inbox" onClick={() => handleMoveToInbox()} style={{ width: '42px', height: '42px' }}><Inbox size={22} /></button>
+                        <button aria-label="Move to Inbox" className="btn btn-ghost btn-icon" title="Move to Inbox" onClick={() => handleMoveToInbox()} style={{ width: '42px', height: '42px' }}><Inbox size={22} /></button>
                       ) : (
-                        <button className="btn btn-ghost btn-icon" title="Archive" onClick={() => handleArchive()} style={{ width: '42px', height: '42px' }}><ArchiveIcon size={22} /></button>
+                        <button aria-label="Archive" className="btn btn-ghost btn-icon" title="Archive" onClick={() => handleArchive()} style={{ width: '42px', height: '42px' }}><ArchiveIcon size={22} /></button>
                       )}
-                      {selectedEmail.folder !== 'spam' && <button className="btn btn-ghost btn-icon" title="Mark as Spam" onClick={() => handleMarkSpam()} style={{ width: '42px', height: '42px' }}><AlertCircle size={22} /></button>}
+                      {selectedEmail.folder !== 'spam' && <button aria-label="Mark as Spam" className="btn btn-ghost btn-icon" title="Mark as Spam" onClick={() => handleMarkSpam()} style={{ width: '42px', height: '42px' }}><AlertCircle size={22} /></button>}
                       {(selectedEmail.folder === 'spam' || isScamEmail(selectedEmail)) && (
-                        <button className="btn btn-ghost btn-icon" title="Mark Safe" onClick={() => handleMarkSafe()} style={{ width: '42px', height: '42px' }}><ShieldCheck size={22} /></button>
+                        <button aria-label="Mark Safe" className="btn btn-ghost btn-icon" title="Mark Safe" onClick={() => handleMarkSafe()} style={{ width: '42px', height: '42px' }}><ShieldCheck size={22} /></button>
                       )}
                       {selectedEmail.folder === 'trash' ? (
-                        <button className="btn btn-danger btn-icon" title="Delete permanently" onClick={() => handlePermanentDelete()} style={{ width: '42px', height: '42px' }}><Trash size={22} /></button>
+                        <button aria-label="Delete permanently" className="btn btn-danger btn-icon" title="Delete permanently" onClick={() => handlePermanentDelete()} style={{ width: '42px', height: '42px' }}><Trash size={22} /></button>
                       ) : (
-                        <button className="btn btn-danger btn-icon" title="Move to Trash" onClick={() => handleDeleteEmail()} style={{ width: '42px', height: '42px' }}><Trash size={22} /></button>
+                        <button aria-label="Move to Trash" className="btn btn-danger btn-icon" title="Move to Trash" onClick={() => handleDeleteEmail()} style={{ width: '42px', height: '42px' }}><Trash size={22} /></button>
                       )}
                     </div>
                   </div>
@@ -1593,18 +1593,18 @@ export default function BusinessDashboard() {
               <div className="dash-list glass">
                 <div className="list-header">
                   <h2 className="list-title">
-                    <button className="btn btn-icon btn-ghost mobile-menu-btn" onClick={() => setSidebarOpen(true)}>
+                    <button aria-label="Open menu" className="btn btn-icon btn-ghost mobile-menu-btn" onClick={() => setSidebarOpen(true)}>
                       <Menu size={20} />
                     </button>
                     {BIZ_FOLDERS.find(f => f.id === activeFolder)?.label || 'Inbox'}
                     {unreadCount > 0 && <span className="badge badge-primary">{unreadCount}</span>}
                   </h2>
                   <div className="list-actions">
-                    <button className="btn btn-icon btn-ghost" title="Refresh" onClick={() => refetchEmails()}><RefreshCw size={16} /></button>
-                    <button className="btn btn-icon btn-ghost" title={viewMode === 'list' ? 'Grid View' : 'List View'} onClick={() => setViewMode(v => v === 'list' ? 'grid' : 'list')}>
+                    <button aria-label="Refresh" className="btn btn-icon btn-ghost" title="Refresh" onClick={() => refetchEmails()}><RefreshCw size={16} /></button>
+                    <button aria-label="Toggle View" className="btn btn-icon btn-ghost" title={viewMode === 'list' ? 'Grid View' : 'List View'} onClick={() => setViewMode(v => v === 'list' ? 'grid' : 'list')}>
                       {viewMode === 'list' ? <Grid size={16} /> : <List size={16} />}
                     </button>
-                    <button className="btn btn-icon btn-ghost" onClick={() => setSortOrder(o => o === 'desc' ? 'asc' : 'desc')} title={`Sort ${sortOrder === 'desc' ? 'Oldest' : 'Newest'}`}>
+                    <button aria-label="Sort" className="btn btn-icon btn-ghost" onClick={() => setSortOrder(o => o === 'desc' ? 'asc' : 'desc')} title={`Sort ${sortOrder === 'desc' ? 'Oldest' : 'Newest'}`}>
                       {sortOrder === 'desc' ? <SortDesc size={16} /> : <SortAsc size={16} />}
                     </button>
                   </div>
@@ -1633,7 +1633,7 @@ export default function BusinessDashboard() {
                     <option value="priority">Priority</option>
                     <option value="attachments">Attachments</option>
                   </select>
-                  {searchQuery && <button className="search-clear" onClick={() => setSearchQuery('')}><X size={14} /></button>}
+                  {searchQuery && <button aria-label="Clear search" className="search-clear" onClick={() => setSearchQuery('')}><X size={14} /></button>}
                 </div>
 
                 {selectedEmails.size > 0 && (
@@ -1735,7 +1735,7 @@ export default function BusinessDashboard() {
             <div className="panel-header">
               <div>
                 <h2 style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <button className="btn btn-icon btn-ghost mobile-menu-btn" onClick={() => setSidebarOpen(true)}>
+                  <button aria-label="Open menu" className="btn btn-icon btn-ghost mobile-menu-btn" onClick={() => setSidebarOpen(true)}>
                     <Menu size={20} />
                   </button>
                   <Globe size={20} /> Domain Management
@@ -1903,7 +1903,7 @@ export default function BusinessDashboard() {
             <div className="panel-header">
               <div>
                 <h2 style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <button className="btn btn-icon btn-ghost mobile-menu-btn" onClick={() => setSidebarOpen(true)}>
+                  <button aria-label="Open menu" className="btn btn-icon btn-ghost mobile-menu-btn" onClick={() => setSidebarOpen(true)}>
                     <Menu size={20} />
                   </button>
                   <Mail size={20} /> Business Mailboxes
@@ -1964,7 +1964,7 @@ export default function BusinessDashboard() {
             <div className="panel-header">
               <div>
                 <h2 style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <button className="btn btn-icon btn-ghost mobile-menu-btn" onClick={() => setSidebarOpen(true)}>
+                  <button aria-label="Open menu" className="btn btn-icon btn-ghost mobile-menu-btn" onClick={() => setSidebarOpen(true)}>
                     <Menu size={20} />
                   </button>
                   <Users size={20} color="var(--primary)" /> Distribution Groups
@@ -2022,10 +2022,10 @@ export default function BusinessDashboard() {
                           <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>{group.address}</span>
                         </div>
                       </div>
-                      <button className="btn btn-icon btn-ghost btn-sm" onClick={() => setGroupDetails(group)} title="Manage group">
+                      <button aria-label="Manage group" className="btn btn-icon btn-ghost btn-sm" onClick={() => setGroupDetails(group)} title="Manage group">
                         <Eye size={14} />
                       </button>
-                      <button className="btn btn-icon btn-ghost btn-sm" style={{ color: 'var(--danger)' }} onClick={() => { businessGroups.remove(activeDomainName, group.id); setDomainGroups(businessGroups.getByDomain(activeDomainName)); showToast('Group removed'); }}>
+                      <button aria-label="Remove group" className="btn btn-icon btn-ghost btn-sm" style={{ color: 'var(--danger)' }} onClick={() => { businessGroups.remove(activeDomainName, group.id); setDomainGroups(businessGroups.getByDomain(activeDomainName)); showToast('Group removed'); }}>
                         <Trash size={14} />
                       </button>
                     </div>
@@ -2058,7 +2058,7 @@ export default function BusinessDashboard() {
             <div className="panel-header">
               <div>
                 <h2 style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <button className="btn btn-icon btn-ghost mobile-menu-btn" onClick={() => setSidebarOpen(true)}>
+                  <button aria-label="Open menu" className="btn btn-icon btn-ghost mobile-menu-btn" onClick={() => setSidebarOpen(true)}>
                     <Menu size={20} />
                   </button>
                   <Users size={20} /> Team Members
@@ -2159,7 +2159,7 @@ export default function BusinessDashboard() {
             <div className="panel-header">
               <div>
                 <h2 style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <button className="btn btn-icon btn-ghost mobile-menu-btn" onClick={() => setSidebarOpen(true)}>
+                  <button aria-label="Open menu" className="btn btn-icon btn-ghost mobile-menu-btn" onClick={() => setSidebarOpen(true)}>
                     <Menu size={20} />
                   </button>
                   <Server size={20} /> Mail Queue
@@ -2251,10 +2251,10 @@ export default function BusinessDashboard() {
                       <td className="queue-retries">{item.retryCount}/{item.retryCount >= 3 ? 'MAX' : '3'}</td>
                       <td className="queue-error">{item.error || '—'}</td>
                       <td className="queue-actions">
-                        {item.status === 'queued' && <button className="btn btn-ghost btn-icon btn-sm" title="Pause" onClick={() => handlePauseQueueItem(item.id)}><Pause size={14} /></button>}
-                        {item.status === 'deferred' && <button className="btn btn-ghost btn-icon btn-sm" title="Retry" onClick={() => handleRetryQueueItem(item.id)}><RefreshCcw size={14} /></button>}
-                        {item.status === 'failed' && <button className="btn btn-ghost btn-icon btn-sm" title="Retry" onClick={() => handleRetryQueueItem(item.id)}><RefreshCcw size={14} /></button>}
-                        <button className="btn btn-danger btn-icon btn-sm" title="Delete" onClick={() => handleDeleteQueueItem(item.id)}><Trash size={14} /></button>
+                        {item.status === 'queued' && <button aria-label="Pause" className="btn btn-ghost btn-icon btn-sm" title="Pause" onClick={() => handlePauseQueueItem(item.id)}><Pause size={14} /></button>}
+                        {item.status === 'deferred' && <button aria-label="Retry" className="btn btn-ghost btn-icon btn-sm" title="Retry" onClick={() => handleRetryQueueItem(item.id)}><RefreshCcw size={14} /></button>}
+                        {item.status === 'failed' && <button aria-label="Retry" className="btn btn-ghost btn-icon btn-sm" title="Retry" onClick={() => handleRetryQueueItem(item.id)}><RefreshCcw size={14} /></button>}
+                        <button aria-label="Delete" className="btn btn-danger btn-icon btn-sm" title="Delete" onClick={() => handleDeleteQueueItem(item.id)}><Trash size={14} /></button>
                       </td>
                     </tr>
                   ))}
@@ -2277,7 +2277,7 @@ export default function BusinessDashboard() {
             <div className="panel-header">
               <div>
                 <h2 style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <button className="btn btn-icon btn-ghost mobile-menu-btn" onClick={() => setSidebarOpen(true)}>
+                  <button aria-label="Open menu" className="btn btn-icon btn-ghost mobile-menu-btn" onClick={() => setSidebarOpen(true)}>
                     <Menu size={20} />
                   </button>
                   <BarChart3 size={20} /> Mail Analytics
@@ -2379,7 +2379,7 @@ export default function BusinessDashboard() {
             <div className="panel-header">
               <div>
                 <h2 style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <button className="btn btn-icon btn-ghost mobile-menu-btn" onClick={() => setSidebarOpen(true)}>
+                  <button aria-label="Open menu" className="btn btn-icon btn-ghost mobile-menu-btn" onClick={() => setSidebarOpen(true)}>
                     <Menu size={20} />
                   </button>
                   <Shield size={20} /> Audit Log
@@ -2538,14 +2538,14 @@ export default function BusinessDashboard() {
                     <div className="toggle-label">Two-Factor Authentication</div>
                     <div className="toggle-desc">Require 2FA for all team members</div>
                   </div>
-                  <button className="toggle-btn on"><Lock size={16} /></button>
+                  <button aria-label="Toggle Two-Factor Authentication" className="toggle-btn on"><Lock size={16} /></button>
                 </div>
                 <div className="toggle-row">
                   <div>
                     <div className="toggle-label">API Access Logging</div>
                     <div className="toggle-desc">Log all API calls to audit trail</div>
                   </div>
-                  <button className="toggle-btn on"><Shield size={16} /></button>
+                  <button aria-label="Toggle API Access Logging" className="toggle-btn on"><Shield size={16} /></button>
                 </div>
               </div>
             </div>
@@ -2636,7 +2636,7 @@ export default function BusinessDashboard() {
           <div className="biz-form-modal glass animate-scale" onClick={(e) => e.stopPropagation()}>
             <div className="compose-header">
               <h3><Globe size={16} /> Domain Verification Diagnostics</h3>
-              <button className="btn btn-ghost btn-icon" type="button" disabled={Boolean(verifyingDomainId)} onClick={() => setDomainVerifyOpen(false)}><X size={18} /></button>
+              <button aria-label="Close" className="btn btn-ghost btn-icon" type="button" disabled={Boolean(verifyingDomainId)} onClick={() => setDomainVerifyOpen(false)}><X size={18} /></button>
             </div>
             <div className="diag-steps">
               {domainVerifySteps.map((step, index) => (
@@ -2728,7 +2728,7 @@ export default function BusinessDashboard() {
           <div className="compose-modal glass animate-scale" onClick={e => e.stopPropagation()}>
             <div className="compose-header">
               <h3><Mail size={16} /> New Business Email</h3>
-              <button className="btn btn-ghost btn-icon" onClick={() => !sending && setComposeOpen(false)} disabled={sending}><X size={18} /></button>
+              <button aria-label="Close" className="btn btn-ghost btn-icon" onClick={() => !sending && setComposeOpen(false)} disabled={sending}><X size={18} /></button>
             </div>
             <Composer
               initialTo={composeTo}
@@ -2757,7 +2757,7 @@ export default function BusinessDashboard() {
           <form className="biz-form-modal glass animate-scale" onSubmit={handleInviteSubmit} onClick={e => e.stopPropagation()}>
             <div className="compose-header">
               <h3><Users size={16} /> Invite Team Member</h3>
-              <button className="btn btn-ghost btn-icon" type="button" onClick={() => setInviteOpen(false)}><X size={18} /></button>
+              <button aria-label="Close" className="btn btn-ghost btn-icon" type="button" onClick={() => setInviteOpen(false)}><X size={18} /></button>
             </div>
             <div style={{ padding: '20px' }}>
               <div className="biz-modal-grid">
@@ -2811,7 +2811,7 @@ export default function BusinessDashboard() {
           <form className="biz-form-modal glass animate-scale" onSubmit={handleTemplateSubmit} onClick={e => e.stopPropagation()}>
             <div className="compose-header">
               <h3><Layers size={16} /> New Template</h3>
-              <button className="btn btn-ghost btn-icon" type="button" onClick={() => setTemplateEditorOpen(false)}><X size={18} /></button>
+              <button aria-label="Close" className="btn btn-ghost btn-icon" type="button" onClick={() => setTemplateEditorOpen(false)}><X size={18} /></button>
             </div>
             <div style={{ padding: '20px' }}>
               <div className="biz-modal-grid">
@@ -2833,7 +2833,7 @@ export default function BusinessDashboard() {
           <div className="biz-form-modal glass animate-scale" onClick={e => e.stopPropagation()}>
             <div className="compose-header">
               <h3><Eye size={16} /> {previewTemplate.name}</h3>
-              <button className="btn btn-ghost btn-icon" type="button" onClick={() => setPreviewTemplate(null)}><X size={18} /></button>
+              <button aria-label="Close" className="btn btn-ghost btn-icon" type="button" onClick={() => setPreviewTemplate(null)}><X size={18} /></button>
             </div>
             <div className="template-preview-modal">
               <strong>{previewTemplate.subject || 'No subject'}</strong>
@@ -2851,7 +2851,7 @@ export default function BusinessDashboard() {
           <div className="biz-form-modal glass animate-scale detail-modal" onClick={e => e.stopPropagation()}>
             <div className="compose-header">
               <h3><Globe size={16} /> {domainDetails.domain}</h3>
-              <button className="btn btn-ghost btn-icon" onClick={() => setDomainDetails(null)}><X size={18} /></button>
+              <button aria-label="Close" className="btn btn-ghost btn-icon" onClick={() => setDomainDetails(null)}><X size={18} /></button>
             </div>
             <div className="detail-modal-body">
               <div className="detail-summary-grid">
@@ -2883,7 +2883,7 @@ export default function BusinessDashboard() {
           <div className="biz-form-modal glass animate-scale detail-modal" onClick={e => e.stopPropagation()}>
             <div className="compose-header">
               <h3><Mail size={16} /> {mailboxDetails.displayName}</h3>
-              <button className="btn btn-ghost btn-icon" onClick={() => setMailboxDetails(null)}><X size={18} /></button>
+              <button aria-label="Close" className="btn btn-ghost btn-icon" onClick={() => setMailboxDetails(null)}><X size={18} /></button>
             </div>
             <div className="detail-modal-body">
               <div className="detail-summary-grid">
@@ -2906,7 +2906,7 @@ export default function BusinessDashboard() {
           <div className="biz-form-modal glass animate-scale detail-modal" onClick={e => e.stopPropagation()}>
             <div className="compose-header">
               <h3><Users size={16} /> {groupDetails.name}</h3>
-              <button className="btn btn-ghost btn-icon" onClick={() => setGroupDetails(null)}><X size={18} /></button>
+              <button aria-label="Close" className="btn btn-ghost btn-icon" onClick={() => setGroupDetails(null)}><X size={18} /></button>
             </div>
             <div className="detail-modal-body">
               <div className="detail-summary-grid">

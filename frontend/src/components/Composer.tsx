@@ -181,12 +181,12 @@ export default function Composer({
 
         <div className="rich-text-container">
           <div className="rich-text-toolbar">
-            <button type="button" className="toolbar-btn" onMouseDown={e => { e.preventDefault(); execCmd('bold'); }} title="Bold"><Bold size={14} /></button>
-            <button type="button" className="toolbar-btn" onMouseDown={e => { e.preventDefault(); execCmd('italic'); }} title="Italic"><Italic size={14} /></button>
-            <button type="button" className="toolbar-btn" onMouseDown={e => { e.preventDefault(); execCmd('underline'); }} title="Underline"><Underline size={14} /></button>
+            <button aria-label="Bold" type="button" className="toolbar-btn" onMouseDown={e => { e.preventDefault(); execCmd('bold'); }} title="Bold"><Bold size={14} /></button>
+            <button aria-label="Italic" type="button" className="toolbar-btn" onMouseDown={e => { e.preventDefault(); execCmd('italic'); }} title="Italic"><Italic size={14} /></button>
+            <button aria-label="Underline" type="button" className="toolbar-btn" onMouseDown={e => { e.preventDefault(); execCmd('underline'); }} title="Underline"><Underline size={14} /></button>
             <div className="toolbar-divider" />
-            <button type="button" className="toolbar-btn" onMouseDown={e => { e.preventDefault(); execCmd('insertUnorderedList'); }} title="Bullet List"><List size={14} /></button>
-            <button type="button" className="toolbar-btn" onMouseDown={e => {
+            <button aria-label="Bullet List" type="button" className="toolbar-btn" onMouseDown={e => { e.preventDefault(); execCmd('insertUnorderedList'); }} title="Bullet List"><List size={14} /></button>
+            <button aria-label="Insert Link" type="button" className="toolbar-btn" onMouseDown={e => {
               e.preventDefault(); 
               const selection = window.getSelection();
               if (selection && selection.rangeCount > 0) {
@@ -221,7 +221,7 @@ export default function Composer({
               <div key={i} className="attachment-chip" style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '4px 10px', background: 'var(--bg-surface-2)', borderRadius: '4px', fontSize: '0.8rem', border: '1px solid var(--border)' }}>
                 <Paperclip size={12} />
                 <span>{file.name}</span>
-                <button onClick={() => removeAttachment(i)} style={{ color: 'var(--text-muted)', marginLeft: '4px' }}><X size={12} /></button>
+                <button aria-label="Remove attachment" onClick={() => removeAttachment(i)} style={{ color: 'var(--text-muted)', marginLeft: '4px' }}><X size={12} /></button>
               </div>
             ))}
           </div>
@@ -238,7 +238,7 @@ export default function Composer({
             multiple 
           />
           <button 
-            className="btn btn-ghost btn-icon" 
+            aria-label="Attach Files" className="btn btn-ghost btn-icon"
             title="Attach Files"
             onClick={() => fileInputRef.current?.click()}
           >
@@ -246,7 +246,7 @@ export default function Composer({
           </button>
         </div>
         <div className="compose-footer-right">
-          <button className="btn btn-ghost btn-icon" onClick={onClose} disabled={sending} title="Discard draft">
+          <button aria-label="Discard draft" className="btn btn-ghost btn-icon" onClick={onClose} disabled={sending} title="Discard draft">
             <Trash2 size={16} />
           </button>
           <button className="btn btn-primary btn-sm" onClick={handleSend} disabled={sending || !to || !subject || (deliveryMode === 'scheduled' && !scheduledAt)}>
