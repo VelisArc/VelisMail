@@ -30,23 +30,29 @@ export default function Refund() {
           </section>
 
           <section>
-            <h2>1. The 30-Day Enterprise Guarantee</h2>
+            <h2>1. The 30-Day Guarantee (Starter, Business, Enterprise)</h2>
             <p>
-              All new Business and Enterprise subscriptions are covered by our 30-day money-back guarantee. If you are unsatisfied with our zero-trust email hosting, latency, or integration tools, you may request a full refund within the first 30 days of your initial purchase. No questions asked.
+              All new Starter, Business, and Enterprise subscriptions are covered by our 30-day money-back guarantee. If you are unsatisfied with our zero-trust email hosting, latency, or integration tools, you may request a full refund within the first 30 days of your initial purchase. No questions asked.
+            </p>
+            <p>
+              <strong>Free Tier:</strong> The Free tier is provided at no cost. Therefore, no refunds are applicable or possible for Free tier workspaces.
             </p>
           </section>
 
           <section>
-            <h2>2. Subscription Cancellations</h2>
+            <h2>2. Subscription Cancellations & Prorated Refunds</h2>
             <p>
-              You can cancel your subscription at any time from your Business Dashboard billing panel. Cancellations will take effect at the end of your current billing cycle. You will retain full access to your secure inbox until the cycle concludes. We do not provide prorated refunds for mid-cycle cancellations on annual plans after the initial 30 days.
+              You can cancel your subscription at any time from your Business Dashboard billing panel. Cancellations will take effect at the end of your current billing cycle. You will retain full access to your secure inbox until the cycle concludes. 
+            </p>
+            <p>
+              We do not provide prorated refunds for mid-cycle cancellations on monthly plans. For annual plans, if you cancel after the initial 30 days but before 6 months, you may be eligible for a partial prorated refund minus a standard early cancellation fee. Please contact billing for annual plan prorations.
             </p>
           </section>
 
           <section>
             <h2>3. How to Request a Refund</h2>
             <p>
-              To initiate a refund, please contact our billing department from your registered admin email address. Refunds are processed back to the original payment method via Stripe and typically take 5-10 business days to appear on your statement.
+              To initiate a refund within the eligible window, please contact our billing department from your registered admin email address. Refunds are processed back to the original payment method (via Stripe/Razorpay) and typically take 5-10 business days to appear on your statement.
             </p>
           </section>
 

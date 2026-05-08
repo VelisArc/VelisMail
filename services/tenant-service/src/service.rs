@@ -48,39 +48,59 @@ impl TenantService {
         let plan_tier = request.plan_tier.unwrap_or_else(|| "starter".to_string());
         let limits = match plan_tier.as_str() {
             "free" => json!({
-                "max_users": 5,
-                "max_storage_gb": 1,
+                "max_users": 3,
+                "max_storage_mb": 500,
                 "max_emails_per_day": 100,
-                "max_attachment_size_mb": 10,
-                "api_rate_limit_per_minute": 30
+                "monthly_email_limit": 3000,
+                "max_attachment_size_mb": 5,
+                "api_rate_limit_per_minute": 30,
+                "max_domains": 1,
+                "max_templates": 3,
+                "audit_retention_days": 7
             }),
             "starter" => json!({
-                "max_users": 10,
-                "max_storage_gb": 5,
-                "max_emails_per_day": 1000,
+                "max_users": 15,
+                "max_storage_mb": 10240,
+                "max_emails_per_day": 5000,
+                "monthly_email_limit": 150000,
                 "max_attachment_size_mb": 25,
-                "api_rate_limit_per_minute": 60
+                "api_rate_limit_per_minute": 120,
+                "max_domains": 3,
+                "max_templates": 25,
+                "audit_retention_days": 30
             }),
             "business" => json!({
-                "max_users": 100,
-                "max_storage_gb": 50,
-                "max_emails_per_day": 10000,
+                "max_users": 75,
+                "max_storage_mb": 51200,
+                "max_emails_per_day": 25000,
+                "monthly_email_limit": 750000,
                 "max_attachment_size_mb": 50,
-                "api_rate_limit_per_minute": 300
+                "api_rate_limit_per_minute": 500,
+                "max_domains": 10,
+                "max_templates": 9999,
+                "audit_retention_days": 90
             }),
             "enterprise" => json!({
-                "max_users": 1000,
-                "max_storage_gb": 500,
+                "max_users": 9999,
+                "max_storage_mb": 512000,
                 "max_emails_per_day": 100000,
+                "monthly_email_limit": 3000000,
                 "max_attachment_size_mb": 100,
-                "api_rate_limit_per_minute": 1000
+                "api_rate_limit_per_minute": 2000,
+                "max_domains": 9999,
+                "max_templates": 9999,
+                "audit_retention_days": 365
             }),
             _ => json!({
-                "max_users": 10,
-                "max_storage_gb": 5,
-                "max_emails_per_day": 1000,
-                "max_attachment_size_mb": 25,
-                "api_rate_limit_per_minute": 60
+                "max_users": 3,
+                "max_storage_mb": 500,
+                "max_emails_per_day": 100,
+                "monthly_email_limit": 3000,
+                "max_attachment_size_mb": 5,
+                "api_rate_limit_per_minute": 30,
+                "max_domains": 1,
+                "max_templates": 3,
+                "audit_retention_days": 7
             }),
         };
 
@@ -434,12 +454,12 @@ impl TenantService {
                 )));
             }
 
-            if limits.max_storage_gb > 0 {
-                let storage_used_gb = usage.storage_used_bytes as f64 / (1024.0 * 1024.0 * 1024.0);
-                if storage_used_gb > limits.max_storage_gb as f64 {
+            if limits.max_storage_mb > 0 {
+                let storage_used_mb = usage.storage_used_bytes as f64 / (1024.0 * 1024.0);
+                if storage_used_mb > limits.max_storage_mb as f64 {
                     return Ok(Some(format!(
-                        "Storage limit exceeded: {:.2}/{} GB used",
-                        storage_used_gb, limits.max_storage_gb
+                        "Storage limit exceeded: {:.2}/{} MB used",
+                        storage_used_mb, limits.max_storage_mb
                     )));
                 }
             }

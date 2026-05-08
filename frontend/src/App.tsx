@@ -21,6 +21,7 @@ const SecurityPolicy = lazy(() => import('./pages/SecurityPolicy'));
 const Refund = lazy(() => import('./pages/Refund'));
 const Documentation = lazy(() => import('./pages/Documentation'));
 const Status = lazy(() => import('./pages/Status'));
+const Pricing = lazy(() => import('./pages/Pricing'));
 
 function App() {
   return (
@@ -40,6 +41,7 @@ function App() {
             <Route path="/about" element={<About />} />
             <Route path="/docs" element={<Documentation />} />
             <Route path="/status" element={<Status />} />
+            <Route path="/pricing" element={<Pricing />} />
 
             {/* Protected routes — require authentication */}
             <Route

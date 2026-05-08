@@ -192,6 +192,7 @@ export default function Home() {
           <div className={`nav-links ${mobileMenuOpen ? 'open' : ''}`}>
             <a href="#features" className="nav-link" onClick={closeMobileMenu}>Features</a>
             <a href="#feedback" className="nav-link" onClick={closeMobileMenu}>Community</a>
+            <Link to="/pricing" className="nav-link" onClick={closeMobileMenu}>Pricing</Link>
             <Link to="/about" className="nav-link" onClick={closeMobileMenu}>About</Link>
             <div className="nav-divider" />
             {!user ? (
@@ -476,6 +477,7 @@ export default function Home() {
                 <h4>Product</h4>
                 <div className="footer-link-list">
                   <a href="#features" className="footer-link">Features</a>
+                  <Link to="/pricing" className="footer-link">Pricing</Link>
                   <Link to="/status" className="footer-link">Network Status</Link>
                   <Link to="/docs" className="footer-link">Documentation</Link>
                 </div>

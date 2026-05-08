@@ -11,7 +11,7 @@ import {
   Mail, Volume2, VolumeX, RefreshCcw, Pause,
   Trash, Archive as ArchiveIcon, Edit3, Eye,
   Download, KeyRound, Lock, XCircle,
-  Layers,
+  Layers, CreditCard,
   List, Grid, SortAsc, SortDesc, Menu
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
@@ -160,10 +160,10 @@ function formatInviteExpiry(expiresAt?: string | null): string {
   return expiresAt ? `Expires ${formatRelative(expiresAt)}` : 'Never expires';
 }
 
-type BizTab = 'mail' | 'domains' | 'mailboxes' | 'groups' | 'team' | 'queue' | 'analytics' | 'audit' | 'templates' | 'settings';
+type BizTab = 'mail' | 'domains' | 'mailboxes' | 'groups' | 'team' | 'queue' | 'analytics' | 'audit' | 'templates' | 'settings' | 'billing';
 
 const ROLE_ALLOWED_TABS: Record<BusinessTeamMember['role'], BizTab[]> = {
-  admin: ['mail', 'domains', 'mailboxes', 'groups', 'team', 'queue', 'analytics', 'audit', 'templates', 'settings'],
+  admin: ['mail', 'domains', 'mailboxes', 'groups', 'team', 'queue', 'analytics', 'audit', 'templates', 'settings', 'billing'],
   member: ['mail', 'team', 'queue', 'analytics', 'templates'],
   viewer: ['mail', 'team', 'analytics'],
 };
@@ -1160,6 +1160,10 @@ export default function BusinessDashboard() {
                 <button className={`folder-btn ${activeBizTab === 'settings' ? 'active' : ''}`} onClick={() => { setActiveBizTab('settings'); setSidebarOpen(false); }}>
                   <Settings size={17} />
                   <span className="folder-label">Settings</span>
+                </button>
+                <button className={`folder-btn ${activeBizTab === 'billing' ? 'active' : ''}`} onClick={() => { setActiveBizTab('billing'); setSidebarOpen(false); }}>
+                  <CreditCard size={17} />
+                  <span className="folder-label">Billing & Premium</span>
                 </button>
               </>
             )}
@@ -2219,6 +2223,51 @@ export default function BusinessDashboard() {
                   <button className="toggle-btn on"><Shield size={16} /></button>
                 </div>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* ===== BILLING TAB ===== */}
+        {activeBizTab === 'billing' && (
+          <div className="biz-panel animate-fade">
+            <div className="panel-header">
+              <h2><CreditCard size={20} /> Billing & Premium</h2>
+              <p>Manage your workspace subscription and upgrade to premium features.</p>
+            </div>
+            
+            <div className="glass-card" style={{ padding: '32px', textAlign: 'center', marginBottom: '24px' }}>
+              <div style={{ marginBottom: '24px' }}>
+                <span className="badge badge-accent" style={{ fontSize: '0.9rem', padding: '6px 12px', marginBottom: '16px', display: 'inline-block' }}>Current Plan: Free</span>
+                <h3 style={{ fontSize: '1.8rem', margin: '0 0 16px' }}>Upgrade to Premium</h3>
+                <p style={{ color: 'var(--text-secondary)', maxWidth: '600px', margin: '0 auto', fontSize: '1.1rem', lineHeight: 1.6 }}>
+                  VelisMail is a Bring Your Own Infrastructure (BYOI) platform. Upgrade your plan to unlock advanced software features like custom branding, unlimited team members, SSO, and extended audit logs.
+                </p>
+              </div>
+              
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', maxWidth: '800px', margin: '0 auto 32px', textAlign: 'left' }}>
+                <div style={{ background: 'var(--bg-surface-2)', padding: '16px', borderRadius: 'var(--radius-md)' }}>
+                  <CheckCircle2 size={20} color="var(--primary)" style={{ marginBottom: '8px' }} />
+                  <h4 style={{ margin: '0 0 4px' }}>Unlimited Routing</h4>
+                  <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-muted)' }}>Remove restrictions on custom domains and routing rules.</p>
+                </div>
+                <div style={{ background: 'var(--bg-surface-2)', padding: '16px', borderRadius: 'var(--radius-md)' }}>
+                  <CheckCircle2 size={20} color="var(--primary)" style={{ marginBottom: '8px' }} />
+                  <h4 style={{ margin: '0 0 4px' }}>Team Expansion</h4>
+                  <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-muted)' }}>Add your entire organization with granular role access.</p>
+                </div>
+                <div style={{ background: 'var(--bg-surface-2)', padding: '16px', borderRadius: 'var(--radius-md)' }}>
+                  <CheckCircle2 size={20} color="var(--primary)" style={{ marginBottom: '8px' }} />
+                  <h4 style={{ margin: '0 0 4px' }}>Security & Audit</h4>
+                  <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-muted)' }}>Extended audit log retention and SAML/SSO integrations.</p>
+                </div>
+              </div>
+
+              <button className="btn btn-primary" style={{ fontSize: '1.1rem', padding: '12px 32px', height: 'auto' }} onClick={() => navigate('/pricing')}>
+                View Pricing & Upgrade
+              </button>
+              <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginTop: '16px' }}>
+                Email API and Database storage limits are managed by your respective providers.
+              </p>
             </div>
           </div>
         )}

@@ -114,20 +114,28 @@ pub struct AddDomainRequest {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ResourceLimits {
     pub max_users: u32,
-    pub max_storage_gb: u32,
+    pub max_storage_mb: u32,
     pub max_emails_per_day: u32,
+    pub monthly_email_limit: u32,
     pub max_attachment_size_mb: u32,
     pub api_rate_limit_per_minute: u32,
+    pub max_domains: u32,
+    pub max_templates: u32,
+    pub audit_retention_days: u32,
 }
 
 impl Default for ResourceLimits {
     fn default() -> Self {
         Self {
-            max_users: 10,
-            max_storage_gb: 5,
-            max_emails_per_day: 1000,
-            max_attachment_size_mb: 25,
-            api_rate_limit_per_minute: 60,
+            max_users: 3,
+            max_storage_mb: 500,
+            max_emails_per_day: 100,
+            monthly_email_limit: 3000,
+            max_attachment_size_mb: 5,
+            api_rate_limit_per_minute: 30,
+            max_domains: 1,
+            max_templates: 3,
+            audit_retention_days: 7,
         }
     }
 }

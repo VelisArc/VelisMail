@@ -57,9 +57,21 @@ export default function Terms() {
           </section>
 
           <section>
-            <h2>4. Billing and Subscriptions</h2>
+            <h2>4. Billing, Subscriptions, and Infrastructure</h2>
             <p>
-              Enterprise and Business plans are billed either monthly or annually. Failure to pay may result in restricted access to your organization's workspaces. All transactions are securely processed via Stripe. You can cancel your subscription at any time via the Business Dashboard.
+              VelisMail operates on a per-workspace subscription model with four tiers: Free, Starter, Business, and Enterprise. Prices are listed in Indian Rupees (INR) and are subject to applicable taxes (e.g., 18% GST). 
+            </p>
+            <p>
+              <strong>Bring Your Own Infrastructure (BYOI):</strong> VelisMail operates as a secure software control panel. We do not provide database hosting, storage, or email API delivery capabilities. You must bring your own PostgreSQL database and Email Delivery API (e.g., SendGrid, Resend). 
+            </p>
+            <p>
+              <strong>Third-Party Limits:</strong> Purchasing a premium VelisMail plan only upgrades your software capabilities (e.g., number of team members, domains, audit logs). It <strong>does not</strong> increase your email sending or storage limits. Those limits are strictly governed by your chosen third-party API and database providers, and you are responsible for any costs incurred with them.
+            </p>
+            <p>
+              <strong>Self-Service Upgrades:</strong> Premium subscriptions must be purchased directly by users via the Business Dashboard. We do not support manual invoicing or admin provisioning except for custom Enterprise agreements.
+            </p>
+            <p>
+              <strong>Auto-Renewal & Cancellation:</strong> Subscriptions are billed automatically on a monthly or annual basis. You may cancel your subscription at any time via your Business Dashboard. Cancellations take effect at the end of the current billing cycle. Failure to pay may result in restricted access to your workspace. All transactions are securely processed via our payment partners (Stripe/Razorpay).
             </p>
           </section>
 
