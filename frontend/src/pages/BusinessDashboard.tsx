@@ -184,12 +184,12 @@ const plans = [
     id: 'free',
     name: 'Free',
     icon: Zap,
-    desc: 'For individuals & testing. Get started instantly.',
+    desc: 'For individuals & testing.',
     monthlyPrice: 0,
     annualPrice: 0,
     popular: false,
     cta: 'Current Plan',
-    ctaStyle: 'cta-outline' as const,
+    ctaStyle: 'btn-outline',
     features: [
       { text: '3,000 emails/mo', highlight: true },
       { text: '100 emails/day limit', highlight: false },
@@ -205,19 +205,19 @@ const plans = [
     disabledFeatures: [
       'Custom branding',
       'Priority support',
-      'Webhooks',
+      'Advanced routing',
     ],
   },
   {
     id: 'starter',
     name: 'Starter',
     icon: Rocket,
-    desc: 'For small teams getting serious about email.',
+    desc: 'For small teams getting serious.',
     monthlyPrice: 799,
     annualPrice: 7999,
     popular: false,
     cta: 'Upgrade to Starter',
-    ctaStyle: 'cta-outline' as const,
+    ctaStyle: 'btn-outline',
     features: [
       { text: '150,000 emails/mo', highlight: true },
       { text: 'No daily email limit', highlight: false },
@@ -229,7 +229,6 @@ const plans = [
       { text: 'Passkey authentication', highlight: false },
       { text: '25 mail templates', highlight: false },
       { text: '30 days audit logs', highlight: false },
-      { text: '2 webhook integrations', highlight: false },
       { text: 'Email support', highlight: false },
       { text: '99.5% platform SLA', highlight: false },
     ],
@@ -241,12 +240,12 @@ const plans = [
     id: 'business',
     name: 'Business',
     icon: Briefcase,
-    desc: 'For growing companies needing advanced controls.',
+    desc: 'For growing companies.',
     monthlyPrice: 2499,
     annualPrice: 24999,
     popular: true,
     cta: 'Upgrade to Business',
-    ctaStyle: 'cta-primary' as const,
+    ctaStyle: 'btn-primary',
     features: [
       { text: '750,000 emails/mo', highlight: true },
       { text: 'No daily email limit', highlight: false },
@@ -258,9 +257,7 @@ const plans = [
       { text: 'Passkey authentication', highlight: false },
       { text: 'Unlimited mail templates', highlight: false },
       { text: '90 days audit logs', highlight: false },
-      { text: '10 webhook integrations', highlight: false },
       { text: 'Custom branding', highlight: true },
-      { text: 'IP whitelisting', highlight: false },
       { text: 'Email + chat support', highlight: false },
       { text: '99.9% platform SLA', highlight: false },
     ],
@@ -270,12 +267,12 @@ const plans = [
     id: 'enterprise',
     name: 'Enterprise',
     icon: Building2,
-    desc: 'For large organizations with premium needs.',
+    desc: 'For large organizations.',
     monthlyPrice: 6999,
     annualPrice: 69999,
     popular: false,
     cta: 'Upgrade to Enterprise',
-    ctaStyle: 'cta-gradient' as const,
+    ctaStyle: 'btn-primary',
     features: [
       { text: 'Unlimited emails', highlight: true },
       { text: 'No daily email limit', highlight: false },
@@ -287,10 +284,6 @@ const plans = [
       { text: 'Passkey authentication', highlight: false },
       { text: 'Unlimited mail templates', highlight: false },
       { text: '1 year audit logs', highlight: false },
-      { text: 'Unlimited webhooks', highlight: false },
-      { text: 'Custom branding', highlight: false },
-      { text: 'IP whitelisting', highlight: false },
-      { text: 'SSO / SAML', highlight: true },
       { text: 'Dedicated Account Manager', highlight: false },
       { text: '99.99% platform SLA', highlight: false },
     ],
@@ -1413,23 +1406,23 @@ export default function BusinessDashboard() {
                       <ArrowLeft size={16} /> Back
                     </button>
                     <div className="reader-toolbar-actions" style={{ display: 'flex', gap: '8px' }}>
-                      <button className="btn btn-ghost btn-icon" title="Reply" onClick={handleReply} style={{ padding: '8px' }}><Reply size={22} /></button>
-                      <button className="btn btn-ghost btn-icon" title="Forward" onClick={handleForward} style={{ padding: '8px' }}><Forward size={22} /></button>
-                      <button className="btn btn-ghost btn-icon" title="Print" onClick={() => { window.print(); showToast('Preparing print view...'); }} style={{ padding: '8px' }}><ExternalLink size={22} /></button>
-                      <button className="btn btn-ghost btn-icon" title="Toggle Priority" onClick={() => handleTogglePriority()} style={{ padding: '8px' }}><Zap size={22} /></button>
+                      <button className="btn btn-ghost btn-icon" title="Reply" onClick={handleReply} style={{ width: '42px', height: '42px' }}><Reply size={22} /></button>
+                      <button className="btn btn-ghost btn-icon" title="Forward" onClick={handleForward} style={{ width: '42px', height: '42px' }}><Forward size={22} /></button>
+                      <button className="btn btn-ghost btn-icon" title="Print" onClick={() => { window.print(); showToast('Preparing print view...'); }} style={{ width: '42px', height: '42px' }}><ExternalLink size={22} /></button>
+                      <button className="btn btn-ghost btn-icon" title="Toggle Priority" onClick={() => handleTogglePriority()} style={{ width: '42px', height: '42px' }}><Zap size={22} /></button>
                       {selectedEmail.folder === 'archive' || selectedEmail.folder === 'trash' || selectedEmail.folder === 'spam' ? (
-                        <button className="btn btn-ghost btn-icon" title="Move to Inbox" onClick={() => handleMoveToInbox()} style={{ padding: '8px' }}><Inbox size={22} /></button>
+                        <button className="btn btn-ghost btn-icon" title="Move to Inbox" onClick={() => handleMoveToInbox()} style={{ width: '42px', height: '42px' }}><Inbox size={22} /></button>
                       ) : (
-                        <button className="btn btn-ghost btn-icon" title="Archive" onClick={() => handleArchive()} style={{ padding: '8px' }}><ArchiveIcon size={22} /></button>
+                        <button className="btn btn-ghost btn-icon" title="Archive" onClick={() => handleArchive()} style={{ width: '42px', height: '42px' }}><ArchiveIcon size={22} /></button>
                       )}
-                      {selectedEmail.folder !== 'spam' && <button className="btn btn-ghost btn-icon" title="Mark as Spam" onClick={() => handleMarkSpam()} style={{ padding: '8px' }}><AlertCircle size={22} /></button>}
+                      {selectedEmail.folder !== 'spam' && <button className="btn btn-ghost btn-icon" title="Mark as Spam" onClick={() => handleMarkSpam()} style={{ width: '42px', height: '42px' }}><AlertCircle size={22} /></button>}
                       {(selectedEmail.folder === 'spam' || isScamEmail(selectedEmail)) && (
-                        <button className="btn btn-ghost btn-icon" title="Mark Safe" onClick={() => handleMarkSafe()} style={{ padding: '8px' }}><ShieldCheck size={22} /></button>
+                        <button className="btn btn-ghost btn-icon" title="Mark Safe" onClick={() => handleMarkSafe()} style={{ width: '42px', height: '42px' }}><ShieldCheck size={22} /></button>
                       )}
                       {selectedEmail.folder === 'trash' ? (
-                        <button className="btn btn-danger btn-icon" title="Delete permanently" onClick={() => handlePermanentDelete()} style={{ padding: '8px' }}><Trash size={22} /></button>
+                        <button className="btn btn-danger btn-icon" title="Delete permanently" onClick={() => handlePermanentDelete()} style={{ width: '42px', height: '42px' }}><Trash size={22} /></button>
                       ) : (
-                        <button className="btn btn-danger btn-icon" title="Move to Trash" onClick={() => handleDeleteEmail()} style={{ padding: '8px' }}><Trash size={22} /></button>
+                        <button className="btn btn-danger btn-icon" title="Move to Trash" onClick={() => handleDeleteEmail()} style={{ width: '42px', height: '42px' }}><Trash size={22} /></button>
                       )}
                     </div>
                   </div>
@@ -2421,65 +2414,63 @@ export default function BusinessDashboard() {
             </div>
             
             <div className="billing-pricing-container" style={{ paddingBottom: '40px' }}>
-              <div className="billing-toggle-wrapper" style={{ display: 'flex', justifyContent: 'center', margin: '32px 0' }}>
-                <div className="billing-toggle">
-                  <span className={!annual ? 'active' : ''}>Monthly</span>
-                  <button 
-                    className={`toggle-switch ${annual ? 'on' : 'off'}`}
-                    onClick={() => setAnnual(!annual)}
-                  >
-                    <div className="knob" />
-                  </button>
-                  <span className={annual ? 'active' : ''}>
-                    Annually <span className="save-badge">Save 16%</span>
-                  </span>
-                </div>
+              <div className="billing-toggle-wrap" style={{ margin: '0 auto 32px' }}>
+                <span className={!annual ? 'active' : ''}>Monthly</span>
+                <button 
+                  className={`billing-toggle ${annual ? 'annual' : ''}`}
+                  onClick={() => setAnnual(!annual)}
+                >
+                  <div className="toggle-knob" />
+                </button>
+                <span className={annual ? 'active' : ''}>
+                  Annually
+                </span>
+                <span className="billing-save-badge">Save 16%</span>
               </div>
 
               <div className="pricing-grid compact-dash-pricing" style={{ 
                 display: 'grid', 
-                gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', 
-                gap: '20px',
-                padding: '0 20px',
-                maxWidth: '100%',
-                overflowX: 'auto'
+                gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', 
+                gap: '16px',
+                padding: '0 8px',
+                maxWidth: '100%'
               }}>
                 {plans.map((plan) => (
-                  <div key={plan.id} className={`pricing-card ${plan.popular ? 'popular' : ''}`} style={{ padding: '24px', fontSize: '0.9rem' }}>
-                    {plan.popular && <div className="popular-badge" style={{ fontSize: '0.75rem', top: '12px', right: '12px' }}>Most Popular</div>}
+                  <div key={plan.id} className={`pricing-card ${plan.popular ? 'popular' : ''}`} style={{ padding: '20px', fontSize: '0.85rem', borderRadius: '8px' }}>
+                    {plan.popular && <div className="popular-badge" style={{ fontSize: '0.7rem', top: '-10px' }}>Most Popular</div>}
                     
-                    <div className="plan-header" style={{ marginBottom: '16px' }}>
-                      <div className="plan-icon" style={{ width: '40px', height: '40px' }}>
-                        <plan.icon size={20} />
+                    <div className="plan-header" style={{ marginBottom: '12px' }}>
+                      <div className="plan-icon" style={{ width: '36px', height: '36px', borderRadius: '6px', marginBottom: '12px' }}>
+                        <plan.icon size={18} />
                       </div>
-                      <h3 style={{ fontSize: '1.4rem' }}>{plan.name}</h3>
-                      <p className="plan-desc" style={{ fontSize: '0.85rem' }}>{plan.desc}</p>
+                      <h3 style={{ fontSize: '1.2rem', marginBottom: '4px' }}>{plan.name}</h3>
+                      <p className="plan-desc" style={{ fontSize: '0.8rem', marginBottom: '12px', minHeight: '38px' }}>{plan.desc}</p>
                     </div>
 
                     <div className="plan-price" style={{ marginBottom: '16px' }}>
-                      <span className="currency" style={{ fontSize: '1.2rem' }}>₹</span>
-                      <span className="amount" style={{ fontSize: '2rem' }}>{formatINR(annual ? plan.annualPrice : plan.monthlyPrice)}</span>
-                      <span className="period" style={{ fontSize: '0.8rem' }}>/{annual ? 'yr' : 'mo'}</span>
+                      <span className="currency" style={{ fontSize: '1.1rem' }}>₹</span>
+                      <span className="amount" style={{ fontSize: '1.8rem' }}>{formatINR(annual ? Math.round(plan.annualPrice / 12) : plan.monthlyPrice)}</span>
+                      <span className="period" style={{ fontSize: '0.8rem' }}>/mo</span>
                     </div>
 
                     <button 
                       className={`btn ${plan.ctaStyle} btn-block`}
                       onClick={() => handleUpgrade(plan)}
                       disabled={plan.id === 'free' || loadingPayment === plan.id}
-                      style={{ height: '40px', fontSize: '0.95rem', fontWeight: 600, marginBottom: '20px' }}
+                      style={{ height: '36px', fontSize: '0.9rem', marginBottom: '20px' }}
                     >
                       {loadingPayment === plan.id ? 'Processing...' : plan.cta}
                     </button>
 
-                    <ul className="plan-features" style={{ gap: '10px' }}>
+                    <ul className="plan-features" style={{ gap: '8px', margin: 0, padding: 0 }}>
                       {plan.features.map((feature, idx) => (
-                        <li key={idx} className={feature.highlight ? 'highlight' : ''} style={{ fontSize: '0.85rem' }}>
-                          <Check size={14} />
+                        <li key={idx} className={feature.highlight ? 'highlight' : ''} style={{ fontSize: '0.8rem', display: 'flex', gap: '8px', alignItems: 'center' }}>
+                          <Check size={14} color={feature.highlight ? 'var(--primary)' : 'var(--success)'} />
                           <span>{feature.text}</span>
                         </li>
                       ))}
                       {plan.disabledFeatures.map((feat, idx) => (
-                        <li key={`disabled-${idx}`} className="disabled" style={{ fontSize: '0.85rem' }}>
+                        <li key={`disabled-${idx}`} className="disabled" style={{ fontSize: '0.8rem', display: 'flex', gap: '8px', alignItems: 'center', opacity: 0.5 }}>
                           <X size={14} />
                           <span>{feat}</span>
                         </li>
