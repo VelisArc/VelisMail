@@ -13,7 +13,7 @@ import {
   Download, KeyRound, Lock, XCircle,
   Layers, CreditCard,
   List, Grid, SortAsc, SortDesc, Menu,
-  Rocket, Briefcase, Building2, ChevronDown
+  Rocket, Briefcase, Building2
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import {
@@ -378,7 +378,7 @@ export default function BusinessDashboard() {
         setLoadingPayment(null);
       },
       prefill: {
-        name: user?.name || '',
+        name: user?.displayName || '',
         email: user?.email || '',
       },
       theme: {
