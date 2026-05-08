@@ -28,6 +28,7 @@ const plans = [
     ctaStyle: 'cta-outline' as const,
     features: [
       { text: '3,000 emails/mo', highlight: true },
+      { text: '100 emails/day limit', highlight: false },
       { text: '500MB Storage', highlight: false },
       { text: '3 team members', highlight: false },
       { text: '1 custom domain', highlight: false },
@@ -55,6 +56,7 @@ const plans = [
     ctaStyle: 'cta-outline' as const,
     features: [
       { text: '150,000 emails/mo', highlight: true },
+      { text: 'No daily email limit', highlight: false },
       { text: '10GB Storage', highlight: false },
       { text: '15 team members', highlight: false },
       { text: '3 custom domains', highlight: false },
@@ -83,6 +85,7 @@ const plans = [
     ctaStyle: 'cta-primary' as const,
     features: [
       { text: '750,000 emails/mo', highlight: true },
+      { text: 'No daily email limit', highlight: false },
       { text: '50GB Storage', highlight: false },
       { text: '75 team members', highlight: false },
       { text: '10 custom domains', highlight: false },
@@ -111,6 +114,7 @@ const plans = [
     ctaStyle: 'cta-gradient' as const,
     features: [
       { text: 'Unlimited emails', highlight: true },
+      { text: 'No daily email limit', highlight: false },
       { text: 'Unlimited Storage', highlight: false },
       { text: 'Unlimited team members', highlight: false },
       { text: 'Unlimited custom domains', highlight: false },
