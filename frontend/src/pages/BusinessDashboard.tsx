@@ -399,6 +399,7 @@ export default function BusinessDashboard() {
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [confirmRevokeId, setConfirmRevokeId] = useState<string | null>(null);
   const [pendingRoleChange, setPendingRoleChange] = useState<{ id: string; role: BusinessTeamMember['role']; step: 1 | 2 } | null>(null);
+  const [confirmAction, setConfirmAction] = useState<{ title: string; message: string; onConfirm: () => void } | null>(null);
 
   const [activeDomain, setActiveDomain] = useState<string>(initialDomainId);
   const [domainsList, setDomainsList] = useState<DomainRecord[]>(initialDomainRecords);
@@ -670,10 +671,16 @@ export default function BusinessDashboard() {
   const handlePermanentDelete = (id?: string) => {
     const emailId = id || selectedEmail?.id;
     if (!emailId) return;
-    mail.permanentDelete(emailId);
-    refetchEmails();
-    setSelectedEmail(null);
-    showToast('Email permanently deleted');
+    setConfirmAction({
+      title: 'Permanently Delete Email',
+      message: 'This email will be permanently deleted and cannot be recovered. Are you sure you want to continue?',
+      onConfirm: () => {
+        mail.permanentDelete(emailId);
+        refetchEmails();
+        setSelectedEmail(null);
+        showToast('Email permanently deleted');
+      },
+    });
   };
 
   const handleMarkSpam = (id?: string) => {
@@ -768,22 +775,28 @@ export default function BusinessDashboard() {
       return;
     }
     const member = teamMembers.find((entry) => entry.id === id);
-    const next = teamMembers.filter(m => m.id !== id);
-    setTeamMembers(next);
-    businessTeam.save(next);
-    if (member) {
-      if (member.inviteToken) {
-        void teamAccess.revoke(member.inviteToken);
-      }
-      businessAudit.add({
-        action: 'Removed team member',
-        actor: user?.email || 'current user',
-        target: member.email,
-        severity: 'warn',
-      });
-      setAuditLog(businessAudit.getAll());
-    }
-    showToast('Team member removed');
+    setConfirmAction({
+      title: 'Remove Team Member',
+      message: `Are you sure you want to remove ${member?.email || 'this member'} from the workspace? They will immediately lose all access.`,
+      onConfirm: () => {
+        const next = teamMembers.filter(m => m.id !== id);
+        setTeamMembers(next);
+        businessTeam.save(next);
+        if (member) {
+          if (member.inviteToken) {
+            void teamAccess.revoke(member.inviteToken);
+          }
+          businessAudit.add({
+            action: 'Removed team member',
+            actor: user?.email || 'current user',
+            target: member.email,
+            severity: 'warn',
+          });
+          setAuditLog(businessAudit.getAll());
+        }
+        showToast('Team member removed');
+      },
+    });
   };
 
   const applyMemberRoleChange = (id: string, role: 'admin' | 'member' | 'viewer') => {
@@ -892,9 +905,15 @@ export default function BusinessDashboard() {
       showToast('Only admins can delete queued messages.', 'error');
       return;
     }
-    businessQueue.remove(id);
-    refreshQueue();
-    showToast('Message deleted from queue');
+    setConfirmAction({
+      title: 'Delete Queued Message',
+      message: 'This message will be removed from the queue and will not be sent. Are you sure?',
+      onConfirm: () => {
+        businessQueue.remove(id);
+        refreshQueue();
+        showToast('Message deleted from queue');
+      },
+    });
   };
 
   const handleRunScheduledQueue = async () => {
@@ -975,19 +994,25 @@ export default function BusinessDashboard() {
       return;
     }
     const template = templates.find((entry) => entry.id === id);
-    const next = templates.filter(t => t.id !== id);
-    setTemplates(next);
-    businessTemplates.save(next);
-    if (template) {
-      businessAudit.add({
-        action: 'Deleted template',
-        actor: user?.email || 'current user',
-        target: template.name,
-        severity: 'warn',
-      });
-      setAuditLog(businessAudit.getAll());
-    }
-    showToast('Template deleted');
+    setConfirmAction({
+      title: 'Delete Template',
+      message: `Are you sure you want to delete the template "${template?.name || ''}"? This action cannot be undone.`,
+      onConfirm: () => {
+        const next = templates.filter(t => t.id !== id);
+        setTemplates(next);
+        businessTemplates.save(next);
+        if (template) {
+          businessAudit.add({
+            action: 'Deleted template',
+            actor: user?.email || 'current user',
+            target: template.name,
+            severity: 'warn',
+          });
+          setAuditLog(businessAudit.getAll());
+        }
+        showToast('Template deleted');
+      },
+    });
   };
 
   const refreshConnectionUsage = () => {
@@ -2868,6 +2893,35 @@ export default function BusinessDashboard() {
                 }}
               >
                 Yes, Disconnect
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {confirmAction && (
+        <div className="modal-overlay" onClick={() => setConfirmAction(null)}>
+          <div className="biz-form-modal glass animate-scale" style={{ maxWidth: '440px', padding: '28px' }} onClick={e => e.stopPropagation()}>
+            <div style={{ textAlign: 'center', marginBottom: '20px' }}>
+              <div style={{ width: '56px', height: '56px', borderRadius: '50%', background: 'rgba(239, 68, 68, 0.1)', color: 'var(--danger)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
+                <AlertTriangle size={28} />
+              </div>
+              <h3 style={{ marginBottom: '10px', fontSize: '1.15rem', fontWeight: 700 }}>{confirmAction.title}</h3>
+              <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', lineHeight: 1.6, margin: 0 }}>
+                {confirmAction.message}
+              </p>
+            </div>
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', paddingTop: '8px', borderTop: '1px solid var(--border-primary)' }}>
+              <button className="btn btn-ghost" style={{ minWidth: '100px' }} onClick={() => setConfirmAction(null)}>Cancel</button>
+              <button 
+                className="btn btn-primary" 
+                style={{ background: 'var(--danger)', borderColor: 'var(--danger)', minWidth: '140px' }}
+                onClick={() => {
+                  confirmAction.onConfirm();
+                  setConfirmAction(null);
+                }}
+              >
+                Yes, Continue
               </button>
             </div>
           </div>

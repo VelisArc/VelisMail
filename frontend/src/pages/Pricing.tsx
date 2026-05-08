@@ -129,43 +129,41 @@ const plans = [
 
 const comparisonRows = [
   { label: 'Monthly Emails', free: '3,000', starter: '150,000', business: '750,000', enterprise: 'Unlimited' },
+  { label: 'Daily Email Limit', free: '100/day', starter: 'No limit', business: 'No limit', enterprise: 'No limit' },
   { label: 'Storage Limit', free: '500 MB', starter: '10 GB', business: '50 GB', enterprise: 'Unlimited' },
   { label: 'Team Members', free: '3', starter: '15', business: '75', enterprise: 'Unlimited' },
   { label: 'Custom Domains', free: '1', starter: '3', business: '10', enterprise: 'Unlimited' },
   { label: 'Mail Templates', free: '3', starter: '25', business: 'Unlimited', enterprise: 'Unlimited' },
   { label: 'Audit Log Retention', free: '7 days', starter: '30 days', business: '90 days', enterprise: '1 year' },
-  { label: 'Webhooks', free: '—', starter: '2', business: '10', enterprise: 'Unlimited' },
   { label: 'Custom Branding', free: false, starter: false, business: true, enterprise: true },
-  { label: 'IP Whitelisting', free: false, starter: false, business: true, enterprise: true },
-  { label: 'SSO / SAML', free: false, starter: false, business: false, enterprise: true },
   { label: 'Platform SLA', free: 'Best Effort', starter: '99.5%', business: '99.9%', enterprise: '99.99%' },
   { label: 'Support', free: 'Community', starter: 'Email', business: 'Email + Chat', enterprise: 'Account Manager' },
 ];
 
 const pricingFaqs = [
   {
-    q: 'Pricing per-user hai ya per-workspace?',
-    a: 'VelisMail ki pricing per-workspace hai, per-user nahi. Iska matlab hai aap apne plan ke team member limit tak jitne chahein users add kar sakte hain bina extra charges ke. Yeh Google Workspace aur Microsoft 365 se kaafi zyada cost-effective hai.',
+    q: 'Is pricing per-user or per-workspace?',
+    a: 'VelisMail pricing is per-workspace, not per-user. This means you can add as many users as your plan allows without paying extra per seat. This is significantly more cost-effective than Google Workspace or Microsoft 365.',
   },
   {
-    q: 'Kya isme email sending aur storage limits included hain?',
-    a: 'Haan, har plan ki apni ek soft limit hoti hai. Free plan mein aap 3,000 emails/month bhej sakte ho, Starter mein 150k aur Business mein 750k. Isse zyada bhejne ke liye aapko higher plan ya Enterprise (Unlimited) lena hoga.',
+    q: 'Are email sending and storage limits included?',
+    a: 'Yes, every plan has its own soft limits. The Free plan allows 3,000 emails/month, Starter allows 150k, and Business allows 750k. To send more, you need to upgrade to a higher plan or choose Enterprise (Unlimited).',
   },
   {
-    q: 'Toh premium plan buy karne ka kya fayda?',
-    a: 'Premium plans aapke email capacity aur storage ko significantly badhate hain. Iske alawa ye aapke workspace features ko unlock karte hain — jaise zyada team members, custom domains, SSO, unlimited audit logs, aur custom branding.',
+    q: 'What is the benefit of buying a premium plan?',
+    a: 'Premium plans significantly increase your email capacity and storage. They also unlock workspace features such as more team members, custom domains, unlimited audit logs, and custom branding.',
   },
   {
-    q: 'Kya annual plan mein koi discount milta hai?',
-    a: 'Haan! Annual billing choose karne par aapko lagbhag 16% ki savings milti hai — yeh 2 months bilkul free ke barabar hai.',
+    q: 'Is there a discount for annual billing?',
+    a: 'Yes! Choosing annual billing saves you approximately 16% — that is equivalent to getting 2 months completely free.',
   },
   {
-    q: 'Agar mujhe plan pasand nahi aaya toh?',
-    a: 'Hum sabhi naye paid subscriptions par 30-day money-back guarantee dete hain. Agar aap satisfied nahi hain toh pehle 30 dinon mein refund request kar sakte hain.',
+    q: 'What if I am not satisfied with my plan?',
+    a: 'We offer a 30-day money-back guarantee on all new paid subscriptions. If you are not satisfied, you can request a refund within the first 30 days.',
   },
   {
-    q: 'GST alag se lagega ya prices inclusive hain?',
-    a: 'Listed prices GST-exclusive hain. Applicable GST (18%) checkout ke time add hoga as per Indian tax regulations.',
+    q: 'Are prices inclusive of GST?',
+    a: 'Listed prices are GST-exclusive. Applicable GST (18%) will be added at checkout as per Indian tax regulations.',
   },
 ];
 
