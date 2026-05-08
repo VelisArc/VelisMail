@@ -1,0 +1,3 @@
+## 2024-05-08 - Optimized redundant string conversions in React hooks
+**Learning:** Found a performance bottleneck where `searchQuery.toLowerCase()` and `templateSearch.toLowerCase()` were being called redundantly *inside* of a React `.filter()` loop, resulting in a large number of redundant string conversions when iterating over items. Because `searchQuery` and `templateSearch` do not change over the course of the loop iteration, their evaluated result can be pre-computed.
+**Action:** Always inspect array map/filter callbacks for invariant string or object computations and lift them outside the loop to be evaluated only once.
