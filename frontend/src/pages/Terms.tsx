@@ -62,10 +62,10 @@ export default function Terms() {
               VelisMail operates on a per-workspace subscription model with four tiers: Free, Starter, Business, and Enterprise. Prices are listed in Indian Rupees (INR) and are subject to applicable taxes (e.g., 18% GST). 
             </p>
             <p>
-              <strong>Bring Your Own Infrastructure (BYOI):</strong> VelisMail operates as a secure software control panel. We do not provide database hosting, storage, or email API delivery capabilities. You must bring your own PostgreSQL database and Email Delivery API (e.g., SendGrid, Resend). 
+              <strong>Bring Your Own Infrastructure (BYOI):</strong> While you connect your own PostgreSQL database and Email API (e.g., SendGrid, Resend), your VelisMail subscription tier establishes maximum thresholds for monthly email volume and storage capacity.
             </p>
             <p>
-              <strong>Third-Party Limits:</strong> Purchasing a premium VelisMail plan only upgrades your software capabilities (e.g., number of team members, domains, audit logs). It <strong>does not</strong> increase your email sending or storage limits. Those limits are strictly governed by your chosen third-party API and database providers, and you are responsible for any costs incurred with them.
+              <strong>Plan Limits:</strong> Purchasing a premium VelisMail plan increases your permitted email sending capacity, storage limits, and unlocks advanced software capabilities (e.g., number of team members, domains, audit logs). 
             </p>
             <p>
               <strong>Self-Service Upgrades:</strong> Premium subscriptions must be purchased directly by users via the Business Dashboard. We do not support manual invoicing or admin provisioning except for custom Enterprise agreements.

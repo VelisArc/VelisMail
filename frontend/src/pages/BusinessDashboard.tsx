@@ -2240,7 +2240,7 @@ export default function BusinessDashboard() {
                 <span className="badge badge-accent" style={{ fontSize: '0.9rem', padding: '6px 12px', marginBottom: '16px', display: 'inline-block' }}>Current Plan: Free</span>
                 <h3 style={{ fontSize: '1.8rem', margin: '0 0 16px' }}>Upgrade to Premium</h3>
                 <p style={{ color: 'var(--text-secondary)', maxWidth: '600px', margin: '0 auto', fontSize: '1.1rem', lineHeight: 1.6 }}>
-                  VelisMail is a Bring Your Own Infrastructure (BYOI) platform. Upgrade your plan to unlock advanced software features like custom branding, unlimited team members, SSO, and extended audit logs.
+                  Upgrade your plan to unlock higher email volumes, expanded storage capacity, and advanced software features like custom branding, unlimited team members, SSO, and extended audit logs.
                 </p>
               </div>
               
@@ -2266,7 +2266,7 @@ export default function BusinessDashboard() {
                 View Pricing & Upgrade
               </button>
               <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginTop: '16px' }}>
-                Email API and Database storage limits are managed by your respective providers.
+                Upgrade to the Enterprise plan for unlimited volume and storage.
               </p>
             </div>
           </div>

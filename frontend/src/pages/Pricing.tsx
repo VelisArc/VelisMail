@@ -27,7 +27,9 @@ const plans = [
     cta: 'Get Started Free',
     ctaStyle: 'cta-outline' as const,
     features: [
-      { text: '3 team members', highlight: true },
+      { text: '3,000 emails/mo', highlight: true },
+      { text: '500MB Storage', highlight: false },
+      { text: '3 team members', highlight: false },
       { text: '1 custom domain', highlight: false },
       { text: 'SPF, DKIM, DMARC', highlight: false },
       { text: 'E2E encryption', highlight: false },
@@ -52,7 +54,9 @@ const plans = [
     cta: 'Start 14-Day Trial',
     ctaStyle: 'cta-outline' as const,
     features: [
-      { text: '15 team members', highlight: true },
+      { text: '150,000 emails/mo', highlight: true },
+      { text: '10GB Storage', highlight: false },
+      { text: '15 team members', highlight: false },
       { text: '3 custom domains', highlight: false },
       { text: 'SPF, DKIM, DMARC', highlight: false },
       { text: 'E2E encryption', highlight: false },
@@ -78,7 +82,9 @@ const plans = [
     cta: 'Start 14-Day Trial',
     ctaStyle: 'cta-primary' as const,
     features: [
-      { text: '75 team members', highlight: true },
+      { text: '750,000 emails/mo', highlight: true },
+      { text: '50GB Storage', highlight: false },
+      { text: '75 team members', highlight: false },
       { text: '10 custom domains', highlight: false },
       { text: 'SPF, DKIM, DMARC', highlight: false },
       { text: 'E2E encryption', highlight: false },
@@ -104,7 +110,9 @@ const plans = [
     cta: 'Start 14-Day Trial',
     ctaStyle: 'cta-gradient' as const,
     features: [
-      { text: 'Unlimited team members', highlight: true },
+      { text: 'Unlimited emails', highlight: true },
+      { text: 'Unlimited Storage', highlight: false },
+      { text: 'Unlimited team members', highlight: false },
       { text: 'Unlimited custom domains', highlight: false },
       { text: 'SPF, DKIM, DMARC', highlight: false },
       { text: 'E2E encryption', highlight: false },
@@ -123,6 +131,8 @@ const plans = [
 ];
 
 const comparisonRows = [
+  { label: 'Monthly Emails', free: '3,000', starter: '150,000', business: '750,000', enterprise: 'Unlimited' },
+  { label: 'Storage Limit', free: '500 MB', starter: '10 GB', business: '50 GB', enterprise: 'Unlimited' },
   { label: 'Team Members', free: '3', starter: '15', business: '75', enterprise: 'Unlimited' },
   { label: 'Custom Domains', free: '1', starter: '3', business: '10', enterprise: 'Unlimited' },
   { label: 'Mail Templates', free: '3', starter: '25', business: 'Unlimited', enterprise: 'Unlimited' },
@@ -142,11 +152,11 @@ const pricingFaqs = [
   },
   {
     q: 'Kya isme email sending aur storage limits included hain?',
-    a: 'Nahi. VelisMail ek "Bring Your Own Infrastructure" (BYOI) model pe kaam karta hai. Ham aapko ek secure, end-to-end encrypted control panel aur dashboard dete hain. Email bhejne aur data store karne ki limit poori tarah aapke connected Email API (jaise SendGrid, Resend) aur Database (PostgreSQL) provider par nirbhar karti hai. Hum us limit me dakhal nahi dete.',
+    a: 'Haan, har plan ki apni ek soft limit hoti hai. Free plan mein aap 3,000 emails/month bhej sakte ho, Starter mein 150k aur Business mein 750k. Isse zyada bhejne ke liye aapko higher plan ya Enterprise (Unlimited) lena hoga.',
   },
   {
     q: 'Toh premium plan buy karne ka kya fayda?',
-    a: 'Premium plans aapke workspace features ko unlock karte hain — jaise zyada team members, custom domains, SSO, unlimited audit logs, aur custom branding. Aap jo VelisMail ko pay karte ho wo sirf software features ke liye hai.',
+    a: 'Premium plans aapke email capacity aur storage ko significantly badhate hain. Iske alawa ye aapke workspace features ko unlock karte hain — jaise zyada team members, custom domains, SSO, unlimited audit logs, aur custom branding.',
   },
   {
     q: 'Kya annual plan mein koi discount milta hai?',
@@ -194,8 +204,7 @@ export default function Pricing() {
           Simple, Transparent <span>Pricing.</span>
         </h1>
         <p className="pricing-subtitle">
-          Per-workspace pricing — not per-user. Bring your own Database and Email API. 
-          We only charge for platform features. Unlimited emails & storage based on your providers.
+          Per-workspace pricing — not per-user. Connect your own infrastructure and scale your email limits safely and securely with our dedicated software tiers.
         </p>
 
         {/* Billing Toggle */}
