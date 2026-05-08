@@ -362,8 +362,9 @@ export default function BusinessDashboard() {
     
     // Try to create an order via backend for live mode
     let orderId: string | undefined;
+    let razorpayKeyId: string | undefined;
     try {
-      const orderRes = await fetchApiJsonDetailed<{ order_id?: string; id?: string }>('/payments/create-order', {
+      const orderRes = await fetchApiJsonDetailed<{ order_id?: string; id?: string; razorpay_key_id?: string; success: boolean; message?: string }>('/payments/create-order', {
         method: 'POST',
         body: JSON.stringify({
           amount: amountInPaise,
@@ -373,15 +374,32 @@ export default function BusinessDashboard() {
           email: user?.email,
         }),
       });
+
+      if (!orderRes.ok || !orderRes.data?.success) {
+        showToast(`Failed to initialize payment: ${orderRes.data?.message || 'Server error'}`, 'error');
+        setLoadingPayment(null);
+        return;
+      }
+
       if (orderRes.ok && orderRes.data) {
         orderId = orderRes.data.order_id || orderRes.data.id;
+        razorpayKeyId = orderRes.data.razorpay_key_id;
       }
     } catch {
-      // If backend order creation is unavailable, proceed with client-only checkout
+      showToast('Payment system unavailable. Please try again later.', 'error');
+      setLoadingPayment(null);
+      return;
     }
     
+    const rzpKey = razorpayKeyId || import.meta.env.VITE_RAZORPAY_KEY_ID;
+    if (!rzpKey) {
+      showToast('Payment gateway configuration is missing.', 'error');
+      setLoadingPayment(null);
+      return;
+    }
+
     const options: Record<string, unknown> = {
-      key: import.meta.env.VITE_RAZORPAY_KEY_ID || 'rzp_live_SA0FP7UH9KHLNQ',
+      key: rzpKey,
       amount: amountInPaise,
       currency: 'INR',
       name: 'VelisMail',
