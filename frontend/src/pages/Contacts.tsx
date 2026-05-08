@@ -139,7 +139,7 @@ export default function Contacts() {
         <div className="contacts-search">
           <Search size={16} />
           <input type="text" placeholder="Search contacts…" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} />
-          {searchQuery && <button className="search-clear" onClick={() => setSearchQuery('')}><X size={14} /></button>}
+          {searchQuery && <button aria-label="Clear search" className="search-clear" onClick={() => setSearchQuery('')}><X size={14} /></button>}
         </div>
 
         {/* Group Filter */}
@@ -197,8 +197,8 @@ export default function Contacts() {
                 {selectedContact.company && <span className="contact-company"><Building2 size={14} /> {selectedContact.company}</span>}
               </div>
               <div className="contact-detail-actions">
-                <button className="btn btn-ghost btn-icon" onClick={startEdit} title="Edit"><Edit3 size={16} /></button>
-                <button className="btn btn-danger btn-icon btn-sm" onClick={() => handleDelete(selectedContact.id)} title="Delete"><Trash2 size={16} /></button>
+                <button aria-label="Edit" className="btn btn-ghost btn-icon" onClick={startEdit} title="Edit"><Edit3 size={16} /></button>
+                <button aria-label="Delete" className="btn btn-danger btn-icon btn-sm" onClick={() => handleDelete(selectedContact.id)} title="Delete"><Trash2 size={16} /></button>
               </div>
             </div>
 
@@ -264,7 +264,7 @@ export default function Contacts() {
           <div className="add-contact-modal glass animate-scale" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
               <h3><UserPlus size={18} /> New Contact</h3>
-              <button className="btn btn-ghost btn-icon" onClick={() => setShowAddModal(false)}><X size={18} /></button>
+              <button aria-label="Close" className="btn btn-ghost btn-icon" onClick={() => setShowAddModal(false)}><X size={18} /></button>
             </div>
             <div className="form-grid">
               <div className="form-field"><label>Name *</label><input className="input" value={formName} onChange={e => setFormName(e.target.value)} placeholder="John Doe" /></div>
