@@ -4,6 +4,7 @@ import {
   Clock, Paperclip, Send, X, Trash2
 } from 'lucide-react';
 import { contacts, type Contact } from '../api/client';
+import DOMPurify from 'dompurify';
 import './Composer.css';
 
 interface ComposerProps {
@@ -48,7 +49,8 @@ export default function Composer({
 
   useEffect(() => {
     if (editorRef.current && initialBody) {
-      editorRef.current.innerHTML = initialBody.replace(/\n/g, '<br>');
+      const formattedBody = initialBody.replace(/\n/g, '<br>');
+      editorRef.current.innerHTML = DOMPurify.sanitize(formattedBody);
     }
   }, [initialBody]);
 
