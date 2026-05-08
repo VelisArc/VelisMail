@@ -373,7 +373,7 @@ export default function BusinessDashboard() {
       currency: 'INR',
       name: 'VelisMail',
       description: `Upgrade to ${plan.name} Plan`,
-      handler: function (response: any) {
+      handler: function (response: { razorpay_payment_id: string }) {
         showToast(`${plan.name} upgrade successful! Verification ID: ${response.razorpay_payment_id}`);
         setLoadingPayment(null);
       },
@@ -391,9 +391,9 @@ export default function BusinessDashboard() {
       }
     };
 
-    // @ts-ignore
+    // @ts-expect-error: Razorpay is loaded dynamically via script tag
     if (window.Razorpay) {
-      // @ts-ignore
+      // @ts-expect-error: Razorpay is loaded dynamically via script tag
       const rzp = new window.Razorpay(options);
       rzp.open();
     } else {
