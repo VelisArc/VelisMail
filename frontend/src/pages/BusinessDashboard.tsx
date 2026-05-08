@@ -353,26 +353,53 @@ export default function BusinessDashboard() {
     };
   }, []);
 
-  const handleUpgrade = (plan: typeof plans[0]) => {
+  const handleUpgrade = async (plan: typeof plans[0]) => {
     if (plan.id === 'free') return;
     
     setLoadingPayment(plan.id);
     
     const amountInPaise = (annual ? plan.annualPrice : plan.monthlyPrice) * 100;
     
-    const options = {
+    // Try to create an order via backend for live mode
+    let orderId: string | undefined;
+    try {
+      const orderRes = await fetchApiJsonDetailed<{ order_id?: string; id?: string }>('/payments/create-order', {
+        method: 'POST',
+        body: JSON.stringify({
+          amount: amountInPaise,
+          currency: 'INR',
+          plan: plan.id,
+          billing: annual ? 'annual' : 'monthly',
+          email: user?.email,
+        }),
+      });
+      if (orderRes.ok && orderRes.data) {
+        orderId = orderRes.data.order_id || orderRes.data.id;
+      }
+    } catch {
+      // If backend order creation is unavailable, proceed with client-only checkout
+    }
+    
+    const options: Record<string, unknown> = {
       key: import.meta.env.VITE_RAZORPAY_KEY_ID || 'rzp_live_SA0FP7UH9KHLNQ',
       amount: amountInPaise,
       currency: 'INR',
       name: 'VelisMail',
-      description: `Upgrade to ${plan.name} Plan`,
-      handler: function (response: { razorpay_payment_id: string }) {
-        showToast(`${plan.name} upgrade successful! Verification ID: ${response.razorpay_payment_id}`);
+      description: `Upgrade to ${plan.name} Plan (${annual ? 'Annual' : 'Monthly'})`,
+      handler: function (response: { razorpay_payment_id: string; razorpay_order_id?: string; razorpay_signature?: string }) {
+        // Update user plan locally
+        auth.updateSettings({ plan: plan.name });
+        showToast(`${plan.name} upgrade successful! Payment ID: ${response.razorpay_payment_id}`);
         setLoadingPayment(null);
       },
       prefill: {
         name: user?.displayName || '',
-        email: user?.email || '',
+        email: user?.recoveryEmail || user?.email || '',
+      },
+      notes: {
+        plan: plan.id,
+        billing: annual ? 'annual' : 'monthly',
+        userId: user?.id || '',
       },
       theme: {
         color: '#7b61ff'
@@ -384,13 +411,21 @@ export default function BusinessDashboard() {
       }
     };
 
+    if (orderId) {
+      options.order_id = orderId;
+    }
+
     // @ts-expect-error: Razorpay is loaded dynamically via script tag
     if (window.Razorpay) {
       // @ts-expect-error: Razorpay is loaded dynamically via script tag
       const rzp = new window.Razorpay(options);
+      rzp.on('payment.failed', function (response: { error: { description: string; code: string } }) {
+        showToast(`Payment failed: ${response.error.description || response.error.code}`, 'error');
+        setLoadingPayment(null);
+      });
       rzp.open();
     } else {
-      showToast('Payment gateway not loaded. Please try again.', 'error');
+      showToast('Payment gateway is loading. Please wait a moment and try again.', 'error');
       setLoadingPayment(null);
     }
   };

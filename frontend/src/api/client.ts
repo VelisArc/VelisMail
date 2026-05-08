@@ -1543,7 +1543,7 @@ export const auth = {
       saveDB(STORAGE_KEYS.session, normalizedSession);
     }
     if (normalizedSession && sessionHasMismatch(normalizedSession)) {
-      console.warn('Session mismatch detected — logging out for safety.');
+      // Session mismatch detected — logging out for safety
       this.logout();
       return null;
     }
@@ -1572,7 +1572,7 @@ export const auth = {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(settings),
-    }).catch(err => console.warn('Failed to sync settings to server', err));
+    }).catch(() => { /* Backend settings sync is best-effort */ });
 
     return { success: true, user: nextUser };
   },
@@ -1604,9 +1604,9 @@ export const auth = {
       await fetchAPI('/auth/account', {
         method: 'DELETE',
       });
-    } catch (error) {
+    } catch {
       // Even if backend fails, clear local session
-      console.warn('Backend account deletion may have failed:', error);
+      // Backend account deletion may fail if service is unreachable — clear local session regardless
     }
 
     // Clear all user-scoped localStorage entries
@@ -1666,7 +1666,7 @@ function syncBusinessEmailToDb(email: Email) {
       businessEmailDbRouteUnavailable = true;
       return;
     }
-    console.warn('Business email database sync failed; the sent message remains available in the local dashboard cache.', err);
+    // Business email DB sync failed; sent message remains available in local dashboard cache
   });
 }
 
@@ -1731,9 +1731,8 @@ export const mail = {
         saveUserDB(STORAGE_KEYS.emails, sourceEmails);
       } else if (response.status === 404) {
         businessEmailDbRouteUnavailable = true;
-        console.warn('Business email database route is unavailable; using local mailbox cache until the backend deploy catches up.');
       } else if (!response.ok) {
-        console.warn(`Business email database fetch failed with status ${response.status}; using local mailbox cache.`);
+        // Business email DB fetch failed — using local cache silently
       }
     }
 

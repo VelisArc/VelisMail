@@ -25,22 +25,17 @@ export async function fetchWithAuth(endpoint: string, options: RequestInit = {})
 
   const url = endpoint.startsWith('http') ? endpoint : `${API_BASE_URL}${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`;
 
-  try {
-    const response = await fetch(url, {
-      ...options,
-      headers,
-    });
+  const response = await fetch(url, {
+    ...options,
+    headers,
+  });
 
-    // Handle session expiration automatically
-    if (response.status === 401) {
-      console.warn('[VelisMail] Session expired. Logging out.');
-      auth.logout();
-      window.location.href = '/login';
-    }
-
-    return response;
-  } catch (error) {
-    console.error('[VelisMail] API Request Failed:', error);
-    throw error;
+  // Handle session expiration automatically
+  if (response.status === 401) {
+    // Session expired — force re-authentication
+    auth.logout();
+    window.location.href = '/login';
   }
+
+  return response;
 }
