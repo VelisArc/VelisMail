@@ -33,6 +33,7 @@ pub fn api_v1_routes(_state: &AppState) -> Router<AppState> {
         .route("/team/invites/complete", post(complete_team_invite))
         .route("/team/invites/revoke", post(revoke_team_invite))
         .route("/tenants/verify-domain", post(verify_domain))
+        .route("/payments/create-order", post(create_payment_order))
         .route("/ws", get(ws_handler))
         .route("/auth/*rest", any(proxy_auth))
         .route("/mail/*rest", any(proxy_mail))
@@ -2602,3 +2603,97 @@ mod tests {
     }
 }
 
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateOrderRequest {
+    pub amount: u64,
+    pub currency: String,
+    pub plan: String,
+    pub billing: String,
+    pub email: Option<String>,
+}
+
+pub async fn create_payment_order(
+    State(state): State<AppState>,
+    Json(payload): Json<CreateOrderRequest>,
+) -> (StatusCode, Json<Value>) {
+    if state.config.razorpay_key_id.is_empty() || state.config.razorpay_key_secret.is_empty() {
+        tracing::error!("Razorpay credentials not configured");
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({
+                "success": false,
+                "message": "Payment gateway is not configured on this server."
+            }))
+        );
+    }
+
+    let client = reqwest::Client::new();
+
+    // Razorpay orders API expects amount in paise (integer)
+    let amount = payload.amount;
+    let currency = payload.currency;
+
+    let res = client
+        .post("https://api.razorpay.com/v1/orders")
+        .basic_auth(&state.config.razorpay_key_id, Some(&state.config.razorpay_key_secret))
+        .json(&json!({
+            "amount": amount,
+            "currency": currency,
+            "receipt": format!("rcpt_{}", uuid::Uuid::new_v4().simple()),
+        }))
+        .send()
+        .await;
+
+    match res {
+        Ok(response) => {
+            if response.status().is_success() {
+                if let Ok(order) = response.json::<Value>().await {
+                    let order_id = order["id"].as_str().unwrap_or_default().to_string();
+                    (
+                        StatusCode::OK,
+                        Json(json!({
+                            "success": true,
+                            "order_id": order_id,
+                            "id": order_id, // include id for compatibility
+                            "razorpay_key_id": state.config.razorpay_key_id,
+                            "amount": amount,
+                            "currency": currency
+                        })),
+                    )
+                } else {
+                    tracing::error!("Failed to parse Razorpay response body");
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        Json(json!({
+                            "success": false,
+                            "message": "Failed to parse payment gateway response."
+                        }))
+                    )
+                }
+            } else {
+                let status = response.status();
+                let error_text = response.text().await.unwrap_or_default();
+                tracing::error!("Razorpay order creation failed: {} - {}", status, error_text);
+                (
+                    status,
+                    Json(json!({
+                        "success": false,
+                        "message": "Payment gateway error during order creation."
+                    }))
+                )
+            }
+        }
+        Err(e) => {
+            tracing::error!("Failed to request Razorpay API: {}", e);
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({
+                    "success": false,
+                    "message": "Failed to communicate with payment gateway."
+                }))
+            )
+        }
+    }
+}
