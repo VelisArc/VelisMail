@@ -474,6 +474,7 @@ export default function BusinessDashboard() {
   const [showQueueFilters, setShowQueueFilters] = useState(false);
   const [queueStatusFilter, setQueueStatusFilter] = useState<string>('all');
   const [templateSearch, setTemplateSearch] = useState('');
+  const lowerTemplateSearch = useMemo(() => templateSearch.toLowerCase(), [templateSearch]);
   const [showAddDomain, setShowAddDomain] = useState(false);
   const [newDomainInput, setNewDomainInput] = useState('');
   const [addingDomain, setAddingDomain] = useState(false);
@@ -551,13 +552,14 @@ export default function BusinessDashboard() {
       return true;
     });
 
+    const lowerQuery = searchQuery.toLowerCase();
     const filtered = searchQuery
       ? statusFiltered.filter(e =>
-          e.subject.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          e.from.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          e.fromName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          e.body.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          (e.labels || []).join(' ').toLowerCase().includes(searchQuery.toLowerCase())
+          e.subject.toLowerCase().includes(lowerQuery) ||
+          e.from.toLowerCase().includes(lowerQuery) ||
+          e.fromName.toLowerCase().includes(lowerQuery) ||
+          e.body.toLowerCase().includes(lowerQuery) ||
+          (e.labels || []).join(' ').toLowerCase().includes(lowerQuery)
         )
       : statusFiltered;
       
@@ -2436,7 +2438,7 @@ export default function BusinessDashboard() {
             </div>
 
             <div className="templates-grid">
-              {templates.filter(t => t.name.toLowerCase().includes(templateSearch.toLowerCase())).map(tpl => (
+              {templates.filter(t => t.name.toLowerCase().includes(lowerTemplateSearch)).map(tpl => (
                 <div key={tpl.id} className="template-card glass-card">
                   <div className="template-header">
                     <div className="template-icon"><Layers size={20} /></div>
