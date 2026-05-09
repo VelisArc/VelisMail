@@ -1,6 +1,10 @@
 //! Gateway configuration
 
-use anyhow::Result;
+use anyhow::{Context, Result};
+
+fn required_env(name: &str) -> Result<String> {
+    std::env::var(name).with_context(|| format!("missing required environment variable {name}"))
+}
 
 #[derive(Clone, Debug)]
 pub struct GatewayConfig {
@@ -32,7 +36,7 @@ impl GatewayConfig {
             .or_else(|| std::env::var("GATEWAY_PORT").ok().and_then(|p| p.parse().ok()))
             .unwrap_or(3000);
 
-        let jwt_secret = std::env::var("JWT_SECRET").unwrap_or_default();
+        let jwt_secret = required_env("JWT_SECRET")?;
         let otp_signing_secret = std::env::var("OTP_SIGNING_SECRET")
             .unwrap_or_else(|_| jwt_secret.clone());
 
@@ -57,10 +61,8 @@ impl GatewayConfig {
                 .unwrap_or_else(|_| "http://tenant-service:3004".to_string()),
             security_service_url: std::env::var("SECURITY_SERVICE_URL")
                 .unwrap_or_else(|_| "http://security-service:3005".to_string()),
-            razorpay_key_id: std::env::var("RAZORPAY_KEY_ID")
-                .unwrap_or_default(),
-            razorpay_key_secret: std::env::var("RAZORPAY_KEY_SECRET")
-                .unwrap_or_default(),
+            razorpay_key_id: required_env("RAZORPAY_KEY_ID")?,
+            razorpay_key_secret: required_env("RAZORPAY_KEY_SECRET")?,
         })
     }
 }
