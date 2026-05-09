@@ -2578,8 +2578,8 @@ pub async fn save_business_email(
     .bind(&e.body)
     .bind(&e.folder)
     .bind(&e.date)
-    .bind(&e.read)
-    .bind(&e.starred)
+    .bind(e.read)
+    .bind(e.starred)
     .execute(&pool)
     .await {
         Ok(_) => (StatusCode::OK, Json(json!({"success": true}))),
@@ -2609,9 +2609,6 @@ mod tests {
 pub struct CreateOrderRequest {
     pub amount: u64,
     pub currency: String,
-    pub plan: String,
-    pub billing: String,
-    pub email: Option<String>,
 }
 
 pub async fn create_payment_order(
