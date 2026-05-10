@@ -1,0 +1,211 @@
+# VelisMail Docker Compose - Development Environment
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-velismail}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-velismail}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-velismail}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-redis}
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-redis}", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # NATS Message Queue
+  nats:
+    image: nats:2-alpine
+    ports:
+      - "4222:4222"
+      - "8222:8222"  # Monitoring
+    command: --jetstream
+    volumes:
+      - nats_data:/var/lib/nats/jetstream
+
+  # MinIO (S3-compatible storage)
+  minio:
+    image: minio/minio:latest
+    ports:
+      - "9000:9000"
+      - "9001:9001"  # Console
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    volumes:
+      - minio_data:/data
+    command: server /data --console-address ":9001"
+
+  # API Gateway
+  api-gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SERVICE: api-gateway
+    ports:
+      - "3000:3000"
+    environment:
+      - GATEWAY_HOST=0.0.0.0
+      - GATEWAY_PORT=3000
+      - FRONTEND_URL=${FRONTEND_URL:-http://localhost:5173}
+      - JWT_SECRET=${JWT_SECRET}
+      - OTP_SIGNING_SECRET=${OTP_SIGNING_SECRET}
+      - AUTH_SERVICE_URL=http://auth-service:3001
+      - MAIL_SERVICE_URL=http://mail-service:3002
+      - STORAGE_SERVICE_URL=http://storage-service:3003
+      - TENANT_SERVICE_URL=http://tenant-service:3004
+      - DELIVERY_SERVICE_URL=http://delivery-engine:3005
+      - RAZORPAY_KEY_ID=${RAZORPAY_KEY_ID:-}
+      - RAZORPAY_KEY_SECRET=${RAZORPAY_KEY_SECRET:-}
+      - BASE_DOMAIN=${BASE_DOMAIN:-velismail.online}
+      - PLATFORM_RESEND_API_KEY=${PLATFORM_RESEND_API_KEY:-}
+    depends_on:
+      - auth-service
+      - mail-service
+      - storage-service
+      - tenant-service
+      - delivery-engine
+
+  # Auth Service
+  auth-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SERVICE: auth-service
+    ports:
+      - "3001:3001"
+    environment:
+      - AUTH_HOST=0.0.0.0
+      - AUTH_PORT=3001
+      - DATABASE_URL=postgres://${POSTGRES_USER:-velismail}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${AUTH_POSTGRES_DB:-velismail_auth}
+      - REDIS_URL=redis://default:${REDIS_PASSWORD:-redis}@redis:6379
+      - JWT_SECRET=${JWT_SECRET}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # Mail Service
+  mail-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SERVICE: mail-service
+    ports:
+      - "3002:3002"
+    environment:
+      - MAIL_HOST=0.0.0.0
+      - MAIL_PORT=3002
+      - DATABASE_URL=postgres://${POSTGRES_USER:-velismail}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${MAIL_POSTGRES_DB:-velismail_mail}
+      - REDIS_URL=redis://default:${REDIS_PASSWORD:-redis}@redis:6379
+      - NATS_URL=nats://nats:4222
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      nats:
+        condition: service_started
+
+  # Storage Service
+  storage-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SERVICE: storage-service
+    ports:
+      - "3003:3003"
+    environment:
+      - STORAGE_HOST=0.0.0.0
+      - STORAGE_PORT=3003
+      - S3_ENDPOINT=http://minio:9000
+      - S3_ACCESS_KEY=minioadmin
+      - S3_SECRET_KEY=minioadmin
+      - DATABASE_URL=postgres://${POSTGRES_USER:-velismail}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${STORAGE_POSTGRES_DB:-velismail_storage}
+      - REDIS_URL=redis://default:${REDIS_PASSWORD:-redis}@redis:6379
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_started
+
+  # Tenant Service
+  tenant-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SERVICE: tenant-service
+    ports:
+      - "3004:3004"
+    environment:
+      - TENANT_HOST=0.0.0.0
+      - TENANT_PORT=3004
+      - DATABASE_URL=postgres://${POSTGRES_USER:-velismail}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${TENANT_POSTGRES_DB:-velismail_tenant}
+      - REDIS_URL=redis://default:${REDIS_PASSWORD:-redis}@redis:6379
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # Delivery Engine
+  delivery-engine:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SERVICE: delivery-engine
+    ports:
+      - "3005:3005"
+    environment:
+      - DELIVERY_HOST=0.0.0.0
+      - DELIVERY_PORT=3005
+      - DATABASE_URL=postgres://${POSTGRES_USER:-velismail}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${DELIVERY_POSTGRES_DB:-velismail_delivery}
+      - REDIS_URL=redis://default:${REDIS_PASSWORD:-redis}@redis:6379
+      - NATS_URL=nats://nats:4222
+      - SMTP_HOST=${SMTP_HOST}
+      - SMTP_PORT=${SMTP_PORT}
+      - SMTP_USERNAME=${SMTP_USERNAME}
+      - SMTP_PASSWORD=${SMTP_PASSWORD}
+      - DKIM_PRIVATE_KEY=${DKIM_PRIVATE_KEY}
+      - DKIM_SELECTOR=${DKIM_SELECTOR}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      nats:
+        condition: service_started
+
+volumes:
+  postgres_data:
+  redis_data:
+  nats_data:
+  minio_data:

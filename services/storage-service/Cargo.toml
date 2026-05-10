@@ -1,0 +1,29 @@
+[package]
+name = "velismail-storage-service"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "storage-service"
+path = "src/main.rs"
+
+[dependencies]
+tokio.workspace = true
+axum.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+anyhow.workspace = true
+thiserror.workspace = true
+uuid.workspace = true
+chrono.workspace = true
+sqlx.workspace = true
+redis.workspace = true
+aws-sdk-s3.workspace = true
+aws-config.workspace = true
+base64 = "0.21"
+velismail-common = { path = "../../libs/common" }
+velismail-database = { path = "../../libs/database" }
+velismail-crypto = { path = "../../libs/crypto" }
+tower-http = { version = "0.5", features = ["limit", "cors", "trace"] }
