@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useState } from 'react';
-import { BrowserRouter, Routes, Route, Navigate, useNavigation } from 'react-router-dom';
+import { createBrowserRouter, RouterProvider, Navigate, Outlet, useNavigation } from 'react-router-dom';
 import ErrorBoundary from './components/ErrorBoundary';
 import AuthGuard from './components/AuthGuard';
 import LoadingFallback from './components/LoadingFallback';
@@ -53,43 +53,48 @@ function NavigationProgress() {
   );
 }
 
-function AppContent() {
+function RootLayout() {
   return (
     <>
       <Analytics />
       <NavigationProgress />
       <Suspense fallback={<LoadingFallback />}>
-        <Routes>
-          <Route path="/" element={<PageTransition><Home /></PageTransition>} />
-          <Route path="/login" element={<PageTransition><Login /></PageTransition>} />
-          <Route path="/privacy" element={<PageTransition><Privacy /></PageTransition>} />
-          <Route path="/terms" element={<PageTransition><Terms /></PageTransition>} />
-          <Route path="/cookies" element={<PageTransition><Cookies /></PageTransition>} />
-          <Route path="/aup" element={<PageTransition><AcceptableUse /></PageTransition>} />
-          <Route path="/security" element={<PageTransition><SecurityPolicy /></PageTransition>} />
-          <Route path="/refund" element={<PageTransition><Refund /></PageTransition>} />
-          <Route path="/about" element={<PageTransition><About /></PageTransition>} />
-          <Route path="/docs" element={<PageTransition><Documentation /></PageTransition>} />
-          <Route path="/status" element={<PageTransition><Status /></PageTransition>} />
-          <Route path="/pricing" element={<PageTransition><Pricing /></PageTransition>} />
-          <Route path="/business" element={<PageTransition><AuthGuard requireSetup><BusinessDashboard /></AuthGuard></PageTransition>} />
-          <Route path="/business-setup" element={<PageTransition><AuthGuard><BusinessSetup /></AuthGuard></PageTransition>} />
-          <Route path="/contacts" element={<PageTransition><AuthGuard requireSetup><Contacts /></AuthGuard></PageTransition>} />
-          <Route path="/settings" element={<PageTransition><AuthGuard requireSetup><Settings /></AuthGuard></PageTransition>} />
-          <Route path="/404" element={<PageTransition><NotFound /></PageTransition>} />
-          <Route path="*" element={<Navigate to="/404" replace />} />
-        </Routes>
+        <Outlet />
       </Suspense>
     </>
   );
 }
 
+const router = createBrowserRouter([
+  {
+    element: <RootLayout />,
+    children: [
+      { path: "/", element: <PageTransition><Home /></PageTransition> },
+      { path: "/login", element: <PageTransition><Login /></PageTransition> },
+      { path: "/privacy", element: <PageTransition><Privacy /></PageTransition> },
+      { path: "/terms", element: <PageTransition><Terms /></PageTransition> },
+      { path: "/cookies", element: <PageTransition><Cookies /></PageTransition> },
+      { path: "/aup", element: <PageTransition><AcceptableUse /></PageTransition> },
+      { path: "/security", element: <PageTransition><SecurityPolicy /></PageTransition> },
+      { path: "/refund", element: <PageTransition><Refund /></PageTransition> },
+      { path: "/about", element: <PageTransition><About /></PageTransition> },
+      { path: "/docs", element: <PageTransition><Documentation /></PageTransition> },
+      { path: "/status", element: <PageTransition><Status /></PageTransition> },
+      { path: "/pricing", element: <PageTransition><Pricing /></PageTransition> },
+      { path: "/business", element: <PageTransition><AuthGuard requireSetup><BusinessDashboard /></AuthGuard></PageTransition> },
+      { path: "/business-setup", element: <PageTransition><AuthGuard><BusinessSetup /></AuthGuard></PageTransition> },
+      { path: "/contacts", element: <PageTransition><AuthGuard requireSetup><Contacts /></AuthGuard></PageTransition> },
+      { path: "/settings", element: <PageTransition><AuthGuard requireSetup><Settings /></AuthGuard></PageTransition> },
+      { path: "/404", element: <PageTransition><NotFound /></PageTransition> },
+      { path: "*", element: <Navigate to="/404" replace /> },
+    ],
+  },
+]);
+
 function App() {
   return (
     <ErrorBoundary>
-      <BrowserRouter>
-        <AppContent />
-      </BrowserRouter>
+      <RouterProvider router={router} />
     </ErrorBoundary>
   );
 }
