@@ -7,27 +7,29 @@
     <link rel="icon" type="image/png" sizes="512x512" href="/icon-512.png?v=20260513" />
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png?v=20260513" />
     <link rel="manifest" href="/manifest.webmanifest" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#ffffff" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0" />
+    <meta name="theme-color" content="#121212" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#fafafa" media="(prefers-color-scheme: light)" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-title" content="VelisMail" />
-    <meta name="description" content="VelisMail is a secure business email platform for custom domains, scheduled send, mail queues, templates, team access, DNS verification, audit logs, and encrypted enterprise communication." />
-    <meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1" />
-    <meta name="googlebot" content="index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1" />
+    <meta name="description" content="VelisMail - Secure business email platform for custom domains, scheduled send, mail queues, templates, team access, DNS verification, audit logs, and encrypted enterprise communication." />
+    <meta name="robots" content="index,follow,max-image-preview:large" />
+    <meta name="googlebot" content="index,follow,max-image-preview:large" />
     <meta name="keywords" content="business email, secure email, custom domain email, enterprise mail, mail queue, email templates, SPF DKIM DMARC, audit logs, team access, encrypted email" />
     <meta name="author" content="VelisMail" />
     <link rel="canonical" href="https://velismail.online" />
     <link rel="alternate" href="https://velismail.online/" hreflang="en" />
     <link rel="alternate" href="https://velismail.online/" hreflang="x-default" />
 
-    <!-- Open Graph / Facebook -->
+    <!-- Open Graph -->
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://velismail.online/" />
     <meta property="og:title" content="VelisMail - Secure Business Email Operations" />
     <meta property="og:description" content="Run custom-domain business email with scheduled sending, queue monitoring, DNS verification, templates, team roles, audit logs, and secure delivery controls." />
     <meta property="og:image" content="https://velismail.online/ZeeResizer.png" />
     <meta property="og:image:alt" content="VelisMail logo" />
+    <meta property="og:site_name" content="VelisMail" />
 
     <!-- Twitter -->
     <meta name="twitter:card" content="summary_large_image" />
@@ -38,7 +40,7 @@
 
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
     <title>VelisMail - Secure Business Email, Custom Domains, Mail Queue, Templates</title>
     <script type="application/ld+json">
       {
@@ -47,9 +49,7 @@
         "name": "VelisMail",
         "url": "https://velismail.online",
         "logo": "https://velismail.online/ZeeResizer.png",
-        "sameAs": [
-          "https://github.com/VelisArc/VelisMail"
-        ]
+        "sameAs": ["https://github.com/VelisArc/VelisMail"]
       }
     </script>
     <script type="application/ld+json">
@@ -80,21 +80,38 @@
     <script>
       (function() {
         try {
-          var mode = localStorage.getItem('velismail_theme') || 'light';
+          var mode = localStorage.getItem('velismail_theme') || 'dark';
           document.documentElement.setAttribute('data-theme', mode);
+          var meta = document.querySelector('meta[name="theme-color"]');
+          if (meta) meta.content = mode === 'dark' ? '#121212' : '#fafafa';
         } catch (e) {}
       })();
     </script>
+    <style>
+      .boot-spinner {
+        display: inline-block;
+        width: 28px;
+        height: 28px;
+        border-radius: 999px;
+        border: 3px solid rgba(82,82,82,0.18);
+        border-top-color: #f59e0b;
+        animation: bootSpin 0.8s cubic-bezier(0.55, 0.2, 0.35, 0.85) infinite;
+        vertical-align: -0.18em;
+      }
+      @keyframes bootSpin { to { transform: rotate(360deg); } }
+      @media (prefers-reduced-motion: reduce) {
+        .boot-spinner { animation-duration: 1.6s; }
+      }
+    </style>
   </head>
   <body>
     <div id="root">
-      <div style="position:fixed;inset:0;display:grid;place-items:center;background:#fff;">
-        <div style="display:flex;align-items:center;gap:14px;padding:16px 18px;border:1px solid rgba(0,0,0,.1);font-family:Manrope,system-ui,sans-serif;color:#262626;font-size:.88rem;font-weight:700;">
-          <div style="width:28px;height:28px;border-radius:999px;border:3px solid rgba(82,82,82,.18);border-top-color:#d97706;animation:velisBootSpin .8s cubic-bezier(.55,.2,.35,.85) infinite;"></div>
+      <div class="boot-loading-screen" style="position:fixed;inset:0;display:grid;place-items:center;z-index:9999;">
+        <div style="display:flex;align-items:center;gap:14px;padding:16px 18px;background:var(--bg-elevated,#fff);border:1px solid var(--border-primary,rgba(0,0,0,.08));border-radius:8px;font-family:Manrope,system-ui,sans-serif;color:var(--text-secondary,#525252);font-size:0.88rem;font-weight:700;">
+          <span class="boot-spinner"></span>
           <span>Loading</span>
         </div>
       </div>
-      <style>@keyframes velisBootSpin{to{transform:rotate(360deg)}}</style>
     </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

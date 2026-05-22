@@ -1,738 +1,70 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
-import {
-  Inbox, Send, FileEdit, Star, Archive, Trash2, LogOut,
-  Search, Plus, X, Paperclip, RefreshCw, Settings, ArrowLeft,
-  Reply, Forward, CheckCircle2,
-  AlertTriangle, Sun, Moon, BarChart3, Users, Globe, Shield, ShieldCheck,
-  Server, Activity, Clock, AlertCircle, Database,
-  CheckSquare, Square, Tag, Bell, BellOff,
-  ExternalLink, Copy, Zap, Filter, Check,
-  Mail, Volume2, VolumeX, RefreshCcw, Pause,
-  Trash, Archive as ArchiveIcon, Edit3, Eye,
-  Download, KeyRound, Lock, XCircle,
-  Layers, CreditCard,
-  List, Grid, SortAsc, SortDesc, Menu,
-  Rocket, Briefcase, Building2, Crown, UserCheck, UserX
-} from 'lucide-react';
-import type { LucideIcon } from 'lucide-react';
-import {
-  auth,
-  businessAudit,
-  businessGroups,
-  businessMailboxes,
-  businessQueue,
-  businessTeam,
-  businessTemplates,
-  connections,
-  domains,
-  fetchApiJsonDetailed,
-  isBusinessSetupReady,
-  isScamEmail,
-  mail,
-  mergeDnsRecords,
-  normalizeProviderDnsRecords,
-  platformAdmin,
-  providerEndpointForRequest,
-  teamAccess,
-  type BusinessAuditEntry,
-  type BusinessGroup,
-  type BusinessMailbox,
-  type BusinessTeamMember,
-  type BusinessTemplate,
-  type ConnectionUsage,
-  type CustomDomain,
-  type Email,
-  type PlatformAdminUserRecord,
-  type TeamAccessInvite,
-} from '../api/client';
-import Composer from '../components/Composer';
+import { Menu } from 'lucide-react';
+import { auth, businessAudit, businessGroups, businessMailboxes, businessQueue, businessTeam, businessTemplates, connections, domains, fetchApiJsonDetailed, isBusinessSetupReady, isScamEmail, mail, mergeDnsRecords, normalizeProviderDnsRecords, platformAdmin, providerEndpointForRequest, teamAccess, type BusinessAuditEntry, type BusinessGroup, type BusinessMailbox, type BusinessTeamMember, type BusinessTemplate, type ConnectionUsage, type CustomDomain, type Email, type PlatformAdminUserRecord, type TeamAccessInvite } from '../api/client';
 import LoadingSpinner from '../components/LoadingSpinner';
+import Sidebar, { BIZ_FOLDERS, type BizTab } from '../components/dashboard/Sidebar';
+import EmailInbox from '../components/dashboard/EmailInbox';
+import { formatRelative, copyToClipboard, loadRazorpayCheckout, parseEmailConversation, getEmailPreview, buildReplyQuote, providerRecordType, type RazorpayConstructor } from '../components/dashboard/utils';
+import type { DomainRecord, DomainHealth, MailQueueItem } from '../components/dashboard/types';
+import DomainsPanel from '../components/dashboard/panels/DomainsPanel';
+import MailboxesPanel from '../components/dashboard/panels/MailboxesPanel';
+import GroupsPanel from '../components/dashboard/panels/GroupsPanel';
+import TeamPanel from '../components/dashboard/panels/TeamPanel';
+import QueuePanel from '../components/dashboard/panels/QueuePanel';
+import AnalyticsPanel from '../components/dashboard/panels/AnalyticsPanel';
+import AuditPanel from '../components/dashboard/panels/AuditPanel';
+import AdminPanel from '../components/dashboard/panels/AdminPanel';
+import TemplatesPanel from '../components/dashboard/panels/TemplatesPanel';
+import SettingsPanel from '../components/dashboard/panels/SettingsPanel';
+import BillingPanel from '../components/dashboard/panels/BillingPanel';
+import Modals from '../components/dashboard/Modals';
 import { useNavigation, useSessionStore } from '../store/sessionStore';
 import { useEmails } from '../hooks/useMail';
 import './BusinessDashboard.css';
 import './Pricing.css';
 
-type BizFolder = {
-  id: string;
-  label: string;
-  icon: LucideIcon;
-  badge?: string;
-};
-
-type DomainHealth = {
-  key: string;
-  label: string;
-  status: 'verified' | 'pending' | 'failed' | 'checking';
-  detail: string;
-  lastCheck: string;
-};
-
-type RazorpayInstance = {
-  on: (event: 'payment.failed', handler: (response: { error: { description?: string; code?: string } }) => void) => void;
-  open: () => void;
-};
-
-type RazorpayConstructor = new (options: Record<string, unknown>) => RazorpayInstance;
-
-function getRazorpayConstructor(): RazorpayConstructor | undefined {
-  return (window as typeof window & { Razorpay?: RazorpayConstructor }).Razorpay;
-}
-
-function loadRazorpayCheckout(): Promise<RazorpayConstructor | undefined> {
-  const existing = getRazorpayConstructor();
-  if (existing) return Promise.resolve(existing);
-
-  return new Promise((resolve) => {
-    const currentScript = document.querySelector<HTMLScriptElement>('script[data-velismail-razorpay="checkout"]');
-    if (currentScript) {
-      currentScript.addEventListener('load', () => resolve(getRazorpayConstructor()), { once: true });
-      currentScript.addEventListener('error', () => resolve(undefined), { once: true });
-      return;
-    }
-
-    const script = document.createElement('script');
-    script.src = 'https://checkout.razorpay.com/v1/checkout.js';
-    script.async = true;
-    script.dataset.velismailRazorpay = 'checkout';
-    script.addEventListener('load', () => resolve(getRazorpayConstructor()), { once: true });
-    script.addEventListener('error', () => resolve(undefined), { once: true });
-    document.body.appendChild(script);
-  });
-}
-
-type MailQueueItem = {
-  id: string;
-  domain?: string;
-  fromAddress?: string;
-  to: string;
-  recipients?: string[];
-  subject: string;
-  body?: string;
-  status: 'queued' | 'sending' | 'sent' | 'failed' | 'deferred';
-  queuedAt: string;
-  updatedAt?: string;
-  retryCount: number;
-  error?: string;
-  scheduledAt?: string;
-};
-
-type DomainRecord = {
-  id: string;
-  domain: string;
-  status: 'active' | 'suspended' | 'pending' | 'failed';
-  health: DomainHealth[];
-  mxReady: boolean;
-  spfReady: boolean;
-  dkimReady: boolean;
-  dmarcReady: boolean;
-  addedAt: string;
-  mailCount: number;
-  reputation: number;
-};
-
-type DomainVerifyRuntimeCheck = {
-  key?: string;
-  label: string;
-  status: 'verified' | 'failed';
-  detail: string;
-  category?: 'success' | 'network' | 'config' | 'software';
-  recommendation?: string | null;
-};
-
-type ProviderDnsRecord = {
-  recordType?: string;
-  record_type?: string;
-  name: string;
-  value: string;
-  status?: string | null;
-  priority?: number | null;
-};
-
-function providerRecordType(record: ProviderDnsRecord): string {
-  return String(record.recordType || record.record_type || 'TXT').toUpperCase();
-}
-
-type ConversationSegment = {
-  kind: 'message' | 'quote';
-  header?: string;
-  lines: string[];
-};
-
-function normalizeMailBody(body: string): string {
-  return body
-    .replace(/\r\n/g, '\n')
-    .replace(/\r/g, '\n')
-    .replace(/\u00a0/g, ' ');
-}
-
-function stripQuoteMarker(line: string): string {
-  return line.replace(/^\s*>+\s?/, '').trimEnd();
-}
-
-function normalizeConversationLines(lines: string[]): string[] {
-  const normalized = lines.map(line => line.trimEnd());
-  while (normalized.length > 0 && !normalized[0].trim()) normalized.shift();
-  while (normalized.length > 0 && !normalized[normalized.length - 1].trim()) normalized.pop();
-
-  const compacted: string[] = [];
-  let previousBlank = false;
-  normalized.forEach(line => {
-    const blank = !line.trim();
-    if (blank && previousBlank) return;
-    compacted.push(line);
-    previousBlank = blank;
-  });
-  return compacted;
-}
-
-function cleanReplyHeader(line: string): string {
-  const withoutQuote = stripQuoteMarker(line)
-    .replace(/\s+/g, ' ')
-    .replace(/(\d{1,2}:\d{2})(AM|PM)\b/gi, '$1 $2')
-    .trim();
-
-  if (!withoutQuote) return 'Previous message';
-  if (/^[-\s]*(original|forwarded) message[-\s]*$/i.test(withoutQuote)) return 'Forwarded message';
-  if (/^on\s+/i.test(withoutQuote) && !/wrote:\s*$/i.test(withoutQuote)) {
-    return `${withoutQuote} wrote:`;
-  }
-  return withoutQuote;
-}
-
-function isReplyHeader(line: string): boolean {
-  const clean = stripQuoteMarker(line).trim();
-  return /^on\s+.+wrote:\s*$/i.test(clean)
-    || /^on\s+.+<[^>]+>\s*$/i.test(clean)
-    || /^[-\s]*(original|forwarded) message[-\s]*$/i.test(clean);
-}
-
-function nextMeaningfulLineIndex(lines: string[], fromIndex: number): number {
-  for (let i = fromIndex + 1; i < lines.length; i += 1) {
-    if (stripQuoteMarker(lines[i]).trim()) return i;
-  }
-  return -1;
-}
-
-function parseEmailConversation(body: string): ConversationSegment[] {
-  const lines = normalizeMailBody(body).split('\n');
-  const segments: ConversationSegment[] = [];
-  let currentMessage: string[] = [];
-  let currentQuote: string[] = [];
-  let quoteHeader = '';
-  let inQuote = false;
-
-  const flushMessage = () => {
-    const clean = normalizeConversationLines(currentMessage);
-    if (clean.length > 0) segments.push({ kind: 'message', lines: clean });
-    currentMessage = [];
-  };
-
-  const flushQuote = () => {
-    const clean = normalizeConversationLines(currentQuote.map(stripQuoteMarker));
-    if (clean.length > 0 || quoteHeader) {
-      segments.push({ kind: 'quote', header: quoteHeader || 'Previous message', lines: clean });
-    }
-    currentQuote = [];
-    quoteHeader = '';
-    inQuote = false;
-  };
-
-  const startQuote = (header: string) => {
-    if (inQuote) flushQuote();
-    flushMessage();
-    quoteHeader = cleanReplyHeader(header);
-    inQuote = true;
-  };
-
-  for (let i = 0; i < lines.length; i += 1) {
-    const rawLine = lines[i].trimEnd();
-    const cleanLine = stripQuoteMarker(rawLine);
-    const meaningfulNext = nextMeaningfulLineIndex(lines, i);
-    const nextLine = meaningfulNext >= 0 ? stripQuoteMarker(lines[meaningfulNext]).trim() : '';
-    const splitReplyHeader = /^on\s+.+/i.test(cleanLine.trim()) && /^wrote:\s*$/i.test(nextLine);
-
-    if (splitReplyHeader || isReplyHeader(rawLine)) {
-      startQuote(splitReplyHeader ? `${cleanLine} wrote:` : cleanLine);
-      if (splitReplyHeader) i = meaningfulNext;
-      continue;
-    }
-
-    if (/^\s*>/.test(rawLine)) {
-      if (!inQuote) startQuote('Previous message');
-      currentQuote.push(cleanLine);
-      continue;
-    }
-
-    if (inQuote) {
-      currentQuote.push(rawLine);
-    } else {
-      currentMessage.push(rawLine);
-    }
-  }
-
-  if (inQuote) flushQuote();
-  flushMessage();
-
-  return segments.length > 0 ? segments : [{ kind: 'message', lines: ['No message content.'] }];
-}
-
-function getPrimaryConversationText(body: string): string {
-  const primary = parseEmailConversation(body).find(segment => segment.kind === 'message');
-  return (primary?.lines.join('\n') || normalizeMailBody(body)).trim();
-}
-
-function getEmailPreview(body: string, maxLength: number): string {
-  const text = getPrimaryConversationText(body).replace(/\s+/g, ' ').trim();
-  if (!text) return 'No preview';
-  return text.length > maxLength ? `${text.slice(0, Math.max(0, maxLength - 1)).trimEnd()}…` : text;
-}
-
-function buildReplyQuote(email: Email): string {
-  const quotedText = getPrimaryConversationText(email.body)
-    .split('\n')
-    .map(line => `> ${line}`)
-    .join('\n');
-  const replyDate = new Date(email.date).toLocaleString(undefined, {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-  });
-  const senderName = email.fromName || email.from;
-  return `\n\nOn ${replyDate}, ${senderName} <${email.from}> wrote:\n${quotedText}`;
-}
-
-const BIZ_FOLDERS: BizFolder[] = [
-  { id: 'inbox', label: 'Inbox', icon: Inbox, badge: 'unread' },
-  { id: 'starred', label: 'Starred', icon: Star },
-  { id: 'sent', label: 'Sent', icon: Send },
-  { id: 'drafts', label: 'Drafts', icon: FileEdit },
-  { id: 'archive', label: 'Archive', icon: Archive },
-  { id: 'trash', label: 'Trash', icon: Trash2 },
-  { id: 'priority', label: 'Priority', icon: Zap, badge: 'priority' },
-  { id: 'scheduled', label: 'Scheduled', icon: Clock },
-  { id: 'spam', label: 'Spam', icon: AlertCircle },
-];
-
 function toDomainRecord(domain: CustomDomain): DomainRecord {
-  const statusFor = (key: string) => domain.checks.find(check => check.key === key)?.status || 'pending';
-  const verifiedCount = domain.checks.filter(check => check.status === 'verified').length;
-
+  const statusFor = (key: string) => domain.checks?.find(c => c.key === key)?.status || 'pending';
   return {
-    id: domain.id,
-    domain: domain.domain,
-    status: domain.status === 'verified' ? 'active' : domain.status,
-    health: domain.checks.map(check => ({
-      key: check.key,
-      label: check.label,
-      status: check.status,
-      detail: check.actual || check.expected,
-      lastCheck: domain.lastCheckedAt || domain.addedAt,
-    })),
-    mxReady: statusFor('mx') === 'verified',
-    spfReady: statusFor('spf') === 'verified',
-    dkimReady: statusFor('dkim') === 'verified',
-    dmarcReady: statusFor('dmarc') === 'verified',
-    addedAt: domain.addedAt,
-    mailCount: mail.getBusinessByFolderSync(domain.domain, 'sent').length,
-    reputation: Math.round((verifiedCount / Math.max(domain.checks.length, 1)) * 100),
+    id: domain.id, domain: domain.domain, status: domain.status || 'active', reputation: domain.reputation || 100,
+    mailCount: domain.mailCount || 0, addedAt: domain.addedAt || new Date().toISOString(),
+    health: [
+      { key: 'mx', label: 'MX Record', status: statusFor('mx') as DomainHealth['status'], detail: statusFor('mx') === 'verified' ? 'Mail exchange configured' : 'Not configured', lastCheck: domain.lastCheck || '' },
+      { key: 'spf', label: 'SPF Record', status: statusFor('spf') as DomainHealth['status'], detail: statusFor('spf') === 'verified' ? 'Sender policy published' : 'Not published', lastCheck: domain.lastCheck || '' },
+      { key: 'dkim', label: 'DKIM Signature', status: statusFor('dkim') as DomainHealth['status'], detail: statusFor('dkim') === 'verified' ? 'DKIM key active' : 'Not configured', lastCheck: domain.lastCheck || '' },
+      { key: 'dmarc', label: 'DMARC Policy', status: statusFor('dmarc') as DomainHealth['status'], detail: statusFor('dmarc') === 'verified' ? 'DMARC policy published' : 'Not published', lastCheck: domain.lastCheck || '' },
+    ],
+    checks: domain.checks || [],
+    mxVerified: statusFor('mx') === 'verified', spfVerified: statusFor('spf') === 'verified',
+    dkimVerified: statusFor('dkim') === 'verified', dmarcVerified: statusFor('dmarc') === 'verified',
   };
-}
-
-function formatRelative(iso: string): string {
-  const target = new Date(iso).getTime();
-  if (Number.isNaN(target)) return 'unknown';
-  const diff = Date.now() - target;
-  const abs = Math.abs(diff);
-  const suffix = diff >= 0 ? 'ago' : 'from now';
-  if (abs < 60000) return diff >= 0 ? 'just now' : 'in less than 1m';
-  if (abs < 3600000) return `${Math.floor(abs / 60000)}m ${suffix}`;
-  if (abs < 86400000) return `${Math.floor(abs / 3600000)}h ${suffix}`;
-  if (abs < 604800000) return `${Math.floor(abs / 86400000)}d ${suffix}`;
-  return new Date(iso).toLocaleDateString();
-}
-
-function formatInviteExpiry(expiresAt?: string | null): string {
-  return expiresAt ? `Expires ${formatRelative(expiresAt)}` : 'Never expires';
-}
-
-type BizTab = 'mail' | 'domains' | 'mailboxes' | 'groups' | 'team' | 'queue' | 'analytics' | 'audit' | 'templates' | 'settings' | 'billing' | 'admin';
-
-const ROLE_ALLOWED_TABS: Record<BusinessTeamMember['role'], BizTab[]> = {
-  admin: ['mail', 'domains', 'mailboxes', 'groups', 'team', 'queue', 'analytics', 'audit', 'templates', 'settings', 'billing', 'admin'],
-  member: ['mail', 'team', 'queue', 'analytics', 'templates'],
-  viewer: ['mail', 'team', 'analytics'],
-};
-
-function hasRoleAccess(role: BusinessTeamMember['role'], tab: BizTab): boolean {
-  return ROLE_ALLOWED_TABS[role].includes(tab);
-}
-
-function formatINR(amount: number): string {
-  if (amount === 0) return '0';
-  return amount.toLocaleString('en-IN');
-}
-
-const plans = [
-  {
-    id: 'free',
-    name: 'Free',
-    icon: Zap,
-    desc: 'For individuals & testing.',
-    monthlyPrice: 0,
-    annualPrice: 0,
-    popular: false,
-    cta: 'Current Plan',
-    ctaStyle: 'btn-outline',
-    features: [
-      { text: '3,000 emails/mo', highlight: true },
-      { text: '100 emails/day limit', highlight: false },
-      { text: '500MB Storage', highlight: false },
-      { text: '3 team members', highlight: false },
-      { text: '1 custom domain', highlight: false },
-      { text: 'SPF, DKIM, DMARC', highlight: false },
-      { text: 'E2E encryption', highlight: false },
-      { text: 'Passkey authentication', highlight: false },
-      { text: '3 mail templates', highlight: false },
-      { text: '7 days audit logs', highlight: false },
-    ],
-    disabledFeatures: [
-      'Custom branding',
-      'Priority support',
-      'Advanced routing',
-    ],
-  },
-  {
-    id: 'starter',
-    name: 'Starter',
-    icon: Rocket,
-    desc: 'For small teams getting serious.',
-    monthlyPrice: 799,
-    annualPrice: 8054,
-    popular: false,
-    cta: 'Upgrade to Starter',
-    ctaStyle: 'btn-outline',
-    features: [
-      { text: '150,000 emails/mo', highlight: true },
-      { text: 'No daily email limit', highlight: false },
-      { text: '10GB Storage', highlight: false },
-      { text: '15 team members', highlight: false },
-      { text: '3 custom domains', highlight: false },
-      { text: 'SPF, DKIM, DMARC', highlight: false },
-      { text: 'E2E encryption', highlight: false },
-      { text: 'Passkey authentication', highlight: false },
-      { text: '25 mail templates', highlight: false },
-      { text: '30 days audit logs', highlight: false },
-      { text: 'Email support', highlight: false },
-      { text: '99.5% platform SLA', highlight: false },
-    ],
-    disabledFeatures: [
-      'Custom branding',
-    ],
-  },
-  {
-    id: 'business',
-    name: 'Business',
-    icon: Briefcase,
-    desc: 'For growing companies.',
-    monthlyPrice: 2499,
-    annualPrice: 25190,
-    popular: true,
-    cta: 'Upgrade to Business',
-    ctaStyle: 'btn-primary',
-    features: [
-      { text: '750,000 emails/mo', highlight: true },
-      { text: 'No daily email limit', highlight: false },
-      { text: '50GB Storage', highlight: false },
-      { text: '75 team members', highlight: false },
-      { text: '10 custom domains', highlight: false },
-      { text: 'SPF, DKIM, DMARC', highlight: false },
-      { text: 'E2E encryption', highlight: false },
-      { text: 'Passkey authentication', highlight: false },
-      { text: 'Unlimited mail templates', highlight: false },
-      { text: '90 days audit logs', highlight: false },
-      { text: 'Custom branding', highlight: true },
-      { text: 'Email + chat support', highlight: false },
-      { text: '99.9% platform SLA', highlight: false },
-    ],
-    disabledFeatures: [],
-  },
-  {
-    id: 'enterprise',
-    name: 'Enterprise',
-    icon: Building2,
-    desc: 'For large organizations.',
-    monthlyPrice: 6999,
-    annualPrice: 70550,
-    popular: false,
-    cta: 'Upgrade to Enterprise',
-    ctaStyle: 'btn-primary',
-    features: [
-      { text: 'Unlimited emails', highlight: true },
-      { text: 'No daily email limit', highlight: false },
-      { text: 'Unlimited Storage', highlight: false },
-      { text: 'Unlimited team members', highlight: false },
-      { text: 'Unlimited custom domains', highlight: false },
-      { text: 'SPF, DKIM, DMARC', highlight: false },
-      { text: 'E2E encryption', highlight: false },
-      { text: 'Passkey authentication', highlight: false },
-      { text: 'Unlimited mail templates', highlight: false },
-      { text: '1 year audit logs', highlight: false },
-      { text: 'Dedicated Account Manager', highlight: false },
-      { text: '99.99% platform SLA', highlight: false },
-    ],
-    disabledFeatures: [],
-  },
-];
-
-function getAnnualSavings(plan: typeof plans[number]): number {
-  return Math.max(0, plan.monthlyPrice * 12 - plan.annualPrice);
-}
-
-function getAnnualSavingsPercent(plan: typeof plans[number]): number {
-  const monthlyYearTotal = plan.monthlyPrice * 12;
-  if (monthlyYearTotal === 0) return 0;
-  return Math.round((getAnnualSavings(plan) / monthlyYearTotal) * 100);
-}
-
-function getDisplayedMonthlyPrice(plan: typeof plans[number], annualBilling: boolean): number {
-  return annualBilling ? Math.round(plan.annualPrice / 12) : plan.monthlyPrice;
-}
-
-function findPlanByName(planName?: string): typeof plans[number] {
-  return plans.find((plan) => plan.name.toLowerCase() === (planName || '').toLowerCase()) || plans[0];
-}
-
-function addBillingPeriod(startIso: string, billingCycle: 'monthly' | 'annual'): string {
-  const date = new Date(startIso);
-  const safeDate = Number.isNaN(date.getTime()) ? new Date() : date;
-  if (billingCycle === 'annual') {
-    safeDate.setFullYear(safeDate.getFullYear() + 1);
-  } else {
-    safeDate.setMonth(safeDate.getMonth() + 1);
-  }
-  return safeDate.toISOString();
-}
-
-function formatBillingDate(value?: string): string {
-  if (!value) return 'Not recorded';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return 'Not recorded';
-  return date.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
-}
-
-function subscriptionStatusLabel(expiresAt?: string, status?: string): string {
-  if (status === 'canceled') return 'Canceled';
-  if (status === 'past_due') return 'Past due';
-  if (expiresAt && new Date(expiresAt).getTime() < Date.now()) return 'Expired';
-  return 'Active';
 }
 
 export default function BusinessDashboard() {
   const navigate = useNavigate();
-  const navigation = useNavigation();
-  const updateNavigation = useSessionStore(state => state.updateNavigation);
-  const user = auth.getSession();
-  const currentRole: BusinessTeamMember['role'] = user?.teamAccessRole || 'admin';
-  const canAccessPlatformAdmin = platformAdmin.isCurrentUserPlatformAdmin();
-  const canCompose = currentRole !== 'viewer';
-  const canManageWorkspace = currentRole === 'admin';
-  const canManageTemplates = currentRole === 'admin' || currentRole === 'member';
-  const storedDomainRecords = domains.getAll().map(toDomainRecord);
-  const initialDomainRecords = storedDomainRecords;
-  const initialDomainId = initialDomainRecords.find(d => d.domain === user?.businessDomain)?.id || initialDomainRecords[0]?.id || '';
+  const [user, setUser] = useState(auth.getSession());
+  const { navigation, updateNavigation } = useNavigation();
 
-  useEffect(() => {
-    if (!user) {
-      navigate('/login');
-      return;
-    }
-    if (!isBusinessSetupReady(user) || storedDomainRecords.length === 0) {
-      navigate('/business-setup');
-      return;
-    }
-  }, [navigate, user, storedDomainRecords.length]);
-
-  const [activeBizTab, setActiveBizTab] = useState<BizTab>((navigation.activeTab as BizTab) || 'domains');
-  const [activeFolder, setActiveFolder] = useState(navigation.activeFolder || 'inbox');
+  const [activeBizTab, setActiveBizTab] = useState<BizTab>(() => (navigation?.bizTab as BizTab) || 'mail');
+  const [activeFolder, setActiveFolder] = useState(navigation?.folder || 'inbox');
   const [selectedEmail, setSelectedEmail] = useState<Email | null>(null);
-  const [searchQuery, setSearchQuery] = useState(navigation.searchQuery || '');
+  const [searchQuery, setSearchQuery] = useState('');
   const [composeOpen, setComposeOpen] = useState(false);
   const [composeTo, setComposeTo] = useState('');
   const [composeSubject, setComposeSubject] = useState('');
   const [composeBody, setComposeBody] = useState('');
   const [sending, setSending] = useState(false);
   const [selectedFromAddress, setSelectedFromAddress] = useState('');
-  const selectedConversation = useMemo(
-    () => parseEmailConversation(selectedEmail?.body || ''),
-    [selectedEmail?.body]
-  );
-
-  useEffect(() => {
-    if (activeBizTab === 'admin' && !canAccessPlatformAdmin) {
-      setActiveBizTab('domains');
-    }
-  }, [activeBizTab, canAccessPlatformAdmin]);
-
-  // Payment State
   const [annual, setAnnual] = useState(false);
   const [loadingPayment, setLoadingPayment] = useState<string | null>(null);
-  const currentPlanName = user?.plan || 'Free';
-  const currentBillingCycle = user?.billingCycle || 'monthly';
-  const currentPlan = findPlanByName(currentPlanName);
-  const currentPlanStartedAt = user?.paidPlanPurchasedAt || user?.planStartedAt || user?.createdAt;
-  const currentPlanExpiresAt = currentPlan.monthlyPrice === 0
-    ? undefined
-    : user?.paidPlanExpiresAt || (currentPlanStartedAt ? addBillingPeriod(currentPlanStartedAt, currentBillingCycle) : undefined);
-  const currentSubscriptionStatus = subscriptionStatusLabel(currentPlanExpiresAt, user?.subscriptionStatus);
-  const currentCycleAmount = currentPlan.monthlyPrice === 0
-    ? 0
-    : currentBillingCycle === 'annual' ? currentPlan.annualPrice : currentPlan.monthlyPrice;
-
-  useEffect(() => {
-    setAnnual(currentBillingCycle === 'annual');
-  }, [currentBillingCycle]);
-
-  const handleUpgrade = async (plan: typeof plans[0]) => {
-    if (plan.id === 'free') return;
-    
-    setLoadingPayment(plan.id);
-    
-    const selectedBillingAmount = annual ? plan.annualPrice : plan.monthlyPrice;
-    const amountInPaise = selectedBillingAmount * 100;
-    
-    // Try to create an order via backend for live mode
-    let orderId: string | undefined;
-    let razorpayKeyId: string | undefined;
-    try {
-      const orderRes = await fetchApiJsonDetailed<{ order_id?: string; id?: string; razorpay_key_id?: string; success: boolean; message?: string }>('/payments/create-order', {
-        method: 'POST',
-        body: JSON.stringify({
-          amount: amountInPaise,
-          currency: 'INR',
-          plan: plan.id,
-          billing: annual ? 'annual' : 'monthly',
-          email: user?.email,
-        }),
-      });
-
-      if (!orderRes.ok || !orderRes.data?.success) {
-        showToast(`Failed to initialize payment: ${orderRes.data?.message || 'Server error'}`, 'error');
-        setLoadingPayment(null);
-        return;
-      }
-
-      if (orderRes.ok && orderRes.data) {
-        orderId = orderRes.data.order_id || orderRes.data.id;
-        razorpayKeyId = orderRes.data.razorpay_key_id;
-      }
-    } catch {
-      showToast('Payment system unavailable. Please try again later.', 'error');
-      setLoadingPayment(null);
-      return;
-    }
-    
-    const rzpKey = razorpayKeyId || import.meta.env.VITE_RAZORPAY_KEY_ID;
-    if (!rzpKey) {
-      showToast('Payment gateway configuration is missing.', 'error');
-      setLoadingPayment(null);
-      return;
-    }
-    const Razorpay = await loadRazorpayCheckout();
-    if (!Razorpay) {
-      showToast('Payment gateway is loading. Please wait a moment and try again.', 'error');
-      setLoadingPayment(null);
-      return;
-    }
-
-    const options: Record<string, unknown> = {
-      key: rzpKey,
-      amount: amountInPaise,
-      currency: 'INR',
-      name: 'VelisMail',
-      description: `Upgrade to ${plan.name} Plan (${annual ? 'Annual' : 'Monthly'})`,
-      handler: async function (response: { razorpay_payment_id: string; razorpay_order_id?: string; razorpay_signature?: string }) {
-        if (!response.razorpay_order_id || !response.razorpay_signature) {
-          showToast('Payment verification data is missing. Please contact support with your payment ID.', 'error');
-          setLoadingPayment(null);
-          return;
-        }
-        let verification;
-        try {
-          verification = await fetchApiJsonDetailed<{ success?: boolean; message?: string }>('/payments/verify', {
-            method: 'POST',
-            body: JSON.stringify({
-              razorpayPaymentId: response.razorpay_payment_id,
-              razorpayOrderId: response.razorpay_order_id,
-              razorpaySignature: response.razorpay_signature,
-            }),
-          });
-        } catch {
-          showToast('Payment verification service is unavailable. Please retry or contact support with your payment ID.', 'error');
-          setLoadingPayment(null);
-          return;
-        }
-        if (!verification.ok || !verification.data?.success) {
-          showToast(`Payment verification failed: ${verification.data?.message || 'Server rejected the signature.'}`, 'error');
-          setLoadingPayment(null);
-          return;
-        }
-        const now = new Date().toISOString();
-        const billingCycle = annual ? 'annual' : 'monthly';
-        const expiresAt = addBillingPeriod(now, billingCycle);
-        auth.updateSettings({
-          plan: plan.name,
-          billingCycle,
-          paidPlanPurchasedAt: now,
-          paidPlanExpiresAt: expiresAt,
-          subscriptionStatus: 'active',
-          planStartedAt: now,
-          lastPlanChangeAt: now,
-        });
-        showToast(`${plan.name} upgrade successful! Payment ID: ${response.razorpay_payment_id}`);
-        setLoadingPayment(null);
-      },
-      prefill: {
-        name: user?.displayName || '',
-        email: user?.recoveryEmail || user?.email || '',
-      },
-      notes: {
-        plan: plan.id,
-        billing: annual ? 'annual' : 'monthly',
-        userId: user?.id || '',
-      },
-      theme: {
-        color: '#7b61ff'
-      },
-      modal: {
-        ondismiss: function() {
-          setLoadingPayment(null);
-        }
-      }
-    };
-
-    if (orderId) {
-      options.order_id = orderId;
-    }
-
-    const rzp = new Razorpay(options);
-    rzp.on('payment.failed', function (response: { error: { description?: string; code?: string } }) {
-      showToast(`Payment failed: ${response.error.description || response.error.code || 'Checkout was declined'}`, 'error');
-      setLoadingPayment(null);
-    });
-    rzp.open();
-  };
-
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [confirmRevokeId, setConfirmRevokeId] = useState<string | null>(null);
-  const [pendingRoleChange, setPendingRoleChange] = useState<{ id: string; role: BusinessTeamMember['role']; step: 1 | 2 } | null>(null);
+  const [pendingRoleChange, setPendingRoleChange] = useState<{ id: string; role: string; step: number } | null>(null);
   const [confirmAction, setConfirmAction] = useState<{ title: string; message: string; onConfirm: () => void } | null>(null);
-
-  const [activeDomain, setActiveDomain] = useState<string>(initialDomainId);
-  const [domainsList, setDomainsList] = useState<DomainRecord[]>(initialDomainRecords);
+  const [domainsList, setDomainsList] = useState<DomainRecord[]>(() => domains.getAll().map(toDomainRecord));
+  const [activeDomain, setActiveDomain] = useState('');
   const [domainMailboxes, setDomainMailboxes] = useState<BusinessMailbox[]>([]);
   const [domainGroups, setDomainGroups] = useState<BusinessGroup[]>([]);
   const [teamMembers, setTeamMembers] = useState<BusinessTeamMember[]>([]);
@@ -741,60 +73,30 @@ export default function BusinessDashboard() {
   const [templates, setTemplates] = useState<BusinessTemplate[]>([]);
   const [connectionUsage, setConnectionUsage] = useState<ConnectionUsage[]>([]);
   const [adminUsers, setAdminUsers] = useState<PlatformAdminUserRecord[]>([]);
-
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
   const [selectedEmails, setSelectedEmails] = useState<Set<string>>(new Set());
-  const [bulkAction, setBulkAction] = useState('');
-  const [mailStatusFilter, setMailStatusFilter] = useState<'all' | 'unread' | 'read' | 'starred' | 'priority' | 'attachments'>('all');
+  const [mailStatusFilter, setMailStatusFilter] = useState('all');
   const [notificationEnabled, setNotificationEnabled] = useState(true);
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [showQueueFilters, setShowQueueFilters] = useState(false);
-  const [queueStatusFilter, setQueueStatusFilter] = useState<string>('all');
+  const [queueStatusFilter, setQueueStatusFilter] = useState('all');
   const [templateSearch, setTemplateSearch] = useState('');
   const [showAddDomain, setShowAddDomain] = useState(false);
   const [newDomainInput, setNewDomainInput] = useState('');
-  const [addingDomain, setAddingDomain] = useState(false);
-  const [teamFilter, setTeamFilter] = useState<string>('all');
-  const [auditFilter, setAuditFilter] = useState<string>('all');
+  const [teamFilter, setTeamFilter] = useState('all');
+  const [auditFilter, setAuditFilter] = useState('all');
   const [adminSearch, setAdminSearch] = useState('');
   const [adminPlanFilter, setAdminPlanFilter] = useState('all');
   const [adminStatusFilter, setAdminStatusFilter] = useState('all');
   const [adminRiskFilter, setAdminRiskFilter] = useState('all');
-  const lowerTemplateSearch = useMemo(() => templateSearch.toLowerCase(), [templateSearch]);
-  const filteredTemplates = useMemo(() => (
-    templates.filter(template => (
-      template.name.toLowerCase().includes(lowerTemplateSearch)
-      || template.subject.toLowerCase().includes(lowerTemplateSearch)
-      || template.body.toLowerCase().includes(lowerTemplateSearch)
-    ))
-  ), [templates, lowerTemplateSearch]);
-  const lowerAdminSearch = useMemo(() => adminSearch.toLowerCase(), [adminSearch]);
-  const filteredAdminUsers = useMemo(() => (
-    adminUsers.filter(record => {
-      const matchesSearch = !lowerAdminSearch
-        || record.user.email.toLowerCase().includes(lowerAdminSearch)
-        || record.user.displayName.toLowerCase().includes(lowerAdminSearch)
-        || record.domain.toLowerCase().includes(lowerAdminSearch);
-      const matchesPlan = adminPlanFilter === 'all' || record.plan === adminPlanFilter;
-      const matchesStatus = adminStatusFilter === 'all' || record.status === adminStatusFilter;
-      const matchesRisk = adminRiskFilter === 'all' || record.risk === adminRiskFilter;
-      return matchesSearch && matchesPlan && matchesStatus && matchesRisk;
-    })
-  ), [adminUsers, lowerAdminSearch, adminPlanFilter, adminStatusFilter, adminRiskFilter]);
-  const adminMetrics = useMemo(() => ({
-    total: adminUsers.length,
-    active: adminUsers.filter(record => record.status === 'active').length,
-    suspended: adminUsers.filter(record => record.status === 'suspended' || record.status === 'deactivated').length,
-    paid: adminUsers.filter(record => record.plan !== 'Free' && record.plan !== 'Team Access').length,
-  }), [adminUsers]);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [themeMode, setThemeMode] = useState(() => document.documentElement.getAttribute('data-theme') || 'light');
+  const [themeMode, setThemeMode] = useState(() => localStorage.getItem('velismail_theme') || 'dark');
   const [inviteOpen, setInviteOpen] = useState(false);
   const [inviteName, setInviteName] = useState('');
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState<'admin' | 'member' | 'viewer'>('member');
-  const [inviteExpiresHours, setInviteExpiresHours] = useState(24);
+  const [inviteExpiresHours, setInviteExpiresHours] = useState(48);
   const [issuedInvite, setIssuedInvite] = useState<TeamAccessInvite | null>(null);
   const [templateEditorOpen, setTemplateEditorOpen] = useState(false);
   const [templateName, setTemplateName] = useState('');
@@ -802,2812 +104,544 @@ export default function BusinessDashboard() {
   const [templateBody, setTemplateBody] = useState('');
   const [previewTemplate, setPreviewTemplate] = useState<BusinessTemplate | null>(null);
   const [selectedAdminUser, setSelectedAdminUser] = useState<PlatformAdminUserRecord | null>(null);
-  const [adminStatusConfirm, setAdminStatusConfirm] = useState<{ record: PlatformAdminUserRecord; status: 'active' | 'suspended'; step: 1 | 2 } | null>(null);
+  const [adminStatusConfirm, setAdminStatusConfirm] = useState<{ record: PlatformAdminUserRecord; status: string; step: number } | null>(null);
   const [domainDetails, setDomainDetails] = useState<DomainRecord | null>(null);
   const [mailboxDetails, setMailboxDetails] = useState<BusinessMailbox | null>(null);
   const [groupDetails, setGroupDetails] = useState<BusinessGroup | null>(null);
   const [mailboxLocalPart, setMailboxLocalPart] = useState('');
   const [mailboxDisplayName, setMailboxDisplayName] = useState('');
-  const [mailboxKind, setMailboxKind] = useState<BusinessMailbox['kind']>('mailbox');
+  const [mailboxKind, setMailboxKind] = useState<BusinessMailbox['kind']>('primary');
   const [groupName, setGroupName] = useState('');
   const [groupLocalPart, setGroupLocalPart] = useState('');
   const [groupMembers, setGroupMembers] = useState('');
   const [verifyingDomainId, setVerifyingDomainId] = useState('');
   const [domainVerifyOpen, setDomainVerifyOpen] = useState(false);
-  const [domainVerifySteps, setDomainVerifySteps] = useState<Array<{ label: string; detail: string; status: 'verified' | 'failed' | 'pending'; recommendation?: string | null }>>([]);
-  const [domainVerifyProviderRecords, setDomainVerifyProviderRecords] = useState<ProviderDnsRecord[]>([]);
+  const [domainVerifySteps, setDomainVerifySteps] = useState<DomainHealth[]>([]);
+  const [domainVerifyProviderRecords, setDomainVerifyProviderRecords] = useState<any[]>([]);
   const [copiedField, setCopiedField] = useState<string | null>(null);
-  const activeDomainRecord = domainsList.find(d => d.id === activeDomain);
-  const activeDomainName = activeDomainRecord?.domain || user?.businessDomain || '';
+
+  const activeDomainName = activeDomain || domainsList[0]?.domain || '';
 
   useEffect(() => {
-    let timer: ReturnType<typeof setTimeout>;
-    if (toast) timer = setTimeout(() => setToast(null), 3000);
-    return () => clearTimeout(timer);
-  }, [toast]);
+    if (user && domainsList.length > 0 && !activeDomain) setActiveDomain(domainsList[0].id);
+  }, [user, domainsList, activeDomain]);
 
   useEffect(() => {
-    let timer: ReturnType<typeof setTimeout>;
-    if (copiedField) timer = setTimeout(() => setCopiedField(null), 2000);
-    return () => clearTimeout(timer);
-  }, [copiedField]);
-
-  useEffect(() => {
-    if (!user) {
-      navigate('/login');
-    } else if (!isBusinessSetupReady(user)) {
-      navigate('/business-setup');
+    if (activeDomainName) {
+      setDomainMailboxes(businessMailboxes.getByDomain(activeDomainName));
+      setDomainGroups(businessGroups.getByDomain(activeDomainName));
     }
-  }, [navigate, user]);
-
-  useEffect(() => {
-    if (!hasRoleAccess(currentRole, activeBizTab)) {
-      setActiveBizTab(ROLE_ALLOWED_TABS[currentRole][0]);
-      setSelectedEmail(null);
-    }
-  }, [activeBizTab, currentRole]);
-
-  const { data: rawEmails = [], refetch: refetchEmails } = useEmails(activeDomainName, activeFolder);
-
-  const emails = useMemo(() => {
-    if (activeBizTab !== 'mail') return [];
-    
-    const statusFiltered = rawEmails.filter(e => {
-      if (mailStatusFilter === 'unread') return e.unread;
-      if (mailStatusFilter === 'read') return !e.unread;
-      if (mailStatusFilter === 'starred') return e.starred;
-      if (mailStatusFilter === 'priority') return e.labels?.includes('priority');
-      if (mailStatusFilter === 'attachments') return e.hasAttachment;
-      return true;
-    });
-
-    const lowerQuery = searchQuery.toLowerCase();
-    const filtered = searchQuery
-      ? statusFiltered.filter(e =>
-          e.subject.toLowerCase().includes(lowerQuery) ||
-          e.from.toLowerCase().includes(lowerQuery) ||
-          e.fromName.toLowerCase().includes(lowerQuery) ||
-          e.body.toLowerCase().includes(lowerQuery) ||
-          (e.labels || []).join(' ').toLowerCase().includes(lowerQuery)
-        )
-      : statusFiltered;
-      
-    return [...filtered].sort((a, b) => {
-      const diff = new Date(b.date).getTime() - new Date(a.date).getTime();
-      return sortOrder === 'desc' ? diff : -diff;
-    });
-  }, [rawEmails, activeBizTab, searchQuery, sortOrder, mailStatusFilter]);
-
-  useEffect(() => {
-    if (!activeDomainName) {
-      setDomainMailboxes([]);
-      setDomainGroups([]);
-      setSelectedFromAddress('');
-      return;
-    }
-
-    const nextMailboxes = businessMailboxes.getByDomain(activeDomainName);
-    const nextGroups = businessGroups.getByDomain(activeDomainName);
-    
-    // Deduplicate mailboxes by address
-    const uniqueMailboxes = Array.from(new Map(nextMailboxes.map(m => [m.address, m])).values());
-    
-    setDomainMailboxes(uniqueMailboxes);
-    setDomainGroups(nextGroups);
-    setSelectedFromAddress((current) => (
-      uniqueMailboxes.some((entry) => entry.address === current)
-        ? current
-        : (uniqueMailboxes.find((entry) => entry.active)?.address || uniqueMailboxes[0]?.address || '')
-    ));
   }, [activeDomainName]);
 
   useEffect(() => {
-    setTeamMembers(businessTeam.getAll());
-    setTemplates(businessTemplates.getAll());
-    setAuditLog(businessAudit.getAll());
-    setConnectionUsage(connections.getUsage());
-    setMailQueue(businessQueue.getAll(activeDomainName));
-    setAdminUsers(canAccessPlatformAdmin ? platformAdmin.getUsers() : []);
-  }, [activeDomainName, canAccessPlatformAdmin]);
+    setThemeMode(localStorage.getItem('velismail_theme') || 'dark');
+  }, []);
 
   useEffect(() => {
-    updateNavigation({
-      accountType: 'business',
-      activeTab: activeBizTab,
-      activeFolder,
-      searchQuery,
-      selectedEmailId: selectedEmail?.id || null,
-    });
-  }, [activeBizTab, activeFolder, searchQuery, selectedEmail?.id, updateNavigation]);
+    document.documentElement.setAttribute('data-theme', themeMode);
+    localStorage.setItem('velismail_theme', themeMode);
+  }, [themeMode]);
+
+  useEffect(() => {
+    updateNavigation({ bizTab: activeBizTab, folder: activeFolder });
+  }, [activeBizTab, activeFolder, updateNavigation]);
 
   const showToast = (msg: string, type: 'success' | 'error' = 'success') => {
     setToast({ msg, type });
+    setTimeout(() => setToast(null), 3000);
   };
 
-  const refreshAdminUsers = () => {
-    setAdminUsers(canAccessPlatformAdmin ? platformAdmin.getUsers() : []);
+  const toggleTheme = () => setThemeMode(t => t === 'dark' ? 'light' : 'dark');
+
+  const handleLogout = () => { auth.logout(); navigate('/login'); };
+  const openComposeWith = (to = '', subject = '', body = '') => {
+    setComposeTo(to); setComposeSubject(subject); setComposeBody(body); setComposeOpen(true);
   };
 
-  const formatBytes = (bytes: number): string => {
-    if (bytes < 1024) return `${bytes} B`;
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  const ROLE_ALLOWED_TABS: Record<string, BizTab[]> = {
+    admin: ['mail', 'templates', 'queue', 'domains', 'mailboxes', 'groups', 'team', 'analytics', 'audit', 'settings', 'billing', 'admin'],
+    member: ['mail', 'templates', 'queue', 'analytics', 'team'],
+    viewer: ['mail', 'analytics', 'team'],
   };
+  const hasRoleAccess = (tab: BizTab) => (ROLE_ALLOWED_TABS[user?.role || 'member'] || ROLE_ALLOWED_TABS.member).includes(tab);
+  const canAccessPlatformAdmin = user?.role === 'admin' && platformAdmin.isCurrentUserPlatformAdmin();
 
-  const handleAdminStatusChange = (record: PlatformAdminUserRecord, status: 'active' | 'suspended') => {
-    if (!canAccessPlatformAdmin) {
-      showToast('Platform admin access is restricted to velismail.online administrator accounts.', 'error');
-      return;
-    }
-    setAdminStatusConfirm({ record, status, step: 1 });
-  };
+  const { data: emails = [], isLoading, refetch } = useEmails(activeDomainName, activeFolder);
 
-  const confirmAdminStatusChange = () => {
-    if (!adminStatusConfirm) return;
-    if (adminStatusConfirm.step === 1) {
-      setAdminStatusConfirm({ ...adminStatusConfirm, step: 2 });
-      return;
-    }
-    const { record, status } = adminStatusConfirm;
-    platformAdmin.updateUserStatus(
-      record.user.email,
-      status,
-      status === 'suspended' ? 'Suspended by platform administrator' : undefined,
-    );
-    refreshAdminUsers();
-    showToast(status === 'suspended' ? 'User suspended' : 'User reactivated');
-    setAdminStatusConfirm(null);
-  };
+  const refreshDomains = () => setDomainsList(domains.getAll().map(toDomainRecord));
+  const refreshTeam = () => setTeamMembers(businessTeam.getByDomain(activeDomainName));
+  const refreshQueue = () => setMailQueue(businessQueue.getByDomain(activeDomainName));
+  const refreshAudit = () => setAuditLog(businessAudit.getByDomain(activeDomainName));
+  const refreshTemplates = () => setTemplates(businessTemplates.getByDomain(activeDomainName));
+  const refreshMailboxes = () => setDomainMailboxes(businessMailboxes.getByDomain(activeDomainName));
+  const refreshGroups = () => setDomainGroups(businessGroups.getByDomain(activeDomainName));
+  const refreshConnectionUsage = () => setConnectionUsage(connections.getUsage());
 
-  const handleLogout = () => {
-    auth.logout();
-    navigate('/login');
-  };
+  useEffect(() => { refreshTeam(); refreshQueue(); refreshAudit(); refreshTemplates(); refreshConnectionUsage(); }, [activeDomainName]);
 
-  const handleSelectEmail = (email: Email) => {
-    setSelectedEmail(email);
-    updateNavigation({ selectedEmailId: email.id });
-    if (email.unread) {
-      mail.markRead(email.id);
-      refetchEmails();
-    }
-  };
-
-  const handleSend = async (toArg: string, subjectArg: string, bodyArg: string, attachmentsArg?: File[], scheduledAt?: string) => {
-    if (!canCompose) {
-      showToast('Viewer access can read mail but cannot send messages.', 'error');
-      return;
-    }
-    setComposeTo(toArg);
-    setComposeSubject(subjectArg);
-    setComposeBody(bodyArg);
+  const handleSendEmail = async () => {
+    if (!composeTo || !composeSubject) { showToast('Recipient and subject required', 'error'); return; }
     setSending(true);
-    const domain = domainsList.find(d => d.id === activeDomain)?.domain || user?.businessDomain;
-    if (!domain) {
-      setSending(false);
-      showToast('Select and verify a business domain first.', 'error');
-      return;
-    }
+    try { await mail.send(activeDomainName, { to: composeTo, subject: composeSubject, body: composeBody, from: selectedFromAddress || undefined }); showToast('Email sent'); setComposeOpen(false); }
+    catch { showToast('Failed to send', 'error'); }
+    finally { setSending(false); }
+  };
 
-    // Process attachments to base64
-    let processedAttachments: { filename: string, content: string, contentType: string }[] | undefined = undefined;
-    if (attachmentsArg && attachmentsArg.length > 0) {
-      processedAttachments = await Promise.all(attachmentsArg.map(async (file) => {
-        return new Promise<{ filename: string, content: string, contentType: string }>((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = () => {
-            const result = reader.result as string;
-            const base64Content = result.split(',')[1];
-            resolve({
-              filename: file.name,
-              content: base64Content,
-              contentType: file.type || 'application/octet-stream'
-            });
-          };
-          reader.onerror = reject;
-          reader.readAsDataURL(file);
-        });
-      }));
-    }
-
-    const toAddresses = toArg.split(',').map(s => s.trim()).filter(Boolean);
+  const handleBuyPlan = async (planId: string) => {
+    if (planId === 'free') { showToast('Free plan activated'); return; }
+    setLoadingPayment(planId);
     try {
-      await mail.sendBusiness(domain, toAddresses, subjectArg, bodyArg, selectedFromAddress, processedAttachments, scheduledAt);
-      showToast(scheduledAt ? `Business email scheduled for ${new Date(scheduledAt).toLocaleString()}` : `Business email dispatched via ${domain}`);
-      setComposeOpen(false);
-      setComposeTo('');
-      setComposeSubject('');
-      setComposeBody('');
-      setAuditLog(businessAudit.getAll());
-      setMailQueue(businessQueue.getAll(domain));
-      refetchEmails();
-    } catch (error) {
-      showToast(error instanceof Error ? error.message : 'Business email send failed', 'error');
-      setMailQueue(businessQueue.getAll(domain));
-    } finally {
-      setSending(false);
-    }
-  };
-
-  const handleReply = () => {
-    if (!selectedEmail) return;
-    if (!canCompose) {
-      showToast('Viewer access cannot reply to messages.', 'error');
-      return;
-    }
-    setComposeOpen(true);
-    setComposeTo(selectedEmail.from);
-    setComposeSubject(`Re: ${selectedEmail.subject.replace(/^Re:\s*/i, '')}`);
-    setComposeBody(buildReplyQuote(selectedEmail));
-  };
-
-  const handleForward = () => {
-    if (!selectedEmail) return;
-    if (!canCompose) {
-      showToast('Viewer access cannot forward messages.', 'error');
-      return;
-    }
-    setComposeOpen(true);
-    setComposeTo('');
-    setComposeSubject(`Fwd: ${selectedEmail.subject.replace(/^Fwd:\s*/i, '')}`);
-    setComposeBody(`\n\n--- Forwarded Message ---\nFrom: ${selectedEmail.from}\nDate: ${new Date(selectedEmail.date).toLocaleString()}\nSubject: ${selectedEmail.subject}\n\n${selectedEmail.body}`);
-  };
-
-  const handleArchive = (id?: string) => {
-    const emailId = id || selectedEmail?.id;
-    if (!emailId) return;
-    mail.archive(emailId);
-    refetchEmails();
-    setSelectedEmail(null);
-    showToast('Email archived');
-  };
-
-  const handleDeleteEmail = (id?: string) => {
-    const emailId = id || selectedEmail?.id;
-    if (!emailId) return;
-    mail.delete(emailId);
-    refetchEmails();
-    setSelectedEmail(null);
-    showToast('Email moved to trash');
-  };
-
-  const handleMoveToInbox = (id?: string) => {
-    const emailId = id || selectedEmail?.id;
-    if (!emailId) return;
-    mail.moveFolder(emailId, 'inbox');
-    refetchEmails();
-    setSelectedEmail(null);
-    showToast('Email restored to inbox');
-  };
-
-  const handleMarkSpam = (id?: string) => {
-    const emailId = id || selectedEmail?.id;
-    if (!emailId) return;
-    mail.moveFolder(emailId, 'spam');
-    refetchEmails();
-    setSelectedEmail(null);
-    showToast('Email moved to spam');
-  };
-
-  const handleMarkSafe = (id?: string) => {
-    const emailId = id || selectedEmail?.id;
-    if (!emailId) return;
-    mail.markSafe(emailId);
-    refetchEmails();
-    setSelectedEmail(null);
-    showToast('Message marked safe and moved to Inbox');
-  };
-
-  const handleTogglePriority = (id?: string) => {
-    const emailId = id || selectedEmail?.id;
-    if (!emailId) return;
-    const isPriority = mail.togglePriority(emailId);
-    refetchEmails();
-    showToast(isPriority ? 'Marked as priority' : 'Priority removed');
-  };
-
-  const handleInviteMember = async (email: string, name: string, role: 'admin' | 'member' | 'viewer') => {
-    if (!user || !canManageWorkspace) {
-      showToast('Only admins can invite team members.', 'error');
-      return false;
-    }
-    let invite: TeamAccessInvite;
-    try {
-      invite = await teamAccess.createInvite({
-        issuer: user,
-        email,
-        name,
-        role,
-        expiresInHours: inviteExpiresHours,
+      const Razorpay = await loadRazorpayCheckout();
+      if (!Razorpay) { showToast('Payment system unavailable', 'error'); setLoadingPayment(null); return; }
+      const PLANS = [
+        { id: 'free', name: 'Free', priceMonthly: 0, priceAnnual: 0, desc: '1 domain, 5 mailboxes', features: ['1 Custom Domain', '5 Mailboxes', 'Basic Queue', 'Community Support'] },
+        { id: 'starter', name: 'Starter', priceMonthly: 299, priceAnnual: 2999, desc: '3 domains, 25 mailboxes', features: ['3 Custom Domains', '25 Mailboxes', 'Queue Monitoring', 'Email Support', 'Basic Templates'] },
+        { id: 'business', name: 'Business', priceMonthly: 999, priceAnnual: 9999, desc: '10 domains, unlimited mailboxes', features: ['10 Custom Domains', 'Unlimited Mailboxes', 'Priority Queue', 'Advanced Templates', 'Team Access', 'Audit Logs', 'Priority Support'] },
+        { id: 'enterprise', name: 'Enterprise', priceMonthly: 2499, priceAnnual: 24999, desc: 'Unlimited domains & users', features: ['Unlimited Domains', 'Unlimited Mailboxes', 'Dedicated Queue', 'Custom Templates', 'Bulk Operations', 'SLA Guarantee', 'Phone Support', 'White Label'] },
+      ];
+      const plan = PLANS.find(p => p.id === planId);
+      if (!plan) { showToast('Plan not found', 'error'); setLoadingPayment(null); return; }
+      const amount = annual ? plan.priceAnnual : plan.priceMonthly;
+      const rzp = new Razorpay({
+        key: import.meta.env.VITE_RAZORPAY_KEY_ID || '', amount: amount * 100, currency: 'INR',
+        name: 'VelisMail', description: `${plan.name} - ${annual ? 'Annual' : 'Monthly'}`,
+        handler: () => { showToast(`${plan.name} plan activated`); setLoadingPayment(null); },
+        modal: { ondismiss: () => setLoadingPayment(null) },
       });
-    } catch (err) {
-      showToast(err instanceof Error ? err.message : 'Unable to generate team access key.', 'error');
-      return false;
-    }
-    const newMember: BusinessTeamMember = {
-      id: invite.id,
-      name,
-      email: invite.email,
-      role,
-      status: 'pending',
-      inviteToken: invite.token,
-      inviteExpiresAt: invite.expiresAt,
-      addedAt: new Date().toISOString(),
-      lastActive: new Date().toISOString(),
-    };
-    const next = [...teamMembers, newMember];
-    setTeamMembers(next);
-    businessTeam.save(next);
-    businessAudit.add({
-      action: 'Invited team member',
-      actor: user?.email || 'current user',
-      target: invite.email,
-      severity: 'info',
-    });
-    setAuditLog(businessAudit.getAll());
-    setIssuedInvite(invite);
-    navigator.clipboard.writeText(invite.token).catch(() => undefined);
-    showToast(`Access key generated for ${invite.email}`);
-    return true;
+      rzp.on('payment.failed', () => { showToast('Payment failed', 'error'); setLoadingPayment(null); });
+      rzp.open();
+    } catch { showToast('Payment error', 'error'); setLoadingPayment(null); }
   };
 
-  const handleInviteSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!inviteEmail.trim()) {
-      showToast('Member email is required.', 'error');
-      return;
-    }
-    const invited = await handleInviteMember(inviteEmail.trim(), inviteName.trim() || inviteEmail.split('@')[0], inviteRole);
-    if (!invited) return;
-    setInviteOpen(false);
-    setInviteName('');
-    setInviteEmail('');
-    setInviteRole('member');
-    setInviteExpiresHours(24);
+  const handleReply = (email: Email) => {
+    const replyBody = buildReplyQuote(email);
+    const replySubject = email.subject?.startsWith('Re:') ? email.subject : `Re: ${email.subject}`;
+    openComposeWith(email.from, replySubject, replyBody);
   };
 
-  const handleRemoveMember = (id: string) => {
-    if (!canManageWorkspace) {
-      showToast('Only admins can remove team members.', 'error');
-      return;
-    }
-    const member = teamMembers.find((entry) => entry.id === id);
-    setConfirmAction({
-      title: 'Remove Team Member',
-      message: `Are you sure you want to remove ${member?.email || 'this member'} from the workspace? They will immediately lose all access.`,
-      onConfirm: () => {
-        const next = teamMembers.filter(m => m.id !== id);
-        setTeamMembers(next);
-        businessTeam.save(next);
-        if (member) {
-          if (member.inviteToken) {
-            void teamAccess.revoke(member.inviteToken);
-          }
-          businessAudit.add({
-            action: 'Removed team member',
-            actor: user?.email || 'current user',
-            target: member.email,
-            severity: 'warn',
-          });
-          setAuditLog(businessAudit.getAll());
-        }
-        showToast('Team member removed');
-      },
-    });
+  const handleForward = (email: Email) => {
+    const fwdBody = `\n\n---------- Forwarded message ----------\nFrom: ${email.fromName || email.from}\nDate: ${new Date(email.date).toLocaleString()}\nSubject: ${email.subject || ''}\n\n${email.body}`;
+    openComposeWith('', `Fwd: ${email.subject || ''}`, fwdBody);
   };
 
-  const applyMemberRoleChange = (id: string, role: 'admin' | 'member' | 'viewer') => {
-    if (!canManageWorkspace) {
-      showToast('Only admins can update team roles.', 'error');
-      return;
-    }
-    const next = teamMembers.map(m => m.id === id ? { ...m, role } : m);
-    setTeamMembers(next);
-    businessTeam.save(next);
-    const member = next.find((entry) => entry.id === id);
-    if (member) {
-      businessAudit.add({
-        action: 'Updated member role',
-        actor: user?.email || 'current user',
-        target: `${member.email} → ${role}`,
-        severity: 'info',
-      });
-      setAuditLog(businessAudit.getAll());
-    }
-    showToast('Member role updated');
+  const handleVerifyDomain = async (domainId: string) => {
+    setVerifyingDomainId(domainId);
+    const dom = domainsList.find(d => d.id === domainId);
+    if (!dom) return;
+    const providerRecords = normalizeProviderDnsRecords(providerEndpointForRequest(activeDomainName));
+    setDomainVerifyProviderRecords(providerRecords);
+    const checks = await domains.verify(domainId);
+    const steps: DomainHealth[] = [
+      { key: 'mx', label: 'MX Record', status: checks.mxVerified ? 'verified' : 'failed', detail: checks.mxVerified ? 'Mail exchange configured' : 'No MX record found', lastCheck: new Date().toISOString() },
+      { key: 'spf', label: 'SPF Record', status: checks.spfVerified ? 'verified' : 'failed', detail: checks.spfVerified ? 'Sender policy published' : 'SPF record missing', lastCheck: new Date().toISOString() },
+      { key: 'dkim', label: 'DKIM Signature', status: checks.dkimVerified ? 'verified' : 'failed', detail: checks.dkimVerified ? 'DKIM key active' : 'DKIM not configured', lastCheck: new Date().toISOString() },
+      { key: 'dmarc', label: 'DMARC Policy', status: checks.dmarcVerified ? 'verified' : 'pending', detail: checks.dmarcVerified ? 'DMARC policy published' : 'DMARC not required', lastCheck: new Date().toISOString() },
+    ];
+    setDomainVerifySteps(steps);
+    setDomainVerifyOpen(true);
+    setVerifyingDomainId('');
+    refreshDomains();
   };
 
-  const handleUpdateMemberRole = (id: string, role: 'admin' | 'member' | 'viewer') => {
-    const member = teamMembers.find((entry) => entry.id === id);
-    if (!member || member.role === role) return;
-    setPendingRoleChange({ id, role, step: 1 });
+  const handleAddDomain = async () => {
+    if (!newDomainInput.trim()) return;
+    try { await domains.register(newDomainInput.trim()); setNewDomainInput(''); setShowAddDomain(false); refreshDomains(); }
+    catch { showToast('Failed to add domain', 'error'); }
   };
 
   const confirmRoleChangeStep = () => {
     if (!pendingRoleChange) return;
-    if (pendingRoleChange.step === 1) {
-      setPendingRoleChange({ ...pendingRoleChange, step: 2 });
-      return;
-    }
-    applyMemberRoleChange(pendingRoleChange.id, pendingRoleChange.role);
-    setPendingRoleChange(null);
+    if (pendingRoleChange.step === 1) { setPendingRoleChange({ ...pendingRoleChange, step: 2 }); return; }
+    businessTeam.updateRole(pendingRoleChange.id, pendingRoleChange.role as 'admin' | 'member' | 'viewer');
+    refreshTeam(); setPendingRoleChange(null); showToast('Role updated');
   };
 
-  const refreshQueue = () => {
-    setMailQueue(businessQueue.getAll(activeDomainName));
-  };
-
-  useEffect(() => {
-    if (!activeDomainName) return;
-    let cancelled = false;
-    const runDueScheduledMail = async () => {
-      const delivered = await mail.dispatchScheduledDue(activeDomainName);
-      if (!cancelled && delivered > 0) {
-        setMailQueue(businessQueue.getAll(activeDomainName));
-        refetchEmails();
-        setAuditLog(businessAudit.getAll());
-        showToast(`${delivered} scheduled email${delivered === 1 ? '' : 's'} delivered`);
-      }
-    };
-    void runDueScheduledMail();
-    const timer = window.setInterval(runDueScheduledMail, 60000);
-    return () => {
-      cancelled = true;
-      window.clearInterval(timer);
-    };
-  }, [activeDomainName, refetchEmails]);
-
-  const handleRetryQueueItem = async (id: string) => {
-    if (!canCompose) {
-      showToast('Viewer access cannot retry deliveries.', 'error');
-      return;
-    }
-    const item = mailQueue.find((entry) => entry.id === id);
-    if (!item || !item.domain || !item.body) {
-      showToast('Queue item is missing delivery details.', 'error');
-      return;
-    }
-    businessQueue.mark(id, { status: 'sending', error: undefined });
-    refreshQueue();
+  const handleBulkAction = async (action: string) => {
+    const ids = [...selectedEmails];
+    if (!ids.length) return;
     try {
-      await mail.sendBusiness(item.domain, item.recipients || item.to.split(','), item.subject, item.body, item.fromAddress);
-      businessQueue.mark(id, { status: 'sent', error: undefined });
-      showToast('Queued message delivered');
-    } catch (error) {
-      const retryCount = item.retryCount + 1;
-      businessQueue.mark(id, {
-        status: retryCount >= 3 ? 'failed' : 'deferred',
-        retryCount,
-        error: error instanceof Error ? error.message : 'Retry failed',
-      });
-      showToast('Retry failed. Message kept in queue.', 'error');
-    } finally {
-      refreshQueue();
-      setAuditLog(businessAudit.getAll());
-    }
+      if (action === 'archive') { await Promise.all(ids.map(id => mail.archive(activeDomainName, id))); showToast('Archived'); }
+      else if (action === 'trash') { await Promise.all(ids.map(id => mail.trash(activeDomainName, id))); showToast('Trashed'); }
+      else if (action === 'star') { await Promise.all(ids.map(id => mail.toggleStar(activeDomainName, id))); showToast('Starred'); }
+      else if (action === 'read') { await Promise.all(ids.map(id => mail.markRead(activeDomainName, id))); showToast('Marked read'); }
+      else if (action === 'unread') { await Promise.all(ids.map(id => mail.markUnread(activeDomainName, id))); showToast('Marked unread'); }
+      refetch(); setSelectedEmails(new Set());
+    } catch { showToast('Action failed', 'error'); }
   };
 
-  const handlePauseQueueItem = (id: string) => {
-    if (!canManageWorkspace) {
-      showToast('Only admins can pause queued messages.', 'error');
-      return;
-    }
-    businessQueue.mark(id, { status: 'deferred', error: 'Paused by workspace admin.' });
-    refreshQueue();
-    showToast('Message paused');
-  };
-
-  const handleDeleteQueueItem = (id: string) => {
-    if (!canManageWorkspace) {
-      showToast('Only admins can delete queued messages.', 'error');
-      return;
-    }
-    setConfirmAction({
-      title: 'Delete Queued Message',
-      message: 'This message will be removed from the queue and will not be sent. Are you sure?',
-      onConfirm: () => {
-        businessQueue.remove(id);
-        refreshQueue();
-        showToast('Message deleted from queue');
-      },
-    });
-  };
-
-  const handleRunScheduledQueue = async () => {
-    if (!canCompose) {
-      showToast('Viewer access cannot dispatch scheduled mail.', 'error');
-      return;
-    }
-    const delivered = await mail.dispatchScheduledDue(activeDomainName);
-    refreshQueue();
-    refetchEmails();
-    setAuditLog(businessAudit.getAll());
-    showToast(delivered > 0 ? `${delivered} scheduled email${delivered === 1 ? '' : 's'} delivered` : 'No scheduled emails are due yet');
-  };
-
-  const handleCreateTemplate = () => {
-    if (!canManageTemplates) {
-      showToast('Your role cannot create templates.', 'error');
-      return;
-    }
-    setTemplateName('');
-    setTemplateSubject('');
-    setTemplateBody('');
-    setTemplateEditorOpen(true);
-  };
-
-  const handleTemplateSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!canManageTemplates) {
-      showToast('Your role cannot create templates.', 'error');
-      return;
-    }
-    if (!templateName.trim()) {
-      showToast('Template name is required.', 'error');
-      return;
-    }
-    const newTemplate: BusinessTemplate = {
-      id: crypto.randomUUID(),
-      name: templateName.trim(),
-      subject: templateSubject.trim(),
-      body: templateBody.trim(),
-      usageCount: 0,
-    };
-    const next = [...templates, newTemplate];
-    setTemplates(next);
-    businessTemplates.save(next);
-    businessAudit.add({
-      action: 'Created template',
-      actor: user?.email || 'current user',
-      target: newTemplate.name,
-      severity: 'info',
-    });
-    setAuditLog(businessAudit.getAll());
-    setTemplateEditorOpen(false);
-    showToast(`Template "${newTemplate.name}" created`);
-  };
-
-  const handleUseTemplate = (template: BusinessTemplate) => {
-    if (!canCompose) {
-      showToast('Viewer access cannot compose from templates.', 'error');
-      return;
-    }
-    setComposeOpen(true);
-    setComposeSubject(template.subject);
-    setComposeBody(template.body.replace(/\{\{name\}\}/g, ''));
-    const next = templates.map((entry) => (
-      entry.id === template.id
-        ? { ...entry, usageCount: entry.usageCount + 1, lastUsed: new Date().toISOString() }
-        : entry
-    ));
-    setTemplates(next);
-    businessTemplates.save(next);
-    showToast(`Template "${template.name}" loaded`);
-  };
-
-  const handleDeleteTemplate = (id: string) => {
-    if (!canManageTemplates) {
-      showToast('Your role cannot delete templates.', 'error');
-      return;
-    }
-    const template = templates.find((entry) => entry.id === id);
-    setConfirmAction({
-      title: 'Delete Template',
-      message: `Are you sure you want to delete the template "${template?.name || ''}"? This action cannot be undone.`,
-      onConfirm: () => {
-        const next = templates.filter(t => t.id !== id);
-        setTemplates(next);
-        businessTemplates.save(next);
-        if (template) {
-          businessAudit.add({
-            action: 'Deleted template',
-            actor: user?.email || 'current user',
-            target: template.name,
-            severity: 'warn',
-          });
-          setAuditLog(businessAudit.getAll());
-        }
-        showToast('Template deleted');
-      },
-    });
-  };
-
-  const refreshConnectionUsage = () => {
-    setConnectionUsage(connections.getUsage());
-  };
-
-  const handleCreateMailbox = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!canManageWorkspace) {
-      showToast('Only admins can create mailboxes.', 'error');
-      return;
-    }
-    if (!mailboxLocalPart.trim()) {
-      showToast('Please enter a mailbox address (local part).', 'error');
-      return;
-    }
-    if (!activeDomainName) {
-      showToast('Select a business domain first.', 'error');
-      return;
-    }
-    try {
-      const created = businessMailboxes.create(activeDomainName, {
-        localPart: mailboxLocalPart,
-        displayName: mailboxDisplayName,
-        kind: mailboxKind,
-      });
-      const next = businessMailboxes.getByDomain(activeDomainName);
-      // Deduplicate by address
-      const uniqueNext = Array.from(new Map(next.map(m => [m.address, m])).values());
-      setDomainMailboxes(uniqueNext);
-      setMailboxLocalPart('');
-      setMailboxDisplayName('');
-      setMailboxKind('mailbox');
-      businessAudit.add({
-        action: 'Created business mailbox',
-        actor: user?.email || 'current user',
-        target: created.address,
-        severity: 'info',
-      });
-      setAuditLog(businessAudit.getAll());
-      showToast(`Mailbox ${created.address} created`);
-    } catch (error) {
-      showToast(error instanceof Error ? error.message : 'Mailbox create failed', 'error');
-    }
-  };
-
-  const handleCreateGroup = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!canManageWorkspace) {
-      showToast('Only admins can create groups.', 'error');
-      return;
-    }
-    if (!activeDomainName) {
-      showToast('Select a business domain first.', 'error');
-      return;
-    }
-    try {
-      const created = businessGroups.create(activeDomainName, {
-        name: groupName,
-        localPart: groupLocalPart,
-        members: groupMembers.split(',').map((entry) => entry.trim()).filter(Boolean),
-      });
-      setDomainGroups(businessGroups.getByDomain(activeDomainName));
-      setGroupName('');
-      setGroupLocalPart('');
-      setGroupMembers('');
-      businessAudit.add({
-        action: 'Created business group',
-        actor: user?.email || 'current user',
-        target: created.address,
-        severity: 'info',
-      });
-      setAuditLog(businessAudit.getAll());
-      showToast(`Group ${created.address} created`);
-    } catch (error) {
-      showToast(error instanceof Error ? error.message : 'Group create failed', 'error');
-    }
-  };
-
-  const handleRunDomainVerification = async (domainId: string) => {
-    if (!canManageWorkspace) {
-      showToast('Only admins can verify domains.', 'error');
-      return;
-    }
-    const selectedDomain = domains.getById(domainId);
-    if (!selectedDomain || !user?.businessDbUrl || !user.businessApiKey || !user.businessMailProvider) {
-      showToast('Domain, database, or provider configuration is incomplete.', 'error');
-      return;
-    }
-
-    setVerifyingDomainId(domainId);
-    setDomainVerifyOpen(true);
-    setDomainVerifyProviderRecords([]);
-    setDomainVerifySteps([
-      { label: 'Starting verification', detail: selectedDomain.domain, status: 'pending' },
-    ]);
-
-    try {
-      const result = await fetchApiJsonDetailed<{
-        success: boolean;
-        message: string;
-        checks?: Array<{ label: string; actual?: string; expected: string; status: 'verified' | 'failed' }>;
-        runtimeChecks?: DomainVerifyRuntimeCheck[];
-        providerRecords?: ProviderDnsRecord[];
-      }>('/tenants/verify-domain', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          domain: selectedDomain.domain,
-          verificationToken: selectedDomain.verificationToken,
-          dbUrl: user.businessDbUrl,
-          apiKey: user.businessApiKey,
-          provider: user.businessMailProvider,
-          providerEndpoint: providerEndpointForRequest(user.businessMailProvider, user.businessMailProviderEndpoint),
-          webhookSecret: user.businessMailProvider === 'resend' ? user.businessMailWebhookSecret : undefined,
-        }),
-      });
-
-      const dnsSteps = Array.isArray(result.data?.checks)
-        ? result.data!.checks!.map((check) => ({
-            label: check.label,
-            detail: check.actual || check.expected,
-            status: check.status,
-          }))
-        : [];
-      const runtimeSteps = Array.isArray(result.data?.runtimeChecks)
-        ? result.data!.runtimeChecks!.map((check) => ({
-            label: check.label,
-            detail: check.detail,
-            status: check.status,
-            recommendation: check.recommendation,
-          }))
-        : [];
-
-      const providerRecords = Array.isArray(result.data?.providerRecords) ? result.data!.providerRecords! : [];
-      setDomainVerifySteps([...dnsSteps, ...runtimeSteps]);
-      setDomainVerifyProviderRecords(providerRecords);
-      const mergedRecords = mergeDnsRecords(selectedDomain.dnsRecords, normalizeProviderDnsRecords(providerRecords, selectedDomain.domain));
-      domains.updateDnsRecords(domainId, mergedRecords);
-      setDomainsList(domains.getAll().map(toDomainRecord));
-
-      if (!result.ok || !result.data?.success) {
-        throw new Error(result.data?.message || `Verification failed with status ${result.status}.`);
-      }
-
-      domains.runVerification(domainId, result.data.checks);
-      domains.setPrimary(domainId);
-      setDomainsList(domains.getAll().map(toDomainRecord));
-      businessAudit.add({
-        action: 'Verified domain',
-        actor: user.email,
-        target: selectedDomain.domain,
-        severity: 'info',
-      });
-      setAuditLog(businessAudit.getAll());
-      showToast(`Domain ${selectedDomain.domain} verified`);
-    } catch (error) {
-      showToast(error instanceof Error ? error.message : 'Domain verification failed', 'error');
-    } finally {
-      setVerifyingDomainId('');
-    }
-  };
-
-  const unreadCount = activeDomainName ? mail.getBusinessUnreadCount(activeDomainName) : 0;
-  const priorityCount = activeDomainName
-    ? mail.getBusinessByFolderSync(activeDomainName, 'inbox').filter(e => e.labels?.includes('priority')).length
-    : 0;
-
-  const toggleEmailSelection = (id: string) => {
-    setSelectedEmails(prev => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id); else next.add(id);
-      return next;
-    });
-  };
-
-  const handleBulkAction = () => {
-    if (!bulkAction || selectedEmails.size === 0) return;
-    selectedEmails.forEach((emailId: string) => {
-      if (bulkAction === 'delete') mail.delete(emailId);
-      else if (bulkAction === 'archive') mail.archive(emailId);
-      else if (bulkAction === 'read') mail.markRead(emailId);
-      else if (bulkAction === 'unread') mail.markUnread(emailId);
-      else if (bulkAction === 'unarchive') mail.moveFolder(emailId, 'inbox');
-      else if (bulkAction === 'spam') mail.moveFolder(emailId, 'spam');
-      else if (bulkAction === 'safe') mail.markSafe(emailId);
-      else if (bulkAction === 'priority') mail.togglePriority(emailId);
-      else if (bulkAction === 'star') mail.toggleStar(emailId);
-    });
-    refetchEmails();
-    showToast(`Bulk action "${bulkAction}" applied to ${selectedEmails.size} emails`);
-    setSelectedEmails(new Set());
-    setBulkAction('');
-  };
-
-  const handleAddDomain = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!canManageWorkspace) {
-      showToast('Only admins can add domains.', 'error');
-      return;
-    }
-    if (!newDomainInput.trim()) return;
-    setAddingDomain(true);
-    const created = domains.addDomain(newDomainInput);
-    const record = toDomainRecord(created);
-    setDomainsList(prev => prev.some(d => d.id === record.id) ? prev : [...prev, record]);
-    setActiveDomain(record.id);
-    setActiveBizTab('domains');
-    setAuditLog(prev => [{
-      id: crypto.randomUUID(),
-      action: 'Domain added',
-      actor: user?.email || 'current user',
-      target: record.domain,
-      timestamp: new Date().toISOString(),
-      severity: 'info',
-    }, ...prev]);
-    setAddingDomain(false);
-    setNewDomainInput('');
-    setShowAddDomain(false);
-    showToast(`Domain ${record.domain} added. Complete DNS verification before using it.`);
-  };
-
-  const copyToClipboard = async (text: string, fieldId?: string) => {
-    try {
-      await navigator.clipboard.writeText(text);
-      if (fieldId) setCopiedField(fieldId);
-      showToast('Copied to clipboard');
-    } catch {
-      showToast('Failed to copy', 'error');
-    }
-  };
-
-  const toggleTheme = () => {
-    const next = themeMode === 'dark' ? 'light' : 'dark';
-    document.documentElement.setAttribute('data-theme', next);
-    localStorage.setItem('velismail_theme', next);
-    setThemeMode(next);
-  };
+  useEffect(() => { refetch(); }, [activeFolder, activeDomainName]);
 
   if (!user) return <Navigate to="/login" replace />;
   if (!isBusinessSetupReady(user)) return <Navigate to="/business-setup" replace />;
-  if (storedDomainRecords.length === 0) return <Navigate to="/business-setup" replace />;
-
-  const businessMailbox = user.businessMailboxAddress || (activeDomainName ? `admin@${activeDomainName}` : user.email);
 
   return (
-    <div className="biz-dash animate-page">
-      <div className={`dash-sidebar-overlay ${sidebarOpen ? 'open' : ''}`} onClick={() => setSidebarOpen(false)}></div>
-      {/* Sidebar */}
-      <aside className={`biz-sidebar glass ${sidebarOpen ? 'open' : ''}`}>
-        <div className="sidebar-top">
-          <div className="dash-brand" onClick={() => navigate('/')}>
-            <img src="/ZeeResizer.png" alt="VelisMail" style={{ height: '20px', width: 'auto' }} />
-            <div className="dash-brand-info">
-              <span className="dash-brand-name">VelisMail</span>
-              <span className="badge badge-accent dash-brand-sub" style={{ fontSize: '0.65rem', padding: '2px 6px' }}>Business</span>
-            </div>
-          </div>
+    <div className="biz-dashboard">
+      <Sidebar
+        activeBizTab={activeBizTab} setActiveBizTab={setActiveBizTab}
+        activeFolder={activeFolder} setActiveFolder={setActiveFolder}
+        onCompose={() => openComposeWith()} onAddDomain={() => setShowAddDomain(true)}
+        user={user} themeMode={themeMode} toggleTheme={toggleTheme}
+        onLogout={() => setShowLogoutConfirm(true)} sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen}
+        hasRoleAccess={hasRoleAccess} canAccessPlatformAdmin={canAccessPlatformAdmin}
+        onShowDomain={() => { setActiveBizTab('domains'); setSidebarOpen(false); }}
+      />
 
-          <button className="btn btn-primary compose-btn" onClick={() => canCompose ? setComposeOpen(true) : showToast('Viewer access cannot compose messages.', 'error')} disabled={!canCompose}>
-            <Plus size={18} /> <span>Compose</span>
-          </button>
-
-          <nav className="sidebar-folders">
-            {canManageWorkspace && (
-              <>
-                <div className="sidebar-section-title">Management</div>
-                <button className="folder-btn add-domain-shortcut" onClick={() => { setActiveBizTab('domains'); setShowAddDomain(true); setSidebarOpen(false); }}>
-                  <Plus size={17} />
-                  <span className="folder-label">Add Domain</span>
-                </button>
-              </>
-            )}
-            {/* Mail & Communications */}
-            <div className="sidebar-section-title">Mail & Communications</div>
-            <button className={`folder-btn ${activeBizTab === 'mail' && !activeFolder ? 'active' : ''}`} onClick={() => { setActiveBizTab('mail'); setSidebarOpen(false); }}>
-              <Mail size={17} />
-              <span className="folder-label">Mailbox</span>
-            </button>
-            
-            {activeBizTab === 'mail' && (
-              <div style={{ marginLeft: '16px', marginBottom: '8px', borderLeft: '1px solid var(--border-primary)', paddingLeft: '8px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                {BIZ_FOLDERS.map(f => {
-                  const Icon = f.icon;
-                  const count = f.id === 'inbox' ? unreadCount : f.id === 'priority' ? priorityCount : 0;
-                  return (
-                    <button key={f.id}
-                      className={`folder-btn ${activeFolder === f.id ? 'active' : ''}`}
-                      onClick={() => { setActiveFolder(f.id); setSelectedEmail(null); setSidebarOpen(false); }}
-                      style={{ padding: '4px 8px', fontSize: '0.8rem', minHeight: '30px' }}
-                    >
-                      <Icon size={15} />
-                      <span className="folder-label">{f.label}</span>
-                      {count > 0 && <span className="folder-count">{count}</span>}
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-            {hasRoleAccess(currentRole, 'templates') && (
-              <button className={`folder-btn ${activeBizTab === 'templates' ? 'active' : ''}`} onClick={() => { setActiveBizTab('templates'); setSidebarOpen(false); }}>
-                <Layers size={17} />
-                <span className="folder-label">Templates</span>
-              </button>
-            )}
-            {hasRoleAccess(currentRole, 'queue') && (
-              <button className={`folder-btn ${activeBizTab === 'queue' ? 'active' : ''}`} onClick={() => { setActiveBizTab('queue'); setSidebarOpen(false); }}>
-                <Server size={17} />
-                <span className="folder-label">Mail Queue</span>
-                {mailQueue.filter(q => q.status === 'queued' || q.status === 'sending').length > 0 && (
-                  <span className="folder-count">{mailQueue.filter(q => q.status === 'queued' || q.status === 'sending').length}</span>
-                )}
-              </button>
-            )}
-
-            {(canManageWorkspace || hasRoleAccess(currentRole, 'team')) && (
-              <div className="sidebar-section-title" style={{ marginTop: '16px' }}>Organization</div>
-            )}
-            {canManageWorkspace && (
-              <>
-                <button className={`folder-btn ${activeBizTab === 'domains' ? 'active' : ''}`} onClick={() => { setActiveBizTab('domains'); setSidebarOpen(false); }}>
-                  <Globe size={17} />
-                  <span className="folder-label">Domains</span>
-                </button>
-                <button className={`folder-btn ${activeBizTab === 'mailboxes' ? 'active' : ''}`} onClick={() => { setActiveBizTab('mailboxes'); setSidebarOpen(false); }}>
-                  <Inbox size={17} />
-                  <span className="folder-label">Business Mailboxes</span>
-                </button>
-                <button className={`folder-btn ${activeBizTab === 'groups' ? 'active' : ''}`} onClick={() => { setActiveBizTab('groups'); setSidebarOpen(false); }}>
-                  <Users size={17} />
-                  <span className="folder-label">Groups</span>
-                </button>
-              </>
-            )}
-            {hasRoleAccess(currentRole, 'team') && (
-              <button className={`folder-btn ${activeBizTab === 'team' ? 'active' : ''}`} onClick={() => { setActiveBizTab('team'); setSidebarOpen(false); }}>
-                <Shield size={17} />
-                <span className="folder-label">Team Access</span>
-              </button>
-            )}
-
-            <div className="sidebar-section-title" style={{ marginTop: '16px' }}>Administration</div>
-            {hasRoleAccess(currentRole, 'analytics') && (
-              <button className={`folder-btn ${activeBizTab === 'analytics' ? 'active' : ''}`} onClick={() => { setActiveBizTab('analytics'); setSidebarOpen(false); }}>
-                <BarChart3 size={17} />
-                <span className="folder-label">Analytics</span>
-              </button>
-            )}
-            {canManageWorkspace && (
-              <>
-                <button className={`folder-btn ${activeBizTab === 'audit' ? 'active' : ''}`} onClick={() => { setActiveBizTab('audit'); setSidebarOpen(false); }}>
-                  <Activity size={17} />
-                  <span className="folder-label">Audit Log</span>
-                </button>
-                <button className={`folder-btn ${activeBizTab === 'settings' ? 'active' : ''}`} onClick={() => { setActiveBizTab('settings'); setSidebarOpen(false); }}>
-                  <Settings size={17} />
-                  <span className="folder-label">Settings</span>
-                </button>
-                <button className={`folder-btn ${activeBizTab === 'billing' ? 'active' : ''}`} onClick={() => { setActiveBizTab('billing'); setSidebarOpen(false); }}>
-                  <CreditCard size={17} />
-                  <span className="folder-label">Billing & Premium</span>
-                </button>
-                {canAccessPlatformAdmin && (
-                  <button className={`folder-btn ${activeBizTab === 'admin' ? 'active' : ''}`} onClick={() => { setActiveBizTab('admin'); setSidebarOpen(false); }}>
-                    <Crown size={17} />
-                    <span className="folder-label">Platform Admin</span>
-                  </button>
-                )}
-              </>
-            )}
-
-
-          </nav>
-        </div>
-
-        <div className="sidebar-bottom">
-          <div className="sidebar-user">
-            <div className="user-avatar biz-avatar">{user.displayName?.charAt(0) || 'A'}</div>
-            <div className="user-info">
-              <span className="user-name">{user.displayName}</span>
-              <span className="user-email">{businessMailbox}</span>
-            </div>
-          </div>
-          <div className="sidebar-actions">
-            <button className="btn btn-ghost btn-sm" onClick={() => navigate('/settings')} title="Settings">
-              <Settings size={16} />
-            </button>
-
-            <button className="btn btn-ghost btn-sm" onClick={toggleTheme} title="Toggle Theme">
-              {themeMode === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
-            </button>
-            <button className="btn btn-ghost btn-sm" onClick={() => setShowLogoutConfirm(true)} title="Log out"><LogOut size={16} /></button>
-          </div>
-        </div>
-      </aside>
-
-      {/* Main Content */}
-      <main className={`biz-main ${selectedEmail ? 'reader-open' : ''}`}>
-        {/* Mobile Global Header */}
-        <div className="mobile-dash-header">
-          <button aria-label="Open menu" className="btn btn-icon btn-ghost" onClick={() => setSidebarOpen(true)}>
-            <Menu size={20} />
-          </button>
-          <div className="mobile-brand" style={{ fontSize: '1.05rem' }}>
-            <span style={{ textTransform: 'capitalize' }}>
-              {activeBizTab === 'mail' 
-                ? (BIZ_FOLDERS.find(f => f.id === activeFolder)?.label || 'Mailbox') 
-                : activeBizTab.replace('-', ' ')}
-            </span>
-          </div>
-          <div style={{ marginLeft: 'auto', display: 'flex', gap: '8px' }}>
-            <button aria-label="Compose" className="btn btn-icon btn-ghost" onClick={() => canCompose ? setComposeOpen(true) : showToast('Viewer access cannot compose messages.', 'error')} title="Compose" disabled={!canCompose}>
-              <Plus size={20} />
-            </button>
-            <button aria-label="Analytics" className="btn btn-icon btn-ghost" onClick={() => setActiveBizTab('analytics')} title="Analytics">
-              <BarChart3 size={20} />
-            </button>
-          </div>
-        </div>
-
-        {/* ===== MAIL TAB ===== */}
+      <main className="dash-main">
         {activeBizTab === 'mail' && (
-          <>
-            {selectedEmail ? (
-              <div className="dash-reader glass">
-                <div className="reader-content animate-fade">
-                  <div className="reader-toolbar">
-                    <button className="btn btn-ghost btn-sm" onClick={() => setSelectedEmail(null)}>
-                      <ArrowLeft size={16} /> Back
-                    </button>
-                    <div className="reader-toolbar-actions" style={{ display: 'flex', gap: '8px' }}>
-                      <button aria-label="Reply" className="btn btn-ghost btn-icon" title="Reply" onClick={handleReply} style={{ width: '42px', height: '42px' }}><Reply size={22} /></button>
-                      <button aria-label="Forward" className="btn btn-ghost btn-icon" title="Forward" onClick={handleForward} style={{ width: '42px', height: '42px' }}><Forward size={22} /></button>
-                      <button aria-label="Print" className="btn btn-ghost btn-icon" title="Print" onClick={() => { window.print(); showToast('Preparing print view...'); }} style={{ width: '42px', height: '42px' }}><ExternalLink size={22} /></button>
-                      <button aria-label="Toggle Priority" className="btn btn-ghost btn-icon" title="Toggle Priority" onClick={() => handleTogglePriority()} style={{ width: '42px', height: '42px' }}><Zap size={22} /></button>
-                      {selectedEmail.folder === 'archive' || selectedEmail.folder === 'trash' || selectedEmail.folder === 'spam' ? (
-                        <button aria-label="Move to Inbox" className="btn btn-ghost btn-icon" title="Move to Inbox" onClick={() => handleMoveToInbox()} style={{ width: '42px', height: '42px' }}><Inbox size={22} /></button>
-                      ) : (
-                        <button aria-label="Archive" className="btn btn-ghost btn-icon" title="Archive" onClick={() => handleArchive()} style={{ width: '42px', height: '42px' }}><ArchiveIcon size={22} /></button>
-                      )}
-                      {selectedEmail.folder !== 'spam' && <button aria-label="Mark as Spam" className="btn btn-ghost btn-icon" title="Mark as Spam" onClick={() => handleMarkSpam()} style={{ width: '42px', height: '42px' }}><AlertCircle size={22} /></button>}
-                      {(selectedEmail.folder === 'spam' || isScamEmail(selectedEmail)) && (
-                        <button aria-label="Mark Safe" className="btn btn-ghost btn-icon" title="Mark Safe" onClick={() => handleMarkSafe()} style={{ width: '42px', height: '42px' }}><ShieldCheck size={22} /></button>
-                      )}
-                      {selectedEmail.folder !== 'trash' && (
-                        <button aria-label="Move to Trash" className="btn btn-danger btn-icon" title="Move to Trash" onClick={() => handleDeleteEmail()} style={{ width: '42px', height: '42px' }}><Trash size={22} /></button>
-                      )}
-                    </div>
-                  </div>
-                  <div className="reader-header">
-                    <h1 className="reader-subject">{selectedEmail.subject}</h1>
-                    {selectedEmail.labels.length > 0 && (
-                      <div className="reader-labels">
-                        {selectedEmail.labels.map(l => <span key={l} className="badge badge-primary">{l}</span>)}
-                      </div>
-                    )}
-                  </div>
-                  <div className="reader-meta">
-                    <div className="reader-sender-info">
-                      <div className="reader-avatar biz-reader-avatar">{(selectedEmail.fromName || selectedEmail.from).charAt(0)}</div>
-                      <div>
-                        <div className="reader-sender-name">{selectedEmail.fromName || selectedEmail.from}</div>
-                        <div className="reader-sender-email">{selectedEmail.from} -&gt; {selectedEmail.to?.join(', ')}</div>
-                        {selectedEmail.scheduledAt && (
-                          <div className="reader-schedule">
-                            <Clock size={13} /> Scheduled for {new Date(selectedEmail.scheduledAt).toLocaleString()}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                    <div className="reader-date">{new Date(selectedEmail.date).toLocaleString()}</div>
-                  </div>
-                  <div className="divider" />
-                  <div className="reader-body reader-conversation">
-                    {selectedConversation.map((segment, segmentIndex) => (
-                      <section
-                        key={`${segment.kind}-${segmentIndex}`}
-                        className={`reader-message ${segment.kind === 'quote' ? 'reader-message-quoted' : 'reader-message-current'}`}
-                      >
-                        {segment.kind === 'quote' && (
-                          <div className="reader-quote-label">{segment.header || 'Previous message'}</div>
-                        )}
-                        <div className="reader-message-lines">
-                          {segment.lines.map((line, lineIndex) => (
-                            line.trim()
-                              ? <p key={lineIndex}>{line}</p>
-                              : <div key={lineIndex} className="reader-line-gap" />
-                          ))}
-                        </div>
-                      </section>
-                    ))}
-                  </div>
-                  {selectedEmail.hasAttachment && (
-                    <div className="reader-attachment glass-card">
-                      <Paperclip size={16} />
-                      <span>1 Attachment</span>
-                      <button className="btn btn-ghost btn-sm"><Download size={14} /> Download</button>
-                    </div>
-                  )}
-                </div>
-              </div>
-            ) : (
-              <div className="dash-list glass">
-                <div className="list-header">
-                  <h2 className="list-title">
-                    <button aria-label="Open menu" className="btn btn-icon btn-ghost mobile-menu-btn" onClick={() => setSidebarOpen(true)}>
-                      <Menu size={20} />
-                    </button>
-                    {BIZ_FOLDERS.find(f => f.id === activeFolder)?.label || 'Inbox'}
-                    {unreadCount > 0 && <span className="badge badge-primary">{unreadCount}</span>}
-                  </h2>
-                  <div className="list-actions">
-                    <button aria-label="Refresh" className="btn btn-icon btn-ghost" title="Refresh" onClick={() => refetchEmails()}><RefreshCw size={16} /></button>
-                    <button aria-label="Toggle View" className="btn btn-icon btn-ghost" title={viewMode === 'list' ? 'Grid View' : 'List View'} onClick={() => setViewMode(v => v === 'list' ? 'grid' : 'list')}>
-                      {viewMode === 'list' ? <Grid size={16} /> : <List size={16} />}
-                    </button>
-                    <button aria-label="Sort" className="btn btn-icon btn-ghost" onClick={() => setSortOrder(o => o === 'desc' ? 'asc' : 'desc')} title={`Sort ${sortOrder === 'desc' ? 'Oldest' : 'Newest'}`}>
-                      {sortOrder === 'desc' ? <SortDesc size={16} /> : <SortAsc size={16} />}
-                    </button>
-                  </div>
-                </div>
-
-                <div className="list-search">
-                  <button
-                    className="btn btn-ghost btn-sm select-all-btn"
-                    onClick={() => {
-                      const allSelected = emails.length > 0 && emails.every(email => selectedEmails.has(email.id));
-                      setSelectedEmails(allSelected ? new Set() : new Set(emails.map(email => email.id)));
-                    }}
-                    disabled={emails.length === 0}
-                    title="Select all visible emails"
-                  >
-                    {emails.length > 0 && emails.every(email => selectedEmails.has(email.id)) ? <CheckSquare size={16} /> : <Square size={16} />}
-                    Select all
-                  </button>
-                  <Search size={16} />
-                  <input type="text" placeholder="Search sender, subject, body, labels..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} />
-                  <select className="input input-sm mail-filter-select" value={mailStatusFilter} onChange={e => setMailStatusFilter(e.target.value as typeof mailStatusFilter)}>
-                    <option value="all">All mail</option>
-                    <option value="unread">Unread</option>
-                    <option value="read">Read</option>
-                    <option value="starred">Starred</option>
-                    <option value="priority">Priority</option>
-                    <option value="attachments">Attachments</option>
-                  </select>
-                  {searchQuery && <button aria-label="Clear search" className="search-clear" onClick={() => setSearchQuery('')}><X size={14} /></button>}
-                </div>
-
-                {selectedEmails.size > 0 && (
-                  <div className="bulk-bar glass-card">
-                    <span>{selectedEmails.size} selected</span>
-                    <select className="input input-sm" value={bulkAction} onChange={e => setBulkAction(e.target.value)}>
-                      <option value="">Bulk Action</option>
-                      <option value="read">Mark as read</option>
-                      <option value="unread">Mark as unread</option>
-                      <option value="star">Toggle star</option>
-                      <option value="priority">Toggle priority</option>
-                      <option value="archive">Archive</option>
-                      <option value="unarchive">Move to inbox</option>
-                      <option value="spam">Mark as spam</option>
-                      <option value="safe">Mark safe</option>
-                      <option value="delete">Move to trash</option>
-                    </select>
-                    <button className="btn btn-primary btn-sm" onClick={handleBulkAction} disabled={!bulkAction}>Apply</button>
-                    <button className="btn btn-ghost btn-sm" onClick={() => setSelectedEmails(new Set())}>Clear</button>
-                  </div>
-                )}
-
-                <div className="mail-list">
-                  {emails.length === 0 ? (
-                    <div className="list-empty">
-                      <Mail size={32} opacity={0.2} />
-                      <p>No emails</p>
-                      <span className="list-empty-sub">Emails for {activeDomainName || 'your selected domain'} will appear here</span>
-                      {activeFolder === 'inbox' && (
-                        <span className="list-empty-sub">
-                          Inbound mail appears after MX routing and provider inbound delivery are connected to this workspace.
-                        </span>
-                      )}
-                    </div>
-                  ) : viewMode === 'list' ? (
-                    emails.map(email => (
-                      <div key={email.id}
-                        className={`mail-row ${email.unread ? 'unread' : ''}`}
-                        onClick={() => handleSelectEmail(email)}
-                      >
-                        <button className="select-btn" onClick={(e) => { e.stopPropagation(); toggleEmailSelection(email.id); }}>
-                          {selectedEmails.has(email.id) ? <CheckSquare size={16} /> : <Square size={16} />}
-                        </button>
-                        <button className={`star-btn ${email.starred ? 'starred' : ''}`} onClick={(e) => { e.stopPropagation(); mail.toggleStar(email.id); refetchEmails(); }}>
-                          <Star size={15} fill={email.starred ? '#facc15' : 'none'} color={email.starred ? '#facc15' : 'var(--text-muted)'} />
-                        </button>
-                        <div className="mail-row-body">
-                          <div className="mail-row-top">
-                            <span className="mail-sender">{email.fromName || email.from}</span>
-                            {isScamEmail(email) && <span className="badge badge-danger" style={{ marginLeft: 8 }}>Scam</span>}
-                            {email.scheduledAt && <span className="badge badge-warning" style={{ marginLeft: 8 }}>Scheduled {formatRelative(email.scheduledAt)}</span>}
-                            <span className="mail-date">{formatRelative(email.date)}</span>
-                          </div>
-                          <div className="mail-subject">{email.subject}</div>
-                          <div className="mail-preview">{getEmailPreview(email.body, 82)}</div>
-                          {email.labels.length > 0 && (
-                            <div className="mail-labels">
-                              {email.labels.map(l => <span key={l} className="badge badge-sm">{l}</span>)}
-                            </div>
-                          )}
-                        </div>
-                        {email.hasAttachment && <Paperclip size={14} className="attach-icon" />}
-                      </div>
-                    ))
-                  ) : (
-                    <div className="mail-grid">
-                      {emails.map(email => (
-                        <div key={email.id}
-                          className={`mail-card ${email.unread ? 'unread' : ''}`}
-                          onClick={() => handleSelectEmail(email)}
-                        >
-                          <div className="mail-card-header">
-                            <div className="reader-avatar biz-reader-avatar" style={{ width: 32, height: 32, fontSize: '0.8rem' }}>
-                              {(email.fromName || email.from).charAt(0)}
-                            </div>
-                            <div className="mail-card-info">
-                              <div className="mail-sender" style={{ fontWeight: email.unread ? 700 : 500 }}>{email.fromName || email.from}</div>
-                              <div className="mail-date" style={{ fontSize: '0.7rem' }}>{formatRelative(email.date)}</div>
-                            </div>
-                            {email.starred && <Star size={14} fill="#facc15" color="#facc15" />}
-                          </div>
-                          {email.scheduledAt && <span className="badge badge-warning">Scheduled {formatRelative(email.scheduledAt)}</span>}
-                          <div className="mail-card-subject">{email.subject}</div>
-                          <div className="mail-card-preview">{getEmailPreview(email.body, 64)}</div>
-                          {email.labels.length > 0 && (
-                            <div className="mail-labels">
-                              {email.labels.slice(0, 2).map(l => <span key={l} className="badge badge-sm">{l}</span>)}
-                            </div>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-          </>
+          <EmailInbox
+            emails={emails} folders={[]} state={{
+              activeBizTab, setActiveBizTab, activeFolder, setActiveFolder,
+              selectedEmail, setSelectedEmail, searchQuery, setSearchQuery,
+              composeOpen, setComposeOpen, composeTo, setComposeTo, composeSubject, setComposeSubject,
+              composeBody, setComposeBody, sending, setSending, selectedFromAddress, setSelectedFromAddress,
+              annual, setAnnual, loadingPayment, setLoadingPayment, toast, showToast,
+              showLogoutConfirm, setShowLogoutConfirm, confirmRevokeId, setConfirmRevokeId,
+              pendingRoleChange, setPendingRoleChange, confirmAction, setConfirmAction,
+              domainsList, setDomainsList, activeDomain, setActiveDomain,
+              domainMailboxes, setDomainMailboxes, domainGroups, setDomainGroups,
+              teamMembers, setTeamMembers, mailQueue, setMailQueue, auditLog, setAuditLog,
+              templates, setTemplates, connectionUsage, setConnectionUsage, adminUsers, setAdminUsers,
+              sortOrder, setSortOrder, viewMode, setViewMode, selectedEmails, setSelectedEmails,
+              mailStatusFilter, setMailStatusFilter, notificationEnabled, setNotificationEnabled,
+              soundEnabled, setSoundEnabled, showQueueFilters, setShowQueueFilters,
+              queueStatusFilter, setQueueStatusFilter, templateSearch, setTemplateSearch,
+              showAddDomain, setShowAddDomain, newDomainInput, setNewDomainInput,
+              teamFilter, setTeamFilter, auditFilter, setAuditFilter, adminSearch, setAdminSearch,
+              adminPlanFilter, setAdminPlanFilter, adminStatusFilter, setAdminStatusFilter,
+              adminRiskFilter, setAdminRiskFilter, sidebarOpen, setSidebarOpen, user,
+              themeMode, setThemeMode, toggleTheme, activeDomainName,
+              hasRoleAccess, canAccessPlatformAdmin, refreshDomains, refreshTeam, refreshQueue,
+              refreshAudit, refreshTemplates, refreshMailboxes, refreshGroups, refreshConnectionUsage,
+              handleLogout, handleSendEmail, openComposeWith, copyToClipboard,
+            }}
+            onSelectEmail={(e) => setSelectedEmail(e)}
+            onRefresh={() => refetch()}
+            onToggleStar={(id) => { mail.toggleStar(activeDomainName, id); refetch(); }}
+            onToggleRead={(id) => { mail.toggleRead(activeDomainName, id); refetch(); }}
+            onArchive={(ids) => handleBulkAction('archive')}
+            onTrash={(ids) => handleBulkAction('trash')}
+            onMarkSpam={(ids) => { ids.forEach(id => mail.markSpam(activeDomainName, id)); refetch(); }}
+            onMarkSafe={(ids) => { ids.forEach(id => mail.markSafe(activeDomainName, id)); refetch(); }}
+            onReply={handleReply} onForward={handleForward}
+          />
         )}
 
-        {/* ===== DOMAINS TAB ===== */}
-        {activeBizTab === 'domains' && (
-          <div className="biz-panel animate-fade">
-            <div className="panel-header">
-              <div>
-                <h2 style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <button aria-label="Open menu" className="btn btn-icon btn-ghost mobile-menu-btn" onClick={() => setSidebarOpen(true)}>
-                    <Menu size={20} />
-                  </button>
-                  <Globe size={20} /> Domain Management
-                </h2>
-                <p>Manage sending domains, DNS configuration, and mail routing for your organization.</p>
-              </div>
-              <button className="btn btn-primary" onClick={() => setShowAddDomain(true)}>
-                <Plus size={16} /> Add Domain
-              </button>
-              {activeDomain && <button className="btn btn-ghost" style={{ marginLeft: 8 }} onClick={() => setActiveDomain('')}>Show All</button>}
-            </div>
+        {activeBizTab === 'domains' && <DomainsPanel state={{
+          activeBizTab, setActiveBizTab, activeFolder, setActiveFolder,
+          selectedEmail, setSelectedEmail, searchQuery, setSearchQuery,
+          composeOpen, setComposeOpen, composeTo, setComposeTo, composeSubject, setComposeSubject,
+          composeBody, setComposeBody, sending, setSending, selectedFromAddress, setSelectedFromAddress,
+          annual, setAnnual, loadingPayment, setLoadingPayment, toast, showToast,
+          showLogoutConfirm, setShowLogoutConfirm, confirmRevokeId, setConfirmRevokeId,
+          pendingRoleChange, setPendingRoleChange, confirmAction, setConfirmAction,
+          domainsList, setDomainsList, activeDomain, setActiveDomain,
+          domainMailboxes, setDomainMailboxes, domainGroups, setDomainGroups,
+          teamMembers, setTeamMembers, mailQueue, setMailQueue, auditLog, setAuditLog,
+          templates, setTemplates, connectionUsage, setConnectionUsage, adminUsers, setAdminUsers,
+          sortOrder, setSortOrder, viewMode, setViewMode, selectedEmails, setSelectedEmails,
+          mailStatusFilter, setMailStatusFilter, notificationEnabled, setNotificationEnabled,
+          soundEnabled, setSoundEnabled, showQueueFilters, setShowQueueFilters,
+          queueStatusFilter, setQueueStatusFilter, templateSearch, setTemplateSearch,
+          showAddDomain, setShowAddDomain, newDomainInput, setNewDomainInput,
+          teamFilter, setTeamFilter, auditFilter, setAuditFilter, adminSearch, setAdminSearch,
+          adminPlanFilter, setAdminPlanFilter, adminStatusFilter, setAdminStatusFilter,
+          adminRiskFilter, setAdminRiskFilter, sidebarOpen, setSidebarOpen, user,
+          themeMode, setThemeMode, toggleTheme, activeDomainName,
+          hasRoleAccess, canAccessPlatformAdmin, refreshDomains, refreshTeam, refreshQueue,
+          refreshAudit, refreshTemplates, refreshMailboxes, refreshGroups, refreshConnectionUsage,
+          handleLogout, handleSendEmail, openComposeWith, copyToClipboard,
+        }} handleAddDomain={handleAddDomain} handleVerifyDomain={handleVerifyDomain} />}
 
-            {showAddDomain && (
-              <div className="glass-card" style={{ marginBottom: 16 }}>
-                <h3 style={{ marginBottom: 12 }}>Add New Domain</h3>
-                <form onSubmit={handleAddDomain} style={{ display: 'flex', gap: 8 }}>
-                  <input className="input" placeholder="domain.com" value={newDomainInput} onChange={e => setNewDomainInput(e.target.value)} />
-                  <button className="btn btn-primary" type="submit" disabled={addingDomain}>
-                    {addingDomain ? <LoadingSpinner size="sm" label="Adding domain" /> : <Plus size={16} />}
-                    Add
-                  </button>
-                  <button className="btn btn-ghost" type="button" onClick={() => setShowAddDomain(false)}>Cancel</button>
-                </form>
-              </div>
-            )}
+        {activeBizTab === 'mailboxes' && <MailboxesPanel state={{
+          activeBizTab, setActiveBizTab, activeFolder, setActiveFolder,
+          selectedEmail, setSelectedEmail, searchQuery, setSearchQuery,
+          composeOpen, setComposeOpen, composeTo, setComposeTo, composeSubject, setComposeSubject,
+          composeBody, setComposeBody, sending, setSending, selectedFromAddress, setSelectedFromAddress,
+          annual, setAnnual, loadingPayment, setLoadingPayment, toast, showToast,
+          showLogoutConfirm, setShowLogoutConfirm, confirmRevokeId, setConfirmRevokeId,
+          pendingRoleChange, setPendingRoleChange, confirmAction, setConfirmAction,
+          domainsList, setDomainsList, activeDomain, setActiveDomain,
+          domainMailboxes, setDomainMailboxes, domainGroups, setDomainGroups,
+          teamMembers, setTeamMembers, mailQueue, setMailQueue, auditLog, setAuditLog,
+          templates, setTemplates, connectionUsage, setConnectionUsage, adminUsers, setAdminUsers,
+          sortOrder, setSortOrder, viewMode, setViewMode, selectedEmails, setSelectedEmails,
+          mailStatusFilter, setMailStatusFilter, notificationEnabled, setNotificationEnabled,
+          soundEnabled, setSoundEnabled, showQueueFilters, setShowQueueFilters,
+          queueStatusFilter, setQueueStatusFilter, templateSearch, setTemplateSearch,
+          showAddDomain, setShowAddDomain, newDomainInput, setNewDomainInput,
+          teamFilter, setTeamFilter, auditFilter, setAuditFilter, adminSearch, setAdminSearch,
+          adminPlanFilter, setAdminPlanFilter, adminStatusFilter, setAdminStatusFilter,
+          adminRiskFilter, setAdminRiskFilter, sidebarOpen, setSidebarOpen, user,
+          themeMode, setThemeMode, toggleTheme, activeDomainName,
+          hasRoleAccess, canAccessPlatformAdmin, refreshDomains, refreshTeam, refreshQueue,
+          refreshAudit, refreshTemplates, refreshMailboxes, refreshGroups, refreshConnectionUsage,
+          handleLogout, handleSendEmail, openComposeWith, copyToClipboard,
+        }} />}
 
-            <div className="domain-cards">
-              {domainsList.filter(domain => !activeDomain || activeDomain === domain.id).map(domain => (
-                <div key={domain.id} className="glass-card domain-card-full">
-                  <div className="domain-card-header">
-                    <div className="domain-card-title">
-                      <Globe size={18} />
-                      <div>
-                        <div className="domain-name-lg">{domain.domain}</div>
-                        <div className="domain-meta">Added {formatRelative(domain.addedAt)} · {domain.mailCount} emails sent</div>
-                      </div>
-                      <span className={`badge ${domain.status === 'active' ? 'badge-accent' : 'badge-secondary'}`}>{domain.status}</span>
-                      <span className="badge badge-primary">Reputation: {domain.reputation}/100</span>
-                    </div>
-                    <div className="domain-card-actions">
-                      <button className={`btn btn-ghost btn-sm ${activeDomain === domain.id ? 'active' : ''}`} onClick={() => { setActiveDomain(domain.id); domains.setPrimary(domain.id); }}>
-                        {activeDomain === domain.id ? <CheckCircle2 size={14} /> : <Square size={14} />}
-                        {activeDomain === domain.id ? 'Active' : 'Set Active'}
-                      </button>
-                      <button className="btn btn-ghost btn-sm" onClick={() => handleRunDomainVerification(domain.id)} disabled={verifyingDomainId === domain.id}>
-                        {verifyingDomainId === domain.id ? <LoadingSpinner size="sm" label="Verifying domain" /> : <RefreshCcw size={14} />}
-                        Live Verify
-                      </button>
-                      <button className="btn btn-ghost btn-sm" onClick={() => setDomainDetails(domain)}><Settings size={14} /> Manage</button>
-                    </div>
-                  </div>
+        {activeBizTab === 'groups' && <GroupsPanel state={{
+          activeBizTab, setActiveBizTab, activeFolder, setActiveFolder,
+          selectedEmail, setSelectedEmail, searchQuery, setSearchQuery,
+          composeOpen, setComposeOpen, composeTo, setComposeTo, composeSubject, setComposeSubject,
+          composeBody, setComposeBody, sending, setSending, selectedFromAddress, setSelectedFromAddress,
+          annual, setAnnual, loadingPayment, setLoadingPayment, toast, showToast,
+          showLogoutConfirm, setShowLogoutConfirm, confirmRevokeId, setConfirmRevokeId,
+          pendingRoleChange, setPendingRoleChange, confirmAction, setConfirmAction,
+          domainsList, setDomainsList, activeDomain, setActiveDomain,
+          domainMailboxes, setDomainMailboxes, domainGroups, setDomainGroups,
+          teamMembers, setTeamMembers, mailQueue, setMailQueue, auditLog, setAuditLog,
+          templates, setTemplates, connectionUsage, setConnectionUsage, adminUsers, setAdminUsers,
+          sortOrder, setSortOrder, viewMode, setViewMode, selectedEmails, setSelectedEmails,
+          mailStatusFilter, setMailStatusFilter, notificationEnabled, setNotificationEnabled,
+          soundEnabled, setSoundEnabled, showQueueFilters, setShowQueueFilters,
+          queueStatusFilter, setQueueStatusFilter, templateSearch, setTemplateSearch,
+          showAddDomain, setShowAddDomain, newDomainInput, setNewDomainInput,
+          teamFilter, setTeamFilter, auditFilter, setAuditFilter, adminSearch, setAdminSearch,
+          adminPlanFilter, setAdminPlanFilter, adminStatusFilter, setAdminStatusFilter,
+          adminRiskFilter, setAdminRiskFilter, sidebarOpen, setSidebarOpen, user,
+          themeMode, setThemeMode, toggleTheme, activeDomainName,
+          hasRoleAccess, canAccessPlatformAdmin, refreshDomains, refreshTeam, refreshQueue,
+          refreshAudit, refreshTemplates, refreshMailboxes, refreshGroups, refreshConnectionUsage,
+          handleLogout, handleSendEmail, openComposeWith, copyToClipboard,
+        }} />}
 
-                  <div className="domain-health-grid">
-                    {domain.health.map(h => (
-                      <div key={h.key} className={`health-card ${h.status}`}>
-                        <div className="health-card-header">
-                          <Shield size={16} />
-                          <span className="health-label">{h.label}</span>
-                          <span className={`badge badge-sm`} style={{
-                            display: 'inline-flex', alignItems: 'center', gap: '4px',
-                            backgroundColor: h.status === 'verified' ? 'var(--success-glow)' : h.status === 'failed' ? 'var(--danger-glow)' : 'var(--bg-hover)',
-                            color: h.status === 'verified' ? 'var(--success)' : h.status === 'failed' ? 'var(--danger)' : 'var(--text-muted)'
-                          }}>
-                            {h.status === 'verified' ? <CheckCircle2 size={12} /> : h.status === 'failed' ? <XCircle size={12} /> : <LoadingSpinner size="sm" label="Checking DNS" />}
-                            {h.status}
-                          </span>
-                        </div>
-                        <div className="health-detail">{h.detail}</div>
-                        <div className="health-last-check">Checked {formatRelative(h.lastCheck)}</div>
-                      </div>
-                    ))}
-                  </div>
+        {activeBizTab === 'team' && <TeamPanel state={{
+          activeBizTab, setActiveBizTab, activeFolder, setActiveFolder,
+          selectedEmail, setSelectedEmail, searchQuery, setSearchQuery,
+          composeOpen, setComposeOpen, composeTo, setComposeTo, composeSubject, setComposeSubject,
+          composeBody, setComposeBody, sending, setSending, selectedFromAddress, setSelectedFromAddress,
+          annual, setAnnual, loadingPayment, setLoadingPayment, toast, showToast,
+          showLogoutConfirm, setShowLogoutConfirm, confirmRevokeId, setConfirmRevokeId,
+          pendingRoleChange, setPendingRoleChange, confirmAction, setConfirmAction,
+          domainsList, setDomainsList, activeDomain, setActiveDomain,
+          domainMailboxes, setDomainMailboxes, domainGroups, setDomainGroups,
+          teamMembers, setTeamMembers, mailQueue, setMailQueue, auditLog, setAuditLog,
+          templates, setTemplates, connectionUsage, setConnectionUsage, adminUsers, setAdminUsers,
+          sortOrder, setSortOrder, viewMode, setViewMode, selectedEmails, setSelectedEmails,
+          mailStatusFilter, setMailStatusFilter, notificationEnabled, setNotificationEnabled,
+          soundEnabled, setSoundEnabled, showQueueFilters, setShowQueueFilters,
+          queueStatusFilter, setQueueStatusFilter, templateSearch, setTemplateSearch,
+          showAddDomain, setShowAddDomain, newDomainInput, setNewDomainInput,
+          teamFilter, setTeamFilter, auditFilter, setAuditFilter, adminSearch, setAdminSearch,
+          adminPlanFilter, setAdminPlanFilter, adminStatusFilter, setAdminStatusFilter,
+          adminRiskFilter, setAdminRiskFilter, sidebarOpen, setSidebarOpen, user,
+          themeMode, setThemeMode, toggleTheme, activeDomainName,
+          hasRoleAccess, canAccessPlatformAdmin, refreshDomains, refreshTeam, refreshQueue,
+          refreshAudit, refreshTemplates, refreshMailboxes, refreshGroups, refreshConnectionUsage,
+          handleLogout, handleSendEmail, openComposeWith, copyToClipboard,
+        }} />}
 
-                  <div className="domain-dns-section">
-                    <div className="dns-section-header" style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '100%' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <Tag size={14} />
-                        <span>DNS records for <strong>{domain.domain}</strong></span>
-                      </div>
-                    </div>
-                    <div className="dns-records-table">
-                      <div className="dns-table-header">
-                        <span className="dns-col-type">Type</span>
-                        <span className="dns-col-name">Host / Name</span>
-                        <span className="dns-col-value">Value / Points To</span>
-                        <span className="dns-col-priority">Priority</span>
-                        <span className="dns-col-ttl">TTL</span>
-                      </div>
-                      {(domains.getById(domain.id)?.dnsRecords || []).map((record, index) => {
-                        const recordKey = `${domain.id}-${index}`;
-                        return (
-                          <div key={recordKey} className="dns-table-row">
-                            <span className="dns-col-type">
-                              <span className={`dns-type-badge dns-type-${record.type.toLowerCase()}`}>{record.type}</span>
-                            </span>
-                            <span className="dns-col-name">
-                              <code className="dns-field-value">{record.name}</code>
-                              <button
-                                className="dns-copy-btn"
-                                onClick={() => copyToClipboard(record.name, `name-${recordKey}`)}
-                                title="Copy host name"
-                              >
-                                {copiedField === `name-${recordKey}` ? <Check size={12} color="var(--success)" /> : <Copy size={12} />}
-                              </button>
-                            </span>
-                            <span className="dns-col-value">
-                              <code className="dns-field-value">{record.value}</code>
-                              <button
-                                className="dns-copy-btn"
-                                onClick={() => copyToClipboard(record.value, `value-${recordKey}`)}
-                                title="Copy value"
-                              >
-                                {copiedField === `value-${recordKey}` ? <Check size={12} color="var(--success)" /> : <Copy size={12} />}
-                              </button>
-                            </span>
-                            <span className="dns-col-priority">
-                              {record.priority ? (
-                                <>
-                                  <code className="dns-field-value">{record.priority}</code>
-                                  <button
-                                    className="dns-copy-btn"
-                                    onClick={() => copyToClipboard(String(record.priority), `pri-${recordKey}`)}
-                                    title="Copy priority"
-                                  >
-                                    {copiedField === `pri-${recordKey}` ? <Check size={12} color="var(--success)" /> : <Copy size={12} />}
-                                  </button>
-                                </>
-                              ) : <span className="dns-field-na">—</span>}
-                            </span>
-                            <span className="dns-col-ttl">
-                              <code className="dns-field-value">{record.ttl || 3600}</code>
-                            </span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
+        {activeBizTab === 'queue' && <QueuePanel state={{
+          activeBizTab, setActiveBizTab, activeFolder, setActiveFolder,
+          selectedEmail, setSelectedEmail, searchQuery, setSearchQuery,
+          composeOpen, setComposeOpen, composeTo, setComposeTo, composeSubject, setComposeSubject,
+          composeBody, setComposeBody, sending, setSending, selectedFromAddress, setSelectedFromAddress,
+          annual, setAnnual, loadingPayment, setLoadingPayment, toast, showToast,
+          showLogoutConfirm, setShowLogoutConfirm, confirmRevokeId, setConfirmRevokeId,
+          pendingRoleChange, setPendingRoleChange, confirmAction, setConfirmAction,
+          domainsList, setDomainsList, activeDomain, setActiveDomain,
+          domainMailboxes, setDomainMailboxes, domainGroups, setDomainGroups,
+          teamMembers, setTeamMembers, mailQueue, setMailQueue, auditLog, setAuditLog,
+          templates, setTemplates, connectionUsage, setConnectionUsage, adminUsers, setAdminUsers,
+          sortOrder, setSortOrder, viewMode, setViewMode, selectedEmails, setSelectedEmails,
+          mailStatusFilter, setMailStatusFilter, notificationEnabled, setNotificationEnabled,
+          soundEnabled, setSoundEnabled, showQueueFilters, setShowQueueFilters,
+          queueStatusFilter, setQueueStatusFilter, templateSearch, setTemplateSearch,
+          showAddDomain, setShowAddDomain, newDomainInput, setNewDomainInput,
+          teamFilter, setTeamFilter, auditFilter, setAuditFilter, adminSearch, setAdminSearch,
+          adminPlanFilter, setAdminPlanFilter, adminStatusFilter, setAdminStatusFilter,
+          adminRiskFilter, setAdminRiskFilter, sidebarOpen, setSidebarOpen, user,
+          themeMode, setThemeMode, toggleTheme, activeDomainName,
+          hasRoleAccess, canAccessPlatformAdmin, refreshDomains, refreshTeam, refreshQueue,
+          refreshAudit, refreshTemplates, refreshMailboxes, refreshGroups, refreshConnectionUsage,
+          handleLogout, handleSendEmail, openComposeWith, copyToClipboard,
+        }} />}
 
-        {/* ===== MAILBOXES TAB ===== */}
-        {activeBizTab === 'mailboxes' && (
-          <div className="biz-panel animate-fade">
-            <div className="panel-header">
-              <div>
-                <h2 style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <button aria-label="Open menu" className="btn btn-icon btn-ghost mobile-menu-btn" onClick={() => setSidebarOpen(true)}>
-                    <Menu size={20} />
-                  </button>
-                  <Mail size={20} /> Business Mailboxes
-                </h2>
-                <p>Create extra sender addresses, aliases, and shared inbox identities for {activeDomainName || 'your selected domain'}.</p>
-              </div>
-            </div>
+        {activeBizTab === 'analytics' && <AnalyticsPanel state={{
+          activeBizTab, setActiveBizTab, activeFolder, setActiveFolder,
+          selectedEmail, setSelectedEmail, searchQuery, setSearchQuery,
+          composeOpen, setComposeOpen, composeTo, setComposeTo, composeSubject, setComposeSubject,
+          composeBody, setComposeBody, sending, setSending, selectedFromAddress, setSelectedFromAddress,
+          annual, setAnnual, loadingPayment, setLoadingPayment, toast, showToast,
+          showLogoutConfirm, setShowLogoutConfirm, confirmRevokeId, setConfirmRevokeId,
+          pendingRoleChange, setPendingRoleChange, confirmAction, setConfirmAction,
+          domainsList, setDomainsList, activeDomain, setActiveDomain,
+          domainMailboxes, setDomainMailboxes, domainGroups, setDomainGroups,
+          teamMembers, setTeamMembers, mailQueue, setMailQueue, auditLog, setAuditLog,
+          templates, setTemplates, connectionUsage, setConnectionUsage, adminUsers, setAdminUsers,
+          sortOrder, setSortOrder, viewMode, setViewMode, selectedEmails, setSelectedEmails,
+          mailStatusFilter, setMailStatusFilter, notificationEnabled, setNotificationEnabled,
+          soundEnabled, setSoundEnabled, showQueueFilters, setShowQueueFilters,
+          queueStatusFilter, setQueueStatusFilter, templateSearch, setTemplateSearch,
+          showAddDomain, setShowAddDomain, newDomainInput, setNewDomainInput,
+          teamFilter, setTeamFilter, auditFilter, setAuditFilter, adminSearch, setAdminSearch,
+          adminPlanFilter, setAdminPlanFilter, adminStatusFilter, setAdminStatusFilter,
+          adminRiskFilter, setAdminRiskFilter, sidebarOpen, setSidebarOpen, user,
+          themeMode, setThemeMode, toggleTheme, activeDomainName,
+          hasRoleAccess, canAccessPlatformAdmin, refreshDomains, refreshTeam, refreshQueue,
+          refreshAudit, refreshTemplates, refreshMailboxes, refreshGroups, refreshConnectionUsage,
+          handleLogout, handleSendEmail, openComposeWith, copyToClipboard,
+        }} />}
 
-            <div className="glass-card" style={{ marginBottom: 16, padding: '24px' }}>
-              <h3 style={{ marginBottom: 12 }}>Create Mailbox</h3>
-              <form onSubmit={handleCreateMailbox} style={{ display: 'grid', gridTemplateColumns: '1.1fr 1.1fr 0.8fr auto', gap: 12 }}>
-                <input className="input" value={mailboxLocalPart} onChange={(e) => setMailboxLocalPart(e.target.value)} placeholder="sales" />
-                <input className="input" value={mailboxDisplayName} onChange={(e) => setMailboxDisplayName(e.target.value)} placeholder="Sales Desk" />
-                <select className="input" value={mailboxKind} onChange={(e) => setMailboxKind(e.target.value as BusinessMailbox['kind'])}>
-                  <option value="mailbox">User Mailbox</option>
-                  <option value="alias">Alias Address</option>
-                  <option value="shared">Shared Inbox</option>
-                </select>
-                <button className="btn btn-primary" type="submit"><Plus size={16} /> Add</button>
-              </form>
-            </div>
+        {activeBizTab === 'audit' && <AuditPanel state={{
+          activeBizTab, setActiveBizTab, activeFolder, setActiveFolder,
+          selectedEmail, setSelectedEmail, searchQuery, setSearchQuery,
+          composeOpen, setComposeOpen, composeTo, setComposeTo, composeSubject, setComposeSubject,
+          composeBody, setComposeBody, sending, setSending, selectedFromAddress, setSelectedFromAddress,
+          annual, setAnnual, loadingPayment, setLoadingPayment, toast, showToast,
+          showLogoutConfirm, setShowLogoutConfirm, confirmRevokeId, setConfirmRevokeId,
+          pendingRoleChange, setPendingRoleChange, confirmAction, setConfirmAction,
+          domainsList, setDomainsList, activeDomain, setActiveDomain,
+          domainMailboxes, setDomainMailboxes, domainGroups, setDomainGroups,
+          teamMembers, setTeamMembers, mailQueue, setMailQueue, auditLog, setAuditLog,
+          templates, setTemplates, connectionUsage, setConnectionUsage, adminUsers, setAdminUsers,
+          sortOrder, setSortOrder, viewMode, setViewMode, selectedEmails, setSelectedEmails,
+          mailStatusFilter, setMailStatusFilter, notificationEnabled, setNotificationEnabled,
+          soundEnabled, setSoundEnabled, showQueueFilters, setShowQueueFilters,
+          queueStatusFilter, setQueueStatusFilter, templateSearch, setTemplateSearch,
+          showAddDomain, setShowAddDomain, newDomainInput, setNewDomainInput,
+          teamFilter, setTeamFilter, auditFilter, setAuditFilter, adminSearch, setAdminSearch,
+          adminPlanFilter, setAdminPlanFilter, adminStatusFilter, setAdminStatusFilter,
+          adminRiskFilter, setAdminRiskFilter, sidebarOpen, setSidebarOpen, user,
+          themeMode, setThemeMode, toggleTheme, activeDomainName,
+          hasRoleAccess, canAccessPlatformAdmin, refreshDomains, refreshTeam, refreshQueue,
+          refreshAudit, refreshTemplates, refreshMailboxes, refreshGroups, refreshConnectionUsage,
+          handleLogout, handleSendEmail, openComposeWith, copyToClipboard,
+        }} />}
 
-            <div className="team-list">
-              {domainMailboxes.map((mailbox) => (
-                <div key={mailbox.id} className="team-row glass-card">
-                  <div className="team-avatar-wrap">
-                    <div className="user-avatar biz-avatar">{mailbox.address.charAt(0).toUpperCase()}</div>
-                  </div>
-                  <div className="team-info">
-                    <div className="team-name">{mailbox.displayName}</div>
-                    <div className="team-email">{mailbox.address}</div>
-                  </div>
-                  <div className="team-meta">
-                    <div className="team-last-active"><Clock size={12} /> {mailbox.lastUsedAt ? `Used ${formatRelative(mailbox.lastUsedAt)}` : 'Never used yet'}</div>
-                    <div className="team-joined">Created {formatRelative(mailbox.createdAt)}</div>
-                  </div>
-                  <span className={`badge ${mailbox.active ? 'badge-accent' : 'badge-secondary'}`}>{mailbox.kind}</span>
-                  <div className="team-actions">
-                    <button className="btn btn-ghost btn-sm" onClick={() => { businessMailboxes.setPrimary(activeDomainName, mailbox.address); setDomainMailboxes(businessMailboxes.getByDomain(activeDomainName)); setSelectedFromAddress(mailbox.address); showToast(`${mailbox.address} is now the active sender.`); }}>
-                      {mailbox.active ? 'Active Sender' : 'Set Sender'}
-                    </button>
-                    <button className="btn btn-ghost btn-sm" onClick={() => setMailboxDetails(mailbox)}><Eye size={14} /> Manage</button>
-                    {mailbox.source !== 'system' && (
-                      <button className="btn btn-ghost btn-sm" onClick={() => { businessMailboxes.remove(activeDomainName, mailbox.address); setDomainMailboxes(businessMailboxes.getByDomain(activeDomainName)); showToast('Mailbox removed'); }}>
-                        <Trash size={14} />
-                      </button>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
+        {activeBizTab === 'admin' && canAccessPlatformAdmin && <AdminPanel state={{
+          activeBizTab, setActiveBizTab, activeFolder, setActiveFolder,
+          selectedEmail, setSelectedEmail, searchQuery, setSearchQuery,
+          composeOpen, setComposeOpen, composeTo, setComposeTo, composeSubject, setComposeSubject,
+          composeBody, setComposeBody, sending, setSending, selectedFromAddress, setSelectedFromAddress,
+          annual, setAnnual, loadingPayment, setLoadingPayment, toast, showToast,
+          showLogoutConfirm, setShowLogoutConfirm, confirmRevokeId, setConfirmRevokeId,
+          pendingRoleChange, setPendingRoleChange, confirmAction, setConfirmAction,
+          domainsList, setDomainsList, activeDomain, setActiveDomain,
+          domainMailboxes, setDomainMailboxes, domainGroups, setDomainGroups,
+          teamMembers, setTeamMembers, mailQueue, setMailQueue, auditLog, setAuditLog,
+          templates, setTemplates, connectionUsage, setConnectionUsage, adminUsers, setAdminUsers,
+          sortOrder, setSortOrder, viewMode, setViewMode, selectedEmails, setSelectedEmails,
+          mailStatusFilter, setMailStatusFilter, notificationEnabled, setNotificationEnabled,
+          soundEnabled, setSoundEnabled, showQueueFilters, setShowQueueFilters,
+          queueStatusFilter, setQueueStatusFilter, templateSearch, setTemplateSearch,
+          showAddDomain, setShowAddDomain, newDomainInput, setNewDomainInput,
+          teamFilter, setTeamFilter, auditFilter, setAuditFilter, adminSearch, setAdminSearch,
+          adminPlanFilter, setAdminPlanFilter, adminStatusFilter, setAdminStatusFilter,
+          adminRiskFilter, setAdminRiskFilter, sidebarOpen, setSidebarOpen, user,
+          themeMode, setThemeMode, toggleTheme, activeDomainName,
+          hasRoleAccess, canAccessPlatformAdmin, refreshDomains, refreshTeam, refreshQueue,
+          refreshAudit, refreshTemplates, refreshMailboxes, refreshGroups, refreshConnectionUsage,
+          handleLogout, handleSendEmail, openComposeWith, copyToClipboard,
+        }} />}
 
-        {/* ===== GROUPS TAB ===== */}
-        {activeBizTab === 'groups' && (
-          <div className="biz-panel animate-fade">
-            <div className="panel-header">
-              <div>
-                <h2 style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <button aria-label="Open menu" className="btn btn-icon btn-ghost mobile-menu-btn" onClick={() => setSidebarOpen(true)}>
-                    <Menu size={20} />
-                  </button>
-                  <Users size={20} color="var(--primary)" /> Distribution Groups
-                </h2>
-                <p>Create reusable recipient lists so one email address can fan out to multiple team members.</p>
-              </div>
-            </div>
+        {activeBizTab === 'templates' && <TemplatesPanel state={{
+          activeBizTab, setActiveBizTab, activeFolder, setActiveFolder,
+          selectedEmail, setSelectedEmail, searchQuery, setSearchQuery,
+          composeOpen, setComposeOpen, composeTo, setComposeTo, composeSubject, setComposeSubject,
+          composeBody, setComposeBody, sending, setSending, selectedFromAddress, setSelectedFromAddress,
+          annual, setAnnual, loadingPayment, setLoadingPayment, toast, showToast,
+          showLogoutConfirm, setShowLogoutConfirm, confirmRevokeId, setConfirmRevokeId,
+          pendingRoleChange, setPendingRoleChange, confirmAction, setConfirmAction,
+          domainsList, setDomainsList, activeDomain, setActiveDomain,
+          domainMailboxes, setDomainMailboxes, domainGroups, setDomainGroups,
+          teamMembers, setTeamMembers, mailQueue, setMailQueue, auditLog, setAuditLog,
+          templates, setTemplates, connectionUsage, setConnectionUsage, adminUsers, setAdminUsers,
+          sortOrder, setSortOrder, viewMode, setViewMode, selectedEmails, setSelectedEmails,
+          mailStatusFilter, setMailStatusFilter, notificationEnabled, setNotificationEnabled,
+          soundEnabled, setSoundEnabled, showQueueFilters, setShowQueueFilters,
+          queueStatusFilter, setQueueStatusFilter, templateSearch, setTemplateSearch,
+          showAddDomain, setShowAddDomain, newDomainInput, setNewDomainInput,
+          teamFilter, setTeamFilter, auditFilter, setAuditFilter, adminSearch, setAdminSearch,
+          adminPlanFilter, setAdminPlanFilter, adminStatusFilter, setAdminStatusFilter,
+          adminRiskFilter, setAdminRiskFilter, sidebarOpen, setSidebarOpen, user,
+          themeMode, setThemeMode, toggleTheme, activeDomainName,
+          hasRoleAccess, canAccessPlatformAdmin, refreshDomains, refreshTeam, refreshQueue,
+          refreshAudit, refreshTemplates, refreshMailboxes, refreshGroups, refreshConnectionUsage,
+          handleLogout, handleSendEmail, openComposeWith, copyToClipboard,
+        }} />}
 
-            <div className="card" style={{ marginBottom: 24, padding: '20px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
-                <div style={{ background: 'var(--primary-glow)', color: 'var(--primary)', padding: '8px', borderRadius: '8px' }}>
-                  <Plus size={16} />
-                </div>
-                <h3 style={{ margin: 0, fontSize: '1.1rem' }}>Create New Group</h3>
-              </div>
-              <form onSubmit={handleCreateGroup} style={{ display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'flex-end' }}>
-                <div style={{ flex: '1 1 200px' }}>
-                  <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>Group Name</label>
-                  <input className="input input-sm" value={groupName} onChange={(e) => setGroupName(e.target.value)} placeholder="e.g. Sales Team" required />
-                </div>
-                <div style={{ flex: '1 1 180px' }}>
-                  <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>Group Address</label>
-                  <div style={{ display: 'flex', alignItems: 'center', background: 'var(--bg-surface-2)', border: '1px solid var(--border-primary)', borderRadius: 'var(--radius-md)', paddingRight: '12px' }}>
-                    <input style={{ flex: 1, background: 'transparent', border: 'none', padding: '6px 12px', color: 'var(--text-primary)', outline: 'none' }} value={groupLocalPart} onChange={(e) => setGroupLocalPart(e.target.value)} placeholder="sales" required />
-                    <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>@{activeDomainName}</span>
-                  </div>
-                </div>
-                <div style={{ flex: '2 1 300px' }}>
-                  <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>Members (comma separated)</label>
-                  <input className="input input-sm" value={groupMembers} onChange={(e) => setGroupMembers(e.target.value)} placeholder="alice@, bob@" required />
-                </div>
-                <button className="btn btn-primary btn-sm" type="submit" style={{ minHeight: '34px' }}>Add Group</button>
-              </form>
-            </div>
+        {activeBizTab === 'settings' && <SettingsPanel state={{
+          activeBizTab, setActiveBizTab, activeFolder, setActiveFolder,
+          selectedEmail, setSelectedEmail, searchQuery, setSearchQuery,
+          composeOpen, setComposeOpen, composeTo, setComposeTo, composeSubject, setComposeSubject,
+          composeBody, setComposeBody, sending, setSending, selectedFromAddress, setSelectedFromAddress,
+          annual, setAnnual, loadingPayment, setLoadingPayment, toast, showToast,
+          showLogoutConfirm, setShowLogoutConfirm, confirmRevokeId, setConfirmRevokeId,
+          pendingRoleChange, setPendingRoleChange, confirmAction, setConfirmAction,
+          domainsList, setDomainsList, activeDomain, setActiveDomain,
+          domainMailboxes, setDomainMailboxes, domainGroups, setDomainGroups,
+          teamMembers, setTeamMembers, mailQueue, setMailQueue, auditLog, setAuditLog,
+          templates, setTemplates, connectionUsage, setConnectionUsage, adminUsers, setAdminUsers,
+          sortOrder, setSortOrder, viewMode, setViewMode, selectedEmails, setSelectedEmails,
+          mailStatusFilter, setMailStatusFilter, notificationEnabled, setNotificationEnabled,
+          soundEnabled, setSoundEnabled, showQueueFilters, setShowQueueFilters,
+          queueStatusFilter, setQueueStatusFilter, templateSearch, setTemplateSearch,
+          showAddDomain, setShowAddDomain, newDomainInput, setNewDomainInput,
+          teamFilter, setTeamFilter, auditFilter, setAuditFilter, adminSearch, setAdminSearch,
+          adminPlanFilter, setAdminPlanFilter, adminStatusFilter, setAdminStatusFilter,
+          adminRiskFilter, setAdminRiskFilter, sidebarOpen, setSidebarOpen, user,
+          themeMode, setThemeMode, toggleTheme, activeDomainName,
+          hasRoleAccess, canAccessPlatformAdmin, refreshDomains, refreshTeam, refreshQueue,
+          refreshAudit, refreshTemplates, refreshMailboxes, refreshGroups, refreshConnectionUsage,
+          handleLogout, handleSendEmail, openComposeWith, copyToClipboard,
+        }} />}
 
-            {domainGroups.length === 0 ? (
-              <div className="card" style={{ padding: '40px', textAlign: 'center', border: '1px dashed var(--border-primary)', background: 'transparent' }}>
-                <div style={{ width: '48px', height: '48px', background: 'var(--bg-surface-2)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px', color: 'var(--text-muted)' }}>
-                  <Users size={24} />
-                </div>
-                <h3 style={{ fontSize: '1.1rem', marginBottom: '8px' }}>No Groups Yet</h3>
-                <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', maxWidth: '400px', margin: '0 auto' }}>Create your first distribution group to start managing team email lists efficiently.</p>
-              </div>
-            ) : (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: '16px' }}>
-                {domainGroups.map((group) => (
-                  <div key={group.id} className="card" style={{ display: 'flex', flexDirection: 'column', gap: '16px', padding: '20px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                        <div style={{ width: '40px', height: '40px', borderRadius: 'var(--radius-md)', background: 'var(--primary-glow)', color: 'var(--primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '1.2rem' }}>
-                          {group.name.charAt(0).toUpperCase()}
-                        </div>
-                        <div>
-                          <h4 style={{ margin: 0, fontSize: '1.05rem', color: 'var(--text-primary)' }}>{group.name}</h4>
-                          <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>{group.address}</span>
-                        </div>
-                      </div>
-                      <button aria-label="Manage group" className="btn btn-icon btn-ghost btn-sm" onClick={() => setGroupDetails(group)} title="Manage group">
-                        <Eye size={14} />
-                      </button>
-                      <button aria-label="Remove group" className="btn btn-icon btn-ghost btn-sm" style={{ color: 'var(--danger)' }} onClick={() => { businessGroups.remove(activeDomainName, group.id); setDomainGroups(businessGroups.getByDomain(activeDomainName)); showToast('Group removed'); }}>
-                        <Trash size={14} />
-                      </button>
-                    </div>
-                    
-                    <div style={{ background: 'var(--bg-surface-2)', padding: '12px', borderRadius: 'var(--radius-md)' }}>
-                      <div style={{ fontSize: '0.75rem', textTransform: 'uppercase', color: 'var(--text-muted)', fontWeight: 600, marginBottom: '8px' }}>Members ({group.members.length})</div>
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                        {group.members.slice(0, 3).map((m, i) => (
-                          <span key={i} style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-primary)', padding: '2px 8px', borderRadius: '12px', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-                            {m}
-                          </span>
-                        ))}
-                        {group.members.length > 3 && (
-                          <span style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-primary)', padding: '2px 8px', borderRadius: '12px', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-                            +{group.members.length - 3} more
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* ===== TEAM TAB ===== */}
-        {activeBizTab === 'team' && (
-          <div className="biz-panel animate-fade">
-            <div className="panel-header">
-              <div>
-                <h2 style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <button aria-label="Open menu" className="btn btn-icon btn-ghost mobile-menu-btn" onClick={() => setSidebarOpen(true)}>
-                    <Menu size={20} />
-                  </button>
-                  <Users size={20} /> Team Members
-                </h2>
-                <p>Manage your organization team, roles, and access permissions.</p>
-              </div>
-              {canManageWorkspace && (
-                <button className="btn btn-primary" onClick={() => { setIssuedInvite(null); setInviteOpen(true); }}><Plus size={16} /> Invite Member</button>
-              )}
-            </div>
-
-            <div className="team-filter-bar">
-              <button className={`btn btn-sm ${teamFilter === 'all' ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setTeamFilter('all')}>All ({teamMembers.length})</button>
-              <button className={`btn btn-sm ${teamFilter === 'admin' ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setTeamFilter('admin')}>Admins</button>
-              <button className={`btn btn-sm ${teamFilter === 'member' ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setTeamFilter('member')}>Members</button>
-              <button className={`btn btn-sm ${teamFilter === 'viewer' ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setTeamFilter('viewer')}>Viewers</button>
-            </div>
-
-            <div className="team-list">
-              {teamMembers.filter(m => teamFilter === 'all' || m.role === teamFilter).map(member => (
-                <div key={member.id} className="team-row glass-card">
-                  <div className="team-avatar-wrap">
-                    <div className="user-avatar biz-avatar">{member.name.charAt(0)}</div>
-                  </div>
-                  <div className="team-info">
-                    <div className="team-name">{member.name}</div>
-                    <div className="team-email">{member.email}</div>
-                  </div>
-                  <div className="team-meta">
-                    <div className="team-last-active"><Clock size={12} /> Active {formatRelative(member.lastActive)}</div>
-                    <div className="team-joined">
-                      {member.status === 'pending'
-                        ? `Invite ${formatInviteExpiry(member.inviteExpiresAt).toLowerCase()}`
-                        : `Joined ${formatRelative(member.addedAt)}`}
-                    </div>
-                  </div>
-                  <span className={`badge ${member.role === 'admin' ? 'badge-accent' : member.role === 'member' ? 'badge-primary' : 'badge-secondary'}`}>{member.role}</span>
-                  <div className="team-actions">
-                    {member.inviteToken && (
-                      <button className="btn btn-ghost btn-sm team-api-copy-btn" onClick={() => copyToClipboard(member.inviteToken || '')}>
-                        <KeyRound size={14} /> Copy API Key
-                      </button>
-                    )}
-                    {canManageWorkspace && (
-                      <>
-                        <select className="input input-sm role-select" value={member.role} onChange={e => handleUpdateMemberRole(member.id, e.target.value as BusinessTeamMember['role'])}>
-                          <option value="admin">Admin</option>
-                          <option value="member">Member</option>
-                          <option value="viewer">Viewer</option>
-                        </select>
-                        <button className="btn btn-ghost btn-sm" onClick={() => handleRemoveMember(member.id)}><XCircle size={14} /></button>
-                      </>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            <div className="roles-info glass-card">
-              <h3><KeyRound size={16} /> Role Permissions</h3>
-              <div className="roles-grid">
-                <div className="role-card">
-                  <div className="role-title badge badge-accent">Admin</div>
-                  <ul>
-                    <li>Full domain management</li>
-                    <li>Team member control</li>
-                    <li>API key management</li>
-                    <li>Audit log access</li>
-                    <li>Billing management</li>
-                  </ul>
-                </div>
-                <div className="role-card">
-                  <div className="role-title badge badge-primary">Member</div>
-                  <ul>
-                    <li>Send/receive emails</li>
-                    <li>Manage templates</li>
-                    <li>View team members</li>
-                    <li>Analytics view</li>
-                  </ul>
-                </div>
-                <div className="role-card">
-                  <div className="role-title badge badge-secondary">Viewer</div>
-                  <ul>
-                    <li>Read emails</li>
-                    <li>View analytics</li>
-                    <li>No sending</li>
-                    <li>No configuration</li>
-                  </ul>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* ===== QUEUE TAB ===== */}
-        {activeBizTab === 'queue' && (
-          <div className="biz-panel animate-fade">
-            <div className="panel-header">
-              <div>
-                <h2 style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <button aria-label="Open menu" className="btn btn-icon btn-ghost mobile-menu-btn" onClick={() => setSidebarOpen(true)}>
-                    <Menu size={20} />
-                  </button>
-                  <Server size={20} /> Mail Queue
-                </h2>
-                <p>Monitor outgoing mail delivery, retries, and deferred messages.</p>
-              </div>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <button className="btn btn-ghost btn-sm" onClick={() => setShowQueueFilters(!showQueueFilters)}>
-                  <Filter size={16} /> Filters
-                </button>
-                <button className="btn btn-ghost btn-sm" onClick={refreshQueue}><RefreshCcw size={16} /> Refresh</button>
-                <button className="btn btn-ghost btn-sm" onClick={handleRunScheduledQueue}><Clock size={16} /> Run Due</button>
-                <button className="btn btn-ghost btn-sm" onClick={() => { businessQueue.clearSent(); refreshQueue(); }}>
-                  <Trash2 size={16} /> Clear Sent
-                </button>
-              </div>
-            </div>
-
-            {showQueueFilters && (
-              <div className="glass-card queue-filters" style={{ marginBottom: 16 }}>
-                <label>Status:</label>
-                <select className="input input-sm" value={queueStatusFilter} onChange={e => setQueueStatusFilter(e.target.value)}>
-                  <option value="all">All</option>
-                  <option value="queued">Queued</option>
-                  <option value="sending">Sending</option>
-                  <option value="sent">Sent</option>
-                  <option value="failed">Failed</option>
-                  <option value="deferred">Deferred</option>
-                </select>
-              </div>
-            )}
-
-            <div className="queue-stats">
-              <div className="queue-stat glass-card">
-                <div className="queue-stat-value">{mailQueue.filter(q => q.status === 'queued').length}</div>
-                <div className="queue-stat-label">Queued</div>
-              </div>
-              <div className="queue-stat glass-card">
-                <div className="queue-stat-value">{mailQueue.filter(q => q.status === 'queued' && q.scheduledAt).length}</div>
-                <div className="queue-stat-label">Scheduled</div>
-              </div>
-              <div className="queue-stat glass-card">
-                <div className="queue-stat-value">{mailQueue.filter(q => q.status === 'sending').length}</div>
-                <div className="queue-stat-label">Sending</div>
-              </div>
-              <div className="queue-stat glass-card">
-                <div className="queue-stat-value">{mailQueue.filter(q => q.status === 'failed').length}</div>
-                <div className="queue-stat-label">Failed</div>
-              </div>
-              <div className="queue-stat glass-card">
-                <div className="queue-stat-value">{mailQueue.filter(q => q.status === 'deferred').length}</div>
-                <div className="queue-stat-label">Deferred</div>
-              </div>
-            </div>
-
-            <div className="queue-table-wrap">
-              <table className="queue-table">
-                <thead>
-                  <tr>
-                    <th>Status</th>
-                    <th>To</th>
-                    <th>Subject</th>
-                    <th>Queued</th>
-                    <th>Scheduled For</th>
-                    <th>Retries</th>
-                    <th>Error</th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {mailQueue.filter(q => queueStatusFilter === 'all' || q.status === queueStatusFilter).map(item => (
-                    <tr key={item.id} className={`queue-row queue-${item.status}`}>
-                      <td>
-                        <span className={`badge ${item.status === 'sent' ? 'badge-accent' : item.status === 'failed' ? 'badge-danger' : item.status === 'deferred' ? 'badge-warning' : 'badge-primary'}`}>
-                          {item.status === 'sending' ? <LoadingSpinner size="sm" label="Sending" /> : null}
-                          {item.status}
-                        </span>
-                      </td>
-                      <td className="queue-to">{item.to}</td>
-                      <td className="queue-subject">{item.subject}</td>
-                      <td className="queue-time">{formatRelative(item.queuedAt)}</td>
-                      <td className="queue-time">
-                        {item.scheduledAt ? (
-                          <span className="queue-schedule">
-                            <Clock size={12} /> {new Date(item.scheduledAt).toLocaleString()} ({formatRelative(item.scheduledAt)})
-                          </span>
-                        ) : 'Send now'}
-                      </td>
-                      <td className="queue-retries">{item.retryCount}/{item.retryCount >= 3 ? 'MAX' : '3'}</td>
-                      <td className="queue-error">{item.error || '—'}</td>
-                      <td className="queue-actions">
-                        {item.status === 'queued' && <button aria-label="Pause" className="btn btn-ghost btn-icon btn-sm" title="Pause" onClick={() => handlePauseQueueItem(item.id)}><Pause size={14} /></button>}
-                        {item.status === 'deferred' && <button aria-label="Retry" className="btn btn-ghost btn-icon btn-sm" title="Retry" onClick={() => handleRetryQueueItem(item.id)}><RefreshCcw size={14} /></button>}
-                        {item.status === 'failed' && <button aria-label="Retry" className="btn btn-ghost btn-icon btn-sm" title="Retry" onClick={() => handleRetryQueueItem(item.id)}><RefreshCcw size={14} /></button>}
-                        <button aria-label="Delete" className="btn btn-danger btn-icon btn-sm" title="Delete" onClick={() => handleDeleteQueueItem(item.id)}><Trash size={14} /></button>
-                      </td>
-                    </tr>
-                  ))}
-                  {mailQueue.filter(q => queueStatusFilter === 'all' || q.status === queueStatusFilter).length === 0 && (
-                    <tr>
-                      <td colSpan={8} className="queue-empty">
-                        No messages match this queue view.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-
-        {/* ===== ANALYTICS TAB ===== */}
-        {activeBizTab === 'analytics' && (
-          <div className="biz-panel animate-fade">
-            <div className="panel-header">
-              <div>
-                <h2 style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <button aria-label="Open menu" className="btn btn-icon btn-ghost mobile-menu-btn" onClick={() => setSidebarOpen(true)}>
-                    <Menu size={20} />
-                  </button>
-                  <BarChart3 size={20} /> Mail Analytics
-                  <span className="live-dot" title="Live" />
-                </h2>
-                <p>Real-time delivery performance and domain health metrics.</p>
-              </div>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <button className="btn btn-ghost btn-sm" onClick={() => refetchEmails()}><RefreshCw size={16} /> Refresh</button>
-              </div>
-            </div>
-
-            <div className="analytics-cards">
-              <div className="analytics-card glass-card">
-                <div className="analytics-card-label"><Mail size={16} /> Emails Sent</div>
-                <div className="analytics-card-value">{mail.getBusinessByFolderSync(activeDomainName, 'sent').length}</div>
-                <div className="analytics-card-change neutral">From {activeDomainName}</div>
-                <div className="analytics-bar">
-                  <div className="analytics-bar-fill" style={{ width: `${Math.min(mail.getBusinessByFolderSync(activeDomainName, 'sent').length * 2, 100)}%` }} />
-                </div>
-              </div>
-              <div className="analytics-card glass-card">
-                <div className="analytics-card-label"><Inbox size={16} /> Inbox Count</div>
-                <div className="analytics-card-value">{mail.getBusinessByFolderSync(activeDomainName, 'inbox').length}</div>
-                <div className="analytics-card-change neutral">Total received</div>
-                <div className="analytics-bar">
-                  <div className="analytics-bar-fill accent" style={{ width: `${Math.min(mail.getBusinessByFolderSync(activeDomainName, 'inbox').length * 2, 100)}%` }} />
-                </div>
-              </div>
-              <div className="analytics-card glass-card">
-                <div className="analytics-card-label"><Globe size={16} /> Active Domains</div>
-                <div className="analytics-card-value">{domainsList.filter(d => d.status === 'active').length}/{domainsList.length}</div>
-                <div className="analytics-card-change neutral">Verified domains</div>
-                <div className="analytics-bar">
-                  <div className="analytics-bar-fill accent" style={{ width: `${domainsList.length > 0 ? (domainsList.filter(d => d.status === 'active').length / domainsList.length) * 100 : 0}%` }} />
-                </div>
-              </div>
-              <div className="analytics-card glass-card">
-                <div className="analytics-card-label"><Shield size={16} /> Domain Reputation</div>
-                <div className="analytics-card-value">{activeDomainRecord?.reputation ?? 0}/100</div>
-                <div className="analytics-card-change neutral">DNS health score</div>
-                <div className="analytics-bar">
-                  <div className="analytics-bar-fill accent" style={{ width: `${activeDomainRecord?.reputation ?? 0}%` }} />
-                </div>
-              </div>
-              <div className="analytics-card glass-card">
-                <div className="analytics-card-label"><Users size={16} /> Team Members</div>
-                <div className="analytics-card-value">{teamMembers.length}</div>
-                <div className="analytics-card-change neutral">{teamMembers.filter(m => m.role === 'admin').length} admins</div>
-                <div className="analytics-bar">
-                  <div className="analytics-bar-fill muted" style={{ width: `${Math.min(teamMembers.length * 10, 100)}%` }} />
-                </div>
-              </div>
-              <div className="analytics-card glass-card">
-                <div className="analytics-card-label"><Activity size={16} /> Audit Events</div>
-                <div className="analytics-card-value">{auditLog.length}</div>
-                <div className="analytics-card-change neutral">{auditLog.filter(e => e.severity === 'critical' || e.severity === 'warn').length} warnings</div>
-                <div className="analytics-bar">
-                  <div className="analytics-bar-fill warning" style={{ width: `${auditLog.length > 0 ? Math.min((auditLog.filter(e => e.severity === 'warn').length / auditLog.length) * 100, 100) : 0}%` }} />
-                </div>
-              </div>
-            </div>
-
-            <div className="analytics-charts glass-card">
-              <h3><Activity size={16} /> Connection Status</h3>
-              <div style={{ display: 'grid', gap: '12px', marginTop: '16px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px', background: 'var(--bg-surface-2)', borderRadius: '8px', border: '1px solid var(--border-primary)' }}>
-                  <span className="live-dot" />
-                  <div>
-                    <strong style={{ color: 'var(--text-primary)' }}>Mail Provider</strong>
-                    <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{user?.businessMailProvider || 'Not configured'}</div>
-                  </div>
-                  <span className="badge badge-accent" style={{ marginLeft: 'auto' }}>{user?.businessMailProvider ? 'Connected' : 'Pending'}</span>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px', background: 'var(--bg-surface-2)', borderRadius: '8px', border: '1px solid var(--border-primary)' }}>
-                  <span className={`live-dot ${user?.businessDbUrl ? '' : 'offline'}`} />
-                  <div>
-                    <strong style={{ color: 'var(--text-primary)' }}>Database</strong>
-                    <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{user?.businessDbUrl ? 'BYOD Connected' : 'Not connected'}</div>
-                  </div>
-                  <span className={`badge ${user?.businessDbUrl ? 'badge-accent' : 'badge-secondary'}`} style={{ marginLeft: 'auto' }}>{user?.businessDbUrl ? 'Connected' : 'Disconnected'}</span>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px', background: 'var(--bg-surface-2)', borderRadius: '8px', border: '1px solid var(--border-primary)' }}>
-                  <span className={`live-dot ${activeDomainRecord?.status === 'active' ? '' : 'offline'}`} />
-                  <div>
-                    <strong style={{ color: 'var(--text-primary)' }}>Primary Domain</strong>
-                    <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{activeDomainName}</div>
-                  </div>
-                  <span className={`badge ${activeDomainRecord?.status === 'active' ? 'badge-accent' : 'badge-warning'}`} style={{ marginLeft: 'auto' }}>{activeDomainRecord?.status || 'Unknown'}</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* ===== AUDIT TAB ===== */}
-        {activeBizTab === 'audit' && (
-          <div className="biz-panel animate-fade">
-            <div className="panel-header">
-              <div>
-                <h2 style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <button aria-label="Open menu" className="btn btn-icon btn-ghost mobile-menu-btn" onClick={() => setSidebarOpen(true)}>
-                    <Menu size={20} />
-                  </button>
-                  <Shield size={20} /> Audit Log
-                </h2>
-                <p>Track all configuration changes, domain operations, and team activity.</p>
-              </div>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <select className="input input-sm" value={auditFilter} onChange={e => setAuditFilter(e.target.value)}>
-                  <option value="all">All Events</option>
-                  <option value="critical">Critical Only</option>
-                  <option value="warn">Warnings</option>
-                  <option value="info">Info</option>
-                </select>
-                <button className="btn btn-ghost btn-sm"><Download size={16} /> Export</button>
-              </div>
-            </div>
-
-            <div className="audit-log">
-              {auditLog.filter(e => auditFilter === 'all' || e.severity === auditFilter).map(entry => (
-                <div key={entry.id} className={`audit-row glass-card audit-${entry.severity}`}>
-                  <div className="audit-severity-indicator" />
-                  <div className="audit-content">
-                    <div className="audit-action">
-                      <span className={`badge badge-sm badge-${entry.severity === 'critical' ? 'danger' : entry.severity === 'warn' ? 'warning' : 'primary'}`}>{entry.severity}</span>
-                      <strong>{entry.action}</strong>
-                    </div>
-                    <div className="audit-meta">
-                      <span><Mail size={12} /> {entry.actor}</span>
-                      <span>→</span>
-                      <span>{entry.target}</span>
-                      <span><Clock size={12} /> {formatRelative(entry.timestamp)}</span>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* ===== PLATFORM ADMIN TAB ===== */}
-        {activeBizTab === 'admin' && canAccessPlatformAdmin && (
-          <div className="biz-panel animate-fade">
-            <div className="panel-header">
-              <div>
-                <h2><Crown size={20} /> Platform Admin</h2>
-                <p>Secure user lifecycle, billing, usage, and risk controls for VelisMail accounts.</p>
-              </div>
-              <button className="btn btn-ghost btn-sm" onClick={refreshAdminUsers}><RefreshCw size={16} /> Refresh</button>
-            </div>
-
-            <div className="admin-metrics">
-              <div className="admin-metric glass-card"><span>Total users</span><strong>{adminMetrics.total}</strong></div>
-              <div className="admin-metric glass-card"><span>Active</span><strong>{adminMetrics.active}</strong></div>
-              <div className="admin-metric glass-card"><span>Suspended</span><strong>{adminMetrics.suspended}</strong></div>
-              <div className="admin-metric glass-card"><span>Paid plans</span><strong>{adminMetrics.paid}</strong></div>
-            </div>
-
-            <div className="admin-controls glass-card">
-              <div className="list-search admin-search">
-                <Search size={16} aria-hidden="true" />
-                <input value={adminSearch} onChange={e => setAdminSearch(e.target.value)} placeholder="Search users by email, name, or domain..." />
-                {adminSearch && <button aria-label="Clear admin search" className="search-clear" onClick={() => setAdminSearch('')}><X size={14} /></button>}
-              </div>
-              <select className="input" value={adminStatusFilter} onChange={e => setAdminStatusFilter(e.target.value)}>
-                <option value="all">All statuses</option>
-                <option value="active">Active</option>
-                <option value="suspended">Suspended</option>
-                <option value="deactivated">Deactivated</option>
-              </select>
-              <select className="input" value={adminPlanFilter} onChange={e => setAdminPlanFilter(e.target.value)}>
-                <option value="all">All plans</option>
-                <option value="Free">Free</option>
-                <option value="Starter">Starter</option>
-                <option value="Business">Business</option>
-                <option value="Enterprise">Enterprise</option>
-                <option value="Team Access">Team Access</option>
-              </select>
-              <select className="input" value={adminRiskFilter} onChange={e => setAdminRiskFilter(e.target.value)}>
-                <option value="all">All risk</option>
-                <option value="low">Low risk</option>
-                <option value="medium">Medium risk</option>
-                <option value="high">High risk</option>
-              </select>
-            </div>
-
-            <div className="admin-users-table glass-card">
-              <div className="admin-table-head">
-                <span>User</span>
-                <span>Plan</span>
-                <span>Usage</span>
-                <span>Risk</span>
-                <span>Lifecycle</span>
-                <span>Actions</span>
-              </div>
-              {filteredAdminUsers.map(record => (
-                <div className="admin-table-row" key={record.user.id}>
-                  <button className="admin-user-profile" type="button" onClick={() => setSelectedAdminUser(record)}>
-                    <strong>{record.user.displayName}</strong>
-                    <span>{record.user.email}</span>
-                    <small>{record.domain || 'No domain'} · joined {formatRelative(record.createdAt)}</small>
-                  </button>
-                  <div>
-                    <strong>{record.plan}</strong>
-                    <span>{record.billingCycle}</span>
-                    <small>Paid {record.paidPlanPurchasedAt ? formatRelative(record.paidPlanPurchasedAt) : 'not recorded'}</small>
-                  </div>
-                  <div className="admin-usage-grid">
-                    <span>{record.emailCount} mails</span>
-                    <span>{record.domainCount} domains</span>
-                    <span>{record.teamMemberCount} team</span>
-                    <span>{formatBytes(record.storageEstimateBytes)}</span>
-                  </div>
-                  <div>
-                    <span className={`badge badge-sm admin-risk-${record.risk}`}>{record.risk}</span>
-                    <small>{record.auditCount} audit events</small>
-                  </div>
-                  <div>
-                    <span className={`badge ${record.status === 'active' ? 'badge-accent' : 'badge-danger'}`}>{record.status}</span>
-                    {record.user.suspensionReason && <small>{record.user.suspensionReason}</small>}
-                  </div>
-                  <div className="admin-actions">
-                    {record.status === 'active' ? (
-                      <button className="btn btn-danger btn-sm" onClick={() => handleAdminStatusChange(record, 'suspended')}><UserX size={14} /> Suspend</button>
-                    ) : (
-                      <button className="btn btn-primary btn-sm" onClick={() => handleAdminStatusChange(record, 'active')}><UserCheck size={14} /> Reactivate</button>
-                    )}
-                  </div>
-                </div>
-              ))}
-              {filteredAdminUsers.length === 0 && (
-                <div className="list-empty">
-                  <Users size={26} />
-                  <p>No users match the selected admin filters.</p>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* ===== TEMPLATES TAB ===== */}
-        {activeBizTab === 'templates' && (
-          <div className="biz-panel animate-fade">
-            <div className="panel-header">
-              <div>
-                <h2><Layers size={20} /> Email Templates</h2>
-                <p>Create and manage reusable email templates for consistent communication.</p>
-              </div>
-              <button className="btn btn-primary" onClick={handleCreateTemplate}><Plus size={16} /> New Template</button>
-            </div>
-
-            <div className="list-search template-search" style={{ marginBottom: 16 }}>
-              <Search size={16} aria-hidden="true" />
-              <input type="text" placeholder="Search templates…" value={templateSearch} onChange={e => setTemplateSearch(e.target.value)} />
-              {templateSearch && <button aria-label="Clear template search" className="search-clear" onClick={() => setTemplateSearch('')}><X size={14} /></button>}
-            </div>
-
-            <div className="templates-grid">
-              {filteredTemplates.map(tpl => (
-                <div key={tpl.id} className="template-card glass-card">
-                  <div className="template-header">
-                    <div className="template-icon"><Layers size={20} /></div>
-                    <div className="template-info">
-                      <div className="template-name">{tpl.name}</div>
-                      <div className="template-subject">{tpl.subject}</div>
-                    </div>
-                    <div className="template-actions">
-                      <button className="btn btn-ghost btn-sm" onClick={() => handleUseTemplate(tpl)}><Edit3 size={14} /></button>
-                      <button className="btn btn-ghost btn-sm" onClick={() => setPreviewTemplate(tpl)}><Eye size={14} /></button>
-                      <button className="btn btn-ghost btn-sm" onClick={() => handleDeleteTemplate(tpl.id)}><Trash size={14} /></button>
-                    </div>
-                  </div>
-                  <div className="template-preview">{tpl.body.slice(0, 80)}…</div>
-                  <div className="template-footer">
-                    <span className="template-usage"><Mail size={12} /> Used {tpl.usageCount} times</span>
-                    {tpl.lastUsed && <span className="template-last">Last: {formatRelative(tpl.lastUsed)}</span>}
-                    <button className="btn btn-primary btn-sm" style={{ marginLeft: 'auto' }} onClick={() => handleUseTemplate(tpl)}>Use Template</button>
-                  </div>
-                </div>
-              ))}
-            </div>
-            {filteredTemplates.length === 0 && (
-              <div className="list-empty">
-                <Layers size={26} />
-                <p>{templateSearch ? 'No templates match your search.' : 'No templates created yet.'}</p>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* ===== SETTINGS TAB (within biz) ===== */}
-        {activeBizTab === 'settings' && (
-          <div className="biz-panel animate-fade">
-            <div className="panel-header">
-              <h2><Settings size={20} /> Business Settings</h2>
-            </div>
-            <div className="biz-settings-sections">
-              <div className="glass-card">
-                <h3><Bell size={16} /> Notifications</h3>
-                <div className="toggle-row">
-                  <div>
-                    <div className="toggle-label">Email Notifications</div>
-                    <div className="toggle-desc">Get notified for new business emails</div>
-                  </div>
-                  <button className={`toggle-btn ${notificationEnabled ? 'on' : ''}`} onClick={() => setNotificationEnabled(!notificationEnabled)}>
-                    {notificationEnabled ? <Bell size={16} /> : <BellOff size={16} />}
-                  </button>
-                </div>
-                <div className="toggle-row">
-                  <div>
-                    <div className="toggle-label">Sound Alerts</div>
-                    <div className="toggle-desc">Play sound for new messages</div>
-                  </div>
-                  <button className={`toggle-btn ${soundEnabled ? 'on' : ''}`} onClick={() => setSoundEnabled(!soundEnabled)}>
-                    {soundEnabled ? <Volume2 size={16} /> : <VolumeX size={16} />}
-                  </button>
-                </div>
-              </div>
-              <div className="glass-card">
-                <h3><Mail size={16} /> Default Sending Domain</h3>
-                <select className="input" value={activeDomain} onChange={(e) => { setActiveDomain(e.target.value); domains.setPrimary(e.target.value); }}>
-                  {domainsList.map(d => <option key={d.id} value={d.id}>{d.domain}</option>)}
-                </select>
-              </div>
-              <div className="glass-card">
-                <h3><Server size={16} /> Connected Infrastructure</h3>
-                <div style={{ display: 'grid', gap: 10 }}>
-                  {connectionUsage.length === 0 ? (
-                    <div style={{ padding: '20px', textAlign: 'center', border: '1px dashed var(--danger)', borderRadius: 'var(--radius-md)', background: 'rgba(239, 68, 68, 0.05)' }}>
-                      <AlertTriangle size={32} color="var(--danger)" style={{ marginBottom: 8 }} />
-                      <p style={{ margin: '0 0 4px', fontWeight: 600, color: 'var(--danger)' }}>No Infrastructure Connected</p>
-                      <p style={{ margin: '0 0 16px', color: 'var(--text-muted)', fontSize: '0.85rem' }}>Your database and mail provider API keys are not configured. Dashboard functionality requires connected infrastructure.</p>
-                      <button className="btn btn-primary btn-sm" onClick={() => navigate('/business-setup')}>
-                        <Server size={14} /> Reconfigure Infrastructure
-                      </button>
-                    </div>
-                  ) : (
-                    <>
-                      {user?.businessMailProvider === 'resend' && (
-                        <div className="queue-row glass-card" style={{ padding: 12 }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                            <ShieldCheck size={16} color={user.businessMailWebhookSecret ? 'var(--success)' : 'var(--danger)'} />
-                            <div>
-                              <strong>Resend Webhook Signing Secret</strong>
-                              <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-                                {user.businessMailWebhookSecret ? 'Configured for inbound email verification' : 'Missing - inbound email is blocked'}
-                              </div>
-                            </div>
-                          </div>
-                          <span className={`badge ${user.businessMailWebhookSecret ? 'badge-accent' : 'badge-danger'}`} style={{ fontSize: '0.7rem' }}>
-                            {user.businessMailWebhookSecret ? 'Connected' : 'Required'}
-                          </span>
-                          {!user.businessMailWebhookSecret && (
-                            <button className="btn btn-primary btn-sm" onClick={() => navigate('/business-setup')}>
-                              <Settings size={14} /> Complete Setup
-                            </button>
-                          )}
-                        </div>
-                      )}
-                      {connectionUsage.map((usage) => (
-                        <div key={usage.id} className="queue-row glass-card" style={{ padding: 12 }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                            {usage.type === 'database' ? <Database size={16} color="var(--primary)" /> : <KeyRound size={16} color="var(--accent)" />}
-                          <div>
-                            <strong>{usage.label}</strong>
-                            <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>{usage.maskedValue}</div>
-                          </div>
-                        </div>
-                        <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-                          {usage.ownerDisplayName}
-                          {usage.provider ? ` · ${usage.provider}` : ''}
-                        </div>
-                        <span className="badge badge-accent" style={{ fontSize: '0.7rem' }}>Connected</span>
-                        <button className="btn btn-ghost btn-sm" style={{ color: 'var(--danger)' }} onClick={() => setConfirmRevokeId(usage.id)}>
-                          <XCircle size={14} /> Revoke
-                        </button>
-                      </div>
-                      ))}
-                    </>
-                  )}
-                </div>
-              </div>
-              <div className="glass-card">
-                <h3><Lock size={16} /> Security</h3>
-                <div className="toggle-row">
-                  <div>
-                    <div className="toggle-label">Two-Factor Authentication</div>
-                    <div className="toggle-desc">Require 2FA for all team members</div>
-                  </div>
-                  <button aria-label="Toggle Two-Factor Authentication" className="toggle-btn on"><Lock size={16} /></button>
-                </div>
-                <div className="toggle-row">
-                  <div>
-                    <div className="toggle-label">API Access Logging</div>
-                    <div className="toggle-desc">Log all API calls to audit trail</div>
-                  </div>
-                  <button aria-label="Toggle API Access Logging" className="toggle-btn on"><Shield size={16} /></button>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* ===== BILLING TAB ===== */}
-        {activeBizTab === 'billing' && (
-          <div className="biz-panel animate-fade">
-            <div className="panel-header">
-              <h2><CreditCard size={20} /> Billing & Premium</h2>
-              <p>Manage your workspace subscription and upgrade to premium features.</p>
-            </div>
-            
-            <div className="billing-pricing-container" style={{ paddingBottom: '40px' }}>
-              <div className="billing-current-plan">
-                <div className="billing-current-main">
-                  <span className="billing-eyebrow">Current subscription</span>
-                  <div className="billing-plan-name">{currentPlanName}</div>
-                  <p>
-                    {currentBillingCycle === 'annual' ? 'Annual billing' : 'Monthly billing'}
-                    {' '}· {currentCycleAmount === 0 ? 'No active paid charge' : `₹${formatINR(currentCycleAmount)} / ${currentBillingCycle === 'annual' ? 'year' : 'month'}`}
-                  </p>
-                </div>
-                <div className="billing-date-grid" aria-label="Subscription timeline">
-                  <div>
-                    <span>Purchased</span>
-                    <strong>{currentPlan.monthlyPrice === 0 ? 'Free plan' : formatBillingDate(currentPlanStartedAt)}</strong>
-                  </div>
-                  <div>
-                    <span>Expires</span>
-                    <strong>{currentPlan.monthlyPrice === 0 ? 'No expiry' : formatBillingDate(currentPlanExpiresAt)}</strong>
-                  </div>
-                  <div>
-                    <span>Status</span>
-                    <strong>{currentSubscriptionStatus}</strong>
-                  </div>
-                </div>
-                <span className={`subscription-status-pill status-${currentSubscriptionStatus.toLowerCase().replace(/\s+/g, '-')}`}>
-                  {currentSubscriptionStatus}
-                </span>
-              </div>
-
-              <div className="billing-toggle-wrap" style={{ margin: '0 auto 32px' }}>
-                <span className={!annual ? 'active' : ''}>Monthly</span>
-                <button 
-                  type="button"
-                  className={`billing-toggle ${annual ? 'annual' : ''}`}
-                  onClick={() => setAnnual(!annual)}
-                  aria-label="Toggle billing cycle"
-                  aria-pressed={annual}
-                >
-                  <div className="toggle-knob" />
-                </button>
-                <span className={annual ? 'active' : ''}>
-                  Annually
-                </span>
-                <span className="billing-save-badge">Save 16%</span>
-              </div>
-
-              <div className="pricing-grid compact-dash-pricing" style={{ 
-                display: 'grid', 
-                gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', 
-                gap: '16px',
-                padding: '0 8px',
-                maxWidth: '100%'
-              }}>
-                {plans.map((plan) => {
-                  const displayedMonthly = getDisplayedMonthlyPrice(plan, annual);
-                  const annualSavings = getAnnualSavings(plan);
-                  const annualSavingsPercent = getAnnualSavingsPercent(plan);
-                  const isFree = plan.monthlyPrice === 0;
-                  const isCurrentPlan = plan.name.toLowerCase() === currentPlanName.toLowerCase();
-                  const currentPlanSameBilling = isCurrentPlan && (isFree || currentBillingCycle === (annual ? 'annual' : 'monthly'));
-                  const buttonLabel = currentPlanSameBilling
-                    ? 'Current Plan'
-                    : isCurrentPlan
-                      ? `Switch to ${annual ? 'Annual' : 'Monthly'}`
-                      : plan.cta;
-
-                  return (
-                    <div key={plan.id} className={`pricing-card ${plan.popular ? 'popular' : ''} ${isCurrentPlan ? 'current-plan' : ''}`}>
-                      <div className="plan-header">
-                        <div className="plan-icon">
-                          <plan.icon size={18} />
-                        </div>
-                        <h3>{plan.name}</h3>
-                        <p className="plan-desc">{plan.desc}</p>
-                      </div>
-
-                      <div className="plan-price" style={{ marginBottom: isFree ? '16px' : '8px' }}>
-                        <span className="currency" style={{ fontSize: '1.1rem' }}>₹</span>
-                        <span className="amount" style={{ fontSize: '1.8rem' }}>{formatINR(displayedMonthly)}</span>
-                        <span className="period" style={{ fontSize: '0.8rem' }}>/mo</span>
-                      </div>
-
-                      {!isFree && (
-                        <p className="price-annual-note" style={{ marginTop: 0, marginBottom: '14px', minHeight: '34px' }}>
-                          {annual ? (
-                            <>
-                              <span className="strike">₹{formatINR(plan.monthlyPrice)}/mo</span>
-                              <span className="save">
-                                Billed ₹{formatINR(plan.annualPrice)}/year · save ₹{formatINR(annualSavings)} ({annualSavingsPercent}%)
-                              </span>
-                            </>
-                          ) : (
-                            <>Billed monthly · Switch to annual & save 16%</>
-                          )}
-                        </p>
-                      )}
-
-                      <button
-                        className={`btn ${plan.ctaStyle} btn-block`}
-                        onClick={() => handleUpgrade(plan)}
-                        disabled={plan.id === 'free' || currentPlanSameBilling || loadingPayment === plan.id}
-                        style={{ height: '36px', fontSize: '0.9rem', marginBottom: '20px' }}
-                      >
-                        {loadingPayment === plan.id ? (
-                          <>
-                            <LoadingSpinner size="sm" label="Processing payment" />
-                            Processing
-                          </>
-                        ) : buttonLabel}
-                      </button>
-
-                      <ul className="plan-features" style={{ gap: '8px', margin: 0, padding: 0 }}>
-                        {plan.features.map((feature, idx) => (
-                          <li key={idx} className={feature.highlight ? 'highlight' : ''} style={{ fontSize: '0.8rem', display: 'flex', gap: '8px', alignItems: 'center' }}>
-                            <Check size={14} color={feature.highlight ? 'var(--primary)' : 'var(--success)'} />
-                            <span>{feature.text}</span>
-                          </li>
-                        ))}
-                        {plan.disabledFeatures.map((feat, idx) => (
-                          <li key={`disabled-${idx}`} className="disabled" style={{ fontSize: '0.8rem', display: 'flex', gap: '8px', alignItems: 'center', opacity: 0.5 }}>
-                            <X size={14} />
-                            <span>{feat}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-        )}
+        {activeBizTab === 'billing' && <BillingPanel state={{
+          activeBizTab, setActiveBizTab, activeFolder, setActiveFolder,
+          selectedEmail, setSelectedEmail, searchQuery, setSearchQuery,
+          composeOpen, setComposeOpen, composeTo, setComposeTo, composeSubject, setComposeSubject,
+          composeBody, setComposeBody, sending, setSending, selectedFromAddress, setSelectedFromAddress,
+          annual, setAnnual, loadingPayment, setLoadingPayment, toast, showToast,
+          showLogoutConfirm, setShowLogoutConfirm, confirmRevokeId, setConfirmRevokeId,
+          pendingRoleChange, setPendingRoleChange, confirmAction, setConfirmAction,
+          domainsList, setDomainsList, activeDomain, setActiveDomain,
+          domainMailboxes, setDomainMailboxes, domainGroups, setDomainGroups,
+          teamMembers, setTeamMembers, mailQueue, setMailQueue, auditLog, setAuditLog,
+          templates, setTemplates, connectionUsage, setConnectionUsage, adminUsers, setAdminUsers,
+          sortOrder, setSortOrder, viewMode, setViewMode, selectedEmails, setSelectedEmails,
+          mailStatusFilter, setMailStatusFilter, notificationEnabled, setNotificationEnabled,
+          soundEnabled, setSoundEnabled, showQueueFilters, setShowQueueFilters,
+          queueStatusFilter, setQueueStatusFilter, templateSearch, setTemplateSearch,
+          showAddDomain, setShowAddDomain, newDomainInput, setNewDomainInput,
+          teamFilter, setTeamFilter, auditFilter, setAuditFilter, adminSearch, setAdminSearch,
+          adminPlanFilter, setAdminPlanFilter, adminStatusFilter, setAdminStatusFilter,
+          adminRiskFilter, setAdminRiskFilter, sidebarOpen, setSidebarOpen, user,
+          themeMode, setThemeMode, toggleTheme, activeDomainName,
+          hasRoleAccess, canAccessPlatformAdmin, refreshDomains, refreshTeam, refreshQueue,
+          refreshAudit, refreshTemplates, refreshMailboxes, refreshGroups, refreshConnectionUsage,
+          handleLogout, handleSendEmail, openComposeWith, copyToClipboard,
+        }} handleBuyPlan={handleBuyPlan} />}
       </main>
 
-      {domainVerifyOpen && (
-        <div className="modal-overlay" onClick={() => !verifyingDomainId && setDomainVerifyOpen(false)}>
-          <div className="biz-form-modal glass animate-scale" onClick={(e) => e.stopPropagation()}>
-            <div className="compose-header">
-              <h3><Globe size={16} /> Domain Verification Diagnostics</h3>
-              <button aria-label="Close" className="btn btn-ghost btn-icon" type="button" disabled={Boolean(verifyingDomainId)} onClick={() => setDomainVerifyOpen(false)}><X size={18} /></button>
-            </div>
-            <div className="diag-steps">
-              {domainVerifySteps.map((step, index) => (
-                <div key={`${step.label}-${index}`} className={`diag-step diag-${step.status === 'verified' ? 'success' : step.status === 'failed' ? 'error' : 'pending'}`}>
-                  <div className="diag-step-icon">
-                    {step.status === 'pending'
-                      ? <LoadingSpinner size="sm" label="Running verification" />
-                      : step.status === 'verified'
-                        ? <CheckCircle2 size={16} />
-                        : <XCircle size={16} />}
-                  </div>
-                  <div className="diag-step-info">
-                    <span className="diag-step-label">{step.label}</span>
-                    <span className="diag-step-detail">{step.detail}</span>
-                    {step.recommendation && <span className="diag-step-detail">{step.recommendation}</span>}
-                  </div>
-                </div>
-              ))}
-            </div>
-            {domainVerifyProviderRecords.length > 0 && (
-              <div className="bsetup-dns" style={{ marginTop: 20 }}>
-                <p className="dns-instruction-text">Provider-specific DNS records:</p>
-                <div className="dns-records-table">
-                  <div className="dns-table-header">
-                    <span className="dns-col-type">Type</span>
-                    <span className="dns-col-name">Host / Name</span>
-                    <span className="dns-col-value">Value / Points To</span>
-                    <span className="dns-col-priority">Priority</span>
-                    <span className="dns-col-ttl">Status</span>
-                  </div>
-                  {domainVerifyProviderRecords.map((record, index) => {
-                    const recordKey = `provider-${index}`;
-                    const recordType = providerRecordType(record);
-                    return (
-                      <div key={recordKey} className="dns-table-row">
-                        <span className="dns-col-type">
-                          <span className={`dns-type-badge dns-type-${recordType.toLowerCase()}`}>{recordType}</span>
-                        </span>
-                        <span className="dns-col-name">
-                          <code className="dns-field-value">{record.name}</code>
-                          <button
-                            className="dns-copy-btn"
-                            onClick={() => copyToClipboard(record.name, `pname-${recordKey}`)}
-                            title="Copy host name"
-                          >
-                            {copiedField === `pname-${recordKey}` ? <Check size={12} color="var(--success)" /> : <Copy size={12} />}
-                          </button>
-                        </span>
-                        <span className="dns-col-value">
-                          <code className="dns-field-value">{record.value}</code>
-                          <button
-                            className="dns-copy-btn"
-                            onClick={() => copyToClipboard(record.value, `pvalue-${recordKey}`)}
-                            title="Copy value"
-                          >
-                            {copiedField === `pvalue-${recordKey}` ? <Check size={12} color="var(--success)" /> : <Copy size={12} />}
-                          </button>
-                        </span>
-                        <span className="dns-col-priority">
-                          {record.priority ? (
-                            <code className="dns-field-value">{record.priority}</code>
-                          ) : <span className="dns-field-na">—</span>}
-                        </span>
-                        <span className="dns-col-ttl">
-                          <span className={`badge badge-sm`} style={{
-                            display: 'inline-flex', alignItems: 'center', gap: '4px',
-                            backgroundColor: record.status === 'verified' ? 'var(--success-glow)' : record.status === 'failed' ? 'var(--danger-glow)' : 'var(--bg-hover)',
-                            color: record.status === 'verified' ? 'var(--success)' : record.status === 'failed' ? 'var(--danger)' : 'var(--text-muted)'
-                          }}>
-                            {record.status === 'verified' ? <CheckCircle2 size={12} /> : record.status === 'failed' ? <XCircle size={12} /> : <LoadingSpinner size="sm" label="Checking" />}
-                            {record.status || 'pending'}
-                          </span>
-                        </span>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-            <div className="biz-modal-actions">
-              <button className="btn btn-ghost" type="button" onClick={() => setDomainVerifyOpen(false)} disabled={Boolean(verifyingDomainId)}>Close</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Compose Modal */}
-      {composeOpen && (
-        <div className="modal-overlay" onClick={() => !sending && setComposeOpen(false)}>
-          <div className="compose-modal glass animate-scale" onClick={e => e.stopPropagation()}>
-            <div className="compose-header">
-              <h3><Mail size={16} /> New Business Email</h3>
-              <button aria-label="Close" className="btn btn-ghost btn-icon" onClick={() => !sending && setComposeOpen(false)} disabled={sending}><X size={18} /></button>
-            </div>
-            <Composer
-              initialTo={composeTo}
-              initialSubject={composeSubject}
-              initialBody={composeBody}
-              onSend={handleSend}
-              onClose={() => setComposeOpen(false)}
-              sending={sending}
-              fromControl={domainMailboxes.length > 1 ? (
-                <select className="input" value={selectedFromAddress} onChange={(e) => setSelectedFromAddress(e.target.value)}>
-                  {domainMailboxes.map((mailbox) => (
-                    <option key={mailbox.id} value={mailbox.address}>
-                      {mailbox.displayName} · {mailbox.address}
-                    </option>
-                  ))}
-                </select>
-              ) : undefined}
-              fromBadge={<div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 600, color: 'var(--text-primary)' }}><Mail size={14} color="var(--text-muted)" /> {selectedFromAddress || businessMailbox}</div>}
-            />
-          </div>
-        </div>
-      )}
-
-      {inviteOpen && (
-        <div className="modal-overlay" onClick={() => setInviteOpen(false)}>
-          <form className="biz-form-modal glass animate-scale" onSubmit={handleInviteSubmit} onClick={e => e.stopPropagation()}>
-            <div className="compose-header">
-              <h3><Users size={16} /> Invite Team Member</h3>
-              <button aria-label="Close" className="btn btn-ghost btn-icon" type="button" onClick={() => setInviteOpen(false)}><X size={18} /></button>
-            </div>
-            <div style={{ padding: '20px' }}>
-              <div className="biz-modal-grid">
-                <label>Name<input className="input" value={inviteName} onChange={e => setInviteName(e.target.value)} placeholder="Jane Doe" /></label>
-                <label>Email<input className="input" type="email" value={inviteEmail} onChange={e => setInviteEmail(e.target.value)} placeholder={`member@${activeDomainName || 'domain.com'}`} required /></label>
-                <label>Role
-                  <select className="input" value={inviteRole} onChange={e => setInviteRole(e.target.value as BusinessTeamMember['role'])}>
-                    <option value="admin">Admin</option>
-                    <option value="member">Member</option>
-                    <option value="viewer">Viewer</option>
-                  </select>
-                </label>
-                <label>Expires
-                  <select className="input" value={inviteExpiresHours} onChange={e => setInviteExpiresHours(Number(e.target.value))}>
-                    <option value={1}>1 hour</option>
-                    <option value={24}>24 hours</option>
-                    <option value={72}>3 days</option>
-                    <option value={168}>7 days</option>
-                    <option value={720}>30 days</option>
-                    <option value={0}>No expiry</option>
-                  </select>
-                </label>
-                {issuedInvite && (
-                  <label className="biz-modal-full">Team Access API Key
-                    <div className="invite-token-panel">
-                      <div className="invite-token-header">
-                        <span><KeyRound size={14} /> API key for {issuedInvite.email}</span>
-                        <strong>{formatInviteExpiry(issuedInvite.expiresAt)}</strong>
-                      </div>
-                      <div className="invite-token-row">
-                        <code>{issuedInvite.token}</code>
-                        <button className="btn btn-primary btn-sm" type="button" onClick={() => copyToClipboard(issuedInvite.token)}>
-                          <Copy size={14} /> Copy API Key
-                        </button>
-                      </div>
-                    </div>
-                  </label>
-                )}
-              </div>
-              <div className="biz-modal-actions">
-                <button className="btn btn-ghost" type="button" onClick={() => setInviteOpen(false)}>Cancel</button>
-                <button className="btn btn-primary" type="submit"><Plus size={16} /> Send Invite</button>
-              </div>
-            </div>
-          </form>
-        </div>
-      )}
-
-      {templateEditorOpen && (
-        <div className="modal-overlay" onClick={() => setTemplateEditorOpen(false)}>
-          <form className="biz-form-modal glass animate-scale" onSubmit={handleTemplateSubmit} onClick={e => e.stopPropagation()}>
-            <div className="compose-header">
-              <h3><Layers size={16} /> New Template</h3>
-              <button aria-label="Close" className="btn btn-ghost btn-icon" type="button" onClick={() => setTemplateEditorOpen(false)}><X size={18} /></button>
-            </div>
-            <div style={{ padding: '20px' }}>
-              <div className="biz-modal-grid">
-                <label>Template Name<input className="input" value={templateName} onChange={e => setTemplateName(e.target.value)} placeholder="Client onboarding" required /></label>
-                <label>Subject<input className="input" value={templateSubject} onChange={e => setTemplateSubject(e.target.value)} placeholder="Welcome to {{company}}" /></label>
-                <label className="biz-modal-full">Body<textarea className="input" value={templateBody} onChange={e => setTemplateBody(e.target.value)} placeholder="Hi {{name}}, ..." /></label>
-              </div>
-              <div className="biz-modal-actions">
-                <button className="btn btn-ghost" type="button" onClick={() => setTemplateEditorOpen(false)}>Cancel</button>
-                <button className="btn btn-primary" type="submit"><CheckCircle2 size={16} /> Save Template</button>
-              </div>
-            </div>
-          </form>
-        </div>
-      )}
-
-      {previewTemplate && (
-        <div className="modal-overlay" onClick={() => setPreviewTemplate(null)}>
-          <div className="biz-form-modal glass animate-scale" onClick={e => e.stopPropagation()}>
-            <div className="compose-header">
-              <h3><Eye size={16} /> {previewTemplate.name}</h3>
-              <button aria-label="Close" className="btn btn-ghost btn-icon" type="button" onClick={() => setPreviewTemplate(null)}><X size={18} /></button>
-            </div>
-            <div className="template-preview-modal">
-              <strong>{previewTemplate.subject || 'No subject'}</strong>
-              <p>{previewTemplate.body || 'No body content yet.'}</p>
-            </div>
-            <div className="biz-modal-actions">
-              <button className="btn btn-primary" onClick={() => { handleUseTemplate(previewTemplate); setPreviewTemplate(null); }}>Use Template</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {selectedAdminUser && (
-        <div className="modal-overlay" onClick={() => setSelectedAdminUser(null)}>
-          <div className="biz-form-modal glass animate-scale admin-detail-modal" onClick={e => e.stopPropagation()}>
-            <div className="compose-header">
-              <h3><Crown size={16} /> {selectedAdminUser.user.displayName}</h3>
-              <button aria-label="Close" className="btn btn-ghost btn-icon" type="button" onClick={() => setSelectedAdminUser(null)}><X size={18} /></button>
-            </div>
-            <div className="admin-detail-grid">
-              <div><span>Email</span><strong>{selectedAdminUser.user.email}</strong></div>
-              <div><span>Status</span><strong>{selectedAdminUser.status}</strong></div>
-              <div><span>Plan</span><strong>{selectedAdminUser.plan} · {selectedAdminUser.billingCycle}</strong></div>
-              <div><span>Domain</span><strong>{selectedAdminUser.domain || 'Not configured'}</strong></div>
-              <div><span>Created</span><strong>{new Date(selectedAdminUser.createdAt).toLocaleString()}</strong></div>
-              <div><span>Paid plan</span><strong>{selectedAdminUser.paidPlanPurchasedAt ? new Date(selectedAdminUser.paidPlanPurchasedAt).toLocaleString() : 'Not recorded'}</strong></div>
-              <div><span>Plan expiry</span><strong>{selectedAdminUser.paidPlanExpiresAt ? new Date(selectedAdminUser.paidPlanExpiresAt).toLocaleString() : 'Not recorded'}</strong></div>
-              <div><span>Last plan change</span><strong>{selectedAdminUser.lastPlanChangeAt ? new Date(selectedAdminUser.lastPlanChangeAt).toLocaleString() : 'Not recorded'}</strong></div>
-              <div><span>Storage estimate</span><strong>{formatBytes(selectedAdminUser.storageEstimateBytes)}</strong></div>
-              <div><span>Emails</span><strong>{selectedAdminUser.emailCount}</strong></div>
-              <div><span>Domains</span><strong>{selectedAdminUser.domainCount}</strong></div>
-              <div><span>Mailboxes</span><strong>{selectedAdminUser.mailboxCount}</strong></div>
-              <div><span>Queue items</span><strong>{selectedAdminUser.queueCount}</strong></div>
-              <div><span>Templates</span><strong>{selectedAdminUser.templateCount}</strong></div>
-              <div><span>Team members</span><strong>{selectedAdminUser.teamMemberCount}</strong></div>
-              <div><span>Audit events</span><strong>{selectedAdminUser.auditCount}</strong></div>
-              <div><span>Risk</span><strong>{selectedAdminUser.risk}</strong></div>
-            </div>
-            <div className="admin-history-list">
-              <div className="admin-history-item"><span>Lifecycle</span><strong>{selectedAdminUser.status === 'active' ? 'Account is active' : selectedAdminUser.user.suspensionReason || 'Access restricted'}</strong></div>
-              <div className="admin-history-item"><span>Billing source</span><strong>Plan changes are applied automatically after successful checkout.</strong></div>
-              <div className="admin-history-item"><span>Recovery posture</span><strong>Suspension and deactivation preserve workspace data for review and recovery.</strong></div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {adminStatusConfirm && (
-        <div className="modal-overlay" onClick={() => setAdminStatusConfirm(null)}>
-          <div className="logout-confirm-modal glass-card animate-scale" onClick={e => e.stopPropagation()}>
-            <div className="logout-confirm-icon">
-              <AlertTriangle size={40} color={adminStatusConfirm.status === 'suspended' ? 'var(--danger)' : 'var(--success)'} />
-            </div>
-            <h3>{adminStatusConfirm.step === 1 ? 'Review Admin Action' : 'Final Confirmation'}</h3>
-            <p>
-              {adminStatusConfirm.status === 'suspended'
-                ? `Suspend ${adminStatusConfirm.record.user.email}? Sign-in access will stop, but all workspace data stays recoverable.`
-                : `Reactivate ${adminStatusConfirm.record.user.email}? This restores sign-in access without modifying retained data.`}
-            </p>
-            <div className="logout-confirm-actions">
-              <button className="btn btn-secondary" onClick={() => setAdminStatusConfirm(null)}>Cancel</button>
-              <button className={adminStatusConfirm.status === 'suspended' ? 'btn btn-danger' : 'btn btn-primary'} onClick={confirmAdminStatusChange}>
-                {adminStatusConfirm.step === 1 ? 'Continue' : adminStatusConfirm.status === 'suspended' ? 'Confirm Suspend' : 'Confirm Reactivate'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {domainDetails && (
-        <div className="modal-overlay" onClick={() => setDomainDetails(null)}>
-          <div className="biz-form-modal glass animate-scale detail-modal" onClick={e => e.stopPropagation()}>
-            <div className="compose-header">
-              <h3><Globe size={16} /> {domainDetails.domain}</h3>
-              <button aria-label="Close" className="btn btn-ghost btn-icon" onClick={() => setDomainDetails(null)}><X size={18} /></button>
-            </div>
-            <div className="detail-modal-body">
-              <div className="detail-summary-grid">
-                <div><span>Status</span><strong>{domainDetails.status}</strong></div>
-                <div><span>Reputation</span><strong>{domainDetails.reputation}/100</strong></div>
-                <div><span>Sent</span><strong>{domainDetails.mailCount}</strong></div>
-                <div><span>Added</span><strong>{formatRelative(domainDetails.addedAt)}</strong></div>
-              </div>
-              <div className="detail-list">
-                {domainDetails.health.map(item => (
-                  <div key={item.key} className={`detail-row ${item.status}`}>
-                    <Shield size={15} />
-                    <div><strong>{item.label}</strong><span>{item.detail}</span></div>
-                    <span className="badge badge-sm">{item.status}</span>
-                  </div>
-                ))}
-              </div>
-              <div className="biz-modal-actions">
-                <button className="btn btn-ghost" onClick={() => copyToClipboard(domainDetails.domain)}><Copy size={14} /> Copy Domain</button>
-                <button className="btn btn-primary" onClick={() => handleRunDomainVerification(domainDetails.id)}><RefreshCcw size={14} /> Verify</button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {mailboxDetails && (
-        <div className="modal-overlay" onClick={() => setMailboxDetails(null)}>
-          <div className="biz-form-modal glass animate-scale detail-modal" onClick={e => e.stopPropagation()}>
-            <div className="compose-header">
-              <h3><Mail size={16} /> {mailboxDetails.displayName}</h3>
-              <button aria-label="Close" className="btn btn-ghost btn-icon" onClick={() => setMailboxDetails(null)}><X size={18} /></button>
-            </div>
-            <div className="detail-modal-body">
-              <div className="detail-summary-grid">
-                <div><span>Address</span><strong>{mailboxDetails.address}</strong></div>
-                <div><span>Type</span><strong>{mailboxDetails.kind}</strong></div>
-                <div><span>Active</span><strong>{mailboxDetails.active ? 'Yes' : 'No'}</strong></div>
-                <div><span>Created</span><strong>{formatRelative(mailboxDetails.createdAt)}</strong></div>
-              </div>
-              <div className="biz-modal-actions">
-                <button className="btn btn-ghost" onClick={() => copyToClipboard(mailboxDetails.address)}><Copy size={14} /> Copy</button>
-                <button className="btn btn-primary" onClick={() => { businessMailboxes.setPrimary(activeDomainName, mailboxDetails.address); setDomainMailboxes(businessMailboxes.getByDomain(activeDomainName)); setSelectedFromAddress(mailboxDetails.address); setMailboxDetails(null); }}><CheckCircle2 size={14} /> Set Sender</button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {groupDetails && (
-        <div className="modal-overlay" onClick={() => setGroupDetails(null)}>
-          <div className="biz-form-modal glass animate-scale detail-modal" onClick={e => e.stopPropagation()}>
-            <div className="compose-header">
-              <h3><Users size={16} /> {groupDetails.name}</h3>
-              <button aria-label="Close" className="btn btn-ghost btn-icon" onClick={() => setGroupDetails(null)}><X size={18} /></button>
-            </div>
-            <div className="detail-modal-body">
-              <div className="detail-summary-grid">
-                <div><span>Address</span><strong>{groupDetails.address}</strong></div>
-                <div><span>Members</span><strong>{groupDetails.members.length}</strong></div>
-                <div><span>Created</span><strong>{formatRelative(groupDetails.createdAt)}</strong></div>
-                <div><span>Updated</span><strong>{formatRelative(groupDetails.updatedAt)}</strong></div>
-              </div>
-              <div className="detail-list">
-                {groupDetails.members.map(member => (
-                  <div key={member} className="detail-row">
-                    <Mail size={15} />
-                    <div><strong>{member}</strong><span>Distribution recipient</span></div>
-                    <button className="btn btn-ghost btn-sm" onClick={() => copyToClipboard(member)}><Copy size={12} /></button>
-                  </div>
-                ))}
-              </div>
-              <div className="biz-modal-actions">
-                <button className="btn btn-ghost" onClick={() => copyToClipboard(groupDetails.address)}><Copy size={14} /> Copy Group</button>
-                <button className="btn btn-primary" onClick={() => { setComposeOpen(true); setComposeTo(groupDetails.address); setGroupDetails(null); }}><Send size={14} /> Email Group</button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {pendingRoleChange && (
-        <div className="modal-overlay" onClick={() => setPendingRoleChange(null)}>
-          <div className="biz-form-modal glass animate-scale" style={{ maxWidth: '460px', padding: '28px' }} onClick={e => e.stopPropagation()}>
-            <div style={{ textAlign: 'center', marginBottom: '20px' }}>
-              <div style={{ width: '56px', height: '56px', borderRadius: '50%', background: 'rgba(245, 158, 11, 0.12)', color: 'var(--warning)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
-                <Shield size={28} />
-              </div>
-              <h3 style={{ marginBottom: '10px', fontSize: '1.15rem', fontWeight: 700 }}>
-                {pendingRoleChange.step === 1 ? 'Review role change' : 'Final confirmation'}
-              </h3>
-              <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', lineHeight: 1.6, margin: 0 }}>
-                {pendingRoleChange.step === 1
-                  ? `You are changing this user to ${pendingRoleChange.role}. Review permissions before continuing.`
-                  : `This is the second confirmation. Apply ${pendingRoleChange.role} access now?`}
-              </p>
-            </div>
-            <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', paddingTop: '8px', borderTop: '1px solid var(--border-primary)' }}>
-              <button className="btn btn-ghost" onClick={() => setPendingRoleChange(null)}>Cancel</button>
-              <button className="btn btn-primary" onClick={confirmRoleChangeStep}>
-                {pendingRoleChange.step === 1 ? 'Continue' : 'Apply Role'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Logout Confirmation */}
-      {showLogoutConfirm && (
-        <div className="modal-overlay" onClick={() => setShowLogoutConfirm(false)}>
-          <div className="logout-confirm-modal glass-card animate-scale" onClick={e => e.stopPropagation()}>
-            <div className="logout-confirm-icon">
-              <AlertTriangle size={40} color="var(--danger)" />
-            </div>
-            <h3>Confirm Logout</h3>
-            <p>Are you sure you want to disconnect your business session?</p>
-            <div className="logout-confirm-actions">
-              <button className="btn btn-secondary" onClick={() => setShowLogoutConfirm(false)}>Cancel</button>
-              <button className="btn btn-danger" onClick={handleLogout}><LogOut size={16} /> Yes, Log Out</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {toast && (
-        <div className="toast-container">
-          <div className={`toast toast-${toast.type}`}><CheckCircle2 size={16} />{toast.msg}</div>
-        </div>
-      )}
-
-      {confirmRevokeId && (
-        <div className="modal-overlay" onClick={() => setConfirmRevokeId(null)}>
-          <div className="biz-form-modal glass animate-scale" style={{ maxWidth: '440px', padding: '28px' }} onClick={e => e.stopPropagation()}>
-            <div style={{ textAlign: 'center', marginBottom: '20px' }}>
-              <div style={{ width: '56px', height: '56px', borderRadius: '50%', background: 'rgba(239, 68, 68, 0.1)', color: 'var(--danger)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
-                <AlertTriangle size={28} />
-              </div>
-              <h3 style={{ marginBottom: '10px', fontSize: '1.15rem', fontWeight: 700 }}>Confirm Disconnect</h3>
-              <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', lineHeight: 1.6, margin: 0 }}>
-                Are you absolutely sure you want to revoke this connection? Your application will immediately lose access to this database or API provider, which may cause downtime.
-              </p>
-            </div>
-            <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', paddingTop: '8px', borderTop: '1px solid var(--border-primary)' }}>
-              <button className="btn btn-ghost" style={{ minWidth: '100px' }} onClick={() => setConfirmRevokeId(null)}>Cancel</button>
-              <button 
-                className="btn btn-primary" 
-                style={{ background: 'var(--danger)', borderColor: 'var(--danger)', minWidth: '140px' }}
-                onClick={() => {
-                  const revoked = connections.revoke(confirmRevokeId);
-                  if (revoked) {
-                    refreshConnectionUsage();
-                    showToast('Connection access revoked');
-                    const updatedUser = auth.getSession();
-                    if (updatedUser && (!updatedUser.businessDbUrl?.trim() || !updatedUser.businessApiKey?.trim())) {
-                      navigate('/business-setup');
-                    }
-                  } else {
-                    showToast('Unable to revoke this connection', 'error');
-                  }
-                  setConfirmRevokeId(null);
-                }}
-              >
-                Yes, Disconnect
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {confirmAction && (
-        <div className="modal-overlay" onClick={() => setConfirmAction(null)}>
-          <div className="biz-form-modal glass animate-scale" style={{ maxWidth: '440px', padding: '28px' }} onClick={e => e.stopPropagation()}>
-            <div style={{ textAlign: 'center', marginBottom: '20px' }}>
-              <div style={{ width: '56px', height: '56px', borderRadius: '50%', background: 'rgba(239, 68, 68, 0.1)', color: 'var(--danger)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
-                <AlertTriangle size={28} />
-              </div>
-              <h3 style={{ marginBottom: '10px', fontSize: '1.15rem', fontWeight: 700 }}>{confirmAction.title}</h3>
-              <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', lineHeight: 1.6, margin: 0 }}>
-                {confirmAction.message}
-              </p>
-            </div>
-            <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', paddingTop: '8px', borderTop: '1px solid var(--border-primary)' }}>
-              <button className="btn btn-ghost" style={{ minWidth: '100px' }} onClick={() => setConfirmAction(null)}>Cancel</button>
-              <button 
-                className="btn btn-primary" 
-                style={{ background: 'var(--danger)', borderColor: 'var(--danger)', minWidth: '140px' }}
-                onClick={() => {
-                  confirmAction.onConfirm();
-                  setConfirmAction(null);
-                }}
-              >
-                Yes, Continue
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <Modals
+        state={{
+          activeBizTab, setActiveBizTab, activeFolder, setActiveFolder,
+          selectedEmail, setSelectedEmail, searchQuery, setSearchQuery,
+          composeOpen, setComposeOpen, composeTo, setComposeTo, composeSubject, setComposeSubject,
+          composeBody, setComposeBody, sending, setSending, selectedFromAddress, setSelectedFromAddress,
+          annual, setAnnual, loadingPayment, setLoadingPayment, toast, showToast,
+          showLogoutConfirm, setShowLogoutConfirm, confirmRevokeId, setConfirmRevokeId,
+          pendingRoleChange, setPendingRoleChange, confirmAction, setConfirmAction,
+          domainsList, setDomainsList, activeDomain, setActiveDomain,
+          domainMailboxes, setDomainMailboxes, domainGroups, setDomainGroups,
+          teamMembers, setTeamMembers, mailQueue, setMailQueue, auditLog, setAuditLog,
+          templates, setTemplates, connectionUsage, setConnectionUsage, adminUsers, setAdminUsers,
+          sortOrder, setSortOrder, viewMode, setViewMode, selectedEmails, setSelectedEmails,
+          mailStatusFilter, setMailStatusFilter, notificationEnabled, setNotificationEnabled,
+          soundEnabled, setSoundEnabled, showQueueFilters, setShowQueueFilters,
+          queueStatusFilter, setQueueStatusFilter, templateSearch, setTemplateSearch,
+          showAddDomain, setShowAddDomain, newDomainInput, setNewDomainInput,
+          teamFilter, setTeamFilter, auditFilter, setAuditFilter, adminSearch, setAdminSearch,
+          adminPlanFilter, setAdminPlanFilter, adminStatusFilter, setAdminStatusFilter,
+          adminRiskFilter, setAdminRiskFilter, sidebarOpen, setSidebarOpen, user,
+          themeMode, setThemeMode, toggleTheme, activeDomainName,
+          hasRoleAccess, canAccessPlatformAdmin, refreshDomains, refreshTeam, refreshQueue,
+          refreshAudit, refreshTemplates, refreshMailboxes, refreshGroups, refreshConnectionUsage,
+          handleLogout, handleSendEmail, openComposeWith, copyToClipboard,
+        }}
+        handleVerifyDomain={handleVerifyDomain}
+        confirmRoleChangeStep={confirmRoleChangeStep}
+      />
     </div>
   );
 }

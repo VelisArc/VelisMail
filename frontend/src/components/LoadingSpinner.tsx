@@ -11,7 +11,7 @@ export default function LoadingSpinner({
 }: LoadingSpinnerProps) {
   return (
     <span
-      className={`velis-spinner velis-spinner-${size} ${className}`.trim()}
+      className={`spinner spinner-${size} ${className}`.trim()}
       role="status"
       aria-label={label}
     />
