@@ -26,7 +26,7 @@ export default function SettingsPanel({ state }: SettingsPanelProps) {
         <h4>Connected Infrastructure</h4>
         {state.connectionUsage.map(c => (
           <div key={c.id} className="flex items-center justify-between connection-row">
-            <div><strong className="text-sm">{c.type}</strong><span className="text-xs text-muted"> {c.detail}</span></div>
+            <div><strong className="text-sm">{c.label}</strong><span className="text-xs text-muted"> {c.maskedValue} ({c.provider || 'N/A'})</span></div>
             <button className="btn btn-ghost btn-sm btn-danger" onClick={() => state.setConfirmRevokeId(c.id)}><X size={12} /> Revoke</button>
           </div>
         ))}

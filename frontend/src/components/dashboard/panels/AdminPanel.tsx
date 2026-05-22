@@ -24,9 +24,9 @@ export default function AdminPanel({ state }: AdminPanelProps) {
         </select>
       </div>
       {state.adminUsers.map(u => (
-        <div key={u.email} className="team-member-row" onClick={() => state.setSelectedAdminUser(u)}>
+        <div key={u.user.email} className="team-member-row" onClick={() => state.setSelectedAdminUser(u)}>
           <div className="avatar avatar-sm"><User size={14} /></div>
-          <div className="team-member-info"><strong>{u.businessName || u.email}</strong><span className="text-muted">{u.email} · {u.role}</span></div>
+          <div className="team-member-info"><strong>{u.user.displayName || u.user.email}</strong><span className="text-muted">{u.user.email} · {u.user.role || 'member'}</span></div>
           <span className="badge badge-neutral">{u.plan}</span>
           <span className={`badge badge-${u.status === 'active' ? 'success' : 'danger'}`}>{u.status}</span>
           <button className="btn btn-ghost btn-sm" onClick={e => { e.stopPropagation(); state.setAdminStatusConfirm({ record: u, status: u.status === 'active' ? 'suspended' : 'active', step: 1 }); }}>

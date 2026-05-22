@@ -29,10 +29,10 @@ export default function EmailInbox({
   const filtered = useMemo(() => {
     const q = state.searchQuery.toLowerCase();
     return emails.filter(e => {
-      if (state.mailStatusFilter === 'unread' && e.read) return false;
-      if (state.mailStatusFilter === 'read' && !e.read) return false;
+      if (state.mailStatusFilter === 'unread' && !e.unread) return false;
+      if (state.mailStatusFilter === 'read' && e.unread) return false;
       if (state.mailStatusFilter === 'starred' && !e.starred) return false;
-      if (state.mailStatusFilter === 'attachments' && !e.attachments?.length) return false;
+      if (state.mailStatusFilter === 'attachments' && !e.hasAttachment) return false;
       if (!q) return true;
       return e.subject?.toLowerCase().includes(q) || e.from?.toLowerCase().includes(q) || e.body?.toLowerCase().includes(q) || e.fromName?.toLowerCase().includes(q);
     }).sort((a, b) => {
@@ -124,9 +124,9 @@ export default function EmailInbox({
                 </div>
               ))}
             </div>
-            {focusedEmail.attachments?.length > 0 && (
+            {focusedEmail.hasAttachment && (
               <div className="reader-attachments">
-                <Paperclip size={14} /> {focusedEmail.attachments.length} attachment(s)
+                <Paperclip size={14} /> Has attachment(s)
               </div>
             )}
           </div>
@@ -141,7 +141,7 @@ export default function EmailInbox({
             ) : state.viewMode === 'grid' ? (
               <div className="mail-grid">
                 {filtered.map(email => (
-                  <div key={email.id} className={`mail-grid-card ${!email.read ? 'unread' : ''}`} onClick={() => { setFocusedEmail(email); onSelectEmail(email); }}>
+                  <div key={email.id} className={`mail-grid-card ${email.unread ? 'unread' : ''}`} onClick={() => { setFocusedEmail(email); onSelectEmail(email); }}>
                     <div className="flex items-center gap-2">
                       <div className="avatar avatar-sm"><User size={14} /></div>
                       <strong className="truncate">{email.fromName || email.from}</strong>
@@ -155,7 +155,7 @@ export default function EmailInbox({
             ) : (
               <div className="mail-list">
                 {filtered.map(email => (
-                  <div key={email.id} className={`mail-row ${!email.read ? 'unread' : ''}`} onClick={() => { setFocusedEmail(email); onSelectEmail(email); }}>
+                  <div key={email.id} className={`mail-row ${email.unread ? 'unread' : ''}`} onClick={() => { setFocusedEmail(email); onSelectEmail(email); }}>
                     <div className="mail-row-select">
                       <input type="checkbox" checked={state.selectedEmails.has(email.id)} onChange={() => {
                         const next = new Set(state.selectedEmails);
@@ -174,7 +174,7 @@ export default function EmailInbox({
                     <div className="mail-row-meta">
                       <span className="mail-date">{new Date(email.date).toLocaleDateString()}</span>
                       {email.starred && <Star size={12} className="text-primary" />}
-                      {email.attachments?.length > 0 && <Paperclip size={12} className="text-muted" />}
+                      {email.hasAttachment && <Paperclip size={12} className="text-muted" />}
                     </div>
                   </div>
                 ))}

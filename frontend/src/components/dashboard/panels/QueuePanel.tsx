@@ -43,7 +43,7 @@ export default function QueuePanel({ state }: QueuePanelProps) {
           <span className="text-xs text-muted">{formatRelative(item.queuedAt)}</span>
           {item.error && <span className="text-xs text-danger">{item.error}</span>}
           <button className="btn btn-ghost btn-sm" onClick={() => { businessQueue.retry(state.activeDomainName, item.id); state.refreshQueue(); }}><RefreshCcw size={12} /></button>
-          <button className="btn btn-ghost btn-sm" onClick={() => { businessQueue.remove(state.activeDomainName, item.id); state.refreshQueue(); }}><X size={12} /></button>
+          <button className="btn btn-ghost btn-sm" onClick={() => { businessQueue.remove(item.id); state.refreshQueue(); }}><X size={12} /></button>
         </div>
       ))}
     </div>

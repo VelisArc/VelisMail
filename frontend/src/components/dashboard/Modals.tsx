@@ -15,11 +15,22 @@ function ComposeModal({ state }: { state: DashboardState }) {
     <div className="modal-overlay" onClick={() => state.setComposeOpen(false)}>
       <div className="compose-modal compose-modal-fixed" onClick={e => e.stopPropagation()}>
         <Composer
-          to={state.composeTo} setTo={state.setComposeTo}
-          subject={state.composeSubject} setSubject={state.setComposeSubject}
-          body={state.composeBody} setBody={state.setComposeBody}
-          fromAddress={state.selectedFromAddress} fromAddresses={state.domainMailboxes.map(m => m.address)}
-          onSend={state.handleSendEmail} onClose={() => state.setComposeOpen(false)}
+          initialTo={state.composeTo}
+          initialSubject={state.composeSubject}
+          initialBody={state.composeBody}
+          fromControl={
+            <select className="input input-auto" value={state.selectedFromAddress} onChange={e => state.setSelectedFromAddress(e.target.value)}>
+              <option value="">Default</option>
+              {state.domainMailboxes.map(m => <option key={m.address} value={m.address}>{m.address}</option>)}
+            </select>
+          }
+          onSend={(to, subject, body) => {
+            state.setComposeTo(to);
+            state.setComposeSubject(subject);
+            state.setComposeBody(body);
+            state.handleSendEmail();
+          }}
+          onClose={() => state.setComposeOpen(false)}
           sending={state.sending}
         />
       </div>
@@ -42,15 +53,15 @@ function InviteModal({ state }: { state: DashboardState }) {
             <select className="input" value={state.inviteExpiresHours} onChange={e => state.setInviteExpiresHours(Number(e.target.value))}>
               <option value={24}>24 hours</option><option value={48}>48 hours</option><option value={72}>72 hours</option><option value={168}>7 days</option>
             </select>
-            <button className="btn btn-primary" onClick={() => { const invite = teamAccess.invite(state.activeDomainName, { name: state.inviteName, email: state.inviteEmail, role: state.inviteRole, expiresHours: state.inviteExpiresHours }); if (invite) { state.setIssuedInvite(invite); state.showToast('Invite created'); } else state.showToast('Failed to create invite', 'error'); }}>Generate Invite</button>
+            <button className="btn btn-primary" onClick={async () => { try { const invite = await teamAccess.createInvite({ issuer: state.user!, name: state.inviteName, email: state.inviteEmail, role: state.inviteRole, expiresInHours: state.inviteExpiresHours }); state.setIssuedInvite(invite); state.showToast('Invite created'); } catch { state.showToast('Failed to create invite', 'error'); } }}>Generate Invite</button>
           </div>
         ) : (
           <div className="invite-success">
             <CheckCircle2 size={40} className="text-success invite-success-icon" />
             <p className="text-sm">Share this link with your team member:</p>
             <div className="invite-link-row">
-              <input className="input" readOnly value={state.issuedInvite.url || state.issuedInvite.code || ''} onClick={e => (e.target as HTMLInputElement).select()} />
-              <button className="btn btn-primary btn-sm" onClick={() => { copyToClipboard(state.issuedInvite.url || state.issuedInvite.code || ''); state.showToast('Copied'); }}><Copy size={14} /></button>
+              <input className="input" readOnly value={state.issuedInvite!.token} onClick={e => (e.target as HTMLInputElement).select()} />
+              <button className="btn btn-primary btn-sm" onClick={() => { copyToClipboard(state.issuedInvite!.token); state.showToast('Copied'); }}><Copy size={14} /></button>
             </div>
             <p className="text-xs text-muted invite-expiry">Expires in {state.inviteExpiresHours} hours</p>
             <button className="btn btn-ghost btn-sm invite-done-btn" onClick={() => { state.setIssuedInvite(null); state.setInviteOpen(false); }}>Done</button>
@@ -73,7 +84,7 @@ function TemplateEditorModal({ state }: { state: DashboardState }) {
             <input className="input" placeholder="Template name" value={state.templateName} onChange={e => state.setTemplateName(e.target.value)} />
             <input className="input" placeholder="Subject line" value={state.templateSubject} onChange={e => state.setTemplateSubject(e.target.value)} />
             <textarea className="input" rows={8} placeholder="Email body..." value={state.templateBody} onChange={e => state.setTemplateBody(e.target.value)} />
-            <button className="btn btn-primary" onClick={() => { businessTemplates.save(state.activeDomainName, { name: state.templateName, subject: state.templateSubject, body: state.templateBody }); state.refreshTemplates(); state.setTemplateEditorOpen(false); state.showToast('Template saved'); }}>Save Template</button>
+            <button className="btn btn-primary" onClick={() => { const all = businessTemplates.getAll(); const newTemplate = { id: 'tpl_' + Math.random().toString(36).slice(2, 8), name: state.templateName, subject: state.templateSubject, body: state.templateBody, usageCount: 0 }; all.unshift(newTemplate); businessTemplates.save(all); state.refreshTemplates(); state.setTemplateEditorOpen(false); state.showToast('Template saved'); }}>Save Template</button>
           </div>
         )}
       </div>
@@ -86,9 +97,9 @@ function AdminUserModal({ state }: { state: DashboardState }) {
   return (
     <div className="modal-overlay" onClick={() => state.setSelectedAdminUser(null)}>
       <div className="biz-form-modal glass animate-scale" onClick={e => e.stopPropagation()}>
-        <div className="compose-header"><h3><UserCheck size={16} /> {state.selectedAdminUser.businessName || state.selectedAdminUser.email}</h3><button className="btn btn-ghost btn-icon" onClick={() => state.setSelectedAdminUser(null)}><X size={18} /></button></div>
+        <div className="compose-header"><h3><UserCheck size={16} /> {state.selectedAdminUser.user.displayName || state.selectedAdminUser.user.email}</h3><button className="btn btn-ghost btn-icon" onClick={() => state.setSelectedAdminUser(null)}><X size={18} /></button></div>
         <div className="detail-grid-2">
-          {Object.entries({ Email: state.selectedAdminUser.email, Role: state.selectedAdminUser.role, Plan: state.selectedAdminUser.plan, Status: state.selectedAdminUser.status, Domain: state.selectedAdminUser.domain, Created: formatRelative(state.selectedAdminUser.createdAt) }).map(([k, v]) => (
+          {Object.entries({ Email: state.selectedAdminUser.user.email, Role: state.selectedAdminUser.user.role || 'member', Plan: state.selectedAdminUser.plan, Status: state.selectedAdminUser.status, Domain: state.selectedAdminUser.domain, Created: formatRelative(state.selectedAdminUser.createdAt) }).map(([k, v]) => (
             <div key={k}><span className="text-xs text-muted">{k}</span><strong className="text-sm text-block">{v}</strong></div>
           ))}
         </div>
@@ -254,7 +265,7 @@ function AdminStatusConfirmModal({ state }: { state: DashboardState }) {
           <button className="btn btn-ghost" onClick={() => state.setAdminStatusConfirm(null)}>Cancel</button>
           <button className={state.adminStatusConfirm.status === 'suspended' ? 'btn btn-danger' : 'btn btn-primary'} onClick={() => {
             if (state.adminStatusConfirm!.step === 1) { state.setAdminStatusConfirm({ ...state.adminStatusConfirm!, step: 2 }); return; }
-            platformAdmin.updateUserStatus(state.adminStatusConfirm!.record.email, state.adminStatusConfirm!.status as 'active' | 'suspended' | 'deactivated');
+            platformAdmin.updateUserStatus(state.adminStatusConfirm!.record.user.email, state.adminStatusConfirm!.status as 'active' | 'suspended' | 'deactivated');
             state.refreshQueue(); state.setAdminStatusConfirm(null); state.showToast(`User ${state.adminStatusConfirm!.status}`);
           }}>
             {state.adminStatusConfirm.step === 1 ? 'Continue' : state.adminStatusConfirm.status === 'suspended' ? 'Confirm Suspend' : 'Confirm Reactivate'}

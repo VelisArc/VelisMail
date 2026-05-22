@@ -1,7 +1,7 @@
 import {
   STORAGE_KEYS,
   loadDB, saveDB, loadUserDB, saveUserDB,
-  emailsCache, reloadAccountCaches,
+  emailsCache, reloadAccountCaches, reloadEmailsCacheFromStorage,
   normalizeMailbox, normalizeDomainInput, normalizeLocalPart,
   hashString,
   isJwtLikelyUsable, clearBackendTokens,
@@ -31,16 +31,18 @@ import {
   syncBridge,
   SEED_EMAILS,
   normalizeBusinessEmailFromDb, syncBusinessEmailToDb,
-  businessEmailDbRouteUnavailable,
+  businessEmailDbRouteUnavailable, setBusinessEmailDbRouteUnavailable,
   folderMatchesBusinessView, mutateEmail,
   normalizeStoredDomain, buildDnsRecords, buildDomainChecks,
   sessionHasMismatch, mergeDnsRecords,
+  isLegacyDnsRecord,
 } from './client-core';
 import type {
   User, DnsRecord, DomainCheck, CustomDomain, BusinessMailbox,
   BusinessGroup, BusinessTeamMember, TeamAccessInvite, BusinessTemplate,
   BusinessMailQueueItem, BusinessAuditEntry, ConnectionUsage,
   PlatformAdminUserRecord, Email, OtpSendResponse, OtpVerifyResponse,
+  ActiveSession, Contact, Signature,
 } from './types';
 import type { CreateTeamAccessInviteParams } from './client-core';
 
@@ -438,6 +440,9 @@ export const businessAudit = {
     this.save([nextEntry, ...all]);
     return nextEntry;
   },
+  getByDomain(_domain: string): BusinessAuditEntry[] {
+    return this.getAll();
+  },
 };
 
 // ---- Queue Functions ----
@@ -474,8 +479,27 @@ export const businessQueue = {
     saveBusinessQueue(loadBusinessQueue().filter((entry) => entry.id !== id));
   },
 
-  clearSent() {
-    saveBusinessQueue(loadBusinessQueue().filter((entry) => entry.status !== 'sent'));
+  clearSent(domain?: string) {
+    const all = domain ? loadBusinessQueue(domain) : loadBusinessQueue();
+    saveBusinessQueue(all.filter((entry) => entry.status !== 'sent'));
+    return all.filter((entry) => entry.status === 'sent').length;
+  },
+  getByDomain(domain: string): BusinessMailQueueItem[] {
+    return this.getAll(domain);
+  },
+  runDue(domain?: string) {
+    const due = this.getAll(domain).filter(item =>
+      item.status === 'queued' && item.scheduledAt && new Date(item.scheduledAt).getTime() <= Date.now()
+    );
+    due.forEach(item => this.mark(item.id, { status: 'sending' }));
+    return due.length;
+  },
+  retry(_domain: string, id: string) {
+    const all = loadBusinessQueue();
+    const item = all.find(i => i.id === id);
+    if (item) {
+      this.mark(item.id, { status: 'queued', retryCount: 0, error: undefined });
+    }
   },
 };
 
@@ -683,6 +707,20 @@ export const businessTeam = {
   save(entries: BusinessTeamMember[]) {
     saveBusinessTeamMembers(entries);
   },
+  getByDomain(_domain: string): BusinessTeamMember[] {
+    return this.getAll();
+  },
+  updateRole(id: string, role: 'admin' | 'member' | 'viewer') {
+    const all = this.getAll();
+    const idx = all.findIndex(m => m.email === id);
+    if (idx >= 0) {
+      all[idx] = { ...all[idx], role };
+      this.save(all);
+    }
+  },
+  remove(email: string) {
+    this.save(this.getAll().filter(m => m.email !== email));
+  },
 };
 
 // ---- Team Access Functions ----
@@ -860,13 +898,19 @@ export const businessTemplates = {
   save(entries: BusinessTemplate[]) {
     saveBusinessTemplates(entries);
   },
+  getByDomain(_domain: string): BusinessTemplate[] {
+    return this.getAll();
+  },
+  delete(_domain: string, id: string) {
+    this.save(this.getAll().filter(t => t.id !== id));
+  },
 };
 
 // ---- Email/Mail Functions ----
 export const mail = {
   getByFolder(folder: string): Email[] {
-    emailsCache = loadUserDB<Email[]>(STORAGE_KEYS.emails, SEED_EMAILS);
-    return emailsCache.filter(e => folderMatchesBusinessView(e, folder));
+    const cached = reloadEmailsCacheFromStorage();
+    return cached.filter(e => folderMatchesBusinessView(e, folder));
   },
 
   getBusinessByFolderSync(domain: string, folder: string): Email[] {
@@ -898,7 +942,7 @@ export const mail = {
         sourceEmails = response.data.emails.map((entry) => normalizeBusinessEmailFromDb(entry));
         saveUserDB(STORAGE_KEYS.emails, sourceEmails);
       } else if (response.status === 404) {
-        businessEmailDbRouteUnavailable = true;
+        setBusinessEmailDbRouteUnavailable(true);
       }
     }
 
@@ -965,9 +1009,9 @@ export const mail = {
         hasAttachment: attachments && attachments.length > 0 ? true : false,
         scheduledAt: normalizedSchedule,
       };
-      emailsCache = loadUserDB<Email[]>(STORAGE_KEYS.emails, SEED_EMAILS);
-      emailsCache.unshift(email);
-      saveUserDB(STORAGE_KEYS.emails, emailsCache);
+      const scheduledCache = reloadEmailsCacheFromStorage();
+      scheduledCache.unshift(email);
+      saveUserDB(STORAGE_KEYS.emails, scheduledCache);
       businessAudit.add({
         action: 'Scheduled business email',
         actor: fromAddr,
@@ -1020,10 +1064,10 @@ export const mail = {
       date: new Date().toISOString(),
       folder: 'sent', unread: false, starred: false, labels: [], hasAttachment: attachments && attachments.length > 0 ? true : false,
     };
-    emailsCache = loadUserDB<Email[]>(STORAGE_KEYS.emails, SEED_EMAILS);
-    emailsCache = emailsCache.filter(existing => existing.id !== email.id);
-    emailsCache.unshift(email);
-    saveUserDB(STORAGE_KEYS.emails, emailsCache);
+    const sendCache = reloadEmailsCacheFromStorage();
+    const filteredCache = sendCache.filter(existing => existing.id !== email.id);
+    filteredCache.unshift(email);
+    saveUserDB(STORAGE_KEYS.emails, filteredCache);
 
     if (session?.businessDbUrl) {
       syncBusinessEmailToDb(email);
@@ -1039,9 +1083,9 @@ export const mail = {
   },
 
   getBusinessUnreadCount(domain: string): number {
-    emailsCache = loadUserDB<Email[]>(STORAGE_KEYS.emails, SEED_EMAILS);
+    const unreadCache = reloadEmailsCacheFromStorage();
     const normalizeDomain = (addr: string) => (addr && addr.includes('@')) ? addr.split('@')[1].toLowerCase() : '';
-    return emailsCache.filter(e => {
+    return unreadCache.filter(e => {
       if (e.folder !== 'inbox' || !e.unread) return false;
       const fromDomain = normalizeDomain(e.from || '');
       const toDomains = (e.to || []).map(t => normalizeDomain(t));
@@ -1102,6 +1146,16 @@ export const mail = {
     mutateEmail(id, e => ({ ...e, folder }));
   },
 
+  trash(_domain: string, id: string) {
+    this.delete(id);
+  },
+  toggleRead(_domain: string, id: string) {
+    const e = mutateEmail(id, entry => ({ ...entry, unread: !entry.unread }));
+    return e?.unread ?? false;
+  },
+  markSpam(_domain: string, id: string) {
+    mutateEmail(id, e => ({ ...e, folder: 'spam', unread: false }));
+  },
   markSafe(id: string) {
     mutateEmail(id, e => ({
       ...e,
@@ -1121,9 +1175,9 @@ export const mail = {
   },
 
   markAllRead(folder: string) {
-    emailsCache = loadUserDB<Email[]>(STORAGE_KEYS.emails, SEED_EMAILS);
-    emailsCache = emailsCache.map(e => folderMatchesBusinessView(e, folder) ? { ...e, unread: false } : e);
-    saveUserDB(STORAGE_KEYS.emails, emailsCache);
+    const markAllCache = reloadEmailsCacheFromStorage();
+    const updatedCache = markAllCache.map(e => folderMatchesBusinessView(e, folder) ? { ...e, unread: false } : e);
+    saveUserDB(STORAGE_KEYS.emails, updatedCache);
   },
 
   async dispatchScheduledDue(domain?: string): Promise<number> {
@@ -1173,9 +1227,9 @@ export const mail = {
             hasAttachment: false,
             scheduledAt: item.scheduledAt,
           };
-          emailsCache = loadUserDB<Email[]>(STORAGE_KEYS.emails, SEED_EMAILS);
-          emailsCache.unshift(fallbackEmail);
-          saveUserDB(STORAGE_KEYS.emails, emailsCache);
+          const dispatchCache = reloadEmailsCacheFromStorage();
+          dispatchCache.unshift(fallbackEmail);
+          saveUserDB(STORAGE_KEYS.emails, dispatchCache);
           syncBusinessEmailToDb(fallbackEmail);
         }
         businessAudit.add({
@@ -1494,6 +1548,12 @@ export const domains = {
     return this.runVerification(id, verificationChecks);
   },
 
+  verify(id: string): CustomDomain | null {
+    return this.runVerification(id);
+  },
+  register(domain: string): CustomDomain {
+    return this.addDomain(domain);
+  },
   setPrimary(id: string): CustomDomain | null {
     const domain = this.getById(id);
     if (!domain) return null;

@@ -1,4 +1,4 @@
-import type { ProviderDnsRecord } from '../../api/client';
+import type { ProviderDnsRecordInput } from '../../api/client';
 import type { Email } from '../../api/client';
 
 export type RazorpayInstance = {
@@ -34,7 +34,7 @@ export function loadRazorpayCheckout(): Promise<RazorpayConstructor | undefined>
   });
 }
 
-export function providerRecordType(record: ProviderDnsRecord): string {
+export function providerRecordType(record: ProviderDnsRecordInput): string {
   return String(record.recordType || record.record_type || 'TXT').toUpperCase();
 }
 

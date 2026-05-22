@@ -1,6 +1,7 @@
 import { LogOut, Mail, Layers, Server, Globe, Inbox, Users, Shield, BarChart3, Activity, Settings, CreditCard, Crown, Plus, Sun, Moon, User } from 'lucide-react';
 import type { User as UserType } from '../../api/client';
-import { BIZ_FOLDERS, type BizTab } from './constants';
+import { BIZ_FOLDERS } from './constants';
+import type { BizTab, BizFolder } from './constants';
 
 interface SidebarProps {
   activeBizTab: BizTab;
@@ -212,7 +213,7 @@ export default function Sidebar({
               {user?.email?.charAt(0).toUpperCase() || <User size={14} />}
             </div>
             <div className="sidebar-user-text">
-              <span className="sidebar-user-name">{user?.businessName || 'User'}</span>
+              <span className="sidebar-user-name">{user?.displayName || 'User'}</span>
               <span className="sidebar-user-role">{user?.role || 'member'}</span>
             </div>
           </div>

@@ -9,6 +9,7 @@ import type {
   Email,
   PlatformAdminUserRecord,
   User,
+  TeamAccessInvite,
 } from '../../api/client';
 
 export type BizTab = 'mail' | 'domains' | 'mailboxes' | 'groups' | 'team' | 'queue' | 'analytics' | 'audit' | 'templates' | 'settings' | 'billing' | 'admin';
@@ -106,7 +107,7 @@ export interface DashboardState {
   setAdminRiskFilter: (f: string) => void;
   sidebarOpen: boolean;
   setSidebarOpen: (o: boolean) => void;
-  user: User;
+  user: User | null;
   themeMode: string;
   setThemeMode: (t: string) => void;
   toggleTheme: () => void;
@@ -125,6 +126,60 @@ export interface DashboardState {
   handleSendEmail: () => void;
   openComposeWith: (to?: string, subject?: string, body?: string) => void;
   copyToClipboard: (text: string) => void;
+  inviteOpen: boolean;
+  setInviteOpen: (o: boolean) => void;
+  inviteName: string;
+  setInviteName: (n: string) => void;
+  inviteEmail: string;
+  setInviteEmail: (e: string) => void;
+  inviteRole: 'admin' | 'member' | 'viewer';
+  setInviteRole: (r: 'admin' | 'member' | 'viewer') => void;
+  inviteExpiresHours: number;
+  setInviteExpiresHours: (h: number) => void;
+  issuedInvite: TeamAccessInvite | null;
+  setIssuedInvite: (i: TeamAccessInvite | null) => void;
+  templateEditorOpen: boolean;
+  setTemplateEditorOpen: (o: boolean) => void;
+  templateName: string;
+  setTemplateName: (n: string) => void;
+  templateSubject: string;
+  setTemplateSubject: (s: string) => void;
+  templateBody: string;
+  setTemplateBody: (b: string) => void;
+  previewTemplate: BusinessTemplate | null;
+  setPreviewTemplate: (t: BusinessTemplate | null) => void;
+  selectedAdminUser: PlatformAdminUserRecord | null;
+  setSelectedAdminUser: (u: PlatformAdminUserRecord | null) => void;
+  adminStatusConfirm: { record: PlatformAdminUserRecord; status: string; step: number } | null;
+  setAdminStatusConfirm: (c: { record: PlatformAdminUserRecord; status: string; step: number } | null) => void;
+  domainDetails: DomainRecord | null;
+  setDomainDetails: (d: DomainRecord | null) => void;
+  mailboxDetails: BusinessMailbox | null;
+  setMailboxDetails: (m: BusinessMailbox | null) => void;
+  groupDetails: BusinessGroup | null;
+  setGroupDetails: (g: BusinessGroup | null) => void;
+  domainVerifyOpen: boolean;
+  setDomainVerifyOpen: (o: boolean) => void;
+  domainVerifySteps: DomainHealth[];
+  setDomainVerifySteps: (s: DomainHealth[]) => void;
+  domainVerifyProviderRecords: Record<string, string>[];
+  setDomainVerifyProviderRecords: (r: Record<string, string>[]) => void;
+  verifyingDomainId: string;
+  setVerifyingDomainId: (id: string) => void;
+  mailboxLocalPart: string;
+  setMailboxLocalPart: (p: string) => void;
+  mailboxDisplayName: string;
+  setMailboxDisplayName: (n: string) => void;
+  mailboxKind: BusinessMailbox['kind'];
+  setMailboxKind: (k: BusinessMailbox['kind']) => void;
+  groupName: string;
+  setGroupName: (n: string) => void;
+  groupLocalPart: string;
+  setGroupLocalPart: (p: string) => void;
+  groupMembers: string;
+  setGroupMembers: (m: string) => void;
+  copiedField: string | null;
+  setCopiedField: (f: string | null) => void;
 }
 
 export interface DomainRecord {

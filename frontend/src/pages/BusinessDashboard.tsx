@@ -1,10 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
-import { auth, businessAudit, businessGroups, businessMailboxes, businessQueue, businessTeam, businessTemplates, connections, domains, isBusinessSetupReady, mail, normalizeProviderDnsRecords, platformAdmin, providerEndpointForRequest, type BusinessAuditEntry, type BusinessGroup, type BusinessMailbox, type BusinessTeamMember, type BusinessTemplate, type ConnectionUsage, type CustomDomain, type Email, type PlatformAdminUserRecord } from '../api/client';
-import Sidebar, { type BizTab } from '../components/dashboard/Sidebar';
+import { auth, businessAudit, businessGroups, businessMailboxes, businessQueue, businessTeam, businessTemplates, connections, domains, isBusinessSetupReady, mail, platformAdmin, type BusinessAuditEntry, type BusinessGroup, type BusinessMailbox, type BusinessTeamMember, type BusinessTemplate, type ConnectionUsage, type CustomDomain, type Email, type PlatformAdminUserRecord, type DomainCheck, type TeamAccessInvite } from '../api/client';
+import Sidebar from '../components/dashboard/Sidebar';
+import { type BizTab } from '../components/dashboard/constants';
 import EmailInbox from '../components/dashboard/EmailInbox';
 import { copyToClipboard, loadRazorpayCheckout, buildReplyQuote } from '../components/dashboard/utils';
-import type { DomainRecord, DomainHealth, MailQueueItem } from '../components/dashboard/types';
+import type { DashboardState, DomainRecord, DomainHealth, MailQueueItem } from '../components/dashboard/types';
 import DomainsPanel from '../components/dashboard/panels/DomainsPanel';
 import MailboxesPanel from '../components/dashboard/panels/MailboxesPanel';
 import GroupsPanel from '../components/dashboard/panels/GroupsPanel';
@@ -17,23 +18,24 @@ import TemplatesPanel from '../components/dashboard/panels/TemplatesPanel';
 import SettingsPanel from '../components/dashboard/panels/SettingsPanel';
 import BillingPanel from '../components/dashboard/panels/BillingPanel';
 import Modals from '../components/dashboard/Modals';
-import { useNavigation } from '../store/sessionStore';
+import { useNavigation, useSessionActions } from '../store/sessionStore';
 import { useEmails } from '../hooks/useMail';
 import './BusinessDashboard.css';
 import './Pricing.css';
 
 function toDomainRecord(domain: CustomDomain): DomainRecord {
-  const statusFor = (key: string) => domain.checks?.find(c => c.key === key)?.status || 'pending';
+  const statusFor = (key: string) => domain.checks?.find((c: DomainCheck) => c.key === key)?.status || 'pending';
+  const now = new Date().toISOString();
   return {
-    id: domain.id, domain: domain.domain, status: domain.status || 'active', reputation: domain.reputation || 100,
-    mailCount: domain.mailCount || 0, addedAt: domain.addedAt || new Date().toISOString(),
+    id: domain.id, domain: domain.domain, status: domain.status || 'active', reputation: 100,
+    mailCount: 0, addedAt: domain.addedAt || now,
     health: [
-      { key: 'mx', label: 'MX Record', status: statusFor('mx') as DomainHealth['status'], detail: statusFor('mx') === 'verified' ? 'Mail exchange configured' : 'Not configured', lastCheck: domain.lastCheck || '' },
-      { key: 'spf', label: 'SPF Record', status: statusFor('spf') as DomainHealth['status'], detail: statusFor('spf') === 'verified' ? 'Sender policy published' : 'Not published', lastCheck: domain.lastCheck || '' },
-      { key: 'dkim', label: 'DKIM Signature', status: statusFor('dkim') as DomainHealth['status'], detail: statusFor('dkim') === 'verified' ? 'DKIM key active' : 'Not configured', lastCheck: domain.lastCheck || '' },
-      { key: 'dmarc', label: 'DMARC Policy', status: statusFor('dmarc') as DomainHealth['status'], detail: statusFor('dmarc') === 'verified' ? 'DMARC policy published' : 'Not published', lastCheck: domain.lastCheck || '' },
+      { key: 'mx', label: 'MX Record', status: statusFor('mx') as DomainHealth['status'], detail: statusFor('mx') === 'verified' ? 'Mail exchange configured' : 'Not configured', lastCheck: domain.lastCheckedAt || '' },
+      { key: 'spf', label: 'SPF Record', status: statusFor('spf') as DomainHealth['status'], detail: statusFor('spf') === 'verified' ? 'Sender policy published' : 'Not published', lastCheck: domain.lastCheckedAt || '' },
+      { key: 'dkim', label: 'DKIM Signature', status: statusFor('dkim') as DomainHealth['status'], detail: statusFor('dkim') === 'verified' ? 'DKIM key active' : 'Not configured', lastCheck: domain.lastCheckedAt || '' },
+      { key: 'dmarc', label: 'DMARC Policy', status: statusFor('dmarc') as DomainHealth['status'], detail: statusFor('dmarc') === 'verified' ? 'DMARC policy published' : 'Not published', lastCheck: domain.lastCheckedAt || '' },
     ],
-    checks: domain.checks || [],
+    checks: domain.checks?.map((c: DomainCheck) => ({ key: c.key, status: c.status, label: c.label, detail: c.expected })) || [],
     mxVerified: statusFor('mx') === 'verified', spfVerified: statusFor('spf') === 'verified',
     dkimVerified: statusFor('dkim') === 'verified', dmarcVerified: statusFor('dmarc') === 'verified',
   };
@@ -42,10 +44,11 @@ function toDomainRecord(domain: CustomDomain): DomainRecord {
 export default function BusinessDashboard() {
   const navigate = useNavigate();
   const [user] = useState(auth.getSession());
-  const { navigation, updateNavigation } = useNavigation();
+  const navigation = useNavigation();
+  const { updateNavigation } = useSessionActions();
 
-  const [activeBizTab, setActiveBizTab] = useState<BizTab>(() => (navigation?.bizTab as BizTab) || 'mail');
-  const [activeFolder, setActiveFolder] = useState(navigation?.folder || 'inbox');
+  const [activeBizTab, setActiveBizTab] = useState<BizTab>(() => (navigation?.activeTab as BizTab) || 'mail');
+  const [activeFolder, setActiveFolder] = useState(navigation?.activeFolder || 'inbox');
   const [selectedEmail, setSelectedEmail] = useState<Email | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [composeOpen, setComposeOpen] = useState(false);
@@ -90,6 +93,33 @@ export default function BusinessDashboard() {
   const [adminRiskFilter, setAdminRiskFilter] = useState('all');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [themeMode, setThemeMode] = useState(() => localStorage.getItem('velismail_theme') || 'dark');
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const [inviteName, setInviteName] = useState('');
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteRole, setInviteRole] = useState<'admin' | 'member' | 'viewer'>('member');
+  const [inviteExpiresHours, setInviteExpiresHours] = useState(48);
+  const [issuedInvite, setIssuedInvite] = useState<TeamAccessInvite | null>(null);
+  const [templateEditorOpen, setTemplateEditorOpen] = useState(false);
+  const [templateName, setTemplateName] = useState('');
+  const [templateSubject, setTemplateSubject] = useState('');
+  const [templateBody, setTemplateBody] = useState('');
+  const [previewTemplate, setPreviewTemplate] = useState<BusinessTemplate | null>(null);
+  const [selectedAdminUser, setSelectedAdminUser] = useState<PlatformAdminUserRecord | null>(null);
+  const [adminStatusConfirm, setAdminStatusConfirm] = useState<{ record: PlatformAdminUserRecord; status: string; step: number } | null>(null);
+  const [domainDetails, setDomainDetails] = useState<DomainRecord | null>(null);
+  const [mailboxDetails, setMailboxDetails] = useState<BusinessMailbox | null>(null);
+  const [groupDetails, setGroupDetails] = useState<BusinessGroup | null>(null);
+  const [mailboxLocalPart, setMailboxLocalPart] = useState('');
+  const [mailboxDisplayName, setMailboxDisplayName] = useState('');
+  const [mailboxKind, setMailboxKind] = useState<BusinessMailbox['kind']>('primary');
+  const [groupName, setGroupName] = useState('');
+  const [groupLocalPart, setGroupLocalPart] = useState('');
+  const [groupMembers, setGroupMembers] = useState('');
+  const [verifyingDomainId, setVerifyingDomainId] = useState('');
+  const [domainVerifyOpen, setDomainVerifyOpen] = useState(false);
+  const [domainVerifySteps, setDomainVerifySteps] = useState<DomainHealth[]>([]);
+  const [domainVerifyProviderRecords, setDomainVerifyProviderRecords] = useState<Record<string, string>[]>([]);
+  const [copiedField, setCopiedField] = useState<string | null>(null);
 
   const activeDomainName = activeDomain || domainsList[0]?.domain || '';
 
@@ -114,7 +144,7 @@ export default function BusinessDashboard() {
   }, [themeMode]);
 
   useEffect(() => {
-    updateNavigation({ bizTab: activeBizTab, folder: activeFolder });
+    updateNavigation({ activeTab: activeBizTab, activeFolder });
   }, [activeBizTab, activeFolder, updateNavigation]);
 
   const showToast = (msg: string, type: 'success' | 'error' = 'success') => {
@@ -141,7 +171,7 @@ export default function BusinessDashboard() {
 
   const refreshDomains = () => setDomainsList(domains.getAll().map(toDomainRecord));
   const refreshTeam = useCallback(() => setTeamMembers(businessTeam.getByDomain(activeDomainName)), [activeDomainName]);
-  const refreshQueue = useCallback(() => setMailQueue(businessQueue.getByDomain(activeDomainName)), [activeDomainName]);
+  const refreshQueue = useCallback(() => setMailQueue(businessQueue.getByDomain(activeDomainName).map(i => ({ id: i.id, to: i.to, subject: i.subject, status: i.status, queuedAt: i.queuedAt, scheduledAt: i.scheduledAt, retries: i.retryCount, error: i.error, from: i.fromAddress }))), [activeDomainName]);
   const refreshAudit = useCallback(() => setAuditLog(businessAudit.getByDomain(activeDomainName)), [activeDomainName]);
   const refreshTemplates = useCallback(() => setTemplates(businessTemplates.getByDomain(activeDomainName)), [activeDomainName]);
   const refreshMailboxes = useCallback(() => setDomainMailboxes(businessMailboxes.getByDomain(activeDomainName)), [activeDomainName]);
@@ -153,7 +183,7 @@ export default function BusinessDashboard() {
   const handleSendEmail = async () => {
     if (!composeTo || !composeSubject) { showToast('Recipient and subject required', 'error'); return; }
     setSending(true);
-    try { await mail.send(activeDomainName, { to: composeTo, subject: composeSubject, body: composeBody, from: selectedFromAddress || undefined }); showToast('Email sent'); setComposeOpen(false); }
+    try { await mail.sendBusiness(activeDomainName, composeTo.split(',').map(s => s.trim()).filter(Boolean), composeSubject, composeBody, selectedFromAddress || undefined); showToast('Email sent'); setComposeOpen(false); }
     catch { showToast('Failed to send', 'error'); }
     finally { setSending(false); }
   };
@@ -196,20 +226,21 @@ export default function BusinessDashboard() {
   };
 
   const handleVerifyDomain = async (domainId: string) => {
-    setVerifyingDomainId(domainId);
     const dom = domainsList.find(d => d.id === domainId);
     if (!dom) return;
-    const providerRecords = normalizeProviderDnsRecords(providerEndpointForRequest(activeDomainName));
-    setDomainVerifyProviderRecords(providerRecords);
-    const checks = await domains.verify(domainId);
-    const steps: DomainHealth[] = [
-      { key: 'mx', label: 'MX Record', status: checks.mxVerified ? 'verified' : 'failed', detail: checks.mxVerified ? 'Mail exchange configured' : 'No MX record found', lastCheck: new Date().toISOString() },
-      { key: 'spf', label: 'SPF Record', status: checks.spfVerified ? 'verified' : 'failed', detail: checks.spfVerified ? 'Sender policy published' : 'SPF record missing', lastCheck: new Date().toISOString() },
-      { key: 'dkim', label: 'DKIM Signature', status: checks.dkimVerified ? 'verified' : 'failed', detail: checks.dkimVerified ? 'DKIM key active' : 'DKIM not configured', lastCheck: new Date().toISOString() },
-      { key: 'dmarc', label: 'DMARC Policy', status: checks.dmarcVerified ? 'verified' : 'pending', detail: checks.dmarcVerified ? 'DMARC policy published' : 'DMARC not required', lastCheck: new Date().toISOString() },
-    ];
-    setDomainVerifySteps(steps);
+    setVerifyingDomainId(domainId);
+    const updated = domains.verify(domainId);
+    if (updated) {
+      const steps: DomainHealth[] = [
+        { key: 'mx', label: 'MX Record', status: (updated.checks.find((c: DomainCheck) => c.key === 'mx')?.status || 'pending') as DomainHealth['status'], detail: 'MX record check', lastCheck: new Date().toISOString() },
+        { key: 'spf', label: 'SPF Record', status: (updated.checks.find((c: DomainCheck) => c.key === 'spf')?.status || 'pending') as DomainHealth['status'], detail: 'SPF record check', lastCheck: new Date().toISOString() },
+        { key: 'dkim', label: 'DKIM Signature', status: (updated.checks.find((c: DomainCheck) => c.key === 'dkim')?.status || 'pending') as DomainHealth['status'], detail: 'DKIM key check', lastCheck: new Date().toISOString() },
+        { key: 'dmarc', label: 'DMARC Policy', status: (updated.checks.find((c: DomainCheck) => c.key === 'dmarc')?.status || 'pending') as DomainHealth['status'], detail: 'DMARC policy check', lastCheck: new Date().toISOString() },
+      ];
+      setDomainVerifySteps(steps);
+    }
     setDomainVerifyOpen(true);
+    setDomainVerifyProviderRecords([]);
     setVerifyingDomainId('');
     refreshDomains();
   };
@@ -231,16 +262,59 @@ export default function BusinessDashboard() {
     const ids = [...selectedEmails];
     if (!ids.length) return;
     try {
-      if (action === 'archive') { await Promise.all(ids.map(id => mail.archive(activeDomainName, id))); showToast('Archived'); }
+      if (action === 'archive') { await Promise.all(ids.map(id => mail.archive(id))); showToast('Archived'); }
       else if (action === 'trash') { await Promise.all(ids.map(id => mail.trash(activeDomainName, id))); showToast('Trashed'); }
-      else if (action === 'star') { await Promise.all(ids.map(id => mail.toggleStar(activeDomainName, id))); showToast('Starred'); }
-      else if (action === 'read') { await Promise.all(ids.map(id => mail.markRead(activeDomainName, id))); showToast('Marked read'); }
-      else if (action === 'unread') { await Promise.all(ids.map(id => mail.markUnread(activeDomainName, id))); showToast('Marked unread'); }
+      else if (action === 'star') { await Promise.all(ids.map(id => mail.toggleStar(id))); showToast('Starred'); }
+      else if (action === 'read') { await Promise.all(ids.map(id => mail.markRead(id))); showToast('Marked read'); }
+      else if (action === 'unread') { await Promise.all(ids.map(id => mail.markUnread(id))); showToast('Marked unread'); }
       refetch(); setSelectedEmails(new Set());
     } catch { showToast('Action failed', 'error'); }
   };
 
   useEffect(() => { refetch(); }, [activeFolder, activeDomainName, refetch]);
+
+  const dashboardState: DashboardState = {
+    activeBizTab, setActiveBizTab, activeFolder, setActiveFolder,
+    selectedEmail, setSelectedEmail, searchQuery, setSearchQuery,
+    composeOpen, setComposeOpen, composeTo, setComposeTo, composeSubject, setComposeSubject,
+    composeBody, setComposeBody, sending, setSending, selectedFromAddress, setSelectedFromAddress,
+    annual, setAnnual, loadingPayment, setLoadingPayment, toast, showToast,
+    showLogoutConfirm, setShowLogoutConfirm, confirmRevokeId, setConfirmRevokeId,
+    pendingRoleChange, setPendingRoleChange, confirmAction, setConfirmAction,
+    domainsList, setDomainsList, activeDomain, setActiveDomain,
+    domainMailboxes, setDomainMailboxes, domainGroups, setDomainGroups,
+    teamMembers, setTeamMembers, mailQueue, setMailQueue, auditLog, setAuditLog,
+    templates, setTemplates, connectionUsage, setConnectionUsage, adminUsers, setAdminUsers,
+    sortOrder, setSortOrder, viewMode, setViewMode, selectedEmails, setSelectedEmails,
+    mailStatusFilter, setMailStatusFilter, notificationEnabled, setNotificationEnabled,
+    soundEnabled, setSoundEnabled, showQueueFilters, setShowQueueFilters,
+    queueStatusFilter, setQueueStatusFilter, templateSearch, setTemplateSearch,
+    showAddDomain, setShowAddDomain, newDomainInput, setNewDomainInput,
+    teamFilter, setTeamFilter, auditFilter, setAuditFilter, adminSearch, setAdminSearch,
+    adminPlanFilter, setAdminPlanFilter, adminStatusFilter, setAdminStatusFilter,
+    adminRiskFilter, setAdminRiskFilter, sidebarOpen, setSidebarOpen, user,
+    themeMode, setThemeMode, toggleTheme, activeDomainName,
+    hasRoleAccess, canAccessPlatformAdmin, refreshDomains, refreshTeam, refreshQueue,
+    refreshAudit, refreshTemplates, refreshMailboxes, refreshGroups, refreshConnectionUsage,
+    handleLogout, handleSendEmail, openComposeWith, copyToClipboard,
+    inviteOpen, setInviteOpen, inviteName, setInviteName, inviteEmail, setInviteEmail,
+    inviteRole, setInviteRole, inviteExpiresHours, setInviteExpiresHours,
+    issuedInvite, setIssuedInvite,
+    templateEditorOpen, setTemplateEditorOpen, templateName, setTemplateName,
+    templateSubject, setTemplateSubject, templateBody, setTemplateBody,
+    previewTemplate, setPreviewTemplate,
+    selectedAdminUser, setSelectedAdminUser,
+    adminStatusConfirm, setAdminStatusConfirm,
+    domainDetails, setDomainDetails, mailboxDetails, setMailboxDetails,
+    groupDetails, setGroupDetails,
+    mailboxLocalPart, setMailboxLocalPart, mailboxDisplayName, setMailboxDisplayName,
+    mailboxKind, setMailboxKind,
+    groupName, setGroupName, groupLocalPart, setGroupLocalPart, groupMembers, setGroupMembers,
+    verifyingDomainId, setVerifyingDomainId,
+    domainVerifyOpen, setDomainVerifyOpen, domainVerifySteps, setDomainVerifySteps,
+    domainVerifyProviderRecords, setDomainVerifyProviderRecords,
+    copiedField, setCopiedField,
+  };
 
   if (!user) return <Navigate to="/login" replace />;
   if (!isBusinessSetupReady(user)) return <Navigate to="/business-setup" replace />;
@@ -250,8 +324,7 @@ export default function BusinessDashboard() {
       <Sidebar
         activeBizTab={activeBizTab} setActiveBizTab={setActiveBizTab}
         activeFolder={activeFolder} setActiveFolder={setActiveFolder}
-        onCompose={() => openComposeWith()} onAddDomain={() => setShowAddDomain(true)}
-        user={user} themeMode={themeMode} toggleTheme={toggleTheme}
+        onCompose={() => openComposeWith()} user={user} themeMode={themeMode} toggleTheme={toggleTheme}
         onLogout={() => setShowLogoutConfirm(true)} sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen}
         hasRoleAccess={hasRoleAccess} canAccessPlatformAdmin={canAccessPlatformAdmin}
         onShowDomain={() => { setActiveBizTab('domains'); setSidebarOpen(false); }}
@@ -260,356 +333,41 @@ export default function BusinessDashboard() {
       <main className="dash-main">
         {activeBizTab === 'mail' && (
           <EmailInbox
-            emails={emails} folders={[]} state={{
-              activeBizTab, setActiveBizTab, activeFolder, setActiveFolder,
-              selectedEmail, setSelectedEmail, searchQuery, setSearchQuery,
-              composeOpen, setComposeOpen, composeTo, setComposeTo, composeSubject, setComposeSubject,
-              composeBody, setComposeBody, sending, setSending, selectedFromAddress, setSelectedFromAddress,
-              annual, setAnnual, loadingPayment, setLoadingPayment, toast, showToast,
-              showLogoutConfirm, setShowLogoutConfirm, confirmRevokeId, setConfirmRevokeId,
-              pendingRoleChange, setPendingRoleChange, confirmAction, setConfirmAction,
-              domainsList, setDomainsList, activeDomain, setActiveDomain,
-              domainMailboxes, setDomainMailboxes, domainGroups, setDomainGroups,
-              teamMembers, setTeamMembers, mailQueue, setMailQueue, auditLog, setAuditLog,
-              templates, setTemplates, connectionUsage, setConnectionUsage, adminUsers, setAdminUsers,
-              sortOrder, setSortOrder, viewMode, setViewMode, selectedEmails, setSelectedEmails,
-              mailStatusFilter, setMailStatusFilter, notificationEnabled, setNotificationEnabled,
-              soundEnabled, setSoundEnabled, showQueueFilters, setShowQueueFilters,
-              queueStatusFilter, setQueueStatusFilter, templateSearch, setTemplateSearch,
-              showAddDomain, setShowAddDomain, newDomainInput, setNewDomainInput,
-              teamFilter, setTeamFilter, auditFilter, setAuditFilter, adminSearch, setAdminSearch,
-              adminPlanFilter, setAdminPlanFilter, adminStatusFilter, setAdminStatusFilter,
-              adminRiskFilter, setAdminRiskFilter, sidebarOpen, setSidebarOpen, user,
-              themeMode, setThemeMode, toggleTheme, activeDomainName,
-              hasRoleAccess, canAccessPlatformAdmin, refreshDomains, refreshTeam, refreshQueue,
-              refreshAudit, refreshTemplates, refreshMailboxes, refreshGroups, refreshConnectionUsage,
-              handleLogout, handleSendEmail, openComposeWith, copyToClipboard,
-            }}
+            emails={emails} state={dashboardState}
             onSelectEmail={(e) => setSelectedEmail(e)}
             onRefresh={() => refetch()}
-            onToggleStar={(id) => { mail.toggleStar(activeDomainName, id); refetch(); }}
-            onToggleRead={(id) => { mail.toggleRead(activeDomainName, id); refetch(); }}
-    onArchive={() => handleBulkAction('archive')}
-    onTrash={() => handleBulkAction('trash')}
-    onMarkSpam={(_ids) => { _ids.forEach(id => mail.markSpam(activeDomainName, id)); refetch(); }}
-    onMarkSafe={(_ids) => { _ids.forEach(id => mail.markSafe(activeDomainName, id)); refetch(); }}
+            onToggleStar={(id) => { mail.toggleStar(id); refetch(); }}
+            onArchive={() => handleBulkAction('archive')}
+            onTrash={() => handleBulkAction('trash')}
             onReply={handleReply} onForward={handleForward}
           />
         )}
 
-        {activeBizTab === 'domains' && <DomainsPanel state={{
-          activeBizTab, setActiveBizTab, activeFolder, setActiveFolder,
-          selectedEmail, setSelectedEmail, searchQuery, setSearchQuery,
-          composeOpen, setComposeOpen, composeTo, setComposeTo, composeSubject, setComposeSubject,
-          composeBody, setComposeBody, sending, setSending, selectedFromAddress, setSelectedFromAddress,
-          annual, setAnnual, loadingPayment, setLoadingPayment, toast, showToast,
-          showLogoutConfirm, setShowLogoutConfirm, confirmRevokeId, setConfirmRevokeId,
-          pendingRoleChange, setPendingRoleChange, confirmAction, setConfirmAction,
-          domainsList, setDomainsList, activeDomain, setActiveDomain,
-          domainMailboxes, setDomainMailboxes, domainGroups, setDomainGroups,
-          teamMembers, setTeamMembers, mailQueue, setMailQueue, auditLog, setAuditLog,
-          templates, setTemplates, connectionUsage, setConnectionUsage, adminUsers, setAdminUsers,
-          sortOrder, setSortOrder, viewMode, setViewMode, selectedEmails, setSelectedEmails,
-          mailStatusFilter, setMailStatusFilter, notificationEnabled, setNotificationEnabled,
-          soundEnabled, setSoundEnabled, showQueueFilters, setShowQueueFilters,
-          queueStatusFilter, setQueueStatusFilter, templateSearch, setTemplateSearch,
-          showAddDomain, setShowAddDomain, newDomainInput, setNewDomainInput,
-          teamFilter, setTeamFilter, auditFilter, setAuditFilter, adminSearch, setAdminSearch,
-          adminPlanFilter, setAdminPlanFilter, adminStatusFilter, setAdminStatusFilter,
-          adminRiskFilter, setAdminRiskFilter, sidebarOpen, setSidebarOpen, user,
-          themeMode, setThemeMode, toggleTheme, activeDomainName,
-          hasRoleAccess, canAccessPlatformAdmin, refreshDomains, refreshTeam, refreshQueue,
-          refreshAudit, refreshTemplates, refreshMailboxes, refreshGroups, refreshConnectionUsage,
-          handleLogout, handleSendEmail, openComposeWith, copyToClipboard,
-        }} handleAddDomain={handleAddDomain} handleVerifyDomain={handleVerifyDomain} />}
+        {activeBizTab === 'domains' && <DomainsPanel state={dashboardState} handleAddDomain={handleAddDomain} handleVerifyDomain={handleVerifyDomain} />}
 
-        {activeBizTab === 'mailboxes' && <MailboxesPanel state={{
-          activeBizTab, setActiveBizTab, activeFolder, setActiveFolder,
-          selectedEmail, setSelectedEmail, searchQuery, setSearchQuery,
-          composeOpen, setComposeOpen, composeTo, setComposeTo, composeSubject, setComposeSubject,
-          composeBody, setComposeBody, sending, setSending, selectedFromAddress, setSelectedFromAddress,
-          annual, setAnnual, loadingPayment, setLoadingPayment, toast, showToast,
-          showLogoutConfirm, setShowLogoutConfirm, confirmRevokeId, setConfirmRevokeId,
-          pendingRoleChange, setPendingRoleChange, confirmAction, setConfirmAction,
-          domainsList, setDomainsList, activeDomain, setActiveDomain,
-          domainMailboxes, setDomainMailboxes, domainGroups, setDomainGroups,
-          teamMembers, setTeamMembers, mailQueue, setMailQueue, auditLog, setAuditLog,
-          templates, setTemplates, connectionUsage, setConnectionUsage, adminUsers, setAdminUsers,
-          sortOrder, setSortOrder, viewMode, setViewMode, selectedEmails, setSelectedEmails,
-          mailStatusFilter, setMailStatusFilter, notificationEnabled, setNotificationEnabled,
-          soundEnabled, setSoundEnabled, showQueueFilters, setShowQueueFilters,
-          queueStatusFilter, setQueueStatusFilter, templateSearch, setTemplateSearch,
-          showAddDomain, setShowAddDomain, newDomainInput, setNewDomainInput,
-          teamFilter, setTeamFilter, auditFilter, setAuditFilter, adminSearch, setAdminSearch,
-          adminPlanFilter, setAdminPlanFilter, adminStatusFilter, setAdminStatusFilter,
-          adminRiskFilter, setAdminRiskFilter, sidebarOpen, setSidebarOpen, user,
-          themeMode, setThemeMode, toggleTheme, activeDomainName,
-          hasRoleAccess, canAccessPlatformAdmin, refreshDomains, refreshTeam, refreshQueue,
-          refreshAudit, refreshTemplates, refreshMailboxes, refreshGroups, refreshConnectionUsage,
-          handleLogout, handleSendEmail, openComposeWith, copyToClipboard,
-        }} />}
+        {activeBizTab === 'mailboxes' && <MailboxesPanel state={dashboardState} />}
 
-        {activeBizTab === 'groups' && <GroupsPanel state={{
-          activeBizTab, setActiveBizTab, activeFolder, setActiveFolder,
-          selectedEmail, setSelectedEmail, searchQuery, setSearchQuery,
-          composeOpen, setComposeOpen, composeTo, setComposeTo, composeSubject, setComposeSubject,
-          composeBody, setComposeBody, sending, setSending, selectedFromAddress, setSelectedFromAddress,
-          annual, setAnnual, loadingPayment, setLoadingPayment, toast, showToast,
-          showLogoutConfirm, setShowLogoutConfirm, confirmRevokeId, setConfirmRevokeId,
-          pendingRoleChange, setPendingRoleChange, confirmAction, setConfirmAction,
-          domainsList, setDomainsList, activeDomain, setActiveDomain,
-          domainMailboxes, setDomainMailboxes, domainGroups, setDomainGroups,
-          teamMembers, setTeamMembers, mailQueue, setMailQueue, auditLog, setAuditLog,
-          templates, setTemplates, connectionUsage, setConnectionUsage, adminUsers, setAdminUsers,
-          sortOrder, setSortOrder, viewMode, setViewMode, selectedEmails, setSelectedEmails,
-          mailStatusFilter, setMailStatusFilter, notificationEnabled, setNotificationEnabled,
-          soundEnabled, setSoundEnabled, showQueueFilters, setShowQueueFilters,
-          queueStatusFilter, setQueueStatusFilter, templateSearch, setTemplateSearch,
-          showAddDomain, setShowAddDomain, newDomainInput, setNewDomainInput,
-          teamFilter, setTeamFilter, auditFilter, setAuditFilter, adminSearch, setAdminSearch,
-          adminPlanFilter, setAdminPlanFilter, adminStatusFilter, setAdminStatusFilter,
-          adminRiskFilter, setAdminRiskFilter, sidebarOpen, setSidebarOpen, user,
-          themeMode, setThemeMode, toggleTheme, activeDomainName,
-          hasRoleAccess, canAccessPlatformAdmin, refreshDomains, refreshTeam, refreshQueue,
-          refreshAudit, refreshTemplates, refreshMailboxes, refreshGroups, refreshConnectionUsage,
-          handleLogout, handleSendEmail, openComposeWith, copyToClipboard,
-        }} />}
+        {activeBizTab === 'groups' && <GroupsPanel state={dashboardState} />}
 
-        {activeBizTab === 'team' && <TeamPanel state={{
-          activeBizTab, setActiveBizTab, activeFolder, setActiveFolder,
-          selectedEmail, setSelectedEmail, searchQuery, setSearchQuery,
-          composeOpen, setComposeOpen, composeTo, setComposeTo, composeSubject, setComposeSubject,
-          composeBody, setComposeBody, sending, setSending, selectedFromAddress, setSelectedFromAddress,
-          annual, setAnnual, loadingPayment, setLoadingPayment, toast, showToast,
-          showLogoutConfirm, setShowLogoutConfirm, confirmRevokeId, setConfirmRevokeId,
-          pendingRoleChange, setPendingRoleChange, confirmAction, setConfirmAction,
-          domainsList, setDomainsList, activeDomain, setActiveDomain,
-          domainMailboxes, setDomainMailboxes, domainGroups, setDomainGroups,
-          teamMembers, setTeamMembers, mailQueue, setMailQueue, auditLog, setAuditLog,
-          templates, setTemplates, connectionUsage, setConnectionUsage, adminUsers, setAdminUsers,
-          sortOrder, setSortOrder, viewMode, setViewMode, selectedEmails, setSelectedEmails,
-          mailStatusFilter, setMailStatusFilter, notificationEnabled, setNotificationEnabled,
-          soundEnabled, setSoundEnabled, showQueueFilters, setShowQueueFilters,
-          queueStatusFilter, setQueueStatusFilter, templateSearch, setTemplateSearch,
-          showAddDomain, setShowAddDomain, newDomainInput, setNewDomainInput,
-          teamFilter, setTeamFilter, auditFilter, setAuditFilter, adminSearch, setAdminSearch,
-          adminPlanFilter, setAdminPlanFilter, adminStatusFilter, setAdminStatusFilter,
-          adminRiskFilter, setAdminRiskFilter, sidebarOpen, setSidebarOpen, user,
-          themeMode, setThemeMode, toggleTheme, activeDomainName,
-          hasRoleAccess, canAccessPlatformAdmin, refreshDomains, refreshTeam, refreshQueue,
-          refreshAudit, refreshTemplates, refreshMailboxes, refreshGroups, refreshConnectionUsage,
-          handleLogout, handleSendEmail, openComposeWith, copyToClipboard,
-        }} />}
+        {activeBizTab === 'team' && <TeamPanel state={dashboardState} />}
 
-        {activeBizTab === 'queue' && <QueuePanel state={{
-          activeBizTab, setActiveBizTab, activeFolder, setActiveFolder,
-          selectedEmail, setSelectedEmail, searchQuery, setSearchQuery,
-          composeOpen, setComposeOpen, composeTo, setComposeTo, composeSubject, setComposeSubject,
-          composeBody, setComposeBody, sending, setSending, selectedFromAddress, setSelectedFromAddress,
-          annual, setAnnual, loadingPayment, setLoadingPayment, toast, showToast,
-          showLogoutConfirm, setShowLogoutConfirm, confirmRevokeId, setConfirmRevokeId,
-          pendingRoleChange, setPendingRoleChange, confirmAction, setConfirmAction,
-          domainsList, setDomainsList, activeDomain, setActiveDomain,
-          domainMailboxes, setDomainMailboxes, domainGroups, setDomainGroups,
-          teamMembers, setTeamMembers, mailQueue, setMailQueue, auditLog, setAuditLog,
-          templates, setTemplates, connectionUsage, setConnectionUsage, adminUsers, setAdminUsers,
-          sortOrder, setSortOrder, viewMode, setViewMode, selectedEmails, setSelectedEmails,
-          mailStatusFilter, setMailStatusFilter, notificationEnabled, setNotificationEnabled,
-          soundEnabled, setSoundEnabled, showQueueFilters, setShowQueueFilters,
-          queueStatusFilter, setQueueStatusFilter, templateSearch, setTemplateSearch,
-          showAddDomain, setShowAddDomain, newDomainInput, setNewDomainInput,
-          teamFilter, setTeamFilter, auditFilter, setAuditFilter, adminSearch, setAdminSearch,
-          adminPlanFilter, setAdminPlanFilter, adminStatusFilter, setAdminStatusFilter,
-          adminRiskFilter, setAdminRiskFilter, sidebarOpen, setSidebarOpen, user,
-          themeMode, setThemeMode, toggleTheme, activeDomainName,
-          hasRoleAccess, canAccessPlatformAdmin, refreshDomains, refreshTeam, refreshQueue,
-          refreshAudit, refreshTemplates, refreshMailboxes, refreshGroups, refreshConnectionUsage,
-          handleLogout, handleSendEmail, openComposeWith, copyToClipboard,
-        }} />}
+        {activeBizTab === 'queue' && <QueuePanel state={dashboardState} />}
 
-        {activeBizTab === 'analytics' && <AnalyticsPanel state={{
-          activeBizTab, setActiveBizTab, activeFolder, setActiveFolder,
-          selectedEmail, setSelectedEmail, searchQuery, setSearchQuery,
-          composeOpen, setComposeOpen, composeTo, setComposeTo, composeSubject, setComposeSubject,
-          composeBody, setComposeBody, sending, setSending, selectedFromAddress, setSelectedFromAddress,
-          annual, setAnnual, loadingPayment, setLoadingPayment, toast, showToast,
-          showLogoutConfirm, setShowLogoutConfirm, confirmRevokeId, setConfirmRevokeId,
-          pendingRoleChange, setPendingRoleChange, confirmAction, setConfirmAction,
-          domainsList, setDomainsList, activeDomain, setActiveDomain,
-          domainMailboxes, setDomainMailboxes, domainGroups, setDomainGroups,
-          teamMembers, setTeamMembers, mailQueue, setMailQueue, auditLog, setAuditLog,
-          templates, setTemplates, connectionUsage, setConnectionUsage, adminUsers, setAdminUsers,
-          sortOrder, setSortOrder, viewMode, setViewMode, selectedEmails, setSelectedEmails,
-          mailStatusFilter, setMailStatusFilter, notificationEnabled, setNotificationEnabled,
-          soundEnabled, setSoundEnabled, showQueueFilters, setShowQueueFilters,
-          queueStatusFilter, setQueueStatusFilter, templateSearch, setTemplateSearch,
-          showAddDomain, setShowAddDomain, newDomainInput, setNewDomainInput,
-          teamFilter, setTeamFilter, auditFilter, setAuditFilter, adminSearch, setAdminSearch,
-          adminPlanFilter, setAdminPlanFilter, adminStatusFilter, setAdminStatusFilter,
-          adminRiskFilter, setAdminRiskFilter, sidebarOpen, setSidebarOpen, user,
-          themeMode, setThemeMode, toggleTheme, activeDomainName,
-          hasRoleAccess, canAccessPlatformAdmin, refreshDomains, refreshTeam, refreshQueue,
-          refreshAudit, refreshTemplates, refreshMailboxes, refreshGroups, refreshConnectionUsage,
-          handleLogout, handleSendEmail, openComposeWith, copyToClipboard,
-        }} />}
+        {activeBizTab === 'analytics' && <AnalyticsPanel state={dashboardState} />}
 
-        {activeBizTab === 'audit' && <AuditPanel state={{
-          activeBizTab, setActiveBizTab, activeFolder, setActiveFolder,
-          selectedEmail, setSelectedEmail, searchQuery, setSearchQuery,
-          composeOpen, setComposeOpen, composeTo, setComposeTo, composeSubject, setComposeSubject,
-          composeBody, setComposeBody, sending, setSending, selectedFromAddress, setSelectedFromAddress,
-          annual, setAnnual, loadingPayment, setLoadingPayment, toast, showToast,
-          showLogoutConfirm, setShowLogoutConfirm, confirmRevokeId, setConfirmRevokeId,
-          pendingRoleChange, setPendingRoleChange, confirmAction, setConfirmAction,
-          domainsList, setDomainsList, activeDomain, setActiveDomain,
-          domainMailboxes, setDomainMailboxes, domainGroups, setDomainGroups,
-          teamMembers, setTeamMembers, mailQueue, setMailQueue, auditLog, setAuditLog,
-          templates, setTemplates, connectionUsage, setConnectionUsage, adminUsers, setAdminUsers,
-          sortOrder, setSortOrder, viewMode, setViewMode, selectedEmails, setSelectedEmails,
-          mailStatusFilter, setMailStatusFilter, notificationEnabled, setNotificationEnabled,
-          soundEnabled, setSoundEnabled, showQueueFilters, setShowQueueFilters,
-          queueStatusFilter, setQueueStatusFilter, templateSearch, setTemplateSearch,
-          showAddDomain, setShowAddDomain, newDomainInput, setNewDomainInput,
-          teamFilter, setTeamFilter, auditFilter, setAuditFilter, adminSearch, setAdminSearch,
-          adminPlanFilter, setAdminPlanFilter, adminStatusFilter, setAdminStatusFilter,
-          adminRiskFilter, setAdminRiskFilter, sidebarOpen, setSidebarOpen, user,
-          themeMode, setThemeMode, toggleTheme, activeDomainName,
-          hasRoleAccess, canAccessPlatformAdmin, refreshDomains, refreshTeam, refreshQueue,
-          refreshAudit, refreshTemplates, refreshMailboxes, refreshGroups, refreshConnectionUsage,
-          handleLogout, handleSendEmail, openComposeWith, copyToClipboard,
-        }} />}
+        {activeBizTab === 'audit' && <AuditPanel state={dashboardState} />}
 
-        {activeBizTab === 'admin' && canAccessPlatformAdmin && <AdminPanel state={{
-          activeBizTab, setActiveBizTab, activeFolder, setActiveFolder,
-          selectedEmail, setSelectedEmail, searchQuery, setSearchQuery,
-          composeOpen, setComposeOpen, composeTo, setComposeTo, composeSubject, setComposeSubject,
-          composeBody, setComposeBody, sending, setSending, selectedFromAddress, setSelectedFromAddress,
-          annual, setAnnual, loadingPayment, setLoadingPayment, toast, showToast,
-          showLogoutConfirm, setShowLogoutConfirm, confirmRevokeId, setConfirmRevokeId,
-          pendingRoleChange, setPendingRoleChange, confirmAction, setConfirmAction,
-          domainsList, setDomainsList, activeDomain, setActiveDomain,
-          domainMailboxes, setDomainMailboxes, domainGroups, setDomainGroups,
-          teamMembers, setTeamMembers, mailQueue, setMailQueue, auditLog, setAuditLog,
-          templates, setTemplates, connectionUsage, setConnectionUsage, adminUsers, setAdminUsers,
-          sortOrder, setSortOrder, viewMode, setViewMode, selectedEmails, setSelectedEmails,
-          mailStatusFilter, setMailStatusFilter, notificationEnabled, setNotificationEnabled,
-          soundEnabled, setSoundEnabled, showQueueFilters, setShowQueueFilters,
-          queueStatusFilter, setQueueStatusFilter, templateSearch, setTemplateSearch,
-          showAddDomain, setShowAddDomain, newDomainInput, setNewDomainInput,
-          teamFilter, setTeamFilter, auditFilter, setAuditFilter, adminSearch, setAdminSearch,
-          adminPlanFilter, setAdminPlanFilter, adminStatusFilter, setAdminStatusFilter,
-          adminRiskFilter, setAdminRiskFilter, sidebarOpen, setSidebarOpen, user,
-          themeMode, setThemeMode, toggleTheme, activeDomainName,
-          hasRoleAccess, canAccessPlatformAdmin, refreshDomains, refreshTeam, refreshQueue,
-          refreshAudit, refreshTemplates, refreshMailboxes, refreshGroups, refreshConnectionUsage,
-          handleLogout, handleSendEmail, openComposeWith, copyToClipboard,
-        }} />}
+        {activeBizTab === 'admin' && canAccessPlatformAdmin && <AdminPanel state={dashboardState} />}
 
-        {activeBizTab === 'templates' && <TemplatesPanel state={{
-          activeBizTab, setActiveBizTab, activeFolder, setActiveFolder,
-          selectedEmail, setSelectedEmail, searchQuery, setSearchQuery,
-          composeOpen, setComposeOpen, composeTo, setComposeTo, composeSubject, setComposeSubject,
-          composeBody, setComposeBody, sending, setSending, selectedFromAddress, setSelectedFromAddress,
-          annual, setAnnual, loadingPayment, setLoadingPayment, toast, showToast,
-          showLogoutConfirm, setShowLogoutConfirm, confirmRevokeId, setConfirmRevokeId,
-          pendingRoleChange, setPendingRoleChange, confirmAction, setConfirmAction,
-          domainsList, setDomainsList, activeDomain, setActiveDomain,
-          domainMailboxes, setDomainMailboxes, domainGroups, setDomainGroups,
-          teamMembers, setTeamMembers, mailQueue, setMailQueue, auditLog, setAuditLog,
-          templates, setTemplates, connectionUsage, setConnectionUsage, adminUsers, setAdminUsers,
-          sortOrder, setSortOrder, viewMode, setViewMode, selectedEmails, setSelectedEmails,
-          mailStatusFilter, setMailStatusFilter, notificationEnabled, setNotificationEnabled,
-          soundEnabled, setSoundEnabled, showQueueFilters, setShowQueueFilters,
-          queueStatusFilter, setQueueStatusFilter, templateSearch, setTemplateSearch,
-          showAddDomain, setShowAddDomain, newDomainInput, setNewDomainInput,
-          teamFilter, setTeamFilter, auditFilter, setAuditFilter, adminSearch, setAdminSearch,
-          adminPlanFilter, setAdminPlanFilter, adminStatusFilter, setAdminStatusFilter,
-          adminRiskFilter, setAdminRiskFilter, sidebarOpen, setSidebarOpen, user,
-          themeMode, setThemeMode, toggleTheme, activeDomainName,
-          hasRoleAccess, canAccessPlatformAdmin, refreshDomains, refreshTeam, refreshQueue,
-          refreshAudit, refreshTemplates, refreshMailboxes, refreshGroups, refreshConnectionUsage,
-          handleLogout, handleSendEmail, openComposeWith, copyToClipboard,
-        }} />}
+        {activeBizTab === 'templates' && <TemplatesPanel state={dashboardState} />}
 
-        {activeBizTab === 'settings' && <SettingsPanel state={{
-          activeBizTab, setActiveBizTab, activeFolder, setActiveFolder,
-          selectedEmail, setSelectedEmail, searchQuery, setSearchQuery,
-          composeOpen, setComposeOpen, composeTo, setComposeTo, composeSubject, setComposeSubject,
-          composeBody, setComposeBody, sending, setSending, selectedFromAddress, setSelectedFromAddress,
-          annual, setAnnual, loadingPayment, setLoadingPayment, toast, showToast,
-          showLogoutConfirm, setShowLogoutConfirm, confirmRevokeId, setConfirmRevokeId,
-          pendingRoleChange, setPendingRoleChange, confirmAction, setConfirmAction,
-          domainsList, setDomainsList, activeDomain, setActiveDomain,
-          domainMailboxes, setDomainMailboxes, domainGroups, setDomainGroups,
-          teamMembers, setTeamMembers, mailQueue, setMailQueue, auditLog, setAuditLog,
-          templates, setTemplates, connectionUsage, setConnectionUsage, adminUsers, setAdminUsers,
-          sortOrder, setSortOrder, viewMode, setViewMode, selectedEmails, setSelectedEmails,
-          mailStatusFilter, setMailStatusFilter, notificationEnabled, setNotificationEnabled,
-          soundEnabled, setSoundEnabled, showQueueFilters, setShowQueueFilters,
-          queueStatusFilter, setQueueStatusFilter, templateSearch, setTemplateSearch,
-          showAddDomain, setShowAddDomain, newDomainInput, setNewDomainInput,
-          teamFilter, setTeamFilter, auditFilter, setAuditFilter, adminSearch, setAdminSearch,
-          adminPlanFilter, setAdminPlanFilter, adminStatusFilter, setAdminStatusFilter,
-          adminRiskFilter, setAdminRiskFilter, sidebarOpen, setSidebarOpen, user,
-          themeMode, setThemeMode, toggleTheme, activeDomainName,
-          hasRoleAccess, canAccessPlatformAdmin, refreshDomains, refreshTeam, refreshQueue,
-          refreshAudit, refreshTemplates, refreshMailboxes, refreshGroups, refreshConnectionUsage,
-          handleLogout, handleSendEmail, openComposeWith, copyToClipboard,
-        }} />}
+        {activeBizTab === 'settings' && <SettingsPanel state={dashboardState} />}
 
-        {activeBizTab === 'billing' && <BillingPanel state={{
-          activeBizTab, setActiveBizTab, activeFolder, setActiveFolder,
-          selectedEmail, setSelectedEmail, searchQuery, setSearchQuery,
-          composeOpen, setComposeOpen, composeTo, setComposeTo, composeSubject, setComposeSubject,
-          composeBody, setComposeBody, sending, setSending, selectedFromAddress, setSelectedFromAddress,
-          annual, setAnnual, loadingPayment, setLoadingPayment, toast, showToast,
-          showLogoutConfirm, setShowLogoutConfirm, confirmRevokeId, setConfirmRevokeId,
-          pendingRoleChange, setPendingRoleChange, confirmAction, setConfirmAction,
-          domainsList, setDomainsList, activeDomain, setActiveDomain,
-          domainMailboxes, setDomainMailboxes, domainGroups, setDomainGroups,
-          teamMembers, setTeamMembers, mailQueue, setMailQueue, auditLog, setAuditLog,
-          templates, setTemplates, connectionUsage, setConnectionUsage, adminUsers, setAdminUsers,
-          sortOrder, setSortOrder, viewMode, setViewMode, selectedEmails, setSelectedEmails,
-          mailStatusFilter, setMailStatusFilter, notificationEnabled, setNotificationEnabled,
-          soundEnabled, setSoundEnabled, showQueueFilters, setShowQueueFilters,
-          queueStatusFilter, setQueueStatusFilter, templateSearch, setTemplateSearch,
-          showAddDomain, setShowAddDomain, newDomainInput, setNewDomainInput,
-          teamFilter, setTeamFilter, auditFilter, setAuditFilter, adminSearch, setAdminSearch,
-          adminPlanFilter, setAdminPlanFilter, adminStatusFilter, setAdminStatusFilter,
-          adminRiskFilter, setAdminRiskFilter, sidebarOpen, setSidebarOpen, user,
-          themeMode, setThemeMode, toggleTheme, activeDomainName,
-          hasRoleAccess, canAccessPlatformAdmin, refreshDomains, refreshTeam, refreshQueue,
-          refreshAudit, refreshTemplates, refreshMailboxes, refreshGroups, refreshConnectionUsage,
-          handleLogout, handleSendEmail, openComposeWith, copyToClipboard,
-        }} handleBuyPlan={handleBuyPlan} />}
+        {activeBizTab === 'billing' && <BillingPanel state={dashboardState} handleBuyPlan={handleBuyPlan} />}
       </main>
 
       <Modals
-        state={{
-          activeBizTab, setActiveBizTab, activeFolder, setActiveFolder,
-          selectedEmail, setSelectedEmail, searchQuery, setSearchQuery,
-          composeOpen, setComposeOpen, composeTo, setComposeTo, composeSubject, setComposeSubject,
-          composeBody, setComposeBody, sending, setSending, selectedFromAddress, setSelectedFromAddress,
-          annual, setAnnual, loadingPayment, setLoadingPayment, toast, showToast,
-          showLogoutConfirm, setShowLogoutConfirm, confirmRevokeId, setConfirmRevokeId,
-          pendingRoleChange, setPendingRoleChange, confirmAction, setConfirmAction,
-          domainsList, setDomainsList, activeDomain, setActiveDomain,
-          domainMailboxes, setDomainMailboxes, domainGroups, setDomainGroups,
-          teamMembers, setTeamMembers, mailQueue, setMailQueue, auditLog, setAuditLog,
-          templates, setTemplates, connectionUsage, setConnectionUsage, adminUsers, setAdminUsers,
-          sortOrder, setSortOrder, viewMode, setViewMode, selectedEmails, setSelectedEmails,
-          mailStatusFilter, setMailStatusFilter, notificationEnabled, setNotificationEnabled,
-          soundEnabled, setSoundEnabled, showQueueFilters, setShowQueueFilters,
-          queueStatusFilter, setQueueStatusFilter, templateSearch, setTemplateSearch,
-          showAddDomain, setShowAddDomain, newDomainInput, setNewDomainInput,
-          teamFilter, setTeamFilter, auditFilter, setAuditFilter, adminSearch, setAdminSearch,
-          adminPlanFilter, setAdminPlanFilter, adminStatusFilter, setAdminStatusFilter,
-          adminRiskFilter, setAdminRiskFilter, sidebarOpen, setSidebarOpen, user,
-          themeMode, setThemeMode, toggleTheme, activeDomainName,
-          hasRoleAccess, canAccessPlatformAdmin, refreshDomains, refreshTeam, refreshQueue,
-          refreshAudit, refreshTemplates, refreshMailboxes, refreshGroups, refreshConnectionUsage,
-          handleLogout, handleSendEmail, openComposeWith, copyToClipboard,
-        }}
+        state={dashboardState}
         handleVerifyDomain={handleVerifyDomain}
         confirmRoleChangeStep={confirmRoleChangeStep}
       />

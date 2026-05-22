@@ -596,6 +596,11 @@ export function reloadAccountCaches() {
   emailsCache = initEmails();
 }
 
+export function reloadEmailsCacheFromStorage(): Email[] {
+  emailsCache = initEmails();
+  return emailsCache;
+}
+
 export function normalizeDomainInput(input: string): string {
   return input
     .trim()
@@ -1259,6 +1264,10 @@ export function syncBusinessEmailToDb(email: Email) {
 }
 
 export let businessEmailDbRouteUnavailable = false;
+
+export function setBusinessEmailDbRouteUnavailable(val: boolean) {
+  businessEmailDbRouteUnavailable = val;
+}
 
 export function folderMatchesBusinessView(email: Email, folder: string): boolean {
   if (folder === 'starred') return email.starred && email.folder !== 'trash';

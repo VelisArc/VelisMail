@@ -1,6 +1,7 @@
 import { Mail, Plus, Menu, CheckCircle2, Inbox } from 'lucide-react';
 import { businessMailboxes } from '../../../api/client';
-import type { DashboardState, BusinessMailbox } from '../types';
+import type { DashboardState } from '../types';
+import type { BusinessMailbox } from '../../../api/client';
 
 interface MailboxesPanelProps {
   state: DashboardState;

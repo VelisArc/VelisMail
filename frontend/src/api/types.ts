@@ -149,6 +149,7 @@ export type BusinessTeamMember = {
   status?: 'pending' | 'active' | 'expired' | 'revoked';
   inviteToken?: string;
   inviteExpiresAt?: string | null;
+  apiKey?: string;
   addedAt: string;
   lastActive: string;
 };
