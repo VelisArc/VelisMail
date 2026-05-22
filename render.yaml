@@ -3,7 +3,6 @@ services:
     name: velismail-backend
     env: docker
     plan: free
-    region: singapore
     dockerfilePath: ./Dockerfile.monolith
     envVars:
       # ── Port ──
