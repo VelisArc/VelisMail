@@ -1,0 +1,30 @@
+[package]
+name = "velismail-tenant-service"
+version.workspace = true
+edition.workspace = true
+
+[lib]
+name = "velismail_tenant_service"
+path = "src/lib.rs"
+
+[[bin]]
+name = "tenant-service"
+path = "src/main.rs"
+
+[dependencies]
+tokio.workspace = true
+axum.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+anyhow.workspace = true
+uuid.workspace = true
+chrono.workspace = true
+sqlx.workspace = true
+velismail-common = { path = "../../libs/common" }
+velismail-database = { path = "../../libs/database" }
+tower-http = { version = "0.5", features = ["cors", "trace"] }
+
+[dev-dependencies]
+proptest = "1.4"
