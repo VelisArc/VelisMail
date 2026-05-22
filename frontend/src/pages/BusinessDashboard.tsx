@@ -1,11 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
-import { Menu } from 'lucide-react';
-import { auth, businessAudit, businessGroups, businessMailboxes, businessQueue, businessTeam, businessTemplates, connections, domains, fetchApiJsonDetailed, isBusinessSetupReady, isScamEmail, mail, mergeDnsRecords, normalizeProviderDnsRecords, platformAdmin, providerEndpointForRequest, teamAccess, type BusinessAuditEntry, type BusinessGroup, type BusinessMailbox, type BusinessTeamMember, type BusinessTemplate, type ConnectionUsage, type CustomDomain, type Email, type PlatformAdminUserRecord, type TeamAccessInvite } from '../api/client';
-import LoadingSpinner from '../components/LoadingSpinner';
-import Sidebar, { BIZ_FOLDERS, type BizTab } from '../components/dashboard/Sidebar';
+import { auth, businessAudit, businessGroups, businessMailboxes, businessQueue, businessTeam, businessTemplates, connections, domains, isBusinessSetupReady, mail, normalizeProviderDnsRecords, platformAdmin, providerEndpointForRequest, type BusinessAuditEntry, type BusinessGroup, type BusinessMailbox, type BusinessTeamMember, type BusinessTemplate, type ConnectionUsage, type CustomDomain, type Email, type PlatformAdminUserRecord } from '../api/client';
+import Sidebar, { type BizTab } from '../components/dashboard/Sidebar';
 import EmailInbox from '../components/dashboard/EmailInbox';
-import { formatRelative, copyToClipboard, loadRazorpayCheckout, parseEmailConversation, getEmailPreview, buildReplyQuote, providerRecordType, type RazorpayConstructor } from '../components/dashboard/utils';
+import { copyToClipboard, loadRazorpayCheckout, buildReplyQuote } from '../components/dashboard/utils';
 import type { DomainRecord, DomainHealth, MailQueueItem } from '../components/dashboard/types';
 import DomainsPanel from '../components/dashboard/panels/DomainsPanel';
 import MailboxesPanel from '../components/dashboard/panels/MailboxesPanel';
@@ -19,7 +17,7 @@ import TemplatesPanel from '../components/dashboard/panels/TemplatesPanel';
 import SettingsPanel from '../components/dashboard/panels/SettingsPanel';
 import BillingPanel from '../components/dashboard/panels/BillingPanel';
 import Modals from '../components/dashboard/Modals';
-import { useNavigation, useSessionStore } from '../store/sessionStore';
+import { useNavigation } from '../store/sessionStore';
 import { useEmails } from '../hooks/useMail';
 import './BusinessDashboard.css';
 import './Pricing.css';
@@ -43,7 +41,7 @@ function toDomainRecord(domain: CustomDomain): DomainRecord {
 
 export default function BusinessDashboard() {
   const navigate = useNavigate();
-  const [user, setUser] = useState(auth.getSession());
+  const [user] = useState(auth.getSession());
   const { navigation, updateNavigation } = useNavigation();
 
   const [activeBizTab, setActiveBizTab] = useState<BizTab>(() => (navigation?.bizTab as BizTab) || 'mail');
@@ -92,33 +90,6 @@ export default function BusinessDashboard() {
   const [adminRiskFilter, setAdminRiskFilter] = useState('all');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [themeMode, setThemeMode] = useState(() => localStorage.getItem('velismail_theme') || 'dark');
-  const [inviteOpen, setInviteOpen] = useState(false);
-  const [inviteName, setInviteName] = useState('');
-  const [inviteEmail, setInviteEmail] = useState('');
-  const [inviteRole, setInviteRole] = useState<'admin' | 'member' | 'viewer'>('member');
-  const [inviteExpiresHours, setInviteExpiresHours] = useState(48);
-  const [issuedInvite, setIssuedInvite] = useState<TeamAccessInvite | null>(null);
-  const [templateEditorOpen, setTemplateEditorOpen] = useState(false);
-  const [templateName, setTemplateName] = useState('');
-  const [templateSubject, setTemplateSubject] = useState('');
-  const [templateBody, setTemplateBody] = useState('');
-  const [previewTemplate, setPreviewTemplate] = useState<BusinessTemplate | null>(null);
-  const [selectedAdminUser, setSelectedAdminUser] = useState<PlatformAdminUserRecord | null>(null);
-  const [adminStatusConfirm, setAdminStatusConfirm] = useState<{ record: PlatformAdminUserRecord; status: string; step: number } | null>(null);
-  const [domainDetails, setDomainDetails] = useState<DomainRecord | null>(null);
-  const [mailboxDetails, setMailboxDetails] = useState<BusinessMailbox | null>(null);
-  const [groupDetails, setGroupDetails] = useState<BusinessGroup | null>(null);
-  const [mailboxLocalPart, setMailboxLocalPart] = useState('');
-  const [mailboxDisplayName, setMailboxDisplayName] = useState('');
-  const [mailboxKind, setMailboxKind] = useState<BusinessMailbox['kind']>('primary');
-  const [groupName, setGroupName] = useState('');
-  const [groupLocalPart, setGroupLocalPart] = useState('');
-  const [groupMembers, setGroupMembers] = useState('');
-  const [verifyingDomainId, setVerifyingDomainId] = useState('');
-  const [domainVerifyOpen, setDomainVerifyOpen] = useState(false);
-  const [domainVerifySteps, setDomainVerifySteps] = useState<DomainHealth[]>([]);
-  const [domainVerifyProviderRecords, setDomainVerifyProviderRecords] = useState<any[]>([]);
-  const [copiedField, setCopiedField] = useState<string | null>(null);
 
   const activeDomainName = activeDomain || domainsList[0]?.domain || '';
 
@@ -166,18 +137,18 @@ export default function BusinessDashboard() {
   const hasRoleAccess = (tab: BizTab) => (ROLE_ALLOWED_TABS[user?.role || 'member'] || ROLE_ALLOWED_TABS.member).includes(tab);
   const canAccessPlatformAdmin = user?.role === 'admin' && platformAdmin.isCurrentUserPlatformAdmin();
 
-  const { data: emails = [], isLoading, refetch } = useEmails(activeDomainName, activeFolder);
+  const { data: emails = [], refetch } = useEmails(activeDomainName, activeFolder);
 
   const refreshDomains = () => setDomainsList(domains.getAll().map(toDomainRecord));
-  const refreshTeam = () => setTeamMembers(businessTeam.getByDomain(activeDomainName));
-  const refreshQueue = () => setMailQueue(businessQueue.getByDomain(activeDomainName));
-  const refreshAudit = () => setAuditLog(businessAudit.getByDomain(activeDomainName));
-  const refreshTemplates = () => setTemplates(businessTemplates.getByDomain(activeDomainName));
-  const refreshMailboxes = () => setDomainMailboxes(businessMailboxes.getByDomain(activeDomainName));
-  const refreshGroups = () => setDomainGroups(businessGroups.getByDomain(activeDomainName));
-  const refreshConnectionUsage = () => setConnectionUsage(connections.getUsage());
+  const refreshTeam = useCallback(() => setTeamMembers(businessTeam.getByDomain(activeDomainName)), [activeDomainName]);
+  const refreshQueue = useCallback(() => setMailQueue(businessQueue.getByDomain(activeDomainName)), [activeDomainName]);
+  const refreshAudit = useCallback(() => setAuditLog(businessAudit.getByDomain(activeDomainName)), [activeDomainName]);
+  const refreshTemplates = useCallback(() => setTemplates(businessTemplates.getByDomain(activeDomainName)), [activeDomainName]);
+  const refreshMailboxes = useCallback(() => setDomainMailboxes(businessMailboxes.getByDomain(activeDomainName)), [activeDomainName]);
+  const refreshGroups = useCallback(() => setDomainGroups(businessGroups.getByDomain(activeDomainName)), [activeDomainName]);
+  const refreshConnectionUsage = useCallback(() => setConnectionUsage(connections.getUsage()), []);
 
-  useEffect(() => { refreshTeam(); refreshQueue(); refreshAudit(); refreshTemplates(); refreshConnectionUsage(); }, [activeDomainName]);
+  useEffect(() => { refreshTeam(); refreshQueue(); refreshAudit(); refreshTemplates(); refreshConnectionUsage(); }, [activeDomainName, refreshTeam, refreshQueue, refreshAudit, refreshTemplates, refreshConnectionUsage]);
 
   const handleSendEmail = async () => {
     if (!composeTo || !composeSubject) { showToast('Recipient and subject required', 'error'); return; }
@@ -269,7 +240,7 @@ export default function BusinessDashboard() {
     } catch { showToast('Action failed', 'error'); }
   };
 
-  useEffect(() => { refetch(); }, [activeFolder, activeDomainName]);
+  useEffect(() => { refetch(); }, [activeFolder, activeDomainName, refetch]);
 
   if (!user) return <Navigate to="/login" replace />;
   if (!isBusinessSetupReady(user)) return <Navigate to="/business-setup" replace />;
@@ -318,10 +289,10 @@ export default function BusinessDashboard() {
             onRefresh={() => refetch()}
             onToggleStar={(id) => { mail.toggleStar(activeDomainName, id); refetch(); }}
             onToggleRead={(id) => { mail.toggleRead(activeDomainName, id); refetch(); }}
-            onArchive={(ids) => handleBulkAction('archive')}
-            onTrash={(ids) => handleBulkAction('trash')}
-            onMarkSpam={(ids) => { ids.forEach(id => mail.markSpam(activeDomainName, id)); refetch(); }}
-            onMarkSafe={(ids) => { ids.forEach(id => mail.markSafe(activeDomainName, id)); refetch(); }}
+    onArchive={() => handleBulkAction('archive')}
+    onTrash={() => handleBulkAction('trash')}
+    onMarkSpam={(_ids) => { _ids.forEach(id => mail.markSpam(activeDomainName, id)); refetch(); }}
+    onMarkSafe={(_ids) => { _ids.forEach(id => mail.markSafe(activeDomainName, id)); refetch(); }}
             onReply={handleReply} onForward={handleForward}
           />
         )}

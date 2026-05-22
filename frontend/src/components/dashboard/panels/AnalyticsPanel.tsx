@@ -1,4 +1,4 @@
-import { BarChart3, RefreshCcw, Send, Globe, Users, Layers, Server, Activity, Menu, CheckCircle2, XCircle } from 'lucide-react';
+import { BarChart3, RefreshCcw, Send, Globe, Users, Layers, Server, Activity, Menu } from 'lucide-react';
 import type { DashboardState } from '../types';
 
 interface AnalyticsPanelProps {

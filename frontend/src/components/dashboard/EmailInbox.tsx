@@ -1,48 +1,29 @@
 import { useState, useMemo } from 'react';
 import {
-  Mail, Send, FileEdit, Star, Archive, Trash2, Search, Plus, X, Paperclip, RefreshCw, ArrowLeft,
-  Reply, Forward, CheckCircle2, Sun, Moon, BarChart3, Users, Globe, Shield, Server, Activity,
-  Clock, AlertCircle, Database, CheckSquare, Square, Tag, Bell, BellOff, ExternalLink, Copy, Zap, Filter, Check,
-  Volume2, VolumeX, RefreshCcw, Pause, Trash, Edit3, Eye, Download, KeyRound, Lock, XCircle, List, Grid,
-  SortAsc, SortDesc, Menu, AlertTriangle, ChevronDown, User, Calendar, Flag,
+  Mail, Star, Archive, Trash2, Search, Paperclip, ArrowLeft,
+  Reply, Forward,
+  RefreshCcw, List, Grid, SortAsc, SortDesc, Menu, User,
 } from 'lucide-react';
 import type { Email } from '../../api/client';
-import { parseEmailConversation, getEmailPreview, buildReplyQuote, copyToClipboard, truncate } from './utils';
-import type { BizFolder, BizTab, DashboardState, MailQueueItem } from './types';
-import LoadingSpinner from '../LoadingSpinner';
-
-const BIZ_FOLDERS: BizFolder[] = [
-  { id: 'inbox', label: 'Inbox', icon: Mail },
-  { id: 'starred', label: 'Starred', icon: Star },
-  { id: 'sent', label: 'Sent', icon: Send },
-  { id: 'drafts', label: 'Drafts', icon: FileEdit },
-  { id: 'archive', label: 'Archive', icon: Archive },
-  { id: 'trash', label: 'Trash', icon: Trash2 },
-  { id: 'priority', label: 'Priority', icon: AlertTriangle },
-  { id: 'scheduled', label: 'Scheduled', icon: Clock },
-  { id: 'spam', label: 'Spam', icon: Shield },
-];
+import { parseEmailConversation, getEmailPreview } from './utils';
+import type { DashboardState } from './types';
 
 interface EmailInboxProps {
   emails: Email[];
-  folders: string[];
-  folderData?: Record<string, any>;
+  folderData?: Record<string, unknown>;
   state: DashboardState;
   onSelectEmail: (email: Email) => void;
   onRefresh: () => void;
   onToggleStar: (id: string) => void;
-  onToggleRead: (id: string) => void;
   onArchive: (ids: string[]) => void;
   onTrash: (ids: string[]) => void;
-  onMarkSpam: (ids: string[]) => void;
-  onMarkSafe: (ids: string[]) => void;
   onReply: (email: Email) => void;
   onForward: (email: Email) => void;
 }
 
 export default function EmailInbox({
-  emails, folders, state, onSelectEmail, onRefresh, onToggleStar, onToggleRead,
-  onArchive, onTrash, onMarkSpam, onMarkSafe, onReply, onForward,
+  emails, state, onSelectEmail, onRefresh, onToggleStar,
+  onArchive, onTrash, onReply, onForward,
 }: EmailInboxProps) {
   const [focusedEmail, setFocusedEmail] = useState<Email | null>(null);
   const filtered = useMemo(() => {
@@ -178,7 +159,7 @@ export default function EmailInbox({
                     <div className="mail-row-select">
                       <input type="checkbox" checked={state.selectedEmails.has(email.id)} onChange={() => {
                         const next = new Set(state.selectedEmails);
-                        next.has(email.id) ? next.delete(email.id) : next.add(email.id);
+                        if (next.has(email.id)) { next.delete(email.id); } else { next.add(email.id); }
                         state.setSelectedEmails(next);
                       }} onClick={e => e.stopPropagation()} />
                     </div>

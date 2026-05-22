@@ -6,10 +6,8 @@ import type {
   BusinessTeamMember,
   BusinessTemplate,
   ConnectionUsage,
-  CustomDomain,
   Email,
   PlatformAdminUserRecord,
-  TeamAccessInvite,
   User,
 } from '../../api/client';
 
@@ -137,7 +135,7 @@ export interface DomainRecord {
   mailCount: number;
   addedAt: string;
   health: DomainHealth[];
-  providerDnsRecords?: any[];
+  providerDnsRecords?: Record<string, string>[];
   mxVerified?: boolean;
   spfVerified?: boolean;
   dkimVerified?: boolean;

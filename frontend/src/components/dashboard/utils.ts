@@ -119,7 +119,6 @@ export function parseEmailConversation(body: string): ConversationSegment[] {
   let currentMessage: string[] = [];
   let currentQuote: string[] = [];
   let inQuote = false;
-  let quoteHeader = '';
 
   const flushMessage = () => {
     const clean = normalizeConversationLines(currentMessage);
@@ -136,7 +135,6 @@ export function parseEmailConversation(body: string): ConversationSegment[] {
   const startQuote = (header: string) => {
     if (inQuote) flushQuote();
     inQuote = true;
-    quoteHeader = header;
     currentQuote.push(header);
   };
 

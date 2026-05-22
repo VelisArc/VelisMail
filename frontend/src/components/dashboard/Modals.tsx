@@ -284,7 +284,7 @@ function DomainVerifyModal({ state, handleVerifyDomain }: { state: DashboardStat
           {state.domainVerifyProviderRecords.length > 0 && (
             <div className="dns-records-section">
               <h4 className="dns-records-title">Required DNS Records</h4>
-              {state.domainVerifyProviderRecords.map((rec: any, i: number) => (
+              {state.domainVerifyProviderRecords.map((rec: Record<string, string>, i: number) => (
                 <div key={i} className="flex items-center gap-2 dns-record-row-flex">
                   <span className="dns-type-badge dns-type-txt">{providerRecordType(rec)}</span>
                   <span className="text-xs truncate dns-record-name">{rec.name || rec.host || '-'}</span>

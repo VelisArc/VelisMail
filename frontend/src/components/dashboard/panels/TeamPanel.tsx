@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { Users, Shield, Plus, Menu, User, KeyRound, X } from 'lucide-react';
+import { Shield, Plus, Menu, User, KeyRound, X } from 'lucide-react';
 import { businessTeam } from '../../../api/client';
 import type { DashboardState } from '../types';
 

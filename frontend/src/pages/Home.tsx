@@ -22,10 +22,6 @@ import {
   Sun,
   Moon,
   ArrowUp,
-  Mail,
-  Github,
-  Twitter,
-  Linkedin,
 } from 'lucide-react';
 import { auth, fetchApiResponse, isBusinessSetupReady } from '../api/client';
 import HomeOpsScene from '../components/HomeOpsScene';

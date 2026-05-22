@@ -1,5 +1,5 @@
 import { Globe, Plus, Menu, RefreshCcw, Copy, Shield } from 'lucide-react';
-import type { DashboardState, DomainRecord } from '../types';
+import type { DashboardState } from '../types';
 
 interface DomainsPanelProps {
   state: DashboardState;

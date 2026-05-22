@@ -1,10 +1,10 @@
 import { getConnectionHostLabel } from '../config/providers';
 import type {
-  User, Contact, Signature, DomainCheckStatus, DnsRecord,
+  User, DnsRecord,
   ProviderDnsRecordInput, DomainCheck, CustomDomain, BusinessMailbox,
   BusinessGroup, BusinessTeamMember, TeamAccessInvite, BusinessTemplate,
   BusinessMailQueueItem, BusinessAuditEntry, ConnectionUsage,
-  PlatformAdminUserRecord, Email, OtpSendResponse, OtpVerifyResponse,
+  PlatformAdminUserRecord, Email,
   ApiJsonDetailedResult,
 } from './types';
 
@@ -277,7 +277,7 @@ export async function fetchApiResponse(endpoint: string, options: RequestInit = 
 export async function fetchApiJsonDetailed<T = unknown>(endpoint: string, options: RequestInit = {}): Promise<ApiJsonDetailedResult<T>> {
   const apiBaseCandidates = getApiBaseCandidates();
   if (apiBaseCandidates.length === 0) {
-    throw new Error('Unable to resolve the VelisMail API URL. Set VITE_API_URL or open the app from velismail.online so the frontend can auto-detect api.velismail.online.');
+    throw new Error('Unable to resolve the VelisMail API URL.');
   }
   const token = localStorage.getItem('velismail_token');
   const headers = new Headers(options.headers || {});
@@ -328,7 +328,7 @@ export async function fetchApiJsonDetailed<T = unknown>(endpoint: string, option
   throw lastError || new Error('Unable to reach the VelisMail API.');
 }
 
-async export function fetchAPI(endpoint: string, options: RequestInit = {}) {
+export async function fetchAPI(endpoint: string, options: RequestInit = {}) {
   const response = await fetchApiResponse(endpoint, options);
   const rawBody = await response.text();
   if (!rawBody.trim()) {
@@ -482,7 +482,7 @@ export function validateCachedTeamAccessToken(token: string): { ok: boolean; inv
   return { ok: true, invite };
 }
 
-async export function postTeamAccess(endpoint: string, body: unknown): Promise<{
+export async function postTeamAccess(endpoint: string, body: unknown): Promise<{
   ok: boolean;
   status: number;
   data: TeamAccessApiResponse | null;
@@ -1081,7 +1081,7 @@ export function stringFromRecord(record: Record<string, unknown>, key: string): 
   return typeof value === 'string' ? value : undefined;
 }
 
-async export function fetchAuthenticatedProfile(): Promise<Partial<User>> {
+export async function fetchAuthenticatedProfile(): Promise<Partial<User>> {
   try {
     const profile = await fetchAPI('/auth/me');
     const raw = profile?.user || profile || {};
