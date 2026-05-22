@@ -59,8 +59,6 @@ impl AuthState {
             });
         }
 
-        sqlx::migrate!("./migrations").run(&db).await?;
-
         Ok(Self {
             config,
             db,

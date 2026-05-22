@@ -12,7 +12,6 @@ pub struct TenantState {
 impl TenantState {
     pub async fn new(config: TenantConfig) -> Result<Self> {
         let db = PgPool::connect(&config.db_url).await?;
-        sqlx::migrate!("./migrations").run(&db).await?;
         Ok(Self { config, db })
     }
 }

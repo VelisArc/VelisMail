@@ -12,7 +12,6 @@ pub struct MailState {
 impl MailState {
     pub async fn new(config: MailConfig) -> Result<Self> {
         let db = PgPool::connect(&config.db_url).await?;
-        sqlx::migrate!("./migrations").run(&db).await?;
         Ok(Self { config, db })
     }
 }

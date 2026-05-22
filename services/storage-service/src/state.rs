@@ -29,8 +29,6 @@ impl StorageState {
 
         let encryption = StorageEncryption::new(&config.encryption_key)?;
 
-        sqlx::migrate!("./migrations").run(&db).await?;
-
         Ok(Self {
             config,
             db,

@@ -12,7 +12,6 @@ pub struct DeliveryState {
 impl DeliveryState {
     pub async fn new(config: DeliveryConfig) -> Result<Self> {
         let db = PgPool::connect(&config.db_url).await?;
-        sqlx::migrate!("./migrations").run(&db).await?;
         Ok(Self { config, db })
     }
 }
