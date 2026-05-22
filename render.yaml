@@ -46,7 +46,7 @@ services:
       - key: RUST_LOG
         value: info
       - key: FRONTEND_URL
-        value: https://velismail.online
+        value: https://velismail.online,https://www.velismail.online
       - key: BASE_DOMAIN
         value: velismail.online
       - key: PUBLIC_API_URL
