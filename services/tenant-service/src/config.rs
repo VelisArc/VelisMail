@@ -9,10 +9,10 @@ pub struct TenantConfig {
 
 impl TenantConfig {
     pub fn from_env() -> Result<Self> {
-        let port = std::env::var("PORT")
+        let port = std::env::var("TENANT_PORT")
             .ok()
             .and_then(|p| p.parse().ok())
-            .or_else(|| std::env::var("TENANT_PORT").ok().and_then(|p| p.parse().ok()))
+            .or_else(|| std::env::var("PORT").ok().and_then(|p| p.parse().ok()))
             .unwrap_or(3004);
 
         Ok(Self {

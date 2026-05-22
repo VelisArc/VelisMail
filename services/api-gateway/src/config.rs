@@ -24,10 +24,10 @@ pub struct GatewayConfig {
 
 impl GatewayConfig {
     pub fn from_env() -> Result<Self> {
-        let port = std::env::var("PORT")
+        let port = std::env::var("GATEWAY_PORT")
             .ok()
             .and_then(|p| p.parse().ok())
-            .or_else(|| std::env::var("GATEWAY_PORT").ok().and_then(|p| p.parse().ok()))
+            .or_else(|| std::env::var("PORT").ok().and_then(|p| p.parse().ok()))
             .unwrap_or(3000);
 
         let jwt_secret = std::env::var("JWT_SECRET").unwrap_or_default();

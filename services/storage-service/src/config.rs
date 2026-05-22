@@ -20,10 +20,10 @@ fn required_env(name: &str) -> Result<String> {
 
 impl StorageConfig {
     pub fn from_env() -> Result<Self> {
-        let port = std::env::var("PORT")
+        let port = std::env::var("STORAGE_PORT")
             .ok()
             .and_then(|p| p.parse().ok())
-            .or_else(|| std::env::var("STORAGE_PORT").ok().and_then(|p| p.parse().ok()))
+            .or_else(|| std::env::var("PORT").ok().and_then(|p| p.parse().ok()))
             .unwrap_or(3003);
 
         Ok(Self {

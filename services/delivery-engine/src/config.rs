@@ -16,10 +16,10 @@ fn required_env(name: &str) -> Result<String> {
 
 impl DeliveryConfig {
     pub fn from_env() -> Result<Self> {
-        let port = std::env::var("PORT")
+        let port = std::env::var("DELIVERY_PORT")
             .ok()
             .and_then(|p| p.parse().ok())
-            .or_else(|| std::env::var("DELIVERY_PORT").ok().and_then(|p| p.parse().ok()))
+            .or_else(|| std::env::var("PORT").ok().and_then(|p| p.parse().ok()))
             .unwrap_or(3005);
 
         Ok(Self {
