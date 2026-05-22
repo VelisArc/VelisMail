@@ -7,10 +7,6 @@ edition.workspace = true
 name = "velismail_auth_service"
 path = "src/lib.rs"
 
-[[bin]]
-name = "auth-service"
-path = "src/main.rs"
-
 [dependencies]
 tokio.workspace = true
 axum.workspace = true

@@ -7,10 +7,6 @@ edition.workspace = true
 name = "velismail_api_gateway"
 path = "src/lib.rs"
 
-[[bin]]
-name = "api-gateway"
-path = "src/main.rs"
-
 [dependencies]
 tokio.workspace = true
 axum.workspace = true

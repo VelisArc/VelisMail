@@ -7,10 +7,6 @@ edition.workspace = true
 name = "velismail_delivery_engine"
 path = "src/lib.rs"
 
-[[bin]]
-name = "delivery-engine"
-path = "src/main.rs"
-
 [dependencies]
 tokio.workspace = true
 axum.workspace = true
