@@ -363,8 +363,8 @@ export default function Login() {
 
   return (
     <div className="login-page">
-      <div className="login-bg-orb login-orb-1" />
-      <div className="login-bg-orb login-orb-2" />
+      <div className="login-orb login-orb-1" />
+      <div className="login-orb login-orb-2" />
       <div className="login-grid-bg" />
 
       <Link to="/" className="login-back-link">

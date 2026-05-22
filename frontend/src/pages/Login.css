@@ -15,6 +15,23 @@
   background: var(--bg-body);
 }
 
+.login-grid-bg {
+  position: fixed;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(0,0,0,0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0,0,0,0.03) 1px, transparent 1px);
+  background-size: 60px 60px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+[data-theme="dark"] .login-grid-bg {
+  background-image:
+    linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px);
+}
+
 .login-orb {
   position: fixed;
   border-radius: 50%;
@@ -281,6 +298,20 @@
   align-self: center;
   margin-top: -6px;
   font-size: var(--text-sm);
+}
+
+.back-step-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+  margin-bottom: var(--space-3);
+  transition: color var(--transition-fast);
+}
+
+.back-step-btn:hover {
+  color: var(--text-primary);
 }
 
 @media (max-width: 1024px) {

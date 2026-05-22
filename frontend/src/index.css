@@ -494,6 +494,22 @@ textarea.input {
   margin-top: 2px;
 }
 
+.form-success {
+  font-size: var(--text-xs);
+  color: var(--success-600);
+  background: var(--success-50);
+  border: 1px solid var(--success-100);
+  border-radius: var(--radius-md);
+  padding: 10px 12px;
+  line-height: 1.5;
+}
+
+[data-theme="dark"] .form-success {
+  background: rgba(34, 197, 94, 0.08);
+  border-color: rgba(34, 197, 94, 0.15);
+  color: var(--success-400);
+}
+
 .form-hint {
   font-size: var(--text-xs);
   color: var(--text-muted);
@@ -962,12 +978,15 @@ textarea.input {
 }
 
 /* Animation Utility Classes */
+.animate-fade,
 .animate-fadeIn { animation: fadeIn 0.6s ease-out both; }
 .animate-fadeInUp { animation: fadeInUp 0.6s ease-out both; }
 .animate-fadeInDown { animation: fadeInDown 0.4s ease-out both; }
 .animate-fadeInLeft { animation: fadeInLeft 0.5s ease-out both; }
 .animate-fadeInRight { animation: fadeInRight 0.5s ease-out both; }
+.animate-scale,
 .animate-scaleIn { animation: scaleIn 0.3s ease-out both; }
+.animate-slide-up,
 .animate-slideUp { animation: slideUp 0.5s ease-out both; }
 .animate-page { animation: pageEnter 0.7s cubic-bezier(0.16, 1, 0.3, 1) both; }
 .animate-pulse { animation: pulse 2s ease-in-out infinite; }
@@ -987,6 +1006,11 @@ textarea.input {
 .stagger-children > *:nth-child(10) { animation-delay: 720ms; }
 .stagger-children > *:nth-child(11) { animation-delay: 800ms; }
 .stagger-children > *:nth-child(12) { animation-delay: 880ms; }
+
+.stagger-1 { animation-delay: 80ms; }
+.stagger-2 { animation-delay: 160ms; }
+.stagger-3 { animation-delay: 240ms; }
+.stagger-4 { animation-delay: 320ms; }
 
 /* ─── Reduced Motion ─── */
 @media (prefers-reduced-motion: reduce) {

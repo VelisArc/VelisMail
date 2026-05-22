@@ -25,6 +25,20 @@
   justify-content: space-between;
 }
 
+.section-tag {
+  display: inline-block;
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: var(--primary-600);
+  text-transform: uppercase;
+  margin-bottom: var(--space-3);
+}
+
+.section-header {
+  margin-bottom: var(--space-8);
+}
+
 .legal-content {
   flex: 1;
   max-width: 780px;

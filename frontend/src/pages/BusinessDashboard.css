@@ -497,8 +497,88 @@
   justify-content: space-between;
 }
 
+/* Sidebar class aliases (used in Sidebar.tsx) */
+.sidebar-user-info {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex: 1;
+  min-width: 0;
+}
+
+.sidebar-user-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.sidebar-user-name {
+  font-weight: 600;
+  font-size: 0.85rem;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  overflow: hidden;
+}
+
+.sidebar-user-role {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  text-transform: capitalize;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  overflow: hidden;
+}
+
+.sidebar-theme-btn {
+  width: 100%;
+}
+
+.sidebar-logout {
+  flex-shrink: 0;
+}
+
+.compose-btn {
+  margin-bottom: var(--space-4);
+}
+
+.sidebar-section-lbl {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin: var(--space-6) 0 var(--space-2) var(--space-2);
+}
+
+.sidebar-sub-folders {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin-left: var(--space-4);
+  padding-left: var(--space-2);
+  border-left: 1px solid var(--glass-border);
+}
+
+.folder-badge {
+  margin-left: auto;
+  font-size: 0.68rem;
+  font-weight: 600;
+  padding: 2px 6px;
+  background: var(--primary-glow);
+  color: var(--primary-600);
+  border-radius: var(--radius-full);
+  min-width: 18px;
+  text-align: center;
+  line-height: 1.3;
+}
+
+.logo-img {
+  height: 24px;
+  width: auto;
+}
+
 /* Main */
-.biz-main {
+.biz-main, .dash-main {
   flex: 1;
   display: flex;
   flex-direction: column;
@@ -506,6 +586,115 @@
   background: var(--bg-body);
   position: relative;
   padding: 0;
+}
+
+.dash-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-6);
+  height: 100%;
+}
+
+.dash-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.dash-search {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+.panel-header-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-left: auto;
+}
+
+.search-input {
+  flex: 1;
+}
+
+.search-icon {
+  flex-shrink: 0;
+  color: var(--text-muted);
+}
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-4);
+  padding: var(--space-16) var(--space-4);
+  text-align: center;
+  color: var(--text-muted);
+}
+
+.panel-inline-form {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.domain-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: var(--space-4);
+}
+
+.domain-health {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.domain-metrics {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--space-3);
+}
+
+.team-member-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3) 0;
+  border-bottom: 1px solid var(--border-primary);
+}
+
+.team-member-info {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.pricing-amount {
+  font-size: var(--text-3xl);
+  font-weight: var(--font-weight-extrabold);
+  color: var(--text-primary);
+}
+
+.pricing-features {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: var(--space-4) 0;
+}
+
+.reader-attachments {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-top: var(--space-4);
 }
 
 /* Mail List */
@@ -1394,8 +1583,8 @@
   color: var(--text-primary);
 }
 
-.mail-sender {
-  width: 200px;
+.mail-sender, .mail-from {
+  width: 160px;
   font-weight: 600;
   font-size: 0.9rem;
   white-space: nowrap;
@@ -1410,7 +1599,7 @@
   min-width: 0;
 }
 
-.mail-subject {
+.mail-subject, .mail-subj {
   font-size: 0.9rem;
   color: var(--text-primary);
   white-space: nowrap;
@@ -1426,12 +1615,26 @@
   text-overflow: ellipsis;
 }
 
-.mail-meta {
+.mail-meta, .mail-row-meta {
   display: flex;
   align-items: center;
   gap: var(--space-4);
   font-size: 0.75rem;
   color: var(--text-muted);
+}
+
+.mail-row-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+  cursor: pointer;
+}
+
+.mail-row-select {
+  display: flex;
+  align-items: center;
+  padding: 0 var(--space-2);
 }
 
 /* Reader View */

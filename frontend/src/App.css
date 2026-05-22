@@ -21,3 +21,96 @@
   border-radius: 0 2px 2px 0;
   transition: width 0.3s ease;
 }
+
+/* Error Boundary */
+.error-boundary-fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: 2rem;
+}
+
+.error-boundary-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  max-width: 420px;
+  text-align: center;
+}
+
+.error-boundary-icon {
+  margin-bottom: 0.5rem;
+}
+
+.error-boundary-message {
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.error-boundary-actions {
+  display: flex;
+  gap: 0.75rem;
+  margin-top: 0.5rem;
+}
+
+/* Button variants */
+.btn-danger {
+  background: var(--danger);
+  color: white;
+  border-color: var(--danger);
+}
+
+.btn-danger:hover {
+  background: var(--danger-600);
+  border-color: var(--danger-600);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+}
+
+/* Badge variants */
+.badge-accent {
+  background: var(--accent-glow);
+  color: var(--accent-600);
+}
+
+/* Animation variants */
+.animate-slide-down {
+  animation: fadeInDown 0.3s ease-out both;
+}
+
+/* Logo text used across pages */
+.logo-text {
+  font-weight: var(--font-weight-extrabold);
+  font-size: var(--text-base);
+  letter-spacing: var(--tracking-tight);
+  color: var(--text-primary);
+}
+
+/* Toast notifications */
+.toast-container {
+  position: fixed;
+  bottom: var(--space-8);
+  right: var(--space-8);
+  z-index: var(--z-toast);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  max-width: 400px;
+  pointer-events: none;
+}
+
+.toast-card {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-5);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  animation: slideUp 0.3s ease-out both;
+  pointer-events: auto;
+}
