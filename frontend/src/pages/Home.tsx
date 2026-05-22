@@ -113,7 +113,7 @@ function saveOfflineLead(key: string, payload: Record<string, string>) {
 }
 
 function useTheme() {
-  const [theme, setTheme] = useState(() => localStorage.getItem('velismail_theme') || 'dark');
+  const [theme, setTheme] = useState(() => localStorage.getItem('velismail_theme') || 'light');
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
     localStorage.setItem('velismail_theme', theme);

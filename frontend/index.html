@@ -80,10 +80,10 @@
     <script>
       (function() {
         try {
-          var mode = localStorage.getItem('velismail_theme') || 'dark';
+          var mode = localStorage.getItem('velismail_theme') || 'light';
           document.documentElement.setAttribute('data-theme', mode);
           var meta = document.querySelector('meta[name="theme-color"]');
-          if (meta) meta.content = mode === 'dark' ? '#121212' : '#fafafa';
+          if (meta) meta.content = mode === 'dark' ? '#121212' : '#ffffff';
         } catch (e) {}
       })();
     </script>

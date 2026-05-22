@@ -66,6 +66,7 @@ export default function BusinessDashboard() {
   const [confirmAction, setConfirmAction] = useState<{ title: string; message: string; onConfirm: () => void } | null>(null);
   const [domainsList, setDomainsList] = useState<DomainRecord[]>(() => domains.getAll().map(toDomainRecord));
   const [activeDomain, setActiveDomain] = useState('');
+  const activeDomainName = activeDomain || domainsList[0]?.domain || '';
   const [domainMailboxes, setDomainMailboxes] = useState<BusinessMailbox[]>([]);
   const [domainGroups, setDomainGroups] = useState<BusinessGroup[]>([]);
   const [teamMembers, setTeamMembers] = useState<BusinessTeamMember[]>([]);
@@ -92,7 +93,7 @@ export default function BusinessDashboard() {
   const [adminStatusFilter, setAdminStatusFilter] = useState('all');
   const [adminRiskFilter, setAdminRiskFilter] = useState('all');
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [themeMode, setThemeMode] = useState(() => localStorage.getItem('velismail_theme') || 'dark');
+  const [themeMode, setThemeMode] = useState(() => localStorage.getItem('velismail_theme') || 'light');
   const [inviteOpen, setInviteOpen] = useState(false);
   const [inviteName, setInviteName] = useState('');
   const [inviteEmail, setInviteEmail] = useState('');
@@ -120,22 +121,8 @@ export default function BusinessDashboard() {
   const [domainVerifySteps, setDomainVerifySteps] = useState<DomainHealth[]>([]);
   const [domainVerifyProviderRecords, setDomainVerifyProviderRecords] = useState<Record<string, string>[]>([]);
   const [copiedField, setCopiedField] = useState<string | null>(null);
-
-  const activeDomainName = activeDomain || domainsList[0]?.domain || '';
-
   useEffect(() => {
-    if (user && domainsList.length > 0 && !activeDomain) setActiveDomain(domainsList[0].id);
-  }, [user, domainsList, activeDomain]);
-
-  useEffect(() => {
-    if (activeDomainName) {
-      setDomainMailboxes(businessMailboxes.getByDomain(activeDomainName));
-      setDomainGroups(businessGroups.getByDomain(activeDomainName));
-    }
-  }, [activeDomainName]);
-
-  useEffect(() => {
-    setThemeMode(localStorage.getItem('velismail_theme') || 'dark');
+    setThemeMode(localStorage.getItem('velismail_theme') || 'light');
   }, []);
 
   useEffect(() => {
