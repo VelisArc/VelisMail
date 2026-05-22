@@ -2,7 +2,6 @@ use crate::config::MailConfig;
 use anyhow::Result;
 use axum::extract::FromRef;
 use sqlx::PgPool;
-use std::sync::Arc;
 
 #[derive(Clone, FromRef)]
 pub struct MailState {

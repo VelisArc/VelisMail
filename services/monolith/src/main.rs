@@ -1,3 +1,5 @@
+use tracing_subscriber::prelude::*;
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     tracing_subscriber::registry()
