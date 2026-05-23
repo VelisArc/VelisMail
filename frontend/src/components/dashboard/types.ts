@@ -1,4 +1,3 @@
-import type { LucideIcon } from 'lucide-react';
 import type {
   BusinessAuditEntry,
   BusinessGroup,
@@ -10,10 +9,7 @@ import type {
   User,
   TeamAccessInvite,
 } from '../../api/client';
-
-export type BizTab = 'mail' | 'domains' | 'mailboxes' | 'groups' | 'team' | 'queue' | 'analytics' | 'audit' | 'templates' | 'settings' | 'billing' | 'admin';
-
-export type BizFolder = { id: string; label: string; icon: LucideIcon; badge?: string };
+import type { BizTab } from './constants';
 
 export interface DashboardState {
   activeBizTab: BizTab;
@@ -118,6 +114,7 @@ export interface DashboardState {
   refreshMailboxes: () => void;
   refreshGroups: () => void;
   refreshConnectionUsage: () => void;
+  refreshAdminUsers: () => void;
   handleLogout: () => void;
   handleSendEmail: () => void;
   openComposeWith: (to?: string, subject?: string, body?: string) => void;

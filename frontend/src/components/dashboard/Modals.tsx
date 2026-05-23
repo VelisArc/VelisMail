@@ -241,7 +241,7 @@ function ConfirmActionModal({ state }: { state: DashboardState }) {
         </div>
         <div className="modal-actions-border">
           <button className="btn btn-ghost confirm-btn-cancel" onClick={() => state.setConfirmAction(null)}>Cancel</button>
-          <button className="btn btn-primary confirm-btn-danger" onClick={() => { state.confirmAction!.onConfirm(); state.setConfirmAction(null); }}>Yes, Continue</button>
+          <button className="btn btn-danger confirm-btn-danger" onClick={() => { state.confirmAction!.onConfirm(); state.setConfirmAction(null); }}>Yes, Continue</button>
         </div>
       </div>
     </div>
@@ -265,8 +265,11 @@ function AdminStatusConfirmModal({ state }: { state: DashboardState }) {
           <button className="btn btn-ghost" onClick={() => state.setAdminStatusConfirm(null)}>Cancel</button>
           <button className={state.adminStatusConfirm.status === 'suspended' ? 'btn btn-danger' : 'btn btn-primary'} onClick={() => {
             if (state.adminStatusConfirm!.step === 1) { state.setAdminStatusConfirm({ ...state.adminStatusConfirm!, step: 2 }); return; }
-            platformAdmin.updateUserStatus(state.adminStatusConfirm!.record.user.email, state.adminStatusConfirm!.status as 'active' | 'suspended' | 'deactivated');
-            state.refreshQueue(); state.setAdminStatusConfirm(null); state.showToast(`User ${state.adminStatusConfirm!.status}`);
+            const email = state.adminStatusConfirm!.record.user.email;
+            const newStatus = state.adminStatusConfirm!.status;
+            platformAdmin.updateUserStatus(email, newStatus as 'active' | 'suspended' | 'deactivated');
+            state.setAdminStatusConfirm(null); state.showToast(`User ${newStatus}`);
+            state.refreshAdminUsers ? state.refreshAdminUsers() : state.refreshTeam();
           }}>
             {state.adminStatusConfirm.step === 1 ? 'Continue' : state.adminStatusConfirm.status === 'suspended' ? 'Confirm Suspend' : 'Confirm Reactivate'}
           </button>

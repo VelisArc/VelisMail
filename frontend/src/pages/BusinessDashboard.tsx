@@ -19,6 +19,7 @@ import SettingsPanel from '../components/dashboard/panels/SettingsPanel';
 import BillingPanel from '../components/dashboard/panels/BillingPanel';
 import Modals from '../components/dashboard/Modals';
 import { useNavigation, useSessionActions } from '../store/sessionStore';
+import { useQueryClient } from '@tanstack/react-query';
 import { useEmails } from '../hooks/useMail';
 import './BusinessDashboard.css';
 import './Pricing.css';
@@ -46,6 +47,7 @@ export default function BusinessDashboard() {
   const [user] = useState(auth.getSession());
   const navigation = useNavigation();
   const { updateNavigation } = useSessionActions();
+  const queryClient = useQueryClient();
 
   const [activeBizTab, setActiveBizTab] = useState<BizTab>(() => (navigation?.activeTab as BizTab) || 'mail');
   const [activeFolder, setActiveFolder] = useState(navigation?.activeFolder || 'inbox');
@@ -156,13 +158,18 @@ export default function BusinessDashboard() {
   const refreshMailboxes = useCallback(() => setDomainMailboxes(businessMailboxes.getByDomain(activeDomainName)), [activeDomainName]);
   const refreshGroups = useCallback(() => setDomainGroups(businessGroups.getByDomain(activeDomainName)), [activeDomainName]);
   const refreshConnectionUsage = useCallback(() => setConnectionUsage(connections.getUsage()), []);
+  const refreshAdminUsers = useCallback(() => setAdminUsers(platformAdmin.getUsers()), []);
 
   useEffect(() => { refreshTeam(); refreshQueue(); refreshAudit(); refreshTemplates(); refreshConnectionUsage(); }, [activeDomainName, refreshTeam, refreshQueue, refreshAudit, refreshTemplates, refreshConnectionUsage]);
 
   const handleSendEmail = async () => {
     if (!composeTo || !composeSubject) { showToast('Recipient and subject required', 'error'); return; }
     setSending(true);
-    try { await mail.sendBusiness(activeDomainName, composeTo.split(',').map(s => s.trim()).filter(Boolean), composeSubject, composeBody, selectedFromAddress || undefined); showToast('Email sent'); setComposeOpen(false); }
+    try {
+      await mail.sendBusiness(activeDomainName, composeTo.split(',').map(s => s.trim()).filter(Boolean), composeSubject, composeBody, selectedFromAddress || undefined);
+      queryClient.invalidateQueries({ queryKey: ['emails', activeDomainName, 'sent'] });
+      showToast('Email sent'); setComposeOpen(false);
+    }
     catch { showToast('Failed to send', 'error'); }
     finally { setSending(false); }
   };
@@ -262,8 +269,6 @@ export default function BusinessDashboard() {
     } catch { showToast('Action failed', 'error'); }
   };
 
-  useEffect(() => { refetch(); }, [activeFolder, activeDomainName, refetch]);
-
   const dashboardState: DashboardState = {
     activeBizTab, setActiveBizTab, activeFolder, setActiveFolder,
     searchQuery, setSearchQuery,
@@ -286,7 +291,7 @@ export default function BusinessDashboard() {
     adminRiskFilter, setAdminRiskFilter, adminPage, setAdminPage, sidebarOpen, setSidebarOpen, user,
     activeDomainName,
     hasRoleAccess, canAccessPlatformAdmin, refreshDomains, refreshTeam, refreshQueue,
-    refreshAudit, refreshTemplates, refreshMailboxes, refreshGroups, refreshConnectionUsage,
+    refreshAudit, refreshTemplates, refreshMailboxes, refreshGroups,     refreshConnectionUsage, refreshAdminUsers,
     handleLogout, handleSendEmail, openComposeWith, copyToClipboard,
     inviteOpen, setInviteOpen, inviteName, setInviteName, inviteEmail, setInviteEmail,
     inviteRole, setInviteRole, inviteExpiresHours, setInviteExpiresHours,

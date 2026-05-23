@@ -17,7 +17,7 @@
   flex-direction: column;
   overflow: hidden;
   background: var(--bg-body);
-  margin-left: 248px;
+  margin-left: 200px;
 }
 
 @media (max-width: 1024px) {
@@ -66,7 +66,7 @@
   left: 0;
   top: 0;
   bottom: 0;
-  width: 248px;
+  width: 200px;
   display: flex;
   flex-direction: column;
   background: linear-gradient(180deg, #ffffff 0%, #fbfcff 100%);
@@ -88,7 +88,7 @@
 
 /* ─── Sidebar Header ─── */
 .side-header {
-  padding: 24px 18px 14px;
+  padding: 16px 14px 10px;
   border-bottom: 1px solid var(--border-primary);
   flex-shrink: 0;
 }
@@ -105,8 +105,8 @@
 }
 
 .side-logo-name {
-  font-weight: 800;
-  font-size: 1.1rem;
+  font-weight: 700;
+  font-size: 1rem;
   letter-spacing: 0;
   display: block;
   line-height: 1.2;
@@ -121,48 +121,46 @@
 }
 
 .side-header-copy {
-  margin-top: 14px;
-  font-size: 0.78rem;
-  line-height: 1.55;
-  color: var(--text-muted);
+  display: none;
 }
 
 /* ─── Compose Button ─── */
 .side-compose {
-  margin: 14px 14px 10px;
+  margin: 10px 12px 8px;
   flex-shrink: 0;
   justify-content: center;
-  min-height: 44px;
-  border-radius: 14px;
+  min-height: 36px;
+  border-radius: 8px;
+  font-size: 0.82rem;
 }
 
 /* ─── Navigation ─── */
 .side-nav {
   flex: 1;
   overflow-y: auto;
-  padding: 8px 10px 18px;
+  padding: 4px 8px 12px;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
 }
 
 .side-section-label {
-  font-size: 0.66rem;
+  font-size: 0.6rem;
   font-weight: 700;
   color: var(--text-muted);
   text-transform: uppercase;
-  letter-spacing: 0.1em;
-  padding: 16px 12px 6px;
+  letter-spacing: 0.08em;
+  padding: 10px 10px 4px;
 }
 
 .side-nav-btn {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   width: 100%;
-  padding: 10px 12px;
-  border-radius: 14px;
-  font-size: 0.88rem;
+  padding: 7px 10px;
+  border-radius: 8px;
+  font-size: 0.82rem;
   font-weight: 500;
   color: var(--text-secondary);
   background: transparent;
@@ -181,27 +179,27 @@
   background: #2f62e8;
   color: #ffffff;
   font-weight: 600;
-  box-shadow: 0 8px 18px rgba(47, 98, 232, 0.18);
+  box-shadow: 0 4px 12px rgba(47, 98, 232, 0.15);
 }
 
 /* ─── Sub Navigation (folders) ─── */
 .side-sub-nav {
   display: flex;
   flex-direction: column;
-  gap: 3px;
-  margin-left: 12px;
-  padding: 6px 0 4px 12px;
+  gap: 2px;
+  margin-left: 8px;
+  padding: 4px 0 2px 8px;
   border-left: 1px solid #dce6f4;
 }
 
 .side-sub-btn {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   width: 100%;
-  padding: 8px 10px;
-  border-radius: 12px;
-  font-size: 0.82rem;
+  padding: 5px 8px;
+  border-radius: 6px;
+  font-size: 0.78rem;
   font-weight: 500;
   color: var(--text-secondary);
   background: transparent;
@@ -237,7 +235,7 @@
 
 /* ─── Sidebar Footer ─── */
 .side-footer {
-  padding: 14px;
+  padding: 8px 10px;
   border-top: 1px solid var(--border-primary);
   flex-shrink: 0;
   background: rgba(248, 250, 252, 0.94);
@@ -246,10 +244,10 @@
 .side-user {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 10px 12px;
+  gap: 8px;
+  padding: 6px 8px;
   border: 1px solid var(--border-primary);
-  border-radius: 14px;
+  border-radius: 8px;
   background: #ffffff;
 }
 
@@ -302,30 +300,23 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 24px;
-  gap: 14px;
-  flex-wrap: wrap;
-}
-
-.panel-header-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+  margin-bottom: 16px;
+  gap: 10px;
   flex-wrap: wrap;
 }
 
 .panel-header h2,
 .panel-header h3 {
-  font-size: 1.15rem;
+  font-size: 1rem;
   font-weight: 700;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   letter-spacing: -0.02em;
 }
 
 .panel-header p {
-  font-size: 0.85rem;
+  font-size: 0.82rem;
   color: var(--text-muted);
   margin-top: 2px;
 }
@@ -333,8 +324,11 @@
 .panel-header-actions {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 6px;
   flex-shrink: 0;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .empty-state {
@@ -352,8 +346,9 @@
 .dash-search {
   display: flex;
   align-items: center;
-  gap: 12px;
-  margin-bottom: 16px;
+  gap: 8px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
 }
 
 .search-input {
@@ -486,12 +481,12 @@
 .mail-row {
   display: flex;
   align-items: center;
-  gap: 14px;
-  padding: 14px 18px;
+  gap: 10px;
+  padding: 8px 12px;
   border-bottom: 1px solid var(--border-primary);
   cursor: pointer;
   transition: background 0.1s;
-  min-height: 86px;
+  min-height: 48px;
 }
 
 .mail-row:hover {
@@ -674,10 +669,12 @@
 
 .reader-toolbar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  justify-content: space-between;
-  padding: 12px 24px;
+  padding: 8px 14px;
+  background: var(--bg-surface);
   border-bottom: 1px solid var(--border-primary);
+  gap: 6px;
 }
 
 .reader-toolbar-actions {
@@ -1464,10 +1461,17 @@
 }
 
 /* ─── Modals ─── */
+.glass {
+  background: var(--bg-primary);
+  border: 1px solid var(--border-primary);
+  border-radius: 12px;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.12), 0 1px 3px rgba(0,0,0,0.06);
+}
+
 .biz-form-modal {
-  width: min(460px, calc(100vw - 32px));
+  width: min(420px, calc(100vw - 32px));
   padding: 0;
-  max-height: 85vh;
+  max-height: 80vh;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -1689,11 +1693,6 @@
   .reader-content {
     padding: 16px;
   }
-  .reader-meta {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 8px;
-  }
   .panel-header {
     flex-direction: row;
     flex-wrap: wrap;
@@ -1740,7 +1739,7 @@
   }
   .mail-row {
     align-items: flex-start;
-    padding: 14px 14px;
+    padding: 10px 12px;
     min-height: 0;
   }
   .mail-row-main {
@@ -1830,7 +1829,7 @@
 .dash-panel {
   flex: 1;
   overflow: hidden;
-  padding: 24px 28px;
+  padding: 16px 20px;
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -2076,12 +2075,12 @@
   background: var(--bg-surface);
   border: 1px solid var(--border-primary);
   border-radius: 3px;
-  padding: 14px;
+  padding: 10px;
   cursor: pointer;
   transition: all 0.15s;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 4px;
 }
 
 .mail-grid-card:hover {
@@ -2112,29 +2111,29 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
   cursor: pointer;
 }
 
 .mail-row-headline {
   display: flex;
   align-items: baseline;
-  gap: 10px;
+  gap: 8px;
   min-width: 0;
 }
 
 .mail-from {
-  font-size: 0.88rem;
+  font-size: 0.82rem;
   font-weight: 600;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   flex-shrink: 0;
-  max-width: 180px;
+  max-width: 160px;
 }
 
 .mail-subj {
-  font-size: 0.9rem;
+  font-size: 0.82rem;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2143,11 +2142,11 @@
 
 .mail-row-meta {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   align-items: center;
-  gap: 10px;
+  gap: 6px;
   flex-shrink: 0;
-  min-width: 88px;
+  min-width: 70px;
 }
 
 .mail-preview {
@@ -2155,7 +2154,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   color: var(--text-secondary);
-  font-size: 0.82rem;
+  font-size: 0.75rem;
 }
 
 /* ─── Reader header ─── */
@@ -2163,8 +2162,25 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
+  gap: 6px;
+  padding: 12px 20px 0;
+}
+
+.reader-header h2 {
+  width: 100%;
+  font-size: 1.1rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.reader-attachments {
+  display: flex;
+  align-items: center;
   gap: 8px;
-  padding: 16px 24px 0;
+  padding: 10px 20px;
+  border-top: 1px solid var(--border-primary);
+  font-size: 0.85rem;
+  color: var(--text-secondary);
 }
 
 .reader-header h2 {
@@ -2697,8 +2713,13 @@
   .dns-record-row-flex {
     flex-wrap: wrap;
   }
+  .dns-record-name,
+  .dns-record-value {
+    flex: 1 1 100%;
+  }
+}
 
-/* ─── Composer missing classes ─── */
+/* ─── Composer input classes ─── */
 .to-input {
   flex: 1;
   background: transparent;
@@ -2735,9 +2756,4 @@
 .subject-input:focus {
   background: var(--bg-hover);
   outline: none;
-}
-  .dns-record-name,
-  .dns-record-value {
-    flex: 1 1 100%;
-  }
 }
