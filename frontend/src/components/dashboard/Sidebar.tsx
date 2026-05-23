@@ -1,5 +1,4 @@
 import { LogOut, Mail, Layers, Server, Globe, Inbox, Users, Shield, BarChart3, Activity, Settings, CreditCard, Crown, Plus, User, Menu } from 'lucide-react';
-import type { LucideIcon } from 'lucide-react';
 import type { User as UserType } from '../../api/client';
 import { BIZ_FOLDERS } from './constants';
 import type { BizTab, BizFolder } from './constants';
@@ -16,22 +15,6 @@ interface SidebarProps {
   setSidebarOpen: (open: boolean) => void;
   hasRoleAccess: (tab: BizTab) => boolean;
   canAccessPlatformAdmin: boolean;
-}
-
-interface NavBtnProps {
-  tab?: BizTab;
-  icon: LucideIcon;
-  label: string;
-  onClick?: () => void;
-}
-
-function NavBtn({ tab, icon: Icon, label, onClick }: NavBtnProps) {
-  return (
-    <button type="button" className="side-nav-btn">
-      <Icon size={16} />
-      <span>{label}</span>
-    </button>
-  );
 }
 
 function Section({ label, children }: { label: string; children: React.ReactNode }) {
