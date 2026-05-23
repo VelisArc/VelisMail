@@ -1,5 +1,4 @@
 import { useState, useMemo, useDeferredValue, memo, useCallback, useRef, useEffect, type FC } from 'react';
-import { FixedSizeList as List } from 'react-window';
 import {
   Mail, Star, Archive, Trash2, Search, Paperclip, ArrowLeft,
   Reply, Forward,
@@ -21,6 +20,52 @@ interface EmailInboxProps {
 }
 
 const ROW_HEIGHT = 64;
+const OVERSCAN = 5;
+
+function VirtualList<T>({ items, itemHeight, renderItem, className }: {
+  items: T[];
+  itemHeight: number;
+  renderItem: (item: T, index: number) => React.ReactNode;
+  className?: string;
+}) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [scrollTop, setScrollTop] = useState(0);
+  const [containerHeight, setContainerHeight] = useState(600);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const obs = new ResizeObserver(entries => {
+      for (const entry of entries) {
+        setContainerHeight(entry.contentRect.height);
+      }
+    });
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, []);
+
+  const handleScroll = useCallback(() => {
+    if (containerRef.current) {
+      setScrollTop(containerRef.current.scrollTop);
+    }
+  }, []);
+
+  const totalHeight = items.length * itemHeight;
+  const startIndex = Math.max(0, Math.floor(scrollTop / itemHeight) - OVERSCAN);
+  const endIndex = Math.min(items.length, Math.ceil((scrollTop + containerHeight) / itemHeight) + OVERSCAN);
+  const visibleItems = items.slice(startIndex, endIndex);
+  const offsetY = startIndex * itemHeight;
+
+  return (
+    <div ref={containerRef} onScroll={handleScroll} className={className} style={{ overflow: 'auto', height: '100%' }}>
+      <div style={{ height: totalHeight, position: 'relative' }}>
+        <div style={{ position: 'absolute', top: 0, left: 0, right: 0, transform: `translateY(${offsetY}px)` }}>
+          {visibleItems.map((item, i) => renderItem(item, startIndex + i))}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 const EmailRow = memo(({ email, style, state, onOpen }: {
   email: Email;
@@ -60,22 +105,6 @@ const EmailInbox: FC<EmailInboxProps> = ({
 }) => {
   const [focusedEmail, setFocusedEmail] = useState<Email | null>(null);
   const deferredQuery = useDeferredValue(state.searchQuery);
-  const listRef = useRef<HTMLDivElement>(null);
-  const [listWidth, setListWidth] = useState(800);
-  const [listHeight, setListHeight] = useState(600);
-
-  useEffect(() => {
-    const el = listRef.current;
-    if (!el) return;
-    const obs = new ResizeObserver(entries => {
-      for (const entry of entries) {
-        setListWidth(entry.contentRect.width);
-        setListHeight(entry.contentRect.height);
-      }
-    });
-    obs.observe(el);
-    return () => obs.disconnect();
-  }, []);
 
   const filtered = useMemo(() => {
     const q = deferredQuery.toLowerCase();
@@ -187,7 +216,7 @@ const EmailInbox: FC<EmailInboxProps> = ({
             )}
           </div>
         ) : (
-          <div className="dash-list" ref={listRef}>
+          <div className="dash-list" style={{ height: '100%', overflow: 'hidden' }}>
             {filtered.length === 0 ? (
               <div className="empty-state">
                 <Mail size={48} className="text-muted" />
@@ -195,7 +224,7 @@ const EmailInbox: FC<EmailInboxProps> = ({
                 <p className="text-muted">Your {state.activeFolder} folder is empty.</p>
               </div>
             ) : state.viewMode === 'grid' ? (
-              <div className="mail-grid">
+              <div className="mail-grid" style={{ overflow: 'auto', height: '100%' }}>
                 {filtered.map(({ email }) => (
                   <div key={email.id} className={`mail-grid-card ${email.unread ? 'unread' : ''}`} onClick={() => openEmail(email)}>
                     <div className="flex items-center gap-2">
@@ -209,21 +238,20 @@ const EmailInbox: FC<EmailInboxProps> = ({
                 ))}
               </div>
             ) : (
-              <List
-                height={listHeight}
-                itemCount={filtered.length}
-                itemSize={ROW_HEIGHT}
-                width={listWidth}
-              >
-                {({ index, style }) => (
+              <VirtualList
+                items={filtered.map(f => f.email)}
+                itemHeight={ROW_HEIGHT}
+                className="dash-list-virtual"
+                renderItem={(email, index) => (
                   <EmailRow
-                    email={filtered[index].email}
-                    style={style}
+                    key={email.id}
+                    email={email}
+                    style={{ height: ROW_HEIGHT }}
                     state={state}
                     onOpen={openEmail}
                   />
                 )}
-              </List>
+              />
             )}
           </div>
         )}
