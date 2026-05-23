@@ -302,7 +302,6 @@ export default function BusinessDashboard() {
         onCompose={() => openComposeWith()} user={user}
         onLogout={() => setShowLogoutConfirm(true)} sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen}
         hasRoleAccess={hasRoleAccess} canAccessPlatformAdmin={canAccessPlatformAdmin}
-        onShowDomain={() => { setActiveBizTab('domains'); setSidebarOpen(false); }}
       />
 
       <main className="dash-main">

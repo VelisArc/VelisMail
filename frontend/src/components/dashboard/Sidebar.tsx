@@ -1,4 +1,5 @@
 import { LogOut, Mail, Layers, Server, Globe, Inbox, Users, Shield, BarChart3, Activity, Settings, CreditCard, Crown, Plus, User, Menu } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import type { User as UserType } from '../../api/client';
 import { BIZ_FOLDERS } from './constants';
 import type { BizTab, BizFolder } from './constants';
@@ -15,7 +16,31 @@ interface SidebarProps {
   setSidebarOpen: (open: boolean) => void;
   hasRoleAccess: (tab: BizTab) => boolean;
   canAccessPlatformAdmin: boolean;
-  onShowDomain: () => void;
+}
+
+interface NavBtnProps {
+  tab?: BizTab;
+  icon: LucideIcon;
+  label: string;
+  onClick?: () => void;
+}
+
+function NavBtn({ tab, icon: Icon, label, onClick }: NavBtnProps) {
+  return (
+    <button type="button" className="side-nav-btn">
+      <Icon size={16} />
+      <span>{label}</span>
+    </button>
+  );
+}
+
+function Section({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <>
+      <div className="side-section-label">{label}</div>
+      {children}
+    </>
+  );
 }
 
 export default function Sidebar({
@@ -30,27 +55,13 @@ export default function Sidebar({
   setSidebarOpen,
   hasRoleAccess,
   canAccessPlatformAdmin,
-  onShowDomain,
 }: SidebarProps) {
   const folderBadge = (f: BizFolder) => f.badge;
 
-  const NavBtn = ({ tab, icon: Icon, label, onClick }: { tab?: BizTab; icon: any; label: string; onClick?: () => void }) => (
-    <button
-      type="button"
-      className={`side-nav-btn ${tab && activeBizTab === tab ? 'active' : ''}`}
-      onClick={onClick || (tab ? () => { setActiveBizTab(tab); setSidebarOpen(false); } : undefined)}
-    >
-      <Icon size={16} />
-      <span>{label}</span>
-    </button>
-  );
-
-  const Section = ({ label, children }: { label: string; children: React.ReactNode }) => (
-    <>
-      <div className="side-section-label">{label}</div>
-      {children}
-    </>
-  );
+  const handleNav = (tab: BizTab) => {
+    setActiveBizTab(tab);
+    setSidebarOpen(false);
+  };
 
   return (
     <>
@@ -83,7 +94,13 @@ export default function Sidebar({
 
         <nav className="side-nav">
           <Section label="Mail">
-            <NavBtn tab="mail" icon={Mail} label="Inbox" />
+            <button
+              type="button"
+              className={`side-nav-btn ${activeBizTab === 'mail' ? 'active' : ''}`}
+              onClick={() => handleNav('mail')}
+            >
+              <Mail size={16} /> Inbox
+            </button>
             {activeBizTab === 'mail' && (
               <div className="side-sub-nav">
                 {BIZ_FOLDERS.map((f) => (
@@ -104,37 +121,109 @@ export default function Sidebar({
 
           {hasRoleAccess('templates') && (
             <Section label="Content">
-              <NavBtn tab="templates" icon={Layers} label="Templates" />
+              <button
+                type="button"
+                className={`side-nav-btn ${activeBizTab === 'templates' ? 'active' : ''}`}
+                onClick={() => handleNav('templates')}
+              >
+                <Layers size={16} /> Templates
+              </button>
             </Section>
           )}
 
           {hasRoleAccess('queue') && (
             <Section label="Operations">
-              <NavBtn tab="queue" icon={Server} label="Mail Queue" />
+              <button
+                type="button"
+                className={`side-nav-btn ${activeBizTab === 'queue' ? 'active' : ''}`}
+                onClick={() => handleNav('queue')}
+              >
+                <Server size={16} /> Mail Queue
+              </button>
             </Section>
           )}
 
           <Section label="Organization">
             {user?.role === 'admin' && (
               <>
-                <NavBtn tab="domains" icon={Globe} label="Domains" />
-                <NavBtn tab="mailboxes" icon={Inbox} label="Mailboxes" />
-                <NavBtn tab="groups" icon={Users} label="Groups" />
+                <button
+                  type="button"
+                  className={`side-nav-btn ${activeBizTab === 'domains' ? 'active' : ''}`}
+                  onClick={() => handleNav('domains')}
+                >
+                  <Globe size={16} /> Domains
+                </button>
+                <button
+                  type="button"
+                  className={`side-nav-btn ${activeBizTab === 'mailboxes' ? 'active' : ''}`}
+                  onClick={() => handleNav('mailboxes')}
+                >
+                  <Inbox size={16} /> Mailboxes
+                </button>
+                <button
+                  type="button"
+                  className={`side-nav-btn ${activeBizTab === 'groups' ? 'active' : ''}`}
+                  onClick={() => handleNav('groups')}
+                >
+                  <Users size={16} /> Groups
+                </button>
               </>
             )}
-            {hasRoleAccess('team') && <NavBtn tab="team" icon={Shield} label="Team" />}
+            {hasRoleAccess('team') && (
+              <button
+                type="button"
+                className={`side-nav-btn ${activeBizTab === 'team' ? 'active' : ''}`}
+                onClick={() => handleNav('team')}
+              >
+                <Shield size={16} /> Team
+              </button>
+            )}
           </Section>
 
           <Section label="Administration">
-            {hasRoleAccess('analytics') && <NavBtn tab="analytics" icon={BarChart3} label="Analytics" />}
+            {hasRoleAccess('analytics') && (
+              <button
+                type="button"
+                className={`side-nav-btn ${activeBizTab === 'analytics' ? 'active' : ''}`}
+                onClick={() => handleNav('analytics')}
+              >
+                <BarChart3 size={16} /> Analytics
+              </button>
+            )}
             {user?.role === 'admin' && (
               <>
-                <NavBtn tab="audit" icon={Activity} label="Audit Log" />
-                <NavBtn tab="settings" icon={Settings} label="Settings" />
-                <NavBtn tab="billing" icon={CreditCard} label="Billing" />
+                <button
+                  type="button"
+                  className={`side-nav-btn ${activeBizTab === 'audit' ? 'active' : ''}`}
+                  onClick={() => handleNav('audit')}
+                >
+                  <Activity size={16} /> Audit Log
+                </button>
+                <button
+                  type="button"
+                  className={`side-nav-btn ${activeBizTab === 'settings' ? 'active' : ''}`}
+                  onClick={() => handleNav('settings')}
+                >
+                  <Settings size={16} /> Settings
+                </button>
+                <button
+                  type="button"
+                  className={`side-nav-btn ${activeBizTab === 'billing' ? 'active' : ''}`}
+                  onClick={() => handleNav('billing')}
+                >
+                  <CreditCard size={16} /> Billing
+                </button>
               </>
             )}
-            {canAccessPlatformAdmin && <NavBtn tab="admin" icon={Crown} label="Platform Admin" />}
+            {canAccessPlatformAdmin && (
+              <button
+                type="button"
+                className={`side-nav-btn ${activeBizTab === 'admin' ? 'active' : ''}`}
+                onClick={() => handleNav('admin')}
+              >
+                <Crown size={16} /> Platform Admin
+              </button>
+            )}
           </Section>
         </nav>
 
