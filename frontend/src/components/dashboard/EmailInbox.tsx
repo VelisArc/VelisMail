@@ -1,10 +1,11 @@
 import { useState, useMemo, useDeferredValue, memo, useCallback, type FC } from 'react';
 import {
   Mail, Star, Archive, Trash2, Search, Paperclip, ArrowLeft,
-  Reply, Forward,
-  RefreshCcw, List as ListIcon, Grid, SortAsc, SortDesc, Menu, User,
+  Reply, Forward, RefreshCcw, List as ListIcon, Grid,
+  SortAsc, SortDesc, Menu, User, CheckSquare, Square, Trash,
 } from 'lucide-react';
 import type { Email } from '../../api/client';
+import { mail } from '../../api/client';
 import { parseEmailConversation, getEmailPreview } from './utils';
 import type { DashboardState } from './types';
 
@@ -25,19 +26,19 @@ const EmailRow = memo(({ email, style, state, onOpen }: {
   state: DashboardState;
   onOpen: (e: Email) => void;
 }) => (
-  <div style={style}>
-    <div className={`mail-row ${email.unread ? 'unread' : ''}`} onClick={() => onOpen(email)}>
-      <div className="mail-row-select">
+  <div style={style} className="mail-row-wrapper" onClick={() => onOpen(email)}>
+    <div className={`mail-row ${email.unread ? 'unread' : ''}`}>
+      <div className="mail-row-select" onClick={e => e.stopPropagation()}>
         <input type="checkbox" checked={state.selectedEmails.has(email.id)} onChange={() => {
           const next = new Set(state.selectedEmails);
-          if (next.has(email.id)) { next.delete(email.id); } else { next.add(email.id); }
+          if (next.has(email.id)) next.delete(email.id); else next.add(email.id);
           state.setSelectedEmails(next);
-        }} onClick={e => e.stopPropagation()} />
+        }} />
       </div>
-      <div className="avatar avatar-sm" onClick={e => e.stopPropagation()}>
+      <div className="avatar avatar-sm">
         <User size={14} />
       </div>
-      <div className="mail-row-main" onClick={e => e.stopPropagation()}>
+      <div className="mail-row-main">
         <div className="mail-row-headline">
           <strong className="mail-from">{email.fromName || email.from}</strong>
           <span className="mail-subj">{email.subject || '(No subject)'}</span>
@@ -82,6 +83,30 @@ const EmailInbox: FC<EmailInboxProps> = ({
   const closeReader = useCallback(() => setFocusedEmail(null), []);
 
   const conversation = focusedEmail ? parseEmailConversation(focusedEmail.body) : [];
+
+  const allSelected = filtered.length > 0 && filtered.every(({ email }) => state.selectedEmails.has(email.id));
+  const toggleSelectAll = () => {
+    if (allSelected) {
+      state.setSelectedEmails(new Set());
+    } else {
+      state.setSelectedEmails(new Set(filtered.map(({ email }) => email.id)));
+    }
+  };
+
+  const isTrash = state.activeFolder === 'trash';
+
+  const handleDeletePermanently = (id: string) => {
+    mail.deletePermanently(id);
+    closeReader();
+    onRefresh();
+  };
+
+  const handleBulkDeletePermanently = () => {
+    const ids = [...state.selectedEmails];
+    ids.forEach(id => mail.deletePermanently(id));
+    state.setSelectedEmails(new Set());
+    onRefresh();
+  };
 
   return (
     <div className="dash-panel">
@@ -130,6 +155,18 @@ const EmailInbox: FC<EmailInboxProps> = ({
         </div>
       </div>
 
+      {state.selectedEmails.size > 0 && (
+        <div className="bulk-bar">
+          <span className="text-xs text-muted">{state.selectedEmails.size} selected</span>
+          <button className="btn btn-ghost btn-sm" onClick={() => state.setSelectedEmails(new Set())}><Square size={14} /> Clear</button>
+          <button className="btn btn-ghost btn-sm" onClick={() => { onArchive([...state.selectedEmails]); state.setSelectedEmails(new Set()); }}><Archive size={14} /> Archive</button>
+          <button className="btn btn-ghost btn-sm" onClick={() => { onTrash([...state.selectedEmails]); state.setSelectedEmails(new Set()); }}><Trash2 size={14} /> Trash</button>
+          {isTrash && (
+            <button className="btn btn-ghost btn-sm btn-danger" onClick={handleBulkDeletePermanently}><Trash size={14} /> Delete Forever</button>
+          )}
+        </div>
+      )}
+
       <div className="dash-body">
         {focusedEmail ? (
           <div className="dash-reader">
@@ -138,12 +175,20 @@ const EmailInbox: FC<EmailInboxProps> = ({
               <button type="button" className="btn btn-ghost btn-sm" onClick={() => onReply(focusedEmail)}><Reply size={14} /> Reply</button>
               <button type="button" className="btn btn-ghost btn-sm" onClick={() => onForward(focusedEmail)}><Forward size={14} /> Forward</button>
               <button type="button" className={`btn btn-ghost btn-sm ${focusedEmail.starred ? 'text-primary' : ''}`} onClick={() => onToggleStar(focusedEmail.id)}><Star size={14} /></button>
-              <button type="button" className="btn btn-ghost btn-sm" onClick={() => { onArchive([focusedEmail.id]); closeReader(); }}>
-                <Archive size={14} /> Archive
-              </button>
-              <button type="button" className="btn btn-ghost btn-sm btn-danger" onClick={() => { onTrash([focusedEmail.id]); closeReader(); }}>
-                <Trash2 size={14} /> Trash
-              </button>
+              {!isTrash && (
+                <button type="button" className="btn btn-ghost btn-sm" onClick={() => { onArchive([focusedEmail.id]); closeReader(); }}>
+                  <Archive size={14} /> Archive
+                </button>
+              )}
+              {!isTrash ? (
+                <button type="button" className="btn btn-ghost btn-sm btn-danger" onClick={() => { onTrash([focusedEmail.id]); closeReader(); }}>
+                  <Trash2 size={14} /> Trash
+                </button>
+              ) : (
+                <button type="button" className="btn btn-ghost btn-sm btn-danger" onClick={() => handleDeletePermanently(focusedEmail.id)}>
+                  <Trash size={14} /> Delete Forever
+                </button>
+              )}
             </div>
             <div className="reader-header">
               <h2>{focusedEmail.subject || '(No subject)'}</h2>
@@ -199,6 +244,12 @@ const EmailInbox: FC<EmailInboxProps> = ({
               </div>
             ) : (
               <div className="dash-list-scroll">
+                {filtered.length > 20 && (
+                  <div className="mail-select-all" onClick={toggleSelectAll}>
+                    {allSelected ? <CheckSquare size={14} /> : <Square size={14} />}
+                    <span>{allSelected ? 'Deselect all' : 'Select all'} ({filtered.length})</span>
+                  </div>
+                )}
                 {filtered.map(({ email }) => (
                   <EmailRow
                     key={email.id}

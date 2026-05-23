@@ -1126,6 +1126,14 @@ export const mail = {
     mutateEmail(id, e => ({ ...e, folder: 'trash' }));
   },
 
+  deletePermanently(id: string) {
+    const cache = reloadEmailsCacheFromStorage();
+    const filtered = cache.filter(e => e.id !== id);
+    emailsCache.length = 0;
+    emailsCache.push(...filtered);
+    saveEmailsSyncAndAsync(STORAGE_KEYS.emails, emailsCache);
+  },
+
   toggleStar(id: string): boolean {
     const e = mutateEmail(id, entry => ({ ...entry, starred: !entry.starred }));
     return e?.starred ?? false;

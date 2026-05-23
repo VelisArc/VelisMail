@@ -121,7 +121,11 @@
 }
 
 .side-header-copy {
-  display: none;
+  display: block;
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  padding: 4px 14px 0;
+  line-height: 1.2;
 }
 
 /* ─── Compose Button ─── */
@@ -130,7 +134,7 @@
   flex-shrink: 0;
   justify-content: center;
   min-height: 36px;
-  border-radius: 8px;
+  border-radius: 4px;
   font-size: 0.82rem;
 }
 
@@ -159,7 +163,7 @@
   gap: 8px;
   width: 100%;
   padding: 7px 10px;
-  border-radius: 8px;
+  border-radius: 4px;
   font-size: 0.82rem;
   font-weight: 500;
   color: var(--text-secondary);
@@ -176,10 +180,10 @@
 }
 
 .side-nav-btn.active {
-  background: #2f62e8;
+  background: var(--accent);
   color: #ffffff;
   font-weight: 600;
-  box-shadow: 0 4px 12px rgba(47, 98, 232, 0.15);
+  box-shadow: 0 4px 12px rgba(13, 148, 136, 0.15);
 }
 
 /* ─── Sub Navigation (folders) ─── */
@@ -189,7 +193,7 @@
   gap: 2px;
   margin-left: 8px;
   padding: 4px 0 2px 8px;
-  border-left: 1px solid #dce6f4;
+  border-left: 1px solid var(--border-primary);
 }
 
 .side-sub-btn {
@@ -494,7 +498,7 @@
 }
 
 .mail-row.unread {
-  background: #f3f7ff;
+  background: var(--bg-surface-2);
 }
 
 .mail-row.unread .mail-sender,
@@ -1464,7 +1468,7 @@
 .glass {
   background: var(--bg-primary);
   border: 1px solid var(--border-primary);
-  border-radius: 12px;
+  border-radius: 6px;
   box-shadow: 0 4px 24px rgba(0,0,0,0.12), 0 1px 3px rgba(0,0,0,0.06);
 }
 
@@ -2074,7 +2078,7 @@
 .mail-grid-card {
   background: var(--bg-surface);
   border: 1px solid var(--border-primary);
-  border-radius: 3px;
+  border-radius: 2px;
   padding: 10px;
   cursor: pointer;
   transition: all 0.15s;
@@ -2147,6 +2151,39 @@
   gap: 6px;
   flex-shrink: 0;
   min-width: 70px;
+}
+
+.mail-row-wrapper {
+  cursor: pointer;
+}
+
+.mail-row-wrapper:hover .mail-row {
+  background: #f8fbff;
+}
+
+.bulk-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 16px;
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border-primary);
+  flex-shrink: 0;
+}
+
+.mail-select-all {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  cursor: pointer;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border-primary);
+}
+
+.mail-select-all:hover {
+  color: var(--text-primary);
 }
 
 .mail-preview {
@@ -2287,7 +2324,7 @@
   align-items: center;
   gap: var(--space-3);
   padding: 12px 18px;
-  border-radius: var(--radius-lg);
+  border-radius: 6px;
   font-size: var(--text-sm);
   font-weight: var(--font-weight-semibold);
   box-shadow: var(--shadow-lg);
