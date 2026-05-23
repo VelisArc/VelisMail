@@ -938,7 +938,7 @@
 
 @media (max-width: 768px) {
   .hero {
-    padding: 100px 0 40px;
+    padding: 90px 0 32px;
   }
 
   .hero-title {
@@ -946,7 +946,7 @@
   }
 
   .hero-ops-scene {
-    min-height: 280px;
+    min-height: 240px;
   }
 
   .hero-stats {
@@ -969,16 +969,41 @@
     grid-template-columns: 1fr;
   }
 
+  .feature-card {
+    padding: var(--space-6);
+  }
+
+  .step-card {
+    padding: var(--space-6) var(--space-5);
+  }
+
+  .solution-card {
+    padding: var(--space-6);
+  }
+
   .section {
-    padding: 60px 0;
+    padding: 48px 0;
+  }
+
+  .section-head {
+    margin-bottom: var(--space-8);
+  }
+
+  .section-title {
+    font-size: 1.6rem;
+  }
+
+  .feedback-copy h2 {
+    font-size: 1.6rem;
   }
 
   .feedback-container {
     text-align: center;
+    gap: var(--space-6);
   }
 
-  .feedback-copy h2 {
-    font-size: 1.8rem;
+  .feedback-form-card {
+    padding: var(--space-6);
   }
 
   .feedback-benefits {
@@ -1010,15 +1035,24 @@
 
 @media (max-width: 480px) {
   .hero {
-    padding: 80px 0 30px;
+    padding: 80px 0 28px;
   }
 
   .hero-title {
     font-size: var(--text-2xl);
   }
 
+  .hero-subtitle {
+    font-size: var(--text-base);
+  }
+
   .hero-ops-scene {
-    min-height: 220px;
+    min-height: 180px;
+  }
+
+  .hero-actions {
+    flex-direction: column;
+    align-items: stretch;
   }
 
   .hero-actions .btn-lg {
@@ -1043,52 +1077,158 @@
     border-radius: 0 0 var(--radius-lg) var(--radius-lg) !important;
   }
 
+  .feature-card {
+    padding: var(--space-5);
+  }
+
+  .step-card {
+    padding: var(--space-5);
+  }
+
+  .solution-card {
+    padding: var(--space-5);
+  }
+
+  .faq-trigger {
+    padding: var(--space-4) var(--space-5);
+  }
+
+  .faq-answer {
+    padding: 0 var(--space-5) var(--space-5);
+  }
+
   .section {
-    padding: 40px 0;
+    padding: 36px 0;
   }
 
   .section-head {
-    margin-bottom: var(--space-8);
+    margin-bottom: var(--space-6);
   }
 
   .section-title {
-    font-size: 1.5rem;
+    font-size: 1.35rem;
   }
 
   .footer-grid {
     grid-template-columns: 1fr;
-    gap: var(--space-6);
+    gap: var(--space-5);
+  }
+
+  .nav-links {
+    padding: 80px var(--space-6) var(--space-6);
+  }
+
+  .home-footer {
+    padding: 40px 0 24px;
   }
 }
 
 @media (max-width: 375px) {
   .hero {
-    padding: 60px 0 24px;
+    padding: 70px 0 20px;
   }
 
   .hero-title {
-    font-size: 1.5rem;
+    font-size: 1.35rem;
   }
 
   .hero-subtitle {
     font-size: var(--text-sm);
   }
 
-  .hero-actions {
-    flex-direction: column;
-    align-items: stretch;
+  .hero-badge {
+    font-size: 0.6rem;
+    padding: 4px 12px;
+  }
+
+  .hero-ops-scene {
+    min-height: 150px;
   }
 
   .hero-actions .btn-lg {
-    width: 100%;
-    justify-content: center;
-    padding: 12px 20px;
+    padding: 10px 16px;
     font-size: var(--text-sm);
+  }
+
+  .hero-stat .stat-value {
+    font-size: 0.8rem;
+  }
+
+  .hero-stat .stat-label {
+    font-size: 0.65rem;
+  }
+
+  .feature-card {
+    padding: var(--space-4);
+  }
+
+  .feature-icon-wrap {
+    width: 40px;
+    height: 40px;
+    margin-bottom: var(--space-3);
+  }
+
+  .feature-card h3 {
+    font-size: var(--text-base);
+  }
+
+  .feature-card p {
+    font-size: 0.8rem;
+  }
+
+  .step-number {
+    width: 44px;
+    height: 44px;
+    font-size: var(--text-lg);
+  }
+
+  .solution-card {
+    padding: var(--space-4);
+  }
+
+  .solution-card h3 {
+    font-size: var(--text-base);
+  }
+
+  .faq-trigger {
+    font-size: var(--text-sm);
+    padding: var(--space-3) var(--space-4);
   }
 
   .nav-links {
     width: 100vw;
-    padding: 80px var(--space-5) var(--space-5);
+    padding: 80px var(--space-4) var(--space-4);
+  }
+
+  .nav-links .nav-link {
+    font-size: var(--text-base);
+  }
+
+  .feedback-form-card {
+    padding: var(--space-5);
+  }
+
+  .feedback-form-card h3 {
+    font-size: var(--text-lg);
+  }
+
+  .feedback-copy h2 {
+    font-size: 1.35rem;
+  }
+
+  .footer-grid {
+    gap: var(--space-4);
+  }
+
+  .footer-column h4 {
+    margin-bottom: var(--space-3);
+  }
+
+  .scroll-to-top {
+    bottom: 16px;
+    right: 16px;
+    width: 36px;
+    height: 36px;
   }
 
   .faq-content.open {
