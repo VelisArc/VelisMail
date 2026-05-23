@@ -70,16 +70,16 @@ CREATE TABLE IF NOT EXISTS devices (
     last_seen TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
 );
 
--- Indexes for performance
-CREATE INDEX idx_users_email ON users(email);
-CREATE INDEX idx_users_tenant_id ON users(tenant_id);
-CREATE INDEX idx_passkey_credentials_user_id ON passkey_credentials(user_id);
-CREATE INDEX idx_passkey_credentials_credential_id ON passkey_credentials(credential_id);
-CREATE INDEX idx_refresh_tokens_user_id ON refresh_tokens(user_id);
-CREATE INDEX idx_refresh_tokens_token_hash ON refresh_tokens(token_hash);
-CREATE INDEX idx_sessions_user_id ON sessions(user_id);
-CREATE INDEX idx_sessions_is_active ON sessions(is_active);
-CREATE INDEX idx_devices_user_id ON devices(user_id);
+-- Indexes for performance (IF NOT EXISTS for safe re-runs)
+CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
+CREATE INDEX IF NOT EXISTS idx_users_tenant_id ON users(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_passkey_credentials_user_id ON passkey_credentials(user_id);
+CREATE INDEX IF NOT EXISTS idx_passkey_credentials_credential_id ON passkey_credentials(credential_id);
+CREATE INDEX IF NOT EXISTS idx_refresh_tokens_user_id ON refresh_tokens(user_id);
+CREATE INDEX IF NOT EXISTS idx_refresh_tokens_token_hash ON refresh_tokens(token_hash);
+CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id);
+CREATE INDEX IF NOT EXISTS idx_sessions_is_active ON sessions(is_active);
+CREATE INDEX IF NOT EXISTS idx_devices_user_id ON devices(user_id);
 
 -- Row-Level Security (RLS)
 ALTER TABLE users ENABLE ROW LEVEL SECURITY;
