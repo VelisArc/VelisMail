@@ -1005,7 +1005,8 @@ impl ExternalApiAdapter for DefaultExternalApiAdapter {
                 refresh_token: _,
             } => {
                 return Err(ExternalApiError::UnsupportedOperation(
-                    "Gmail OAuth token exchange requires the OAuth connector to be enabled.".to_string(),
+                    "Gmail OAuth token exchange requires the OAuth connector to be enabled."
+                        .to_string(),
                 ));
             }
             ApiCredentials::SendGrid { api_key } => {

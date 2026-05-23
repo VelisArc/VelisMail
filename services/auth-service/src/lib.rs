@@ -9,7 +9,10 @@ const MIGRATIONS: &[(&str, &str)] = &[
     ("001", include_str!("../migrations/001_initial_schema.sql")),
     ("002", include_str!("../migrations/002_initial_auth.sql")),
     ("003", include_str!("../migrations/003_password_auth.sql")),
-    ("004", include_str!("../migrations/004_recovery_email_and_password_reset.sql")),
+    (
+        "004",
+        include_str!("../migrations/004_recovery_email_and_password_reset.sql"),
+    ),
     ("005", include_str!("../migrations/005_user_settings.sql")),
 ];
 
@@ -41,9 +44,18 @@ pub async fn run_service() -> anyhow::Result<()> {
         .route("/me", axum::routing::get(handlers::get_current_user))
         .route("/account", axum::routing::patch(handlers::update_account))
         .route("/sessions", axum::routing::get(handlers::list_sessions))
-        .route("/sessions/revoke-others", axum::routing::post(handlers::revoke_other_sessions))
-        .route("/sessions/:id", axum::routing::delete(handlers::revoke_session))
-        .route("/device/register", axum::routing::post(handlers::register_device))
+        .route(
+            "/sessions/revoke-others",
+            axum::routing::post(handlers::revoke_other_sessions),
+        )
+        .route(
+            "/sessions/:id",
+            axum::routing::delete(handlers::revoke_session),
+        )
+        .route(
+            "/device/register",
+            axum::routing::post(handlers::register_device),
+        )
         .route("/device/trust", axum::routing::post(handlers::trust_device))
         .route("/logout", axum::routing::post(handlers::logout))
         .route_layer(axum::middleware::from_fn_with_state(
@@ -55,15 +67,30 @@ pub async fn run_service() -> anyhow::Result<()> {
         .route("/health", axum::routing::get(handlers::health_check))
         .route("/register", axum::routing::post(handlers::register))
         .route("/login", axum::routing::post(handlers::login_password))
-        .route("/login/password", axum::routing::post(handlers::login_password))
+        .route(
+            "/login/password",
+            axum::routing::post(handlers::login_password),
+        )
         .route("/send-otp", axum::routing::post(handlers::send_otp))
         .route("/otp/send", axum::routing::post(handlers::send_otp))
-        .route("/password-reset/request", axum::routing::post(handlers::send_otp))
+        .route(
+            "/password-reset/request",
+            axum::routing::post(handlers::send_otp),
+        )
         .route("/verify-otp", axum::routing::post(handlers::verify_otp))
         .route("/otp/verify", axum::routing::post(handlers::verify_otp))
-        .route("/reset-password", axum::routing::post(handlers::reset_password))
-        .route("/change-password", axum::routing::post(handlers::change_password))
-        .route("/token/refresh", axum::routing::post(handlers::refresh_token))
+        .route(
+            "/reset-password",
+            axum::routing::post(handlers::reset_password),
+        )
+        .route(
+            "/change-password",
+            axum::routing::post(handlers::change_password),
+        )
+        .route(
+            "/token/refresh",
+            axum::routing::post(handlers::refresh_token),
+        )
         .merge(protected_routes)
         .layer(axum::middleware::from_fn_with_state(
             state.clone(),

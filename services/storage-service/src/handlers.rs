@@ -87,13 +87,10 @@ pub async fn upload(
 
     let attachment_id = Uuid::new_v4();
     let storage_key = format!("attachments/{}/{}", attachment_id, filename);
-    let encrypted = state
-        .encryption
-        .encrypt(&plaintext)
-        .map_err(|err| {
-            tracing::error!("attachment encryption failed: {}", err);
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
+    let encrypted = state.encryption.encrypt(&plaintext).map_err(|err| {
+        tracing::error!("attachment encryption failed: {}", err);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
 
     state
         .s3
@@ -141,13 +138,10 @@ pub async fn download(
         .download_object(&key)
         .await
         .map_err(|_| StatusCode::NOT_FOUND)?;
-    let decrypted = state
-        .encryption
-        .decrypt(&data)
-        .map_err(|err| {
-            tracing::error!("attachment decrypt failed for {}: {}", key, err);
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
+    let decrypted = state.encryption.decrypt(&data).map_err(|err| {
+        tracing::error!("attachment decrypt failed for {}: {}", key, err);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
 
     Ok(Json(json!({
         "success": true,

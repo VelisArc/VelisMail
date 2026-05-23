@@ -11,12 +11,18 @@ pub async fn run_service() -> anyhow::Result<()> {
     let app = axum::Router::new()
         .route("/health", axum::routing::get(handlers::health_check))
         .route("/emails", axum::routing::post(handlers::send_email))
-        .route("/inbound", axum::routing::post(handlers::save_business_email))
+        .route(
+            "/inbound",
+            axum::routing::post(handlers::save_business_email),
+        )
         .route(
             "/business-emails",
             axum::routing::get(handlers::get_business_emails).post(handlers::save_business_email),
         )
-        .route("/business-emails/query", axum::routing::post(handlers::query_business_emails))
+        .route(
+            "/business-emails/query",
+            axum::routing::post(handlers::query_business_emails),
+        )
         .layer(axum::middleware::from_fn(middleware::auth_layer))
         .layer(middleware::cors_layer())
         .layer(tower_http::trace::TraceLayer::new_for_http())

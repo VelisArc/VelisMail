@@ -166,4 +166,3 @@ pub mod keys {
         format!("email:thread:{}", thread_id)
     }
 }
-

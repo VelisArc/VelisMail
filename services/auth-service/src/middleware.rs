@@ -25,10 +25,9 @@ pub async fn rate_limit(
 
 /// CORS layer
 pub fn cors_layer() -> CorsLayer {
-    let configured = std::env::var("FRONTEND_URL")
-        .unwrap_or_else(|_| {
-            "https://velismail.online,http://localhost:5173,http://127.0.0.1:5173".to_string()
-        });
+    let configured = std::env::var("FRONTEND_URL").unwrap_or_else(|_| {
+        "https://velismail.online,http://localhost:5173,http://127.0.0.1:5173".to_string()
+    });
 
     let origins: Vec<HeaderValue> = configured
         .split(',')

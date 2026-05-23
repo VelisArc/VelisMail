@@ -91,4 +91,3 @@ pub async fn check_health(pool: &PgPool) -> Result<()> {
     sqlx::query("SELECT 1").execute(pool).await?;
     Ok(())
 }
-

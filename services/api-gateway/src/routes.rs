@@ -3,7 +3,10 @@
 use crate::state::AppState;
 use axum::{
     body::{Body, Bytes},
-    extract::{Query, State, ws::{WebSocketUpgrade, WebSocket}},
+    extract::{
+        ws::{WebSocket, WebSocketUpgrade},
+        Query, State,
+    },
     http::{HeaderMap, HeaderValue, Method, Request, StatusCode, Uri},
     response::{IntoResponse, Response},
     routing::{any, get, post},
@@ -12,13 +15,13 @@ use axum::{
 use base64::{engine::general_purpose, Engine as _};
 use hmac::{Hmac, Mac};
 use jsonwebtoken::{decode, DecodingKey, Validation};
+use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sha2::Sha256;
-use sqlx::{PgPool, postgres::PgPoolOptions, Row};
+use sqlx::{postgres::PgPoolOptions, PgPool, Row};
 use std::collections::HashMap;
 use std::sync::Mutex;
-use once_cell::sync::Lazy;
 use tokio::{
     net::{lookup_host, TcpStream},
     time::{sleep, timeout, Duration},
@@ -32,7 +35,10 @@ pub fn api_v1_routes(_state: &AppState) -> Router<AppState> {
         .route("/verify", post(verify_infrastructure))
         .route("/mail/send", post(send_mail))
         .route("/mail/inbound", post(receive_resend_inbound))
-        .route("/mail/business-emails", get(get_business_emails).post(save_business_email))
+        .route(
+            "/mail/business-emails",
+            get(get_business_emails).post(save_business_email),
+        )
         .route("/mail/business-emails/query", post(query_business_emails))
         .route("/team/invites", post(create_team_invite))
         .route("/team/invites/validate", post(validate_team_invite))
@@ -76,11 +82,14 @@ pub async fn ws_handler(ws: WebSocketUpgrade) -> Response {
 async fn handle_socket(mut socket: WebSocket) {
     tracing::info!("New WebSocket connection established");
     // Send a welcome message
-    if let Err(e) = socket.send(axum::extract::ws::Message::Text("connected".to_string())).await {
+    if let Err(e) = socket
+        .send(axum::extract::ws::Message::Text("connected".to_string()))
+        .await
+    {
         tracing::error!("Failed to send welcome message: {}", e);
         return;
     }
-    
+
     // Keep the socket alive so clients can observe connection health.
     let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(45));
     loop {
@@ -214,7 +223,6 @@ pub struct VerifyDomainPayload {
     provider_endpoint: Option<String>,
     api_endpoint: Option<String>,
 }
-
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -836,19 +844,22 @@ async fn dispatch_via_provider(
             });
             if let Some(atts) = &payload.attachments {
                 if !atts.is_empty() {
-                    let sg_atts: Vec<_> = atts.iter().map(|a| {
-                        let content = if let Some(idx) = a.content.find("base64,") {
-                            &a.content[idx + 7..]
-                        } else {
-                            &a.content
-                        };
-                        json!({
-                            "content": content,
-                            "filename": a.filename,
-                            "type": a.mime_type,
-                            "disposition": "attachment"
+                    let sg_atts: Vec<_> = atts
+                        .iter()
+                        .map(|a| {
+                            let content = if let Some(idx) = a.content.find("base64,") {
+                                &a.content[idx + 7..]
+                            } else {
+                                &a.content
+                            };
+                            json!({
+                                "content": content,
+                                "filename": a.filename,
+                                "type": a.mime_type,
+                                "disposition": "attachment"
+                            })
                         })
-                    }).collect();
+                        .collect();
                     if let Some(object) = req_body.as_object_mut() {
                         object.insert("attachments".to_string(), json!(sg_atts));
                     }
@@ -861,7 +872,7 @@ async fn dispatch_via_provider(
                 .send()
                 .await
                 .map_err(|err| err.to_string())?
-        },
+        }
         "resend" => {
             let mut req_body = json!({
                 "from": format!("{from_name} <{from_email}>"),
@@ -871,17 +882,20 @@ async fn dispatch_via_provider(
             });
             if let Some(atts) = &payload.attachments {
                 if !atts.is_empty() {
-                    let rs_atts: Vec<_> = atts.iter().map(|a| {
-                        let content = if let Some(idx) = a.content.find("base64,") {
-                            &a.content[idx + 7..]
-                        } else {
-                            &a.content
-                        };
-                        json!({
-                            "content": content,
-                            "filename": a.filename
+                    let rs_atts: Vec<_> = atts
+                        .iter()
+                        .map(|a| {
+                            let content = if let Some(idx) = a.content.find("base64,") {
+                                &a.content[idx + 7..]
+                            } else {
+                                &a.content
+                            };
+                            json!({
+                                "content": content,
+                                "filename": a.filename
+                            })
                         })
-                    }).collect();
+                        .collect();
                     if let Some(object) = req_body.as_object_mut() {
                         object.insert("attachments".to_string(), json!(rs_atts));
                     }
@@ -894,7 +908,7 @@ async fn dispatch_via_provider(
                 .send()
                 .await
                 .map_err(|err| err.to_string())?
-        },
+        }
         "postmark" => {
             let mut req_body = json!({
                 "From": format!("{from_name} <{from_email}>"),
@@ -904,18 +918,21 @@ async fn dispatch_via_provider(
             });
             if let Some(atts) = &payload.attachments {
                 if !atts.is_empty() {
-                    let pm_atts: Vec<_> = atts.iter().map(|a| {
-                        let content = if let Some(idx) = a.content.find("base64,") {
-                            &a.content[idx + 7..]
-                        } else {
-                            &a.content
-                        };
-                        json!({
-                            "Name": a.filename,
-                            "Content": content,
-                            "ContentType": a.mime_type
+                    let pm_atts: Vec<_> = atts
+                        .iter()
+                        .map(|a| {
+                            let content = if let Some(idx) = a.content.find("base64,") {
+                                &a.content[idx + 7..]
+                            } else {
+                                &a.content
+                            };
+                            json!({
+                                "Name": a.filename,
+                                "Content": content,
+                                "ContentType": a.mime_type
+                            })
                         })
-                    }).collect();
+                        .collect();
                     if let Some(object) = req_body.as_object_mut() {
                         object.insert("Attachments".to_string(), json!(pm_atts));
                     }
@@ -928,7 +945,7 @@ async fn dispatch_via_provider(
                 .send()
                 .await
                 .map_err(|err| err.to_string())?
-        },
+        }
         "brevo" => {
             let mut req_body = json!({
                 "sender": {
@@ -941,17 +958,20 @@ async fn dispatch_via_provider(
             });
             if let Some(atts) = &payload.attachments {
                 if !atts.is_empty() {
-                    let br_atts: Vec<_> = atts.iter().map(|a| {
-                        let content = if let Some(idx) = a.content.find("base64,") {
-                            &a.content[idx + 7..]
-                        } else {
-                            &a.content
-                        };
-                        json!({
-                            "name": a.filename,
-                            "content": content
+                    let br_atts: Vec<_> = atts
+                        .iter()
+                        .map(|a| {
+                            let content = if let Some(idx) = a.content.find("base64,") {
+                                &a.content[idx + 7..]
+                            } else {
+                                &a.content
+                            };
+                            json!({
+                                "name": a.filename,
+                                "content": content
+                            })
                         })
-                    }).collect();
+                        .collect();
                     if let Some(object) = req_body.as_object_mut() {
                         object.insert("attachment".to_string(), json!(br_atts));
                     }
@@ -964,17 +984,21 @@ async fn dispatch_via_provider(
                 .send()
                 .await
                 .map_err(|err| err.to_string())?
-        },
+        }
 
         "amazonses" => {
             let credentials = if let Some((ak, sk)) = api_key.split_once(':') {
                 aws_sdk_sesv2::config::Credentials::new(ak, sk, None, None, "manual")
             } else {
-                return Err("Amazon SES requires api_key in the format 'ACCESS_KEY:SECRET_KEY'".to_string());
+                return Err(
+                    "Amazon SES requires api_key in the format 'ACCESS_KEY:SECRET_KEY'".to_string(),
+                );
             };
             let region = aws_config::Region::new(endpoint.unwrap_or("us-east-1").to_string());
             let config = aws_config::SdkConfig::builder()
-                .credentials_provider(aws_sdk_sesv2::config::SharedCredentialsProvider::new(credentials))
+                .credentials_provider(aws_sdk_sesv2::config::SharedCredentialsProvider::new(
+                    credentials,
+                ))
                 .region(region)
                 .build();
             let ses_client = aws_sdk_sesv2::Client::new(&config);
@@ -991,7 +1015,10 @@ async fn dispatch_via_provider(
                     raw_message.push_str(&format!("To: {}\n", payload.to.join(",")));
                     raw_message.push_str(&format!("Subject: {}\n", payload.subject.trim()));
                     raw_message.push_str("MIME-Version: 1.0\n");
-                    raw_message.push_str(&format!("Content-Type: multipart/mixed; boundary=\"{}\"\n\n", boundary));
+                    raw_message.push_str(&format!(
+                        "Content-Type: multipart/mixed; boundary=\"{}\"\n\n",
+                        boundary
+                    ));
 
                     raw_message.push_str(&format!("--{}\n", boundary));
                     raw_message.push_str("Content-Type: text/plain; charset=UTF-8\n\n");
@@ -999,7 +1026,10 @@ async fn dispatch_via_provider(
 
                     for att in atts {
                         raw_message.push_str(&format!("--{}\n", boundary));
-                        raw_message.push_str(&format!("Content-Type: {}; name=\"{}\"\n", att.mime_type, att.filename));
+                        raw_message.push_str(&format!(
+                            "Content-Type: {}; name=\"{}\"\n",
+                            att.mime_type, att.filename
+                        ));
                         raw_message.push_str("Content-Disposition: attachment\n");
                         raw_message.push_str("Content-Transfer-Encoding: base64\n\n");
                         let b64_content = if let Some(idx) = att.content.find("base64,") {
@@ -1012,7 +1042,9 @@ async fn dispatch_via_provider(
                     raw_message.push_str(&format!("--{}--\n", boundary));
 
                     let raw = aws_sdk_sesv2::types::RawMessage::builder()
-                        .data(aws_sdk_sesv2::primitives::Blob::new(raw_message.into_bytes()))
+                        .data(aws_sdk_sesv2::primitives::Blob::new(
+                            raw_message.into_bytes(),
+                        ))
                         .build()
                         .map_err(|err| err.to_string())?;
                     aws_sdk_sesv2::types::EmailContent::builder()
@@ -1029,12 +1061,10 @@ async fn dispatch_via_provider(
                         .map_err(|err| err.to_string())?;
                     let message_builder = aws_sdk_sesv2::types::Message::builder()
                         .subject(subject)
-                        .body(
-                            aws_sdk_sesv2::types::Body::builder()
-                                .text(text)
-                                .build()
-                        );
-                    aws_sdk_sesv2::types::EmailContent::builder().simple(message_builder.build()).build()
+                        .body(aws_sdk_sesv2::types::Body::builder().text(text).build());
+                    aws_sdk_sesv2::types::EmailContent::builder()
+                        .simple(message_builder.build())
+                        .build()
                 }
             } else {
                 let subject = aws_sdk_sesv2::types::Content::builder()
@@ -1047,29 +1077,33 @@ async fn dispatch_via_provider(
                     .map_err(|err| err.to_string())?;
                 let message_builder = aws_sdk_sesv2::types::Message::builder()
                     .subject(subject)
-                    .body(
-                        aws_sdk_sesv2::types::Body::builder()
-                            .text(text)
-                            .build()
-                    );
-                aws_sdk_sesv2::types::EmailContent::builder().simple(message_builder.build()).build()
+                    .body(aws_sdk_sesv2::types::Body::builder().text(text).build());
+                aws_sdk_sesv2::types::EmailContent::builder()
+                    .simple(message_builder.build())
+                    .build()
             };
 
-            match ses_client.send_email()
+            match ses_client
+                .send_email()
                 .from_email_address(format!("{} <{}>", from_name, from_email))
                 .destination(dest_builder)
                 .content(email_content)
                 .send()
-                .await {
+                .await
+            {
                 Ok(resp) => return Ok(resp.message_id),
                 Err(err) => return Err(format!("Amazon SES error: {}", err)),
             }
         }
         "custom_webhook" => {
-            let endpoint = endpoint.ok_or_else(|| "Custom webhook endpoint is missing.".to_string())?;
+            let endpoint =
+                endpoint.ok_or_else(|| "Custom webhook endpoint is missing.".to_string())?;
             client
                 .post(endpoint)
-                .header(axum::http::header::AUTHORIZATION, format!("Bearer {api_key}"))
+                .header(
+                    axum::http::header::AUTHORIZATION,
+                    format!("Bearer {api_key}"),
+                )
                 .json(&json!({
                     "from": from_email,
                     "fromName": from_name,
@@ -1081,7 +1115,11 @@ async fn dispatch_via_provider(
                 .await
                 .map_err(|err| err.to_string())?
         }
-        _ => return Err(format!("Provider '{provider}' is not supported for outbound delivery.")),
+        _ => {
+            return Err(format!(
+                "Provider '{provider}' is not supported for outbound delivery."
+            ))
+        }
     };
 
     if !response.status().is_success() {
@@ -1189,7 +1227,11 @@ fn provider_inbound_mx_hosts(records: &[ProviderDnsRecord]) -> Vec<String> {
         .iter()
         .filter(|record| record.record_type.eq_ignore_ascii_case("MX"))
         .filter_map(|record| {
-            let host = record.value.split_whitespace().last().unwrap_or(&record.value);
+            let host = record
+                .value
+                .split_whitespace()
+                .last()
+                .unwrap_or(&record.value);
             let normalized = normalize_dns_answer(host);
             if normalized.is_empty() {
                 None
@@ -1213,10 +1255,7 @@ fn expected_resend_inbound_webhook_url() -> String {
 }
 
 fn normalize_webhook_url(value: &str) -> String {
-    value
-        .trim()
-        .trim_end_matches('/')
-        .to_ascii_lowercase()
+    value.trim().trim_end_matches('/').to_ascii_lowercase()
 }
 
 fn webhook_event_enabled(events: &Value, event_name: &str) -> bool {
@@ -1928,7 +1967,8 @@ pub async fn verify_domain(
     } else if resend_provider {
         "Provider-listed inbound MX for this domain region".to_string()
     } else {
-        "Managed by the selected provider; VelisMail does not require legacy mx1/mx2 records.".to_string()
+        "Managed by the selected provider; VelisMail does not require legacy mx1/mx2 records."
+            .to_string()
     };
 
     let txt_answers = match query_dns_answers(&state.http_client, &txt_host, "TXT").await {
@@ -1997,11 +2037,7 @@ pub async fn verify_domain(
         DomainCheckResult {
             key: "mx",
             label: "Inbound MX",
-            status: if mx_verified {
-                "verified"
-            } else {
-                "failed"
-            },
+            status: if mx_verified { "verified" } else { "failed" },
             expected: expected_mx,
             actual: mx_actual,
         },
@@ -2445,7 +2481,8 @@ pub async fn create_team_invite(
         token: token.clone(),
         email,
         name: if payload.name.trim().is_empty() {
-            payload.email
+            payload
+                .email
                 .split('@')
                 .next()
                 .unwrap_or("Team member")
@@ -2732,7 +2769,7 @@ async fn ensure_business_emails_table(pool: &PgPool) -> Result<(), String> {
             is_read BOOLEAN,
             is_starred BOOLEAN,
             has_attachment BOOLEAN DEFAULT FALSE
-        );"
+        );",
     )
     .execute(pool)
     .await
@@ -2787,7 +2824,11 @@ fn business_db_url_from_parts(
 ) -> Option<String> {
     body_url
         .or(query_url)
-        .or_else(|| headers.get("x-business-db-url").and_then(|h| h.to_str().ok()))
+        .or_else(|| {
+            headers
+                .get("x-business-db-url")
+                .and_then(|h| h.to_str().ok())
+        })
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .map(str::to_string)
@@ -2800,8 +2841,13 @@ fn first_header<'a>(headers: &'a HeaderMap, names: &[&str]) -> Option<&'a str> {
 }
 
 fn decode_svix_secret(secret: &str) -> Vec<u8> {
-    let raw = secret.trim().strip_prefix("whsec_").unwrap_or(secret.trim());
-    general_purpose::STANDARD.decode(raw).unwrap_or_else(|_| secret.as_bytes().to_vec())
+    let raw = secret
+        .trim()
+        .strip_prefix("whsec_")
+        .unwrap_or(secret.trim());
+    general_purpose::STANDARD
+        .decode(raw)
+        .unwrap_or_else(|_| secret.as_bytes().to_vec())
 }
 
 fn decode_html_entities(value: &str) -> String {
@@ -2844,7 +2890,11 @@ fn constant_time_eq(left: &[u8], right: &[u8]) -> bool {
     diff == 0
 }
 
-fn verify_resend_webhook_signature(headers: &HeaderMap, body: &[u8], secret: &str) -> Result<bool, String> {
+fn verify_resend_webhook_signature(
+    headers: &HeaderMap,
+    body: &[u8],
+    secret: &str,
+) -> Result<bool, String> {
     if secret.trim().is_empty() {
         return Err("Missing Resend webhook signing secret for this domain.".to_string());
     }
@@ -2951,7 +3001,12 @@ fn email_address_domain(address: &str) -> Option<String> {
 }
 
 fn sender_display_name(from: &str) -> String {
-    let name = from.split('<').next().unwrap_or(from).trim().trim_matches('"');
+    let name = from
+        .split('<')
+        .next()
+        .unwrap_or(from)
+        .trim()
+        .trim_matches('"');
     if name.is_empty() || name == from {
         from.to_string()
     } else {
@@ -3014,19 +3069,15 @@ async fn register_inbound_route(
         };
     }
 
-    state
-        .inbound_routes
-        .write()
-        .await
-        .insert(
-            domain.to_string(),
-            json!({
-                "dbUrl": db_url,
-                "apiKey": api_key,
-                "webhookSecret": webhook_secret,
-                "provider": provider,
-            }),
-        );
+    state.inbound_routes.write().await.insert(
+        domain.to_string(),
+        json!({
+            "dbUrl": db_url,
+            "apiKey": api_key,
+            "webhookSecret": webhook_secret,
+            "provider": provider,
+        }),
+    );
 
     let Some(pool) = gateway_route_pool().await else {
         return RuntimeCheckResult {
@@ -3045,7 +3096,9 @@ async fn register_inbound_route(
             status: "failed",
             detail: format!("VelisMail could not prepare inbound route storage: {err}"),
             category: "software",
-            recommendation: Some("Fix the API gateway route database connection and retry verification.".to_string()),
+            recommendation: Some(
+                "Fix the API gateway route database connection and retry verification.".to_string(),
+            ),
         };
     }
     match sqlx::query(
@@ -3093,26 +3146,40 @@ fn inbound_route_value(value: &Value) -> Option<(String, String, String)> {
 }
 
 async fn lookup_inbound_route(state: &AppState, domain: &str) -> Option<(String, String, String)> {
-    if let Some(route) = state.inbound_routes.read().await.get(domain).and_then(inbound_route_value) {
+    if let Some(route) = state
+        .inbound_routes
+        .read()
+        .await
+        .get(domain)
+        .and_then(inbound_route_value)
+    {
         return Some(route);
     }
 
     let pool = gateway_route_pool().await?;
     ensure_inbound_routes_table(&pool).await.ok()?;
-    let row = sqlx::query("SELECT db_url, api_key, webhook_secret FROM inbound_mail_routes WHERE domain = $1")
-        .bind(domain)
-        .fetch_optional(&pool)
-        .await
-        .ok()??;
+    let row = sqlx::query(
+        "SELECT db_url, api_key, webhook_secret FROM inbound_mail_routes WHERE domain = $1",
+    )
+    .bind(domain)
+    .fetch_optional(&pool)
+    .await
+    .ok()??;
     let db_url = row.try_get::<String, _>(0).ok()?;
     let api_key = row.try_get::<String, _>(1).ok()?;
     let webhook_secret = row.try_get::<String, _>(2).ok()?;
     Some((db_url, api_key, webhook_secret))
 }
 
-async fn fetch_resend_received_email(client: &reqwest::Client, api_key: &str, email_id: &str) -> Option<Value> {
+async fn fetch_resend_received_email(
+    client: &reqwest::Client,
+    api_key: &str,
+    email_id: &str,
+) -> Option<Value> {
     let response = client
-        .get(format!("https://api.resend.com/emails/receiving/{email_id}"))
+        .get(format!(
+            "https://api.resend.com/emails/receiving/{email_id}"
+        ))
         .bearer_auth(api_key)
         .send()
         .await
@@ -3224,21 +3291,28 @@ pub async fn receive_resend_inbound(
         Err(err) => {
             return (
                 StatusCode::BAD_REQUEST,
-                Json(json!({"success": false, "error": format!("Invalid Resend webhook JSON: {err}")})),
+                Json(
+                    json!({"success": false, "error": format!("Invalid Resend webhook JSON: {err}")}),
+                ),
             )
         }
     };
 
     let event_type = value_string(payload.get("type")).unwrap_or_default();
     if event_type != "email.received" {
-        return (StatusCode::OK, Json(json!({"success": true, "ignored": true})));
+        return (
+            StatusCode::OK,
+            Json(json!({"success": true, "ignored": true})),
+        );
     }
 
     let recipient_domains = resend_payload_recipient_domains(&payload);
     if recipient_domains.is_empty() {
         return (
             StatusCode::BAD_REQUEST,
-            Json(json!({"success": false, "error": "Resend inbound payload is missing recipient domains."})),
+            Json(
+                json!({"success": false, "error": "Resend inbound payload is missing recipient domains."}),
+            ),
         );
     }
 
@@ -3248,7 +3322,7 @@ pub async fn receive_resend_inbound(
             route = Some(found);
             break;
         }
-    };
+    }
     let Some((db_url, api_key, webhook_secret)) = route else {
         return (
             StatusCode::NOT_FOUND,
@@ -3260,7 +3334,8 @@ pub async fn receive_resend_inbound(
         );
     };
 
-    let signature_verified = match verify_resend_webhook_signature(&headers, &body, &webhook_secret) {
+    let signature_verified = match verify_resend_webhook_signature(&headers, &body, &webhook_secret)
+    {
         Ok(verified) => verified,
         Err(message) => {
             return (
@@ -3272,7 +3347,12 @@ pub async fn receive_resend_inbound(
 
     let (email, _) = match resend_webhook_email(&state.http_client, &payload, &api_key).await {
         Ok(result) => result,
-        Err(message) => return (StatusCode::BAD_REQUEST, Json(json!({"success": false, "error": message}))),
+        Err(message) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(json!({"success": false, "error": message})),
+            )
+        }
     };
 
     let save_payload = SaveBusinessEmailRequest {
@@ -3296,11 +3376,19 @@ pub async fn receive_resend_inbound(
 async fn read_business_emails(db_url: &str) -> (StatusCode, Json<Value>) {
     let pool = match get_tenant_pool(db_url).await {
         Ok(p) => p,
-        Err(e) => return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"success": false, "error": format!("DB Error: {}", e)}))),
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"success": false, "error": format!("DB Error: {}", e)})),
+            )
+        }
     };
 
     if let Err(e) = ensure_business_emails_table(&pool).await {
-        return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"success": false, "error": format!("Schema Error: {}", e)})));
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"success": false, "error": format!("Schema Error: {}", e)})),
+        );
     }
 
     let rows = match sqlx::query(
@@ -3342,7 +3430,10 @@ async fn read_business_emails(db_url: &str) -> (StatusCode, Json<Value>) {
         }));
     }
 
-    (StatusCode::OK, Json(json!({"success": true, "emails": emails})))
+    (
+        StatusCode::OK,
+        Json(json!({"success": true, "emails": emails})),
+    )
 }
 
 pub async fn get_business_emails(
@@ -3352,7 +3443,12 @@ pub async fn get_business_emails(
 ) -> (StatusCode, Json<Value>) {
     let db_url = match business_db_url_from_parts(&headers, query.db_url.as_deref(), None) {
         Some(url) => url,
-        None => return (StatusCode::BAD_REQUEST, Json(json!({"success": false, "error": "Missing business database URL"}))),
+        None => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(json!({"success": false, "error": "Missing business database URL"})),
+            )
+        }
     };
 
     read_business_emails(&db_url).await
@@ -3364,7 +3460,10 @@ pub async fn query_business_emails(
 ) -> (StatusCode, Json<Value>) {
     let db_url = payload.db_url.trim();
     if db_url.is_empty() {
-        return (StatusCode::BAD_REQUEST, Json(json!({"success": false, "error": "Missing business database URL"})));
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({"success": false, "error": "Missing business database URL"})),
+        );
     }
 
     read_business_emails(db_url).await
@@ -3376,18 +3475,35 @@ pub async fn save_business_email(
     headers: HeaderMap,
     Json(payload): Json<SaveBusinessEmailRequest>,
 ) -> (StatusCode, Json<Value>) {
-    let db_url = match business_db_url_from_parts(&headers, query.db_url.as_deref(), payload.db_url.as_deref()) {
+    let db_url = match business_db_url_from_parts(
+        &headers,
+        query.db_url.as_deref(),
+        payload.db_url.as_deref(),
+    ) {
         Some(url) => url,
-        None => return (StatusCode::BAD_REQUEST, Json(json!({"success": false, "error": "Missing business database URL"}))),
+        None => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(json!({"success": false, "error": "Missing business database URL"})),
+            )
+        }
     };
 
     let pool = match get_tenant_pool(&db_url).await {
         Ok(p) => p,
-        Err(e) => return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"success": false, "error": format!("DB Error: {}", e)}))),
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"success": false, "error": format!("DB Error: {}", e)})),
+            )
+        }
     };
 
     if let Err(e) = ensure_business_emails_table(&pool).await {
-        return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"success": false, "error": format!("Schema Error: {}", e)})));
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"success": false, "error": format!("Schema Error: {}", e)})),
+        );
     }
 
     let e = payload.email;
@@ -3442,7 +3558,6 @@ mod tests {
     }
 }
 
-
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CreateOrderRequest {
@@ -3485,19 +3600,29 @@ pub async fn create_payment_order(
             Json(json!({
                 "success": false,
                 "message": "Payment gateway is not configured on this server."
-            }))
+            })),
         );
     }
 
-    let plan = payload.plan.as_deref().unwrap_or("").trim().to_ascii_lowercase();
-    let billing = payload.billing.as_deref().unwrap_or("monthly").trim().to_ascii_lowercase();
+    let plan = payload
+        .plan
+        .as_deref()
+        .unwrap_or("")
+        .trim()
+        .to_ascii_lowercase();
+    let billing = payload
+        .billing
+        .as_deref()
+        .unwrap_or("monthly")
+        .trim()
+        .to_ascii_lowercase();
     let Some(expected_amount) = expected_subscription_amount_paise(&plan, &billing) else {
         return (
             StatusCode::BAD_REQUEST,
             Json(json!({
                 "success": false,
                 "message": "Unsupported subscription plan or billing cycle."
-            }))
+            })),
         );
     };
     if payload.amount != expected_amount {
@@ -3506,7 +3631,7 @@ pub async fn create_payment_order(
             Json(json!({
                 "success": false,
                 "message": "Payment amount does not match the selected subscription plan."
-            }))
+            })),
         );
     }
     if !payload.currency.eq_ignore_ascii_case("INR") {
@@ -3515,7 +3640,7 @@ pub async fn create_payment_order(
             Json(json!({
                 "success": false,
                 "message": "Unsupported payment currency."
-            }))
+            })),
         );
     }
 
@@ -3526,7 +3651,10 @@ pub async fn create_payment_order(
 
     let res = client
         .post("https://api.razorpay.com/v1/orders")
-        .basic_auth(&state.config.razorpay_key_id, Some(&state.config.razorpay_key_secret))
+        .basic_auth(
+            &state.config.razorpay_key_id,
+            Some(&state.config.razorpay_key_secret),
+        )
         .json(&json!({
             "amount": amount,
             "currency": currency,
@@ -3563,19 +3691,23 @@ pub async fn create_payment_order(
                         Json(json!({
                             "success": false,
                             "message": "Failed to parse payment gateway response."
-                        }))
+                        })),
                     )
                 }
             } else {
                 let status = response.status();
                 let error_text = response.text().await.unwrap_or_default();
-                tracing::error!("Razorpay order creation failed: {} - {}", status, error_text);
+                tracing::error!(
+                    "Razorpay order creation failed: {} - {}",
+                    status,
+                    error_text
+                );
                 (
                     status,
                     Json(json!({
                         "success": false,
                         "message": "Payment gateway error during order creation."
-                    }))
+                    })),
                 )
             }
         }
@@ -3586,7 +3718,7 @@ pub async fn create_payment_order(
                 Json(json!({
                     "success": false,
                     "message": "Failed to communicate with payment gateway."
-                }))
+                })),
             )
         }
     }
@@ -3606,7 +3738,7 @@ pub async fn verify_payment(
             Json(json!({
                 "success": false,
                 "message": "Payment gateway verification is not configured."
-            }))
+            })),
         );
     }
 
@@ -3619,12 +3751,13 @@ pub async fn verify_payment(
             Json(json!({
                 "success": false,
                 "message": "Missing payment verification fields."
-            }))
+            })),
         );
     }
 
     let signed = format!("{order_id}|{payment_id}");
-    let mut mac = match Hmac::<Sha256>::new_from_slice(state.config.razorpay_key_secret.as_bytes()) {
+    let mut mac = match Hmac::<Sha256>::new_from_slice(state.config.razorpay_key_secret.as_bytes())
+    {
         Ok(mac) => mac,
         Err(_) => {
             return (
@@ -3632,13 +3765,16 @@ pub async fn verify_payment(
                 Json(json!({
                     "success": false,
                     "message": "Payment gateway verification failed to initialize."
-                }))
+                })),
             )
         }
     };
     mac.update(signed.as_bytes());
     let expected = bytes_to_lower_hex(&mac.finalize().into_bytes());
-    let verified = constant_time_eq(expected.as_bytes(), signature.to_ascii_lowercase().as_bytes());
+    let verified = constant_time_eq(
+        expected.as_bytes(),
+        signature.to_ascii_lowercase().as_bytes(),
+    );
 
     if verified {
         (
@@ -3647,7 +3783,7 @@ pub async fn verify_payment(
                 "success": true,
                 "paymentId": payment_id,
                 "orderId": order_id
-            }))
+            })),
         )
     } else {
         (
@@ -3655,7 +3791,7 @@ pub async fn verify_payment(
             Json(json!({
                 "success": false,
                 "message": "Payment signature verification failed."
-            }))
+            })),
         )
     }
 }

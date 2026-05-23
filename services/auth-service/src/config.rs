@@ -67,7 +67,9 @@ impl AuthConfig {
                 .and_then(|p| p.parse().ok())
                 .unwrap_or(false),
             db_url: required_env("DATABASE_URL")?,
-            redis_url: std::env::var("REDIS_URL").ok().filter(|v| !v.trim().is_empty()),
+            redis_url: std::env::var("REDIS_URL")
+                .ok()
+                .filter(|v| !v.trim().is_empty()),
             max_failed_attempts: std::env::var("MAX_FAILED_ATTEMPTS")
                 .ok()
                 .and_then(|p| p.parse().ok())

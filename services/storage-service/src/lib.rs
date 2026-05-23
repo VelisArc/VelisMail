@@ -11,7 +11,10 @@ pub async fn run_service() -> anyhow::Result<()> {
 
     let app = axum::Router::new()
         .route("/health", axum::routing::get(handlers::health_check))
-        .route("/upload", axum::routing::post(handlers::upload).layer(middleware::body_limit_layer()))
+        .route(
+            "/upload",
+            axum::routing::post(handlers::upload).layer(middleware::body_limit_layer()),
+        )
         .route("/download/*key", axum::routing::get(handlers::download))
         .route("/delete/*key", axum::routing::delete(handlers::delete))
         .route("/quota", axum::routing::get(handlers::get_quota))

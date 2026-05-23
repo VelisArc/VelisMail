@@ -22,10 +22,7 @@ mod credentials;
 mod error;
 mod health;
 
-
 mod provider;
-
-
 
 pub use adapter::*;
 pub use credentials::*;

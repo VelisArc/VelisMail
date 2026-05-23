@@ -102,4 +102,3 @@ impl EncryptedPayload {
         bytes
     }
 }
-

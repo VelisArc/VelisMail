@@ -70,10 +70,7 @@ pub async fn rate_limit(
 
 /// Security headers middleware — adds defense-in-depth HTTP headers to all responses.
 /// These headers mitigate XSS, clickjacking, MIME-sniffing, and info-disclosure.
-pub async fn security_headers(
-    request: Request<Body>,
-    next: Next,
-) -> Response {
+pub async fn security_headers(request: Request<Body>, next: Next) -> Response {
     let mut response = next.run(request).await;
     let headers = response.headers_mut();
 

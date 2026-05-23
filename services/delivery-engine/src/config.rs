@@ -26,12 +26,16 @@ impl DeliveryConfig {
             host: std::env::var("DELIVERY_HOST").unwrap_or_else(|_| "0.0.0.0".to_string()),
             port,
             db_url: required_env("DATABASE_URL")?,
-            dkim_private_key: std::env::var("DKIM_PRIVATE_KEY").ok().filter(|v| !v.trim().is_empty()),
+            dkim_private_key: std::env::var("DKIM_PRIVATE_KEY")
+                .ok()
+                .filter(|v| !v.trim().is_empty()),
             dkim_selector: std::env::var("DKIM_SELECTOR")
                 .ok()
                 .filter(|v| !v.trim().is_empty())
                 .unwrap_or_else(|| "velismail".to_string()),
-            spf_record: std::env::var("SPF_RECORD").ok().filter(|v| !v.trim().is_empty()),
+            spf_record: std::env::var("SPF_RECORD")
+                .ok()
+                .filter(|v| !v.trim().is_empty()),
         })
     }
 }

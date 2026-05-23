@@ -121,7 +121,11 @@ fn business_db_url_from_parts(
 ) -> Option<String> {
     body_url
         .or(query_url)
-        .or_else(|| headers.get("x-business-db-url").and_then(|h| h.to_str().ok()))
+        .or_else(|| {
+            headers
+                .get("x-business-db-url")
+                .and_then(|h| h.to_str().ok())
+        })
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .map(str::to_string)
@@ -181,7 +185,10 @@ async fn read_business_emails(db_url: &str) -> (StatusCode, Json<Value>) {
         })
         .collect();
 
-    (StatusCode::OK, Json(json!({"success": true, "emails": emails})))
+    (
+        StatusCode::OK,
+        Json(json!({"success": true, "emails": emails})),
+    )
 }
 
 /// Health check
@@ -329,7 +336,9 @@ pub async fn send_email(
         Some(from_name),
         from_email.parse().map_err(|_| StatusCode::BAD_REQUEST)?,
     );
-    let mut builder = Message::builder().from(from_mailbox).subject(request.subject.trim());
+    let mut builder = Message::builder()
+        .from(from_mailbox)
+        .subject(request.subject.trim());
 
     for email in &request.to {
         builder = builder.to(email.parse().map_err(|_| StatusCode::BAD_REQUEST)?);

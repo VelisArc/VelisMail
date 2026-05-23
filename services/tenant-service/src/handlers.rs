@@ -116,13 +116,10 @@ pub async fn list_users(
 ) -> Result<Json<serde_json::Value>, StatusCode> {
     let service = TenantService::new(state.db.clone());
     let tenant_id = Uuid::parse_str(&id).map_err(|_| StatusCode::BAD_REQUEST)?;
-    service
-        .set_tenant_context(tenant_id)
-        .await
-        .map_err(|err| {
-            info!("Failed to set tenant context: {}", err);
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
+    service.set_tenant_context(tenant_id).await.map_err(|err| {
+        info!("Failed to set tenant context: {}", err);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
     let users = sqlx::query_as::<_, crate::models::TenantUser>(
         "SELECT * FROM tenant_users WHERE tenant_id = $1 ORDER BY created_at DESC",
     )

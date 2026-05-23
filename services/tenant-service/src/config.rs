@@ -1,10 +1,14 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 
 #[derive(Clone, Debug)]
 pub struct TenantConfig {
     pub host: String,
     pub port: u16,
     pub db_url: String,
+}
+
+fn required_env(name: &str) -> Result<String> {
+    std::env::var(name).with_context(|| format!("missing required environment variable {name}"))
 }
 
 impl TenantConfig {
@@ -18,8 +22,7 @@ impl TenantConfig {
         Ok(Self {
             host: std::env::var("TENANT_HOST").unwrap_or_else(|_| "0.0.0.0".to_string()),
             port,
-            db_url: std::env::var("DATABASE_URL")
-                .expect("DATABASE_URL must be set in environment"),
+            db_url: required_env("DATABASE_URL")?,
         })
     }
 }

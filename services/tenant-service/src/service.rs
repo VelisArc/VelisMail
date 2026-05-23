@@ -306,7 +306,8 @@ impl TenantService {
         let verification_token = Uuid::new_v4().to_string();
 
         // Create DNS records for verification
-        let base_domain = std::env::var("BASE_DOMAIN").unwrap_or_else(|_| "velismail.online".to_string());
+        let base_domain =
+            std::env::var("BASE_DOMAIN").unwrap_or_else(|_| "velismail.online".to_string());
         let dns_records = json!([
             {
                 "type": "TXT",
@@ -510,10 +511,11 @@ impl TenantService {
             .fetch_one(&self.pool)
             .await
             .unwrap_or(0) as u32;
-        let active_users = sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM users WHERE is_active = true")
-            .fetch_one(&self.pool)
-            .await
-            .unwrap_or(0) as u32;
+        let active_users =
+            sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM users WHERE is_active = true")
+                .fetch_one(&self.pool)
+                .await
+                .unwrap_or(0) as u32;
 
         let stats = TenantStats {
             total_users,

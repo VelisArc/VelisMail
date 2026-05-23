@@ -4,10 +4,10 @@ use crate::config::GatewayConfig;
 use anyhow::Result;
 use reqwest::Client;
 use serde_json::Value;
-use std::{collections::HashMap, sync::Arc};
 use std::time::Duration;
-use tokio::sync::Semaphore;
+use std::{collections::HashMap, sync::Arc};
 use tokio::sync::RwLock;
+use tokio::sync::Semaphore;
 
 #[derive(Clone)]
 pub struct AppState {

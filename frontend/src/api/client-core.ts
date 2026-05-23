@@ -655,8 +655,7 @@ export async function initEmailsAsync(): Promise<Email[]> {
 }
 
 export function initEmails(): Email[] {
-  emailsCache = loadUserDB<Email[]>(STORAGE_KEYS.emails, SEED_EMAILS);
-  return emailsCache;
+  return loadUserDB<Email[]>(STORAGE_KEYS.emails, SEED_EMAILS);
 }
 
 export let emailsCache = initEmails();

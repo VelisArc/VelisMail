@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { auth, businessAudit, businessGroups, businessMailboxes, businessQueue, businessTeam, businessTemplates, connections, domains, isBusinessSetupReady, mail, platformAdmin, type BusinessAuditEntry, type BusinessGroup, type BusinessMailbox, type BusinessTeamMember, type BusinessTemplate, type ConnectionUsage, type CustomDomain, type Email, type PlatformAdminUserRecord, type DomainCheck, type TeamAccessInvite } from '../api/client';
 import Sidebar from '../components/dashboard/Sidebar';
-import { type BizTab } from '../components/dashboard/constants';
+import { ROLE_ALLOWED_TABS, type BizTab } from '../components/dashboard/constants';
 import EmailInbox from '../components/dashboard/EmailInbox';
 import { copyToClipboard, loadRazorpayCheckout, buildReplyQuote } from '../components/dashboard/utils';
 import type { DashboardState, DomainRecord, DomainHealth, MailQueueItem } from '../components/dashboard/types';
@@ -134,13 +134,17 @@ export default function BusinessDashboard() {
     setComposeTo(to); setComposeSubject(subject); setComposeBody(body); setComposeOpen(true);
   };
 
-  const ROLE_ALLOWED_TABS: Record<string, BizTab[]> = {
-    admin: ['mail', 'templates', 'queue', 'domains', 'mailboxes', 'groups', 'team', 'analytics', 'audit', 'settings', 'billing', 'admin'],
-    member: ['mail', 'templates', 'queue', 'domains', 'mailboxes', 'groups', 'team', 'analytics', 'audit', 'settings', 'billing'],
-    viewer: ['mail', 'templates', 'queue', 'domains', 'mailboxes', 'groups', 'team', 'analytics', 'audit', 'settings', 'billing'],
-  };
-  const hasRoleAccess = (tab: BizTab) => (ROLE_ALLOWED_TABS[user?.role || 'member'] || ROLE_ALLOWED_TABS.member).includes(tab);
+  const hasRoleAccess = useCallback(
+    (tab: BizTab) => (ROLE_ALLOWED_TABS[user?.role || 'member'] || ROLE_ALLOWED_TABS.member).includes(tab),
+    [user?.role],
+  );
   const canAccessPlatformAdmin = user?.role === 'admin' && platformAdmin.isCurrentUserPlatformAdmin();
+
+  useEffect(() => {
+    if (!hasRoleAccess(activeBizTab) || (activeBizTab === 'admin' && !canAccessPlatformAdmin)) {
+      setActiveBizTab('mail');
+    }
+  }, [activeBizTab, canAccessPlatformAdmin, hasRoleAccess]);
 
   const { data: emails = [], refetch } = useEmails(activeDomainName, activeFolder);
 
@@ -313,6 +317,7 @@ export default function BusinessDashboard() {
         activeFolder={activeFolder} setActiveFolder={setActiveFolder}
         onCompose={() => openComposeWith()} user={user}
         onLogout={() => setShowLogoutConfirm(true)} sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen}
+        hasRoleAccess={hasRoleAccess} canAccessPlatformAdmin={canAccessPlatformAdmin}
       />
 
       <main className="dash-main">
@@ -341,7 +346,7 @@ export default function BusinessDashboard() {
 
         {activeBizTab === 'audit' && <AuditPanel state={dashboardState} />}
 
-        {activeBizTab === 'admin' && <AdminPanel state={dashboardState} />}
+        {activeBizTab === 'admin' && canAccessPlatformAdmin && <AdminPanel state={dashboardState} />}
 
         {activeBizTab === 'templates' && <TemplatesPanel state={dashboardState} />}
 

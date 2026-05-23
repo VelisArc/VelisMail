@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom';
 import { useEffect, useState, useCallback, useRef } from 'react';
 import {
   ArrowRight, CheckCircle2, Database, Fingerprint,
-  Globe, Lock, Menu, Shield, Sparkles,
+  Globe, Lock, Menu, Shield,
   X, Zap, Users, ChevronDown,
   ArrowUp, BarChart3, Activity,
 } from 'lucide-react';
@@ -149,9 +149,6 @@ export default function Home() {
 
   return (
     <div className="home animate-page">
-      <div className="home-bg-orb orb-1" aria-hidden="true" />
-      <div className="home-bg-orb orb-2" aria-hidden="true" />
-
       <SEO />
 
       <nav className={`home-nav ${scrolled ? 'nav-scrolled' : ''}`} role="navigation" aria-label="Main navigation">
@@ -201,25 +198,25 @@ export default function Home() {
         <div className="container hero-grid">
           <div className="hero-copy">
             <div className="hero-badge">
-              <Sparkles size={14} aria-hidden="true" />
-              <span>Enterprise Email for the Modern Era</span>
+              <Shield size={14} aria-hidden="true" />
+              <span>Mail operations for serious teams</span>
             </div>
 
             <h1 className="hero-title">
-              Email That Works
-              <span className="gradient-text">For Everyone.</span>
+              Run business email
+              <span>with control.</span>
             </h1>
 
             <p className="hero-subtitle">
-              Secure, encrypted business email with zero-trust architecture. Manage your
-              domains, team, and delivery workflows from one unified console.
+              Operate domains, mailboxes, teams, delivery queues, templates, billing,
+              and audit trails from one focused console built for daily administration.
             </p>
 
             <div className="hero-actions">
               <Link to={getDashboardLink()} className="btn btn-primary btn-lg">
                 {getDashboardText()} <ArrowRight size={20} aria-hidden="true" />
               </Link>
-              <a href="#features" className="btn btn-secondary btn-lg">See How It Works</a>
+              <a href="#features" className="btn btn-secondary btn-lg">Review Platform</a>
             </div>
 
             <div className="hero-stats">

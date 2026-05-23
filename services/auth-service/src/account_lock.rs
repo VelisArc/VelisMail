@@ -165,13 +165,16 @@ impl AccountLockManager {
                 if let Some(last_score) = scores.last() {
                     let lockout_start =
                         DateTime::<Utc>::from_timestamp(*last_score, 0).unwrap_or_else(Utc::now);
-                    let lockout_end = lockout_start + Duration::minutes(self.lockout_duration_minutes);
+                    let lockout_end =
+                        lockout_start + Duration::minutes(self.lockout_duration_minutes);
                     return Ok(Some(lockout_end));
                 }
             }
         }
 
-        Ok(Some(Utc::now() + Duration::minutes(self.lockout_duration_minutes)))
+        Ok(Some(
+            Utc::now() + Duration::minutes(self.lockout_duration_minutes),
+        ))
     }
 
     pub async fn get_failed_attempts_count(&self, email: &str) -> Result<u32> {

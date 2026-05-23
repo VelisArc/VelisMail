@@ -40,4 +40,3 @@ pub fn derive_encryption_key(ikm: &[u8], salt: &[u8], info: &[u8]) -> Result<Vec
 pub fn derive_mac_key(ikm: &[u8], salt: &[u8], info: &[u8]) -> Result<Vec<u8>> {
     derive_key(ikm, salt, info, 32)
 }
-

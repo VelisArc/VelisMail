@@ -26,7 +26,9 @@ impl AuthState {
             Some(url) => redis::Client::open(url.clone())
                 .map(|c| Some(Arc::new(c)))
                 .unwrap_or_else(|e| {
-                    tracing::warn!("Redis connection failed (auth will fall back to Postgres): {e}");
+                    tracing::warn!(
+                        "Redis connection failed (auth will fall back to Postgres): {e}"
+                    );
                     None
                 }),
             None => None,

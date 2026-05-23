@@ -1,6 +1,6 @@
 //! Gateway configuration
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 
 #[derive(Clone, Debug)]
 pub struct GatewayConfig {
@@ -31,7 +31,7 @@ impl GatewayConfig {
             .unwrap_or(3000);
 
         let otp_signing_secret = std::env::var("OTP_SIGNING_SECRET")
-            .expect("OTP_SIGNING_SECRET must be set in environment");
+            .context("missing required environment variable OTP_SIGNING_SECRET")?;
 
         Ok(Self {
             host: std::env::var("GATEWAY_HOST").unwrap_or_else(|_| "0.0.0.0".to_string()),
@@ -54,10 +54,8 @@ impl GatewayConfig {
             delivery_service_url: std::env::var("DELIVERY_SERVICE_URL")
                 .or_else(|_| std::env::var("SECURITY_SERVICE_URL"))
                 .unwrap_or_else(|_| "http://delivery-engine:3005".to_string()),
-            razorpay_key_id: std::env::var("RAZORPAY_KEY_ID")
-                .unwrap_or_default(),
-            razorpay_key_secret: std::env::var("RAZORPAY_KEY_SECRET")
-                .unwrap_or_default(),
+            razorpay_key_id: std::env::var("RAZORPAY_KEY_ID").unwrap_or_default(),
+            razorpay_key_secret: std::env::var("RAZORPAY_KEY_SECRET").unwrap_or_default(),
         })
     }
 }

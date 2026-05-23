@@ -22,4 +22,3 @@ pub fn random_token(length: usize) -> Result<String> {
 pub fn random_challenge(length: usize) -> Result<Vec<u8>> {
     random_bytes(length)
 }
-

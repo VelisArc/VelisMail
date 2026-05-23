@@ -35,4 +35,3 @@ impl StorageEncryption {
         self.key.decrypt(ciphertext, None)
     }
 }
-

@@ -33,7 +33,7 @@ thiserror = "1.0"
 futures = "0.3"
 
 # Database
-sqlx = { version = "0.7", features = ["runtime-tokio", "tls-rustls", "postgres", "migrate", "uuid", "chrono", "json"] }
+sqlx = { version = "0.8", features = ["runtime-tokio", "tls-rustls", "postgres", "migrate", "uuid", "chrono", "json"] }
 redis = { version = "0.25", features = ["tokio-comp", "cluster"] }
 
 # Crypto & Security
@@ -43,7 +43,7 @@ jsonwebtoken = "9.2"
 zeroize = "1.7"
 
 # Mail protocols
-lettre = "0.11"
+lettre = { version = "0.11", default-features = false, features = ["builder", "hostname", "pool", "smtp-transport", "rustls-tls"] }
 imap = "2.4"
 
 # Storage
@@ -63,7 +63,7 @@ tower-http = { version = "0.5", features = ["trace", "cors", "limit"] }
 tower = { version = "0.5", features = ["limit"] }
 
 # HTTP Client
-reqwest = { version = "0.12", features = ["json", "rustls-tls"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 
 # Rate limiting
 governor = "0.6"

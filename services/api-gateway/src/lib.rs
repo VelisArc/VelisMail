@@ -69,9 +69,13 @@ fn build_cors_layer(frontend_url: &str) -> tower_http::cors::CorsLayer {
         .collect();
 
     if origins.is_empty() {
-        tracing::warn!("No valid CORS origins parsed from FRONTEND_URL — falling back to permissive");
+        tracing::warn!(
+            "No valid CORS origins parsed from FRONTEND_URL — falling back to permissive"
+        );
         return CorsLayer::new()
-            .allow_origin(AllowOrigin::exact(HeaderValue::from_static("https://velismail.online")))
+            .allow_origin(AllowOrigin::exact(HeaderValue::from_static(
+                "https://velismail.online",
+            )))
             .allow_methods(methods)
             .allow_headers(vec![
                 axum::http::header::AUTHORIZATION,

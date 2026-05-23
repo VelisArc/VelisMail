@@ -147,8 +147,7 @@ async fn send_otp_email(
     if let Some(api_key) = state.config.platform_resend_api_key.as_deref() {
         let from = format!(
             "{} <{}>",
-            state.config.otp_from_name,
-            state.config.otp_from_email
+            state.config.otp_from_name, state.config.otp_from_email
         );
         let response = reqwest::Client::new()
             .post("https://api.resend.com/emails")
@@ -230,20 +229,18 @@ async fn send_otp_email(
 
     let transport = transport_builder.credentials(credentials).build();
 
-    transport
-        .send(&message)
-        .map_err(|err| {
-            tracing::error!(
-                "otp smtp send failed via {}:{} as {} from {} to {}: {}",
-                state.config.smtp_host,
-                state.config.smtp_port,
-                state.config.smtp_username,
-                state.config.otp_from_email,
-                email,
-                err
-            );
-            StatusCode::BAD_GATEWAY
-        })?;
+    transport.send(&message).map_err(|err| {
+        tracing::error!(
+            "otp smtp send failed via {}:{} as {} from {} to {}: {}",
+            state.config.smtp_host,
+            state.config.smtp_port,
+            state.config.smtp_username,
+            state.config.otp_from_email,
+            email,
+            err
+        );
+        StatusCode::BAD_GATEWAY
+    })?;
 
     Ok(())
 }
@@ -537,11 +534,13 @@ async fn login_password_inner(
         }
         return Err(StatusCode::UNAUTHORIZED);
     };
-    let user_id: Uuid = row.try_get("id").map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    let tenant_id: Uuid = row
-        .try_get("tenant_id")
-        .unwrap_or_else(|_| Uuid::nil());
-    let email: String = row.try_get("email").map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let user_id: Uuid = row
+        .try_get("id")
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let tenant_id: Uuid = row.try_get("tenant_id").unwrap_or_else(|_| Uuid::nil());
+    let email: String = row
+        .try_get("email")
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     let password_hash: Option<String> = row.try_get("password_hash").ok();
 
     let stored = password_hash.ok_or(StatusCode::UNAUTHORIZED)?;
@@ -696,7 +695,9 @@ pub async fn send_otp(
             .map(|value| value.trim().to_lowercase())
             .filter(|value| !value.is_empty())
             .ok_or(StatusCode::BAD_REQUEST)?;
-        let display_name: String = row.try_get("display_name").map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        let display_name: String = row
+            .try_get("display_name")
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
         (recovery_email, display_name)
     } else {
         let normalized_email = requested_email.ok_or(StatusCode::BAD_REQUEST)?;
@@ -712,7 +713,10 @@ pub async fn send_otp(
 
     reserve_daily_otp_send(&state, &normalized_email, &purpose).await?;
 
-    let otp = format!("{:06}", (uuid::Uuid::new_v4().as_u128() % 900_000) + 100_000);
+    let otp = format!(
+        "{:06}",
+        (uuid::Uuid::new_v4().as_u128() % 900_000) + 100_000
+    );
     let salt = Uuid::new_v4().to_string();
     let now = chrono::Utc::now().timestamp();
     let exp = now + state.config.otp_ttl_seconds;
@@ -778,7 +782,8 @@ pub async fn verify_otp(
         return Err(StatusCode::UNAUTHORIZED);
     }
 
-    let verification_email = if purpose == "password_reset" && token.claims.sub != normalized_email {
+    let verification_email = if purpose == "password_reset" && token.claims.sub != normalized_email
+    {
         let row = sqlx::query(
             "SELECT recovery_email
              FROM users
@@ -872,7 +877,9 @@ pub async fn reset_password(
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
     .ok_or(StatusCode::NOT_FOUND)?;
 
-    let user_id: Uuid = row.try_get("id").map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let user_id: Uuid = row
+        .try_get("id")
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     let recovery_email: Option<String> = row.try_get("recovery_email").ok();
     let normalized_recovery_email = recovery_email
         .map(|value| value.trim().to_lowercase())
@@ -917,7 +924,9 @@ pub async fn change_password(
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
     .ok_or(StatusCode::NOT_FOUND)?;
 
-    let user_id: Uuid = row.try_get("id").map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let user_id: Uuid = row
+        .try_get("id")
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     let stored_hash: Option<String> = row.try_get("password_hash").ok();
     let stored_hash = stored_hash.ok_or(StatusCode::UNAUTHORIZED)?;
     if !verify_password(&request.current_password, &stored_hash) {
@@ -961,7 +970,9 @@ pub async fn refresh_token(
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     let row = row.ok_or(StatusCode::UNAUTHORIZED)?;
-    let user_id: Uuid = row.try_get("user_id").map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let user_id: Uuid = row
+        .try_get("user_id")
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     let user = sqlx::query("SELECT email, tenant_id FROM users WHERE id = $1")
         .bind(user_id)
@@ -969,7 +980,9 @@ pub async fn refresh_token(
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
         .ok_or(StatusCode::UNAUTHORIZED)?;
-    let email: String = user.try_get("email").map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let email: String = user
+        .try_get("email")
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     let tenant_id: Uuid = user.try_get("tenant_id").unwrap_or_else(|_| Uuid::nil());
 
     let access_token = state
@@ -1049,15 +1062,29 @@ pub async fn get_current_user(
     })?
     .ok_or(StatusCode::NOT_FOUND)?;
 
-    let id: Uuid = user.try_get("id").map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    let tenant_id: Uuid = user.try_get("tenant_id").map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    let email: String = user.try_get("email").map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let id: Uuid = user
+        .try_get("id")
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let tenant_id: Uuid = user
+        .try_get("tenant_id")
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let email: String = user
+        .try_get("email")
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     let recovery_email: Option<String> = user.try_get("recovery_email").ok();
-    let display_name: String = user.try_get("display_name").map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    let status: String = user.try_get("status").map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let display_name: String = user
+        .try_get("display_name")
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let status: String = user
+        .try_get("status")
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     let settings: Option<serde_json::Value> = user.try_get("settings").ok();
-    let created_at: chrono::DateTime<chrono::Utc> = user.try_get("created_at").map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    let updated_at: chrono::DateTime<chrono::Utc> = user.try_get("updated_at").map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let created_at: chrono::DateTime<chrono::Utc> = user
+        .try_get("created_at")
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let updated_at: chrono::DateTime<chrono::Utc> = user
+        .try_get("updated_at")
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     let last_login: Option<chrono::DateTime<chrono::Utc>> = user.try_get("last_login").ok();
 
     Ok(Json(json!({
@@ -1192,7 +1219,11 @@ pub async fn revoke_other_sessions(
     .execute(&state.db)
     .await
     .map_err(|err| {
-        tracing::error!("revoke_other_sessions failed for user {}: {}", claims.sub.0, err);
+        tracing::error!(
+            "revoke_other_sessions failed for user {}: {}",
+            claims.sub.0,
+            err
+        );
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
 
@@ -1219,7 +1250,11 @@ pub async fn register_device(
     // middleware is wired, just acknowledge the request.
     tracing::debug!(
         "register_device {} ({} on {}/{} via {})",
-        device_id, req.device_name, req.os, req.platform, req.browser
+        device_id,
+        req.device_name,
+        req.os,
+        req.platform,
+        req.browser
     );
     // Touch state so the unused-var warning stays clean.
     let _ = &state.db;
