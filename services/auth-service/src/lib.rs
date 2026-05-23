@@ -9,6 +9,8 @@ pub async fn run_service() -> anyhow::Result<()> {
     let config = config::AuthConfig::from_env()?;
     let state = state::AuthState::new(config.clone()).await?;
 
+    sqlx::migrate!("./migrations").run(&state.db).await?;
+
     let protected_routes = axum::Router::new()
         .route("/me", axum::routing::get(handlers::get_current_user))
         .route("/account", axum::routing::patch(handlers::update_account))
