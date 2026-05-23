@@ -1,4 +1,4 @@
-import { LogOut, Mail, Layers, Server, Globe, Inbox, Users, Shield, BarChart3, Activity, Settings, CreditCard, Crown, Plus, Sun, Moon, User } from 'lucide-react';
+import { LogOut, Mail, Layers, Server, Globe, Inbox, Users, Shield, BarChart3, Activity, Settings, CreditCard, Crown, Plus, User } from 'lucide-react';
 import type { User as UserType } from '../../api/client';
 import { BIZ_FOLDERS } from './constants';
 import type { BizTab, BizFolder } from './constants';
@@ -10,8 +10,6 @@ interface SidebarProps {
   setActiveFolder: (f: string) => void;
   onCompose: () => void;
   user: UserType | null;
-  themeMode: string;
-  toggleTheme: () => void;
   onLogout: () => void;
   sidebarOpen: boolean;
   setSidebarOpen: (open: boolean) => void;
@@ -27,8 +25,6 @@ export default function Sidebar({
   setActiveFolder,
   onCompose,
   user,
-  themeMode,
-  toggleTheme,
   onLogout,
   sidebarOpen,
   setSidebarOpen,
@@ -204,10 +200,6 @@ export default function Sidebar({
         </nav>
 
         <div className="sidebar-bottom">
-          <button type="button" className="btn btn-ghost btn-sm sidebar-theme-btn" onClick={toggleTheme}>
-            {themeMode === 'dark' ? <Sun size={14} /> : <Moon size={14} />}
-            {themeMode === 'dark' ? 'Light' : 'Dark'}
-          </button>
           <div className="sidebar-user-info">
             <div className="avatar avatar-sm">
               {user?.email?.charAt(0).toUpperCase() || <User size={14} />}

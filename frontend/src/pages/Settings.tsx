@@ -3,13 +3,13 @@ import { Navigate, useNavigate, Link } from 'react-router-dom';
 import {
   Shield, ArrowLeft, CheckCircle2, AlertCircle,
   RefreshCw, User as UserIcon, Lock, Mail, Trash2,
-  Sun, Moon, LogOut, Monitor, Smartphone,
+  LogOut,
 } from 'lucide-react';
 import { auth, isBusinessSetupReady, type ActiveSession, type User } from '../api/client';
 import LoadingSpinner from '../components/LoadingSpinner';
 import './Settings.css';
 
-type Tab = 'profile' | 'security' | 'appearance' | 'account';
+type Tab = 'profile' | 'security' | 'account';
 
 export default function SettingsPage() {
   const navigate = useNavigate();
@@ -264,22 +264,9 @@ export default function SettingsPage() {
     }
   };
 
-  const setTheme = (theme: 'light' | 'dark' | 'system') => {
-    if (theme === 'system') {
-      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-      document.documentElement.setAttribute('data-theme', prefersDark ? 'dark' : 'light');
-      localStorage.removeItem('velismail_theme');
-    } else {
-      document.documentElement.setAttribute('data-theme', theme);
-      localStorage.setItem('velismail_theme', theme);
-    }
-    showToast(`Theme set to ${theme}`);
-  };
-
   if (!user) return <Navigate to="/login" replace />;
   if (!isBusinessSetupReady(user)) return <Navigate to="/business-setup" replace />;
 
-  const currentTheme = localStorage.getItem('velismail_theme') || 'light';
   const primaryMailbox = user.businessMailboxAddress || user.email;
 
   return (
@@ -308,9 +295,7 @@ export default function SettingsPage() {
           <button className={`tab-btn ${activeTab === 'security' ? 'active' : ''}`} onClick={() => setActiveTab('security')}>
             <Lock size={18} /> Security
           </button>
-          <button className={`tab-btn ${activeTab === 'appearance' ? 'active' : ''}`} onClick={() => setActiveTab('appearance')}>
-            <Sun size={18} /> Appearance
-          </button>
+
           <button className={`tab-btn ${activeTab === 'account' ? 'active' : ''}`} onClick={() => setActiveTab('account')}>
             <Mail size={18} /> Account
           </button>
@@ -444,67 +429,6 @@ export default function SettingsPage() {
               </div>
             </div>
           )}
-
-          {activeTab === 'appearance' && (
-            <div className="animate-fade">
-              <div className="settings-section-header">
-                <h2>Appearance</h2>
-                <p>Customize how VelisMail looks on your device</p>
-              </div>
-              <div className="glass-card appearance-card">
-                <h3><Sun size={18} /> Theme</h3>
-                <p>Choose your preferred color scheme</p>
-                <div className="theme-options">
-                  <button
-                    className={`theme-option ${currentTheme === 'light' ? 'active' : ''}`}
-                    onClick={() => setTheme('light')}
-                  >
-                    <Monitor size={24} />
-                    <span>Light</span>
-                  </button>
-                  <button
-                    className={`theme-option ${currentTheme === 'dark' ? 'active' : ''}`}
-                    onClick={() => setTheme('dark')}
-                  >
-                    <Moon size={24} />
-                    <span>Dark</span>
-                  </button>
-                  <button
-                    className={`theme-option ${currentTheme === 'system' ? 'active' : ''}`}
-                    onClick={() => setTheme('system')}
-                  >
-                    <Smartphone size={24} />
-                    <span>System</span>
-                  </button>
-                </div>
-              </div>
-              <div className="glass-card appearance-card">
-                <h3><Sun size={18} /> Accent Color</h3>
-                <p>Customize the primary color used throughout the app</p>
-                <div className="accent-options">
-                  {[
-                    { name: 'Purple', value: '#8b5cf6' },
-                    { name: 'Rose', value: '#f43f5e' },
-                    { name: 'Amber', value: '#f59e0b' },
-                  ].map(color => (
-                    <button
-                      key={color.value}
-                      className="accent-option"
-                      style={{ '--accent-preview': color.value } as React.CSSProperties}
-                      title={color.name}
-                      onClick={() => {
-                        document.documentElement.style.setProperty('--primary', color.value);
-                        document.documentElement.style.setProperty('--primary-400', color.value);
-                        localStorage.setItem('velismail-accent', color.value);
-                        showToast(`Accent color changed to ${color.name}`);
-                      }}
-                    />
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
-
           {activeTab === 'account' && (
             <div className="animate-fade">
               <div className="settings-section-header">

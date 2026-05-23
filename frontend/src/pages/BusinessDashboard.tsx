@@ -93,7 +93,6 @@ export default function BusinessDashboard() {
   const [adminStatusFilter, setAdminStatusFilter] = useState('all');
   const [adminRiskFilter, setAdminRiskFilter] = useState('all');
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [themeMode, setThemeMode] = useState(() => localStorage.getItem('velismail_theme') || 'light');
   const [inviteOpen, setInviteOpen] = useState(false);
   const [inviteName, setInviteName] = useState('');
   const [inviteEmail, setInviteEmail] = useState('');
@@ -122,15 +121,6 @@ export default function BusinessDashboard() {
   const [domainVerifyProviderRecords, setDomainVerifyProviderRecords] = useState<Record<string, string>[]>([]);
   const [copiedField, setCopiedField] = useState<string | null>(null);
   useEffect(() => {
-    setThemeMode(localStorage.getItem('velismail_theme') || 'light');
-  }, []);
-
-  useEffect(() => {
-    document.documentElement.setAttribute('data-theme', themeMode);
-    localStorage.setItem('velismail_theme', themeMode);
-  }, [themeMode]);
-
-  useEffect(() => {
     updateNavigation({ activeTab: activeBizTab, activeFolder });
   }, [activeBizTab, activeFolder, updateNavigation]);
 
@@ -138,8 +128,6 @@ export default function BusinessDashboard() {
     setToast({ msg, type });
     setTimeout(() => setToast(null), 3000);
   };
-
-  const toggleTheme = () => setThemeMode(t => t === 'dark' ? 'light' : 'dark');
 
   const handleLogout = () => { auth.logout(); navigate('/login'); };
   const openComposeWith = (to = '', subject = '', body = '') => {
@@ -280,7 +268,7 @@ export default function BusinessDashboard() {
     teamFilter, setTeamFilter, auditFilter, setAuditFilter, adminSearch, setAdminSearch,
     adminPlanFilter, setAdminPlanFilter, adminStatusFilter, setAdminStatusFilter,
     adminRiskFilter, setAdminRiskFilter, sidebarOpen, setSidebarOpen, user,
-    themeMode, setThemeMode, toggleTheme, activeDomainName,
+    activeDomainName,
     hasRoleAccess, canAccessPlatformAdmin, refreshDomains, refreshTeam, refreshQueue,
     refreshAudit, refreshTemplates, refreshMailboxes, refreshGroups, refreshConnectionUsage,
     handleLogout, handleSendEmail, openComposeWith, copyToClipboard,
@@ -311,7 +299,7 @@ export default function BusinessDashboard() {
       <Sidebar
         activeBizTab={activeBizTab} setActiveBizTab={setActiveBizTab}
         activeFolder={activeFolder} setActiveFolder={setActiveFolder}
-        onCompose={() => openComposeWith()} user={user} themeMode={themeMode} toggleTheme={toggleTheme}
+        onCompose={() => openComposeWith()} user={user}
         onLogout={() => setShowLogoutConfirm(true)} sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen}
         hasRoleAccess={hasRoleAccess} canAccessPlatformAdmin={canAccessPlatformAdmin}
         onShowDomain={() => { setActiveBizTab('domains'); setSidebarOpen(false); }}

@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import {
   ArrowRight,
   CheckCircle2,
@@ -19,8 +19,6 @@ import {
   Users,
   Settings,
   ChevronDown,
-  Sun,
-  Moon,
   ArrowUp,
 } from 'lucide-react';
 import { auth, fetchApiResponse, isBusinessSetupReady } from '../api/client';
@@ -112,22 +110,11 @@ function saveOfflineLead(key: string, payload: Record<string, string>) {
   localStorage.setItem(key, JSON.stringify(existing.slice(0, 25)));
 }
 
-function useTheme() {
-  const [theme, setTheme] = useState(() => localStorage.getItem('velismail_theme') || 'light');
-  useEffect(() => {
-    document.documentElement.setAttribute('data-theme', theme);
-    localStorage.setItem('velismail_theme', theme);
-  }, [theme]);
-  const toggle = useCallback(() => setTheme((t) => (t === 'dark' ? 'light' : 'dark')), []);
-  return { theme, toggle };
-}
-
 export default function Home() {
   const [user] = useState(auth.getSession());
   const scrolled = useScrollPosition();
   const { visible: showScrollTop, scrollToTop } = useScrollToTop();
   const animationRef = useIntersectionObserver();
-  const { theme, toggle: toggleTheme } = useTheme();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [openFaq, setOpenFaq] = useState<number | null>(null);
   const [feedbackForm, setFeedbackForm] = useState({ name: '', email: '', type: 'suggestion', message: '' });
@@ -216,14 +203,6 @@ export default function Home() {
                 </Link>
               </div>
             )}
-            <button
-              type="button"
-              className="btn btn-ghost btn-sm nav-theme-toggle"
-              onClick={toggleTheme}
-              aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
-            >
-              {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
-            </button>
           </div>
         </div>
       </nav>
@@ -516,13 +495,6 @@ export default function Home() {
               <div className="footer-link-list">
                 <a href="#feedback" className="footer-link">Feedback</a>
                 <a href="mailto:support@velismail.online" className="footer-link">Support</a>
-                <button
-                  type="button"
-                  className="footer-link"
-                  onClick={toggleTheme}
-                >
-                  {theme === 'dark' ? 'Light Mode' : 'Dark Mode'}
-                </button>
               </div>
             </div>
           </div>

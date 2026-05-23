@@ -108,9 +108,6 @@ export interface DashboardState {
   sidebarOpen: boolean;
   setSidebarOpen: (o: boolean) => void;
   user: User | null;
-  themeMode: string;
-  setThemeMode: (t: string) => void;
-  toggleTheme: () => void;
   activeDomainName: string;
   hasRoleAccess: (tab: BizTab) => boolean;
   canAccessPlatformAdmin: boolean;

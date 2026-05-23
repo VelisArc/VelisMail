@@ -1770,30 +1770,4 @@ export const signatures = {
   },
 };
 
-// ---- Theme Functions ----
-export const theme = {
-  get(): 'light' | 'dark' {
-    return loadUserDB<'light' | 'dark'>(STORAGE_KEYS.theme, 'light');
-  },
 
-  set(mode: 'light' | 'dark') {
-    saveUserDB(STORAGE_KEYS.theme, mode);
-    document.documentElement.setAttribute('data-theme', mode);
-  },
-
-  toggle(): 'light' | 'dark' {
-    const current = this.get();
-    const next = current === 'light' ? 'dark' : 'light';
-    this.set(next);
-    return next;
-  },
-
-  init() {
-    let mode = this.get();
-    if (!localStorage.getItem(STORAGE_KEYS.theme)) {
-      mode = 'light';
-      this.set(mode);
-    }
-    document.documentElement.setAttribute('data-theme', mode);
-  },
-};

@@ -529,10 +529,6 @@
   overflow: hidden;
 }
 
-.sidebar-theme-btn {
-  width: 100%;
-}
-
 .sidebar-logout {
   flex-shrink: 0;
 }

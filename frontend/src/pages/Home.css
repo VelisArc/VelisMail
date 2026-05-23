@@ -211,12 +211,6 @@
     margin-top: auto;
   }
 
-  .nav-theme-toggle {
-    position: absolute;
-    top: var(--space-8);
-    right: var(--space-8);
-  }
-}
 
 /* Mobile overlay backdrop */
 .nav-overlay {
@@ -857,17 +851,6 @@
   background: rgba(59, 130, 246, 0.08);
   border: 1px solid rgba(59, 130, 246, 0.15);
   color: var(--info-500);
-}
-
-[data-theme="dark"] .inline-alert.success {
-  background: rgba(34, 197, 94, 0.08);
-  border-color: rgba(34, 197, 94, 0.15);
-  color: var(--success-400);
-}
-
-[data-theme="dark"] .inline-alert.error {
-  background: rgba(239, 68, 68, 0.08);
-  border-color: rgba(239, 68, 68, 0.15);
 }
 
 /* ─── Animations ─── */

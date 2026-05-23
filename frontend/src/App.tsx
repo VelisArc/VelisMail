@@ -92,6 +92,9 @@ const router = createBrowserRouter([
 ]);
 
 function App() {
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', 'light');
+  }, []);
   return (
     <ErrorBoundary>
       <RouterProvider router={router} />

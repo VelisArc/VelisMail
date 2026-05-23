@@ -21,7 +21,6 @@ export const STORAGE_KEYS = {
   businessQueue: 'velismail_business_queue',
   businessAudit: 'velismail_business_audit',
   contacts: 'velismail_contacts',
-  theme: 'velismail_theme',
   signatures: 'velismail_signatures',
 };
 
@@ -29,7 +28,6 @@ export const TEAM_INVITES_KEY = 'velismail_team_access_invites';
 
 export const DURABLE_STORAGE_KEYS = new Set<string>([
   STORAGE_KEYS.session,
-  STORAGE_KEYS.theme,
   STORAGE_KEYS.users,
   STORAGE_KEYS.emails,
   STORAGE_KEYS.domains,
