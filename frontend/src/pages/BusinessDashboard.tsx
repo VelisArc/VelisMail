@@ -186,7 +186,7 @@ export default function BusinessDashboard() {
 
   const refreshSignatures = useCallback(() => setSignaturesList(signatures.getAll()), []);
   const refreshContacts = useCallback(() => setContactsList(contacts.getAll()), []);
-  const refreshSessions = useCallback(async () => { try { const res = await auth.listSessions(); if (res.success) setActiveSessions(res.sessions); } catch {} }, []);
+  const refreshSessions = useCallback(async () => { try { const res = await auth.listSessions(); if (res.success) setActiveSessions(res.sessions); } catch { /* ignore */ } }, []);
 
   useEffect(() => { refreshTeam(); refreshQueue(); refreshAudit(); refreshTemplates(); refreshConnectionUsage(); }, [activeDomainName, refreshTeam, refreshQueue, refreshAudit, refreshTemplates, refreshConnectionUsage]);
 
