@@ -15,9 +15,14 @@ const MIGRATIONS: &[(&str, &str)] = &[
 
 async fn run_migrations(db: &sqlx::PgPool) -> anyhow::Result<()> {
     for (version, sql) in MIGRATIONS {
-        for statement in sql.split(';') {
-            let trimmed = statement.trim();
-            if !trimmed.is_empty() && !trimmed.starts_with("--") {
+        let clean: String = sql
+            .lines()
+            .filter(|l| !l.trim().starts_with("--"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        for stmt in clean.split(';') {
+            let trimmed = stmt.trim();
+            if !trimmed.is_empty() {
                 sqlx::query(trimmed).execute(db).await?;
             }
         }
