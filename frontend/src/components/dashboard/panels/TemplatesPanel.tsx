@@ -9,7 +9,7 @@ interface TemplatesPanelProps {
 export default function TemplatesPanel({ state }: TemplatesPanelProps) {
   return (
     <div className="dash-panel">
-      <div className="panel-header"><button className="btn btn-ghost btn-icon sidebar-toggle" onClick={() => state.setSidebarOpen(true)}><Menu size={20} /></button><h3><Layers size={18} /> Templates</h3><button className="btn btn-primary btn-sm" onClick={() => { state.setTemplateEditorOpen(true); state.setTemplateName(''); state.setTemplateSubject(''); state.setTemplateBody(''); }}><Plus size={14} /> New Template</button></div>
+      <div className="panel-header"><button className="btn btn-ghost btn-icon sidebar-toggle" onClick={() => state.setSidebarOpen(true)}><Menu size={16} /></button><h3><Layers size={16} /> Templates</h3><button className="btn btn-primary btn-sm" onClick={() => { state.setTemplateEditorOpen(true); state.setTemplateName(''); state.setTemplateSubject(''); state.setTemplateBody(''); }}><Plus size={12} /> New Template</button></div>
       <input className="input mb-16" placeholder="Search templates..." value={state.templateSearch} onChange={e => state.setTemplateSearch(e.target.value)} />
       <div className="templates-grid">
         {state.templates.filter(t => t.name.toLowerCase().includes(state.templateSearch.toLowerCase())).map(t => (

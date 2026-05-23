@@ -42,7 +42,7 @@ function InviteModal({ state }: { state: DashboardState }) {
   return (
     <div className="modal-overlay" onClick={() => { state.setInviteOpen(false); }}>
       <div className="biz-form-modal glass" onClick={e => e.stopPropagation()}>
-        <div className="compose-header"><h3><UserCheck size={16} /> Invite Team Member</h3><button className="btn btn-ghost btn-icon" onClick={() => { state.setInviteOpen(false); }}><X size={18} /></button></div>
+        <div className="compose-header"><h3><UserCheck size={16} /> Invite Team Member</h3><button className="btn btn-ghost btn-icon" onClick={() => { state.setInviteOpen(false); }}><X size={16} /></button></div>
         {!state.issuedInvite ? (
           <div className="invite-form">
             <input className="input" placeholder="Full name" value={state.inviteName} onChange={e => state.setInviteName(e.target.value)} />
@@ -57,7 +57,7 @@ function InviteModal({ state }: { state: DashboardState }) {
           </div>
         ) : (
           <div className="invite-success">
-            <CheckCircle2 size={40} className="text-success invite-success-icon" />
+            <CheckCircle2 size={32} className="text-success invite-success-icon" />
             <p className="text-sm">Share this link with your team member:</p>
             <div className="invite-link-row">
               <input className="input" readOnly value={state.issuedInvite!.token} onClick={e => (e.target as HTMLInputElement).select()} />
@@ -76,7 +76,7 @@ function TemplateEditorModal({ state }: { state: DashboardState }) {
   return (
     <div className="modal-overlay" onClick={() => state.setTemplateEditorOpen(false)}>
       <div className="biz-form-modal glass" onClick={e => e.stopPropagation()}>
-        <div className="compose-header"><h3><Layers size={16} /> {state.previewTemplate ? 'Template Preview' : (state.templateName ? 'Edit Template' : 'New Template')}</h3><button className="btn btn-ghost btn-icon" onClick={() => { state.setTemplateEditorOpen(false); state.setPreviewTemplate(null); }}><X size={18} /></button></div>
+        <div className="compose-header"><h3><Layers size={16} /> {state.previewTemplate ? 'Template Preview' : (state.templateName ? 'Edit Template' : 'New Template')}</h3><button className="btn btn-ghost btn-icon" onClick={() => { state.setTemplateEditorOpen(false); state.setPreviewTemplate(null); }}><X size={16} /></button></div>
         {state.previewTemplate ? (
           <div className="template-preview-body"><h4>{state.previewTemplate.name}</h4><p className="text-sm text-muted">{state.previewTemplate.subject}</p><div className="reader-body template-preview-content">{state.previewTemplate.body}</div></div>
         ) : (
@@ -97,7 +97,7 @@ function AdminUserModal({ state }: { state: DashboardState }) {
   return (
     <div className="modal-overlay" onClick={() => state.setSelectedAdminUser(null)}>
       <div className="biz-form-modal glass animate-scale" onClick={e => e.stopPropagation()}>
-        <div className="compose-header"><h3><UserCheck size={16} /> {state.selectedAdminUser.user.displayName || state.selectedAdminUser.user.email}</h3><button className="btn btn-ghost btn-icon" onClick={() => state.setSelectedAdminUser(null)}><X size={18} /></button></div>
+        <div className="compose-header"><h3><UserCheck size={16} /> {state.selectedAdminUser.user.displayName || state.selectedAdminUser.user.email}</h3><button className="btn btn-ghost btn-icon" onClick={() => state.setSelectedAdminUser(null)}><X size={16} /></button></div>
         <div className="detail-grid-2">
           {Object.entries({ Email: state.selectedAdminUser.user.email, Role: state.selectedAdminUser.user.role || 'member', Plan: state.selectedAdminUser.plan, Status: state.selectedAdminUser.status, Domain: state.selectedAdminUser.domain, Created: formatRelative(state.selectedAdminUser.createdAt) }).map(([k, v]) => (
             <div key={k}><span className="text-xs text-muted">{k}</span><strong className="text-sm text-block">{v}</strong></div>
@@ -113,7 +113,7 @@ function DomainDetailsModal({ state, handleVerifyDomain }: { state: DashboardSta
   return (
     <div className="modal-overlay" onClick={() => state.setDomainDetails(null)}>
       <div className="biz-form-modal glass animate-scale" onClick={e => e.stopPropagation()}>
-        <div className="compose-header"><h3><Globe size={16} /> {state.domainDetails.domain}</h3><button className="btn btn-ghost btn-icon" onClick={() => state.setDomainDetails(null)}><X size={18} /></button></div>
+        <div className="compose-header"><h3><Globe size={16} /> {state.domainDetails.domain}</h3><button className="btn btn-ghost btn-icon" onClick={() => state.setDomainDetails(null)}><X size={16} /></button></div>
         <div className="detail-grid-2">
           <div><span className="text-xs text-muted">Status</span><strong className="text-sm text-block">{state.domainDetails.status}</strong></div>
           <div><span className="text-xs text-muted">Reputation</span><strong className="text-sm text-block">{state.domainDetails.reputation}/100</strong></div>
@@ -143,7 +143,7 @@ function MailboxDetailsModal({ state }: { state: DashboardState }) {
   return (
     <div className="modal-overlay" onClick={() => state.setMailboxDetails(null)}>
       <div className="biz-form-modal glass animate-scale" onClick={e => e.stopPropagation()}>
-        <div className="compose-header"><h3><Mail size={16} /> {state.mailboxDetails.displayName}</h3><button className="btn btn-ghost btn-icon" onClick={() => state.setMailboxDetails(null)}><X size={18} /></button></div>
+        <div className="compose-header"><h3><Mail size={16} /> {state.mailboxDetails.displayName}</h3><button className="btn btn-ghost btn-icon" onClick={() => state.setMailboxDetails(null)}><X size={16} /></button></div>
         <div className="detail-grid-2">
           <div><span className="text-xs text-muted">Address</span><strong className="text-sm text-block">{state.mailboxDetails.address}</strong></div>
           <div><span className="text-xs text-muted">Type</span><strong className="text-sm text-block">{state.mailboxDetails.kind}</strong></div>
@@ -164,7 +164,7 @@ function GroupDetailsModal({ state }: { state: DashboardState }) {
   return (
     <div className="modal-overlay" onClick={() => state.setGroupDetails(null)}>
       <div className="biz-form-modal glass animate-scale" onClick={e => e.stopPropagation()}>
-        <div className="compose-header"><h3><Users size={16} /> {state.groupDetails.name}</h3><button className="btn btn-ghost btn-icon" onClick={() => state.setGroupDetails(null)}><X size={18} /></button></div>
+        <div className="compose-header"><h3><Users size={16} /> {state.groupDetails.name}</h3><button className="btn btn-ghost btn-icon" onClick={() => state.setGroupDetails(null)}><X size={16} /></button></div>
         <div className="detail-grid-2">
           <div><span className="text-xs text-muted">Address</span><strong className="text-sm text-block">{state.groupDetails.address}</strong></div>
           <div><span className="text-xs text-muted">Members</span><strong className="text-sm text-block">{state.groupDetails.members.length}</strong></div>
@@ -211,7 +211,7 @@ function RoleChangeConfirmModal({ state, confirmRoleChangeStep }: { state: Dashb
       <div className="biz-form-modal glass animate-scale role-change-modal" onClick={e => e.stopPropagation()}>
         <div className="modal-body-center">
           <div className="modal-icon-warning">
-            <Shield size={28} />
+            <Shield size={24} />
           </div>
           <h3 className="role-change-title">{state.pendingRoleChange.step === 1 ? 'Review role change' : 'Final confirmation'}</h3>
           <p className="text-sm text-muted">
@@ -234,7 +234,7 @@ function ConfirmActionModal({ state }: { state: DashboardState }) {
       <div className="biz-form-modal glass animate-scale confirm-modal" onClick={e => e.stopPropagation()}>
         <div className="modal-body-center">
           <div className="modal-icon-danger">
-            <AlertTriangle size={28} />
+<AlertTriangle size={24} />
           </div>
           <h3 className="confirm-title">{state.confirmAction.title}</h3>
           <p className="text-sm text-muted">{state.confirmAction.message}</p>
@@ -255,7 +255,7 @@ function AdminStatusConfirmModal({ state }: { state: DashboardState }) {
       <div className="biz-form-modal glass animate-scale admin-status-modal" onClick={e => e.stopPropagation()}>
         <div className="modal-body-center">
           <div className="modal-icon-warning">
-            <Shield size={28} />
+            <Shield size={24} />
           </div>
           <h3 className="admin-status-title">
             {state.adminStatusConfirm.step === 1 ? 'Review status change' : `Confirm ${state.adminStatusConfirm.status === 'suspended' ? 'Suspend' : 'Reactivate'}`}
@@ -285,7 +285,7 @@ function DomainVerifyModal({ state, handleVerifyDomain }: { state: DashboardStat
   return (
     <div className="modal-overlay" onClick={() => state.setDomainVerifyOpen(false)}>
       <div className="biz-form-modal glass animate-scale domain-verify-modal" onClick={e => e.stopPropagation()}>
-        <div className="compose-header"><h3><CheckCircle2 size={16} /> Domain Verification</h3><button className="btn btn-ghost btn-icon" onClick={() => state.setDomainVerifyOpen(false)}><X size={18} /></button></div>
+        <div className="compose-header"><h3><CheckCircle2 size={16} /> Domain Verification</h3><button className="btn btn-ghost btn-icon" onClick={() => state.setDomainVerifyOpen(false)}><X size={16} /></button></div>
         <div className="domain-verify-body">
           {isVerifying && <div className="verify-loading-bar" />}
           {state.domainVerifySteps.map(step => (
@@ -325,7 +325,7 @@ function ToastNotification({ state }: { state: DashboardState }) {
   return (
     <div className="toast-container">
       <div className={`toast toast-${state.toast.type} toast-flex`}>
-        <CheckCircle2 size={18} />
+        <CheckCircle2 size={16} />
         {state.toast.msg}
       </div>
     </div>

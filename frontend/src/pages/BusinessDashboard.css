@@ -69,7 +69,7 @@
   width: 200px;
   display: flex;
   flex-direction: column;
-  background: linear-gradient(180deg, #ffffff 0%, #fbfcff 100%);
+   background: var(--bg-surface);
   border-right: 1px solid var(--border-primary);
   z-index: 40;
   overflow: hidden;
@@ -175,7 +175,7 @@
 }
 
 .side-nav-btn:hover {
-  background: #f3f6fb;
+  background: var(--bg-hover);
   color: var(--text-primary);
 }
 
@@ -214,7 +214,7 @@
 }
 
 .side-sub-btn:hover {
-  background: #f3f6fb;
+  background: var(--bg-hover);
   color: var(--text-primary);
 }
 
@@ -494,7 +494,7 @@
 }
 
 .mail-row:hover {
-  background: #f8fbff;
+  background: var(--bg-hover);
 }
 
 .mail-row.unread {
@@ -2046,6 +2046,18 @@
   margin-bottom: 16px;
 }
 
+.settings-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+
+.empty-state-sm {
+  padding: 16px 0;
+  text-align: center;
+}
+
 .connection-row {
   display: flex;
   align-items: center;
@@ -2158,7 +2170,7 @@
 }
 
 .mail-row-wrapper:hover .mail-row {
-  background: #f8fbff;
+  background: var(--bg-hover);
 }
 
 .bulk-bar {

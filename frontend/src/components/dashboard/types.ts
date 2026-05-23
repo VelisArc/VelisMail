@@ -8,6 +8,9 @@ import type {
   PlatformAdminUserRecord,
   User,
   TeamAccessInvite,
+  Signature,
+  Contact,
+  ActiveSession,
 } from '../../api/client';
 import type { BizTab } from './constants';
 
@@ -173,6 +176,39 @@ export interface DashboardState {
   setGroupMembers: (m: string) => void;
   copiedField: string | null;
   setCopiedField: (f: string | null) => void;
+
+  // Phase B — Settings expansion
+  signatures: Signature[];
+  setSignatures: (s: Signature[]) => void;
+  refreshSignatures: () => void;
+  contacts: Contact[];
+  setContacts: (c: Contact[]) => void;
+  refreshContacts: () => void;
+  contactsSearch: string;
+  setContactsSearch: (s: string) => void;
+  activeSessions: ActiveSession[];
+  setActiveSessions: (s: ActiveSession[]) => void;
+  refreshSessions: () => void;
+  signatureEditorOpen: boolean;
+  setSignatureEditorOpen: (o: boolean) => void;
+  signatureEditorName: string;
+  setSignatureEditorName: (n: string) => void;
+  signatureEditorContent: string;
+  setSignatureEditorContent: (c: string) => void;
+  editingSignatureId: string | null;
+  setEditingSignatureId: (id: string | null) => void;
+  contactEditorOpen: boolean;
+  setContactEditorOpen: (o: boolean) => void;
+  contactEditorName: string;
+  setContactEditorName: (n: string) => void;
+  contactEditorEmail: string;
+  setContactEditorEmail: (e: string) => void;
+  contactEditorPhone: string;
+  setContactEditorPhone: (p: string) => void;
+  contactEditorCompany: string;
+  setContactEditorCompany: (c: string) => void;
+  editingContactId: string | null;
+  setEditingContactId: (id: string | null) => void;
 }
 
 export interface DomainRecord {

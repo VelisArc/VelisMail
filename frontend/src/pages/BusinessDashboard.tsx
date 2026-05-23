@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
-import { auth, businessAudit, businessGroups, businessMailboxes, businessQueue, businessTeam, businessTemplates, connections, domains, isBusinessSetupReady, mail, platformAdmin, type BusinessAuditEntry, type BusinessGroup, type BusinessMailbox, type BusinessTeamMember, type BusinessTemplate, type ConnectionUsage, type CustomDomain, type Email, type PlatformAdminUserRecord, type DomainCheck, type TeamAccessInvite } from '../api/client';
+import { auth, businessAudit, businessGroups, businessMailboxes, businessQueue, businessTeam, businessTemplates, connections, domains, isBusinessSetupReady, mail, platformAdmin, signatures, contacts, type BusinessAuditEntry, type BusinessGroup, type BusinessMailbox, type BusinessTeamMember, type BusinessTemplate, type ConnectionUsage, type CustomDomain, type Email, type PlatformAdminUserRecord, type DomainCheck, type TeamAccessInvite, type Signature, type Contact, type ActiveSession } from '../api/client';
 import Sidebar from '../components/dashboard/Sidebar';
 import { ROLE_ALLOWED_TABS, type BizTab } from '../components/dashboard/constants';
 import EmailInbox from '../components/dashboard/EmailInbox';
@@ -122,6 +122,22 @@ export default function BusinessDashboard() {
   const [domainVerifySteps, setDomainVerifySteps] = useState<DomainHealth[]>([]);
   const [domainVerifyProviderRecords, setDomainVerifyProviderRecords] = useState<Record<string, string>[]>([]);
   const [copiedField, setCopiedField] = useState<string | null>(null);
+
+  // Phase B — Settings expansion
+  const [signaturesList, setSignaturesList] = useState<Signature[]>(() => signatures.getAll());
+  const [contactsList, setContactsList] = useState<Contact[]>(() => contacts.getAll());
+  const [contactsSearch, setContactsSearch] = useState('');
+  const [activeSessions, setActiveSessions] = useState<ActiveSession[]>([]);
+  const [signatureEditorOpen, setSignatureEditorOpen] = useState(false);
+  const [signatureEditorName, setSignatureEditorName] = useState('');
+  const [signatureEditorContent, setSignatureEditorContent] = useState('');
+  const [editingSignatureId, setEditingSignatureId] = useState<string | null>(null);
+  const [contactEditorOpen, setContactEditorOpen] = useState(false);
+  const [contactEditorName, setContactEditorName] = useState('');
+  const [contactEditorEmail, setContactEditorEmail] = useState('');
+  const [contactEditorPhone, setContactEditorPhone] = useState('');
+  const [contactEditorCompany, setContactEditorCompany] = useState('');
+  const [editingContactId, setEditingContactId] = useState<string | null>(null);
   useEffect(() => {
     updateNavigation({ activeTab: activeBizTab, activeFolder });
   }, [activeBizTab, activeFolder, updateNavigation]);
@@ -148,6 +164,14 @@ export default function BusinessDashboard() {
     }
   }, [activeBizTab, canAccessPlatformAdmin, hasRoleAccess]);
 
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'n') { e.preventDefault(); openComposeWith(); }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, []);
+
   const { data: emails = [], refetch } = useEmails(activeDomainName, activeFolder);
 
   const refreshDomains = () => setDomainsList(domains.getAll().map(toDomainRecord));
@@ -159,6 +183,10 @@ export default function BusinessDashboard() {
   const refreshGroups = useCallback(() => setDomainGroups(businessGroups.getByDomain(activeDomainName)), [activeDomainName]);
   const refreshConnectionUsage = useCallback(() => setConnectionUsage(connections.getUsage()), []);
   const refreshAdminUsers = useCallback(() => setAdminUsers(platformAdmin.getUsers()), []);
+
+  const refreshSignatures = useCallback(() => setSignaturesList(signatures.getAll()), []);
+  const refreshContacts = useCallback(() => setContactsList(contacts.getAll()), []);
+  const refreshSessions = useCallback(async () => { try { const res = await auth.listSessions(); if (res.success) setActiveSessions(res.sessions); } catch {} }, []);
 
   useEffect(() => { refreshTeam(); refreshQueue(); refreshAudit(); refreshTemplates(); refreshConnectionUsage(); }, [activeDomainName, refreshTeam, refreshQueue, refreshAudit, refreshTemplates, refreshConnectionUsage]);
 
@@ -310,6 +338,24 @@ export default function BusinessDashboard() {
     domainVerifyOpen, setDomainVerifyOpen, domainVerifySteps, setDomainVerifySteps,
     domainVerifyProviderRecords, setDomainVerifyProviderRecords,
     copiedField, setCopiedField,
+
+    signatures: signaturesList, setSignatures: setSignaturesList,
+    refreshSignatures,
+    contacts: contactsList, setContacts: setContactsList,
+    refreshContacts,
+    contactsSearch, setContactsSearch,
+    activeSessions, setActiveSessions,
+    refreshSessions,
+    signatureEditorOpen, setSignatureEditorOpen,
+    signatureEditorName, setSignatureEditorName,
+    signatureEditorContent, setSignatureEditorContent,
+    editingSignatureId, setEditingSignatureId,
+    contactEditorOpen, setContactEditorOpen,
+    contactEditorName, setContactEditorName,
+    contactEditorEmail, setContactEditorEmail,
+    contactEditorPhone, setContactEditorPhone,
+    contactEditorCompany, setContactEditorCompany,
+    editingContactId, setEditingContactId,
   };
 
   if (!user) return <Navigate to="/login" replace />;
@@ -334,6 +380,9 @@ export default function BusinessDashboard() {
             onArchive={(ids) => handleBulkAction('archive', ids)}
             onTrash={(ids) => handleBulkAction('trash', ids)}
             onReply={handleReply} onForward={handleForward}
+            onToggleRead={(id) => { mail.toggleRead(activeDomainName, id); refetch(); }}
+            onMarkSpam={(id) => { mail.markSpam(activeDomainName, id); refetch(); }}
+            onTogglePriority={(id) => { mail.togglePriority(id); refetch(); }}
           />
         )}
 

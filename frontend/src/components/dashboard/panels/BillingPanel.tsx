@@ -17,7 +17,7 @@ interface BillingPanelProps {
 export default function BillingPanel({ state, handleBuyPlan }: BillingPanelProps) {
   return (
     <div className="dash-panel">
-      <div className="panel-header"><button className="btn btn-ghost btn-icon sidebar-toggle" onClick={() => state.setSidebarOpen(true)}><Menu size={20} /></button><h3><CreditCard size={18} /> Billing & Premium</h3></div>
+      <div className="panel-header"><button className="btn btn-ghost btn-icon sidebar-toggle" onClick={() => state.setSidebarOpen(true)}><Menu size={16} /></button><h3><CreditCard size={16} /> Billing & Premium</h3></div>
       <div className="flex items-center gap-3 billing-toggle-bar">
         <span className="text-sm">Monthly</span>
         <button type="button" className={`toggle-switch ${state.annual ? 'active' : ''}`} onClick={() => state.setAnnual(!state.annual)}>

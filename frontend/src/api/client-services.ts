@@ -19,6 +19,9 @@ import {
   loadBusinessTemplates, saveBusinessTemplates,
   normalizeBusinessQueueEntry, loadBusinessQueue, saveBusinessQueue,
   loadBusinessAuditEntries, saveBusinessAuditEntries,
+  loadAutoReply, saveAutoReply,
+  loadLabels, saveLabels,
+  loadRules, saveRules,
   getSystemBusinessMailbox,
   normalizeBusinessMailboxEntry, normalizeBusinessGroupEntry,
   buildConnectionUsage,
@@ -43,7 +46,8 @@ import type {
   BusinessGroup, BusinessTeamMember, TeamAccessInvite, BusinessTemplate,
   BusinessMailQueueItem, BusinessAuditEntry, ConnectionUsage,
   PlatformAdminUserRecord, Email, OtpSendResponse, OtpVerifyResponse,
-  ActiveSession, Contact, Signature,
+  ActiveSession, Contact, Signature, AutoReply, Label, EmailRule,
+  EmailRuleCondition, EmailRuleAction,
 } from './types';
 import type { CreateTeamAccessInviteParams } from './client-core';
 
@@ -1816,6 +1820,69 @@ export const signatures = {
     const all = this.getAll();
     all.forEach(s => s.isDefault = s.id === id);
     saveUserDB(STORAGE_KEYS.signatures, all);
+  },
+};
+
+export const autoReply = {
+  get(): AutoReply {
+    return loadAutoReply();
+  },
+  set(data: AutoReply) {
+    saveAutoReply(data);
+  },
+  enable(subject: string, body: string, opts?: { startDate?: string; endDate?: string; onlyContacts?: boolean }) {
+    saveAutoReply({ enabled: true, subject, body, ...opts });
+  },
+  disable() {
+    const current = loadAutoReply();
+    saveAutoReply({ ...current, enabled: false });
+  },
+};
+
+export const labels = {
+  getAll(): Label[] {
+    return loadLabels();
+  },
+  add(name: string, color: string): Label {
+    const all = loadLabels();
+    const label: Label = { id: `lbl_${Math.random().toString(36).slice(2, 8)}`, name, color };
+    all.push(label);
+    saveLabels(all);
+    return label;
+  },
+  update(id: string, data: Partial<Label>) {
+    const all = loadLabels();
+    const idx = all.findIndex(l => l.id === id);
+    if (idx !== -1) { all[idx] = { ...all[idx], ...data }; saveLabels(all); }
+  },
+  remove(id: string) {
+    saveLabels(loadLabels().filter(l => l.id !== id));
+  },
+};
+
+export const rules = {
+  getAll(): EmailRule[] {
+    return loadRules();
+  },
+  add(name: string, conditions: EmailRuleCondition[], actions: EmailRuleAction[]): EmailRule {
+    const all = loadRules();
+    const rule: EmailRule = { id: `rule_${Math.random().toString(36).slice(2, 8)}`, name, conditions, actions, enabled: true };
+    all.push(rule);
+    saveRules(all);
+    return rule;
+  },
+  update(id: string, data: Partial<EmailRule>) {
+    const all = loadRules();
+    const idx = all.findIndex(r => r.id === id);
+    if (idx !== -1) { all[idx] = { ...all[idx], ...data }; saveRules(all); }
+  },
+  remove(id: string) {
+    saveRules(loadRules().filter(r => r.id !== id));
+  },
+  toggle(id: string) {
+    const all = loadRules();
+    const rule = all.find(r => r.id === id);
+    if (rule) { rule.enabled = !rule.enabled; saveRules(all); }
   },
 };
 

@@ -11,14 +11,14 @@ export default function DomainsPanel({ state, handleAddDomain, handleVerifyDomai
   return (
     <div className="dash-panel">
       <div className="panel-header">
-        <button className="btn btn-ghost btn-icon sidebar-toggle" onClick={() => state.setSidebarOpen(true)}><Menu size={20} /></button>
-        <h3><Globe size={18} /> Domains</h3>
-        <button className="btn btn-primary btn-sm" onClick={() => state.setShowAddDomain(!state.showAddDomain)}><Plus size={14} /> Add Domain</button>
+        <button className="btn btn-ghost btn-icon sidebar-toggle" onClick={() => state.setSidebarOpen(true)}><Menu size={16} /></button>
+        <h3><Globe size={16} /> Domains</h3>
+        <button className="btn btn-primary btn-sm" onClick={() => state.setShowAddDomain(!state.showAddDomain)}><Plus size={12} /> Add Domain</button>
       </div>
       {state.showAddDomain && (
         <div className="panel-inline-form">
           <input className="input" placeholder="example.com" value={state.newDomainInput} onChange={e => state.setNewDomainInput(e.target.value)} />
-          <button className="btn btn-primary" onClick={handleAddDomain}><Plus size={14} /> Add</button>
+          <button className="btn btn-primary" onClick={handleAddDomain}><Plus size={12} /> Add</button>
           <button className="btn btn-ghost" onClick={() => { state.setShowAddDomain(false); state.setNewDomainInput(''); }}>Cancel</button>
         </div>
       )}

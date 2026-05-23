@@ -177,7 +177,7 @@ export default function Sidebar({
               <span className="side-user-role">{user?.role || 'member'}</span>
             </div>
             <button type="button" className="btn btn-ghost btn-icon" onClick={onLogout} aria-label="Log out">
-              <LogOut size={15} />
+              <LogOut size={14} />
             </button>
           </div>
         </div>

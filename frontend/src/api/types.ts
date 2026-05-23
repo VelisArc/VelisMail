@@ -304,3 +304,37 @@ export type ApiJsonDetailedResult<T = unknown> = {
   data: T | null;
   rawText: string;
 };
+
+export type AutoReply = {
+  enabled: boolean;
+  subject: string;
+  body: string;
+  startDate?: string;
+  endDate?: string;
+  onlyContacts?: boolean;
+};
+
+export type Label = {
+  id: string;
+  name: string;
+  color: string;
+};
+
+export type EmailRuleCondition = {
+  field: 'from' | 'to' | 'subject' | 'body';
+  operator: 'contains' | 'equals' | 'startsWith' | 'endsWith';
+  value: string;
+};
+
+export type EmailRuleAction = {
+  type: 'move' | 'label' | 'star' | 'markRead' | 'forward' | 'delete';
+  value?: string;
+};
+
+export type EmailRule = {
+  id: string;
+  name: string;
+  conditions: EmailRuleCondition[];
+  actions: EmailRuleAction[];
+  enabled: boolean;
+};

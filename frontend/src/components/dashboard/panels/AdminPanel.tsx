@@ -22,7 +22,7 @@ export default function AdminPanel({ state }: AdminPanelProps) {
 
   return (
     <div className="dash-panel">
-      <div className="panel-header"><button className="btn btn-ghost btn-icon sidebar-toggle" onClick={() => state.setSidebarOpen(true)}><Menu size={20} /></button><h3><Crown size={18} /> Platform Admin</h3><button className="btn btn-ghost btn-sm" onClick={() => { state.setAdminUsers(platformAdmin.getUsers()); state.showToast('Refreshed'); }}><RefreshCcw size={14} /></button></div>
+      <div className="panel-header"><button className="btn btn-ghost btn-icon sidebar-toggle" onClick={() => state.setSidebarOpen(true)}><Menu size={20} /></button><h3><Crown size={16} /> Platform Admin</h3><button className="btn btn-ghost btn-sm" onClick={() => { state.setAdminUsers(platformAdmin.getUsers()); state.showToast('Refreshed'); }}><RefreshCcw size={12} /></button></div>
       <div className="admin-grid-4">
         {[ { label: 'Total Users', value: state.adminUsers.length }, { label: 'Active', value: state.adminUsers.filter(u => u.status === 'active').length }, { label: 'Suspended', value: state.adminUsers.filter(u => u.status === 'suspended').length }, { label: 'Paid Plans', value: state.adminUsers.filter(u => u.plan !== 'free').length }].map(s => (
           <div key={s.label} className="glass-card admin-stat"><strong className="queue-stat-value">{s.value}</strong><span className="text-muted text-sm">{s.label}</span></div>
@@ -47,11 +47,11 @@ export default function AdminPanel({ state }: AdminPanelProps) {
           <span className="badge badge-neutral">{u.plan}</span>
           <span className={`badge badge-${u.status === 'active' ? 'success' : 'danger'}`}>{u.status}</span>
           <div className="flex gap-1">
-            <button className="btn btn-ghost btn-sm" title="Change role" onClick={e => { e.stopPropagation(); const roles = ['admin', 'member', 'viewer']; const idx = roles.indexOf(u.user.role || 'member'); const next = roles[(idx + 1) % roles.length]; platformAdmin.updateUserRole(u.user.email, next as 'admin' | 'member' | 'viewer'); state.setAdminUsers(platformAdmin.getUsers()); state.showToast(`Role set to ${next}`); }}><Shield size={14} /></button>
+            <button className="btn btn-ghost btn-sm" title="Change role" onClick={e => { e.stopPropagation(); const roles = ['admin', 'member', 'viewer']; const idx = roles.indexOf(u.user.role || 'member'); const next = roles[(idx + 1) % roles.length]; platformAdmin.updateUserRole(u.user.email, next as 'admin' | 'member' | 'viewer'); state.setAdminUsers(platformAdmin.getUsers()); state.showToast(`Role set to ${next}`); }}><Shield size={12} /></button>
             <button className="btn btn-ghost btn-sm" onClick={e => { e.stopPropagation(); state.setAdminStatusConfirm({ record: u, status: u.status === 'active' ? 'suspended' : 'active', step: 1 }); }}>
               {u.status === 'active' ? 'Suspend' : 'Reactivate'}
             </button>
-            <button className="btn btn-ghost btn-sm btn-danger" title="Delete user" onClick={e => { e.stopPropagation(); if (confirm(`Delete user ${u.user.email}?`)) { platformAdmin.deleteUser(u.user.email); state.setAdminUsers(platformAdmin.getUsers()); state.showToast('User deleted'); } }}><Trash2 size={14} /></button>
+            <button className="btn btn-ghost btn-sm btn-danger" title="Delete user" onClick={e => { e.stopPropagation(); if (confirm(`Delete user ${u.user.email}?`)) { platformAdmin.deleteUser(u.user.email); state.setAdminUsers(platformAdmin.getUsers()); state.showToast('User deleted'); } }}><Trash2 size={12} /></button>
           </div>
         </div>
       ))}

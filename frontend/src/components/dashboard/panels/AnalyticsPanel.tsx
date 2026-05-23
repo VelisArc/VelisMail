@@ -8,7 +8,7 @@ interface AnalyticsPanelProps {
 export default function AnalyticsPanel({ state }: AnalyticsPanelProps) {
   return (
     <div className="dash-panel">
-      <div className="panel-header"><button className="btn btn-ghost btn-icon sidebar-toggle" onClick={() => state.setSidebarOpen(true)}><Menu size={20} /></button><h3><BarChart3 size={18} /> Analytics</h3><button className="btn btn-ghost btn-sm" onClick={state.refreshQueue}><RefreshCcw size={14} /></button></div>
+      <div className="panel-header"><button className="btn btn-ghost btn-icon sidebar-toggle" onClick={() => state.setSidebarOpen(true)}><Menu size={16} /></button><h3><BarChart3 size={16} /> Analytics</h3><button className="btn btn-ghost btn-sm" onClick={state.refreshQueue}><RefreshCcw size={12} /></button></div>
       <div className="analytics-grid">
         {[
           { label: 'Emails Sent', value: state.mailQueue.filter(i => i.status === 'sent').length, icon: Send },
@@ -19,7 +19,7 @@ export default function AnalyticsPanel({ state }: AnalyticsPanelProps) {
           { label: 'Audit Events', value: state.auditLog.length, icon: Activity },
         ].map(s => (
           <div key={s.label} className="glass-card analytics-stat">
-            <s.icon size={24} className="text-primary analytics-stat-icon" />
+            <s.icon size={18} className="text-primary analytics-stat-icon" />
             <strong className="analytics-stat-value">{s.value}</strong>
             <span className="text-muted text-sm">{s.label}</span>
           </div>

@@ -6,7 +6,7 @@ import type {
   BusinessGroup, BusinessTeamMember, TeamAccessInvite, BusinessTemplate,
   BusinessMailQueueItem, BusinessAuditEntry, ConnectionUsage,
   PlatformAdminUserRecord, Email,
-  ApiJsonDetailedResult,
+  ApiJsonDetailedResult, AutoReply, Label, EmailRule,
 } from './types';
 
 // ---- Local Storage DB ----
@@ -23,6 +23,9 @@ export const STORAGE_KEYS = {
   businessAudit: 'velismail_business_audit',
   contacts: 'velismail_contacts',
   signatures: 'velismail_signatures',
+  autoReply: 'velismail_auto_reply',
+  labels: 'velismail_labels',
+  rules: 'velismail_rules',
 };
 
 export const TEAM_INVITES_KEY = 'velismail_team_access_invites';
@@ -896,6 +899,30 @@ export function loadBusinessAuditEntries(): BusinessAuditEntry[] {
 
 export function saveBusinessAuditEntries(entries: BusinessAuditEntry[]) {
   saveUserDB(STORAGE_KEYS.businessAudit, entries);
+}
+
+export function loadAutoReply(): AutoReply {
+  return loadUserDB<AutoReply>(STORAGE_KEYS.autoReply, { enabled: false, subject: '', body: '', onlyContacts: false });
+}
+
+export function saveAutoReply(data: AutoReply) {
+  saveUserDB(STORAGE_KEYS.autoReply, data);
+}
+
+export function loadLabels(): Label[] {
+  return loadUserDB<Label[]>(STORAGE_KEYS.labels, []);
+}
+
+export function saveLabels(entries: Label[]) {
+  saveUserDB(STORAGE_KEYS.labels, entries);
+}
+
+export function loadRules(): EmailRule[] {
+  return loadUserDB<EmailRule[]>(STORAGE_KEYS.rules, []);
+}
+
+export function saveRules(entries: EmailRule[]) {
+  saveUserDB(STORAGE_KEYS.rules, entries);
 }
 
 export function buildConnectionUsage(type: 'database' | 'mail-provider', user: User, value: string, provider?: string): ConnectionUsage {

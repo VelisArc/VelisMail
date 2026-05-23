@@ -15,7 +15,7 @@ export default function TeamPanel({ state }: TeamPanelProps) {
 
   return (
     <div className="dash-panel">
-      <div className="panel-header"><button className="btn btn-ghost btn-icon sidebar-toggle" onClick={() => state.setSidebarOpen(true)}><Menu size={20} /></button><h3><Shield size={18} /> Team Access</h3><button className="btn btn-primary btn-sm" onClick={() => state.setInviteOpen(true)}><Plus size={14} /> Invite Member</button></div>
+      <div className="panel-header"><button className="btn btn-ghost btn-icon sidebar-toggle" onClick={() => state.setSidebarOpen(true)}><Menu size={20} /></button><h3><Shield size={16} /> Team Access</h3><button className="btn btn-primary btn-sm" onClick={() => state.setInviteOpen(true)}><Plus size={12} /> Invite Member</button></div>
       <div className="flex gap-2 panel-section">
         {['all', 'admin', 'member', 'viewer'].map(f => (
           <button key={f} className={`btn btn-sm ${state.teamFilter === f ? 'btn-primary' : 'btn-ghost'}`} onClick={() => state.setTeamFilter(f)}>
@@ -32,10 +32,10 @@ export default function TeamPanel({ state }: TeamPanelProps) {
           }}>
             <option value="admin">Admin</option><option value="member">Member</option><option value="viewer">Viewer</option>
           </select>
-          {m.apiKey && <button className="btn btn-ghost btn-sm" onClick={() => { state.copyToClipboard(m.apiKey!); state.showToast('API key copied'); }}><KeyRound size={14} /></button>}
+          {m.apiKey && <button className="btn btn-ghost btn-sm" onClick={() => { state.copyToClipboard(m.apiKey!); state.showToast('API key copied'); }}><KeyRound size={12} /></button>}
           <button className="btn btn-ghost btn-sm btn-danger" onClick={() => {
             if (confirm(`Remove ${m.email}?`)) { businessTeam.remove(m.email); state.refreshTeam(); state.showToast('Member removed'); }
-          }}><X size={14} /></button>
+          }}><X size={12} /></button>
         </div>
       ))}
       <div className="roles-info-detailed">

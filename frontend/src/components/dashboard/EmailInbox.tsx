@@ -2,7 +2,8 @@ import { useState, useMemo, useDeferredValue, memo, useCallback, type FC } from 
 import {
   Mail, Star, Archive, Trash2, Search, Paperclip, ArrowLeft,
   Reply, Forward, RefreshCcw, List as ListIcon, Grid,
-  SortAsc, SortDesc, Menu, User, CheckSquare, Square, Trash,
+  SortAsc, SortDesc, Menu, CheckSquare, Square, Trash,
+  Eye, EyeOff, Shield, AlertTriangle,
 } from 'lucide-react';
 import type { Email } from '../../api/client';
 import { mail } from '../../api/client';
@@ -18,6 +19,19 @@ interface EmailInboxProps {
   onTrash: (ids: string[]) => void;
   onReply: (email: Email) => void;
   onForward: (email: Email) => void;
+  onToggleRead?: (id: string, unread: boolean) => void;
+  onMarkSpam?: (id: string) => void;
+  onTogglePriority?: (id: string) => void;
+}
+
+const AVATAR_COLORS = ['#0d9488','#0891b2','#2563eb','#7c3aed','#db2777','#dc2626','#ea580c','#ca8a04','#16a34a','#059669'];
+function avatarColor(name: string): string {
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
+}
+function avatarInitial(name: string): string {
+  return (name || '?').charAt(0).toUpperCase();
 }
 
 const EmailRow = memo(({ email, style, state, onOpen }: {
@@ -35,8 +49,8 @@ const EmailRow = memo(({ email, style, state, onOpen }: {
           state.setSelectedEmails(next);
         }} />
       </div>
-      <div className="avatar avatar-sm">
-        <User size={14} />
+      <div className="avatar avatar-sm" style={{ background: avatarColor(email.fromName || email.from) + '20', color: avatarColor(email.fromName || email.from) }}>
+        {avatarInitial(email.fromName || email.from)}
       </div>
       <div className="mail-row-main">
         <div className="mail-row-headline">
@@ -57,6 +71,7 @@ const EmailRow = memo(({ email, style, state, onOpen }: {
 const EmailInbox: FC<EmailInboxProps> = ({
   emails, state, onRefresh, onToggleStar,
   onArchive, onTrash, onReply, onForward,
+  onToggleRead, onMarkSpam, onTogglePriority,
 }) => {
   const [focusedEmail, setFocusedEmail] = useState<Email | null>(null);
   const deferredQuery = useDeferredValue(state.searchQuery);
@@ -113,7 +128,7 @@ const EmailInbox: FC<EmailInboxProps> = ({
       <div className="panel-header mail-panel-header">
         <div className="mail-panel-title">
           <button type="button" className="btn btn-ghost btn-icon sidebar-toggle" onClick={() => state.setSidebarOpen(true)} aria-label="Open menu">
-            <Menu size={20} />
+            <Menu size={16} />
           </button>
           <h3>
             <Mail size={18} /> {state.activeFolder.charAt(0).toUpperCase() + state.activeFolder.slice(1)}
@@ -171,10 +186,25 @@ const EmailInbox: FC<EmailInboxProps> = ({
         {focusedEmail ? (
           <div className="dash-reader">
             <div className="reader-toolbar">
-              <button type="button" className="btn btn-ghost btn-icon" onClick={closeReader}><ArrowLeft size={18} /></button>
+              <button type="button" className="btn btn-ghost btn-icon" onClick={closeReader}><ArrowLeft size={16} /></button>
               <button type="button" className="btn btn-ghost btn-sm" onClick={() => onReply(focusedEmail)}><Reply size={14} /> Reply</button>
               <button type="button" className="btn btn-ghost btn-sm" onClick={() => onForward(focusedEmail)}><Forward size={14} /> Forward</button>
               <button type="button" className={`btn btn-ghost btn-sm ${focusedEmail.starred ? 'text-primary' : ''}`} onClick={() => onToggleStar(focusedEmail.id)}><Star size={14} /></button>
+              {onToggleRead && (
+                <button type="button" className="btn btn-ghost btn-sm" onClick={() => { onToggleRead(focusedEmail.id, focusedEmail.unread); closeReader(); }}>
+                  {focusedEmail.unread ? <Eye size={14} /> : <EyeOff size={14} />} {focusedEmail.unread ? 'Mark Read' : 'Mark Unread'}
+                </button>
+              )}
+              {onMarkSpam && state.activeFolder !== 'spam' && state.activeFolder !== 'trash' && (
+                <button type="button" className="btn btn-ghost btn-sm" onClick={() => { onMarkSpam(focusedEmail.id); closeReader(); }}>
+                  <AlertTriangle size={14} /> Spam
+                </button>
+              )}
+              {onTogglePriority && (
+                <button type="button" className="btn btn-ghost btn-sm" onClick={() => { onTogglePriority(focusedEmail.id); }}>
+                  <Shield size={14} /> {focusedEmail.labels?.includes('priority') ? 'Unmark' : 'Priority'}
+                </button>
+              )}
               {!isTrash && (
                 <button type="button" className="btn btn-ghost btn-sm" onClick={() => { onArchive([focusedEmail.id]); closeReader(); }}>
                   <Archive size={14} /> Archive
@@ -197,7 +227,7 @@ const EmailInbox: FC<EmailInboxProps> = ({
               ))}
             </div>
             <div className="reader-meta">
-              <div className="avatar avatar-sm"><User size={14} /></div>
+              <div className="avatar avatar-sm" style={{ background: avatarColor(focusedEmail.fromName || focusedEmail.from) + '20', color: avatarColor(focusedEmail.fromName || focusedEmail.from) }}>{avatarInitial(focusedEmail.fromName || focusedEmail.from)}</div>
               <div>
                 <strong>{focusedEmail.fromName || focusedEmail.from}</strong>
                 <span className="text-muted">&lt;{focusedEmail.from}&gt;</span>
@@ -233,7 +263,7 @@ const EmailInbox: FC<EmailInboxProps> = ({
                 {filtered.map(({ email }) => (
                   <div key={email.id} className={`mail-grid-card ${email.unread ? 'unread' : ''}`} onClick={() => openEmail(email)}>
                     <div className="flex items-center gap-2">
-                      <div className="avatar avatar-sm"><User size={14} /></div>
+                      <div className="avatar avatar-sm" style={{ background: avatarColor(email.fromName || email.from) + '20', color: avatarColor(email.fromName || email.from) }}>{avatarInitial(email.fromName || email.from)}</div>
                       <strong className="truncate">{email.fromName || email.from}</strong>
                     </div>
                     <h4 className="truncate">{email.subject || '(No subject)'}</h4>
