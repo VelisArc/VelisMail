@@ -1,9 +1,10 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { auth, businessAudit, businessGroups, businessMailboxes, businessQueue, businessTeam, businessTemplates, connections, domains, isBusinessSetupReady, mail, platformAdmin, signatures, contacts, type BusinessAuditEntry, type BusinessGroup, type BusinessMailbox, type BusinessTeamMember, type BusinessTemplate, type ConnectionUsage, type CustomDomain, type Email, type PlatformAdminUserRecord, type DomainCheck, type TeamAccessInvite, type Signature, type Contact, type ActiveSession } from '../api/client';
 import Sidebar from '../components/dashboard/Sidebar';
 import { ROLE_ALLOWED_TABS, type BizTab } from '../components/dashboard/constants';
 import EmailInbox from '../components/dashboard/EmailInbox';
+import ErrorBoundary from '../components/ErrorBoundary';
 import { copyToClipboard, loadRazorpayCheckout, buildReplyQuote } from '../components/dashboard/utils';
 import type { DashboardState, DomainRecord, DomainHealth, MailQueueItem } from '../components/dashboard/types';
 import DomainsPanel from '../components/dashboard/panels/DomainsPanel';
@@ -142,12 +143,12 @@ export default function BusinessDashboard() {
     updateNavigation({ activeTab: activeBizTab, activeFolder });
   }, [activeBizTab, activeFolder, updateNavigation]);
 
-  const showToast = (msg: string, type: 'success' | 'error' = 'success') => {
+  const showToast = useCallback((msg: string, type: 'success' | 'error' = 'success') => {
     setToast({ msg, type });
     setTimeout(() => setToast(null), 3000);
-  };
+  }, []);
 
-  const handleLogout = () => { auth.logout(); navigate('/login'); };
+  const handleLogout = useCallback(() => { auth.logout(); navigate('/login'); }, [navigate]);
   const openComposeWith = (to = '', subject = '', body = '') => {
     setComposeTo(to); setComposeSubject(subject); setComposeBody(body); setComposeOpen(true);
   };
@@ -172,7 +173,7 @@ export default function BusinessDashboard() {
     return () => window.removeEventListener('keydown', handler);
   }, []);
 
-  const { data: emails = [], refetch } = useEmails(activeDomainName, activeFolder);
+  const { data: emails = [], isLoading: emailsLoading, refetch } = useEmails(activeDomainName, activeFolder);
 
   const refreshDomains = () => setDomainsList(domains.getAll().map(toDomainRecord));
   const refreshTeam = useCallback(() => setTeamMembers(businessTeam.getByDomain(activeDomainName)), [activeDomainName]);
@@ -186,11 +187,11 @@ export default function BusinessDashboard() {
 
   const refreshSignatures = useCallback(() => setSignaturesList(signatures.getAll()), []);
   const refreshContacts = useCallback(() => setContactsList(contacts.getAll()), []);
-  const refreshSessions = useCallback(async () => { try { const res = await auth.listSessions(); if (res.success) setActiveSessions(res.sessions); } catch { /* ignore */ } }, []);
+  const refreshSessions = useCallback(async () => { try { const res = await auth.listSessions(); if (res.success) setActiveSessions(res.sessions); } catch (e) { console.error('refresh sessions failed', e); } }, []);
 
   useEffect(() => { refreshTeam(); refreshQueue(); refreshAudit(); refreshTemplates(); refreshConnectionUsage(); }, [activeDomainName, refreshTeam, refreshQueue, refreshAudit, refreshTemplates, refreshConnectionUsage]);
 
-  const handleSendEmail = async () => {
+  const handleSendEmail = useCallback(async () => {
     if (!composeTo || !composeSubject) { showToast('Recipient and subject required', 'error'); return; }
     setSending(true);
     try {
@@ -198,9 +199,9 @@ export default function BusinessDashboard() {
       queryClient.invalidateQueries({ queryKey: ['emails', activeDomainName, 'sent'] });
       showToast('Email sent'); setComposeOpen(false);
     }
-    catch { showToast('Failed to send', 'error'); }
+    catch (e) { console.error('send failed', e); showToast('Failed to send', 'error'); }
     finally { setSending(false); }
-  };
+  }, [activeDomainName, composeTo, composeSubject, composeBody, selectedFromAddress, queryClient, showToast]);
 
   const handleBuyPlan = async (planId: string) => {
     if (planId === 'free') { showToast('Free plan activated'); return; }
@@ -227,7 +228,7 @@ export default function BusinessDashboard() {
       });
       rzp.on('payment.failed', () => { showToast('Payment failed', 'error'); setLoadingPayment(null); });
       rzp.open();
-    } catch { showToast('Payment error', 'error'); setLoadingPayment(null); }
+    } catch (e) { console.error('payment error', e); showToast('Payment error', 'error'); setLoadingPayment(null); }
   };
 
   const handleReply = (email: Email) => {
@@ -274,7 +275,7 @@ export default function BusinessDashboard() {
   const handleAddDomain = async () => {
     if (!newDomainInput.trim()) return;
     try { await domains.register(newDomainInput.trim()); setNewDomainInput(''); setShowAddDomain(false); refreshDomains(); }
-    catch { showToast('Failed to add domain', 'error'); }
+    catch (e) { console.error('add domain failed', e); showToast('Failed to add domain', 'error'); }
   };
 
   const confirmRoleChangeStep = () => {
@@ -294,10 +295,10 @@ export default function BusinessDashboard() {
       else if (action === 'read') { await Promise.all(targetIds.map(id => mail.markRead(id))); showToast('Marked read'); }
       else if (action === 'unread') { await Promise.all(targetIds.map(id => mail.markUnread(id))); showToast('Marked unread'); }
       refetch(); if (!ids) setSelectedEmails(new Set());
-    } catch { showToast('Action failed', 'error'); }
+    } catch (e) { console.error('bulk action failed', e); showToast('Action failed', 'error'); }
   };
 
-  const dashboardState: DashboardState = {
+  const dashboardState = useMemo((): DashboardState => ({
     activeBizTab, setActiveBizTab, activeFolder, setActiveFolder,
     searchQuery, setSearchQuery,
     composeOpen, setComposeOpen, composeTo, setComposeTo, composeSubject, setComposeSubject,
@@ -356,7 +357,7 @@ export default function BusinessDashboard() {
     contactEditorPhone, setContactEditorPhone,
     contactEditorCompany, setContactEditorCompany,
     editingContactId, setEditingContactId,
-  };
+  }), [activeBizTab, activeFolder, searchQuery, composeOpen, composeTo, composeSubject, composeBody, sending, selectedFromAddress, annual, loadingPayment, toast, showLogoutConfirm, confirmRevokeId, pendingRoleChange, confirmAction, domainsList, activeDomain, domainMailboxes, domainGroups, teamMembers, mailQueue, auditLog, templates, connectionUsage, adminUsers, sortOrder, viewMode, selectedEmails, mailStatusFilter, notificationEnabled, soundEnabled, showQueueFilters, queueStatusFilter, templateSearch, showAddDomain, newDomainInput, teamFilter, auditFilter, adminSearch, adminPlanFilter, adminStatusFilter, adminRiskFilter, adminPage, sidebarOpen, user, inviteOpen, inviteName, inviteEmail, inviteRole, inviteExpiresHours, issuedInvite, templateEditorOpen, templateName, templateSubject, templateBody, previewTemplate, selectedAdminUser, adminStatusConfirm, domainDetails, mailboxDetails, groupDetails, mailboxLocalPart, mailboxDisplayName, mailboxKind, groupName, groupLocalPart, groupMembers, verifyingDomainId, domainVerifyOpen, domainVerifySteps, domainVerifyProviderRecords, copiedField, signaturesList, contactsList, contactsSearch, activeSessions, signatureEditorOpen, signatureEditorName, signatureEditorContent, editingSignatureId, contactEditorOpen, contactEditorName, contactEditorEmail, contactEditorPhone, contactEditorCompany, editingContactId, showToast, activeDomainName, canAccessPlatformAdmin, handleLogout, handleSendEmail, hasRoleAccess, refreshAdminUsers, refreshAudit, refreshConnectionUsage, refreshContacts, refreshGroups, refreshMailboxes, refreshQueue, refreshSessions, refreshSignatures, refreshTeam, refreshTemplates]);
 
   if (!user) return <Navigate to="/login" replace />;
   if (!isBusinessSetupReady(user)) return <Navigate to="/business-setup" replace />;
@@ -373,8 +374,9 @@ export default function BusinessDashboard() {
 
       <main className="dash-main">
         {activeBizTab === 'mail' && (
+          <ErrorBoundary>
             <EmailInbox
-            emails={emails} state={dashboardState}
+            emails={emails} isLoading={emailsLoading} state={dashboardState}
             onRefresh={() => refetch()}
             onToggleStar={(id) => { mail.toggleStar(id); refetch(); }}
             onArchive={(ids) => handleBulkAction('archive', ids)}
@@ -384,29 +386,30 @@ export default function BusinessDashboard() {
             onMarkSpam={(id) => { mail.markSpam(activeDomainName, id); refetch(); }}
             onTogglePriority={(id) => { mail.togglePriority(id); refetch(); }}
           />
+          </ErrorBoundary>
         )}
 
-        {activeBizTab === 'domains' && <DomainsPanel state={dashboardState} handleAddDomain={handleAddDomain} handleVerifyDomain={handleVerifyDomain} />}
+        {activeBizTab === 'domains' && <ErrorBoundary><DomainsPanel state={dashboardState} handleAddDomain={handleAddDomain} handleVerifyDomain={handleVerifyDomain} /></ErrorBoundary>}
 
-        {activeBizTab === 'mailboxes' && <MailboxesPanel state={dashboardState} />}
+        {activeBizTab === 'mailboxes' && <ErrorBoundary><MailboxesPanel state={dashboardState} /></ErrorBoundary>}
 
-        {activeBizTab === 'groups' && <GroupsPanel state={dashboardState} />}
+        {activeBizTab === 'groups' && <ErrorBoundary><GroupsPanel state={dashboardState} /></ErrorBoundary>}
 
-        {activeBizTab === 'team' && <TeamPanel state={dashboardState} />}
+        {activeBizTab === 'team' && <ErrorBoundary><TeamPanel state={dashboardState} /></ErrorBoundary>}
 
-        {activeBizTab === 'queue' && <QueuePanel state={dashboardState} />}
+        {activeBizTab === 'queue' && <ErrorBoundary><QueuePanel state={dashboardState} /></ErrorBoundary>}
 
-        {activeBizTab === 'analytics' && <AnalyticsPanel state={dashboardState} />}
+        {activeBizTab === 'analytics' && <ErrorBoundary><AnalyticsPanel state={dashboardState} /></ErrorBoundary>}
 
-        {activeBizTab === 'audit' && <AuditPanel state={dashboardState} />}
+        {activeBizTab === 'audit' && <ErrorBoundary><AuditPanel state={dashboardState} /></ErrorBoundary>}
 
-        {activeBizTab === 'admin' && canAccessPlatformAdmin && <AdminPanel state={dashboardState} />}
+        {activeBizTab === 'admin' && canAccessPlatformAdmin && <ErrorBoundary><AdminPanel state={dashboardState} /></ErrorBoundary>}
 
-        {activeBizTab === 'templates' && <TemplatesPanel state={dashboardState} />}
+        {activeBizTab === 'templates' && <ErrorBoundary><TemplatesPanel state={dashboardState} /></ErrorBoundary>}
 
-        {activeBizTab === 'settings' && <SettingsPanel state={dashboardState} />}
+        {activeBizTab === 'settings' && <ErrorBoundary><SettingsPanel state={dashboardState} /></ErrorBoundary>}
 
-        {activeBizTab === 'billing' && <BillingPanel state={dashboardState} handleBuyPlan={handleBuyPlan} />}
+        {activeBizTab === 'billing' && <ErrorBoundary><BillingPanel state={dashboardState} handleBuyPlan={handleBuyPlan} /></ErrorBoundary>}
       </main>
 
       <Modals

@@ -69,7 +69,7 @@
   width: 200px;
   display: flex;
   flex-direction: column;
-   background: var(--bg-surface);
+  background: var(--bg-surface);
   border-right: 1px solid var(--border-primary);
   z-index: 40;
   overflow: hidden;
@@ -1470,6 +1470,8 @@
   border: 1px solid var(--border-primary);
   border-radius: 6px;
   box-shadow: 0 4px 24px rgba(0,0,0,0.12), 0 1px 3px rgba(0,0,0,0.06);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
 }
 
 .biz-form-modal {
@@ -2220,24 +2222,7 @@
   font-size: 1.1rem;
   font-weight: 700;
   letter-spacing: -0.01em;
-}
-
-.reader-attachments {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 20px;
-  border-top: 1px solid var(--border-primary);
-  font-size: 0.85rem;
-  color: var(--text-secondary);
-}
-
-.reader-header h2 {
-  font-size: 1.3rem;
-  font-weight: 700;
-  width: 100%;
   margin-bottom: 8px;
-  letter-spacing: -0.02em;
 }
 
 .reader-attachments {

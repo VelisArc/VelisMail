@@ -12,7 +12,7 @@ interface ModalsProps {
 
 function ComposeModal({ state }: { state: DashboardState }) {
   return (
-    <div className="modal-overlay" onClick={() => state.setComposeOpen(false)}>
+    <div className="modal-overlay" onClick={() => state.setComposeOpen(false)} role="dialog" aria-modal="true" aria-label="Compose email">
       <div className="compose-modal compose-modal-fixed" onClick={e => e.stopPropagation()}>
         <Composer
           initialTo={state.composeTo}
@@ -40,7 +40,7 @@ function ComposeModal({ state }: { state: DashboardState }) {
 
 function InviteModal({ state }: { state: DashboardState }) {
   return (
-    <div className="modal-overlay" onClick={() => { state.setInviteOpen(false); }}>
+    <div className="modal-overlay" onClick={() => { state.setInviteOpen(false); }} role="dialog" aria-modal="true" aria-label="Invite team member">
       <div className="biz-form-modal glass" onClick={e => e.stopPropagation()}>
         <div className="compose-header"><h3><UserCheck size={16} /> Invite Team Member</h3><button className="btn btn-ghost btn-icon" onClick={() => { state.setInviteOpen(false); }}><X size={16} /></button></div>
         {!state.issuedInvite ? (
@@ -74,7 +74,7 @@ function InviteModal({ state }: { state: DashboardState }) {
 
 function TemplateEditorModal({ state }: { state: DashboardState }) {
   return (
-    <div className="modal-overlay" onClick={() => state.setTemplateEditorOpen(false)}>
+    <div className="modal-overlay" onClick={() => state.setTemplateEditorOpen(false)} role="dialog" aria-modal="true" aria-label="Template editor">
       <div className="biz-form-modal glass" onClick={e => e.stopPropagation()}>
         <div className="compose-header"><h3><Layers size={16} /> {state.previewTemplate ? 'Template Preview' : (state.templateName ? 'Edit Template' : 'New Template')}</h3><button className="btn btn-ghost btn-icon" onClick={() => { state.setTemplateEditorOpen(false); state.setPreviewTemplate(null); }}><X size={16} /></button></div>
         {state.previewTemplate ? (
@@ -95,7 +95,7 @@ function TemplateEditorModal({ state }: { state: DashboardState }) {
 function AdminUserModal({ state }: { state: DashboardState }) {
   if (!state.selectedAdminUser) return null;
   return (
-    <div className="modal-overlay" onClick={() => state.setSelectedAdminUser(null)}>
+    <div className="modal-overlay" onClick={() => state.setSelectedAdminUser(null)} role="dialog" aria-modal="true" aria-label="Admin user details">
       <div className="biz-form-modal glass animate-scale" onClick={e => e.stopPropagation()}>
         <div className="compose-header"><h3><UserCheck size={16} /> {state.selectedAdminUser.user.displayName || state.selectedAdminUser.user.email}</h3><button className="btn btn-ghost btn-icon" onClick={() => state.setSelectedAdminUser(null)}><X size={16} /></button></div>
         <div className="detail-grid-2">
@@ -111,7 +111,7 @@ function AdminUserModal({ state }: { state: DashboardState }) {
 function DomainDetailsModal({ state, handleVerifyDomain }: { state: DashboardState; handleVerifyDomain: (id: string) => void }) {
   if (!state.domainDetails) return null;
   return (
-    <div className="modal-overlay" onClick={() => state.setDomainDetails(null)}>
+    <div className="modal-overlay" onClick={() => state.setDomainDetails(null)} role="dialog" aria-modal="true" aria-label="Domain details">
       <div className="biz-form-modal glass animate-scale" onClick={e => e.stopPropagation()}>
         <div className="compose-header"><h3><Globe size={16} /> {state.domainDetails.domain}</h3><button className="btn btn-ghost btn-icon" onClick={() => state.setDomainDetails(null)}><X size={16} /></button></div>
         <div className="detail-grid-2">
@@ -141,7 +141,7 @@ function DomainDetailsModal({ state, handleVerifyDomain }: { state: DashboardSta
 function MailboxDetailsModal({ state }: { state: DashboardState }) {
   if (!state.mailboxDetails) return null;
   return (
-    <div className="modal-overlay" onClick={() => state.setMailboxDetails(null)}>
+    <div className="modal-overlay" onClick={() => state.setMailboxDetails(null)} role="dialog" aria-modal="true" aria-label="Mailbox details">
       <div className="biz-form-modal glass animate-scale" onClick={e => e.stopPropagation()}>
         <div className="compose-header"><h3><Mail size={16} /> {state.mailboxDetails.displayName}</h3><button className="btn btn-ghost btn-icon" onClick={() => state.setMailboxDetails(null)}><X size={16} /></button></div>
         <div className="detail-grid-2">
@@ -162,7 +162,7 @@ function MailboxDetailsModal({ state }: { state: DashboardState }) {
 function GroupDetailsModal({ state }: { state: DashboardState }) {
   if (!state.groupDetails) return null;
   return (
-    <div className="modal-overlay" onClick={() => state.setGroupDetails(null)}>
+    <div className="modal-overlay" onClick={() => state.setGroupDetails(null)} role="dialog" aria-modal="true" aria-label="Group details">
       <div className="biz-form-modal glass animate-scale" onClick={e => e.stopPropagation()}>
         <div className="compose-header"><h3><Users size={16} /> {state.groupDetails.name}</h3><button className="btn btn-ghost btn-icon" onClick={() => state.setGroupDetails(null)}><X size={16} /></button></div>
         <div className="detail-grid-2">
@@ -188,7 +188,7 @@ function GroupDetailsModal({ state }: { state: DashboardState }) {
 
 function LogoutConfirmModal({ state }: { state: DashboardState }) {
   return (
-    <div className="modal-overlay" onClick={() => state.setShowLogoutConfirm(false)}>
+    <div className="modal-overlay" onClick={() => state.setShowLogoutConfirm(false)} role="dialog" aria-modal="true" aria-label="Confirm logout">
       <div className="biz-form-modal glass animate-scale logout-modal" onClick={e => e.stopPropagation()}>
         <div className="modal-icon-danger">
           <AlertTriangle size={28} />
@@ -207,7 +207,7 @@ function LogoutConfirmModal({ state }: { state: DashboardState }) {
 function RoleChangeConfirmModal({ state, confirmRoleChangeStep }: { state: DashboardState; confirmRoleChangeStep: () => void }) {
   if (!state.pendingRoleChange) return null;
   return (
-    <div className="modal-overlay" onClick={() => state.setPendingRoleChange(null)}>
+    <div className="modal-overlay" onClick={() => state.setPendingRoleChange(null)} role="dialog" aria-modal="true" aria-label="Confirm role change">
       <div className="biz-form-modal glass animate-scale role-change-modal" onClick={e => e.stopPropagation()}>
         <div className="modal-body-center">
           <div className="modal-icon-warning">
@@ -228,20 +228,21 @@ function RoleChangeConfirmModal({ state, confirmRoleChangeStep }: { state: Dashb
 }
 
 function ConfirmActionModal({ state }: { state: DashboardState }) {
-  if (!state.confirmAction) return null;
+  const action = state.confirmAction;
+  if (!action) return null;
   return (
-    <div className="modal-overlay" onClick={() => state.setConfirmAction(null)}>
+    <div className="modal-overlay" onClick={() => state.setConfirmAction(null)} role="dialog" aria-modal="true" aria-label="Confirm action">
       <div className="biz-form-modal glass animate-scale confirm-modal" onClick={e => e.stopPropagation()}>
         <div className="modal-body-center">
           <div className="modal-icon-danger">
 <AlertTriangle size={24} />
           </div>
-          <h3 className="confirm-title">{state.confirmAction.title}</h3>
-          <p className="text-sm text-muted">{state.confirmAction.message}</p>
+          <h3 className="confirm-title">{action.title}</h3>
+          <p className="text-sm text-muted">{action.message}</p>
         </div>
         <div className="modal-actions-border">
           <button className="btn btn-ghost confirm-btn-cancel" onClick={() => state.setConfirmAction(null)}>Cancel</button>
-          <button className="btn btn-danger confirm-btn-danger" onClick={() => { state.confirmAction!.onConfirm(); state.setConfirmAction(null); }}>Yes, Continue</button>
+          <button className="btn btn-danger confirm-btn-confirm" onClick={() => { action.onConfirm(); state.setConfirmAction(null); }}>Yes, Continue</button>
         </div>
       </div>
     </div>
@@ -251,7 +252,7 @@ function ConfirmActionModal({ state }: { state: DashboardState }) {
 function AdminStatusConfirmModal({ state }: { state: DashboardState }) {
   if (!state.adminStatusConfirm) return null;
   return (
-    <div className="modal-overlay" onClick={() => state.setAdminStatusConfirm(null)}>
+    <div className="modal-overlay" onClick={() => state.setAdminStatusConfirm(null)} role="dialog" aria-modal="true" aria-label="Admin status confirmation">
       <div className="biz-form-modal glass animate-scale admin-status-modal" onClick={e => e.stopPropagation()}>
         <div className="modal-body-center">
           <div className="modal-icon-warning">
@@ -283,7 +284,7 @@ function DomainVerifyModal({ state, handleVerifyDomain }: { state: DashboardStat
   if (!state.domainVerifyOpen) return null;
   const isVerifying = state.domainVerifySteps.length > 0 && state.domainVerifySteps.some(s => s.status === 'pending' || s.status === 'checking');
   return (
-    <div className="modal-overlay" onClick={() => state.setDomainVerifyOpen(false)}>
+    <div className="modal-overlay" onClick={() => state.setDomainVerifyOpen(false)} role="dialog" aria-modal="true" aria-label="Domain verification">
       <div className="biz-form-modal glass animate-scale domain-verify-modal" onClick={e => e.stopPropagation()}>
         <div className="compose-header"><h3><CheckCircle2 size={16} /> Domain Verification</h3><button className="btn btn-ghost btn-icon" onClick={() => state.setDomainVerifyOpen(false)}><X size={16} /></button></div>
         <div className="domain-verify-body">
@@ -322,10 +323,11 @@ function DomainVerifyModal({ state, handleVerifyDomain }: { state: DashboardStat
 
 function ToastNotification({ state }: { state: DashboardState }) {
   if (!state.toast) return null;
+  const isError = state.toast.type === 'error';
   return (
-    <div className="toast-container">
+    <div className="toast-container" role="alert" aria-live="polite">
       <div className={`toast toast-${state.toast.type} toast-flex`}>
-        <CheckCircle2 size={16} />
+        {isError ? <AlertCircle size={16} /> : <CheckCircle2 size={16} />}
         {state.toast.msg}
       </div>
     </div>

@@ -53,7 +53,7 @@ export default function Sidebar({
       <aside className={`dash-sidebar ${sidebarOpen ? 'open' : ''}`}>
         <div className="side-header">
           <div className="side-logo">
-            <img src="/ZeeResizer.png" alt="" />
+            <img src="/ZeeResizer.png" alt="VelisMail" />
             <div>
               <span className="side-logo-name">VelisMail</span>
               <span className="side-logo-badge">Business</span>
@@ -71,6 +71,7 @@ export default function Sidebar({
             <button
               type="button"
               className={`side-nav-btn ${activeBizTab === 'mail' ? 'active' : ''}`}
+              aria-current={activeBizTab === 'mail' ? 'page' : undefined}
               onClick={() => handleNav('mail')}
             >
               <Mail size={16} /> Inbox
@@ -82,6 +83,7 @@ export default function Sidebar({
                     key={f.id}
                     type="button"
                     className={`side-sub-btn ${activeFolder === f.id ? 'active' : ''}`}
+                    aria-current={activeFolder === f.id ? 'page' : undefined}
                     onClick={() => { setActiveFolder(f.id); setSidebarOpen(false); }}
                   >
                     <f.icon size={13} />
@@ -173,7 +175,7 @@ export default function Sidebar({
           <div className="side-user">
             <div className="side-avatar">{user?.email?.charAt(0).toUpperCase() || <User size={14} />}</div>
             <div className="side-user-info">
-              <span className="side-user-name">{user?.displayName || 'User'}</span>
+              <span className="side-user-name" title={user?.displayName || 'User'}>{user?.displayName || 'User'}</span>
               <span className="side-user-role">{user?.role || 'member'}</span>
             </div>
             <button type="button" className="btn btn-ghost btn-icon" onClick={onLogout} aria-label="Log out">

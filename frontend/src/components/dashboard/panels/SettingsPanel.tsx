@@ -76,6 +76,10 @@ function ContactEditor({ state, contact }: { state: DashboardState; contact?: Co
 
 export default function SettingsPanel({ state }: SettingsPanelProps) {
   const [activeSettingsTab, setActiveSettingsTab] = useState<'notifications' | 'signatures' | 'contacts' | 'security' | 'connections' | 'autoreply' | 'labels' | 'rules'>('notifications');
+  const [newLabelName, setNewLabelName] = useState('');
+  const [showLabelInput, setShowLabelInput] = useState(false);
+  const [newRuleName, setNewRuleName] = useState('');
+  const [showRuleInput, setShowRuleInput] = useState(false);
 
   const filteredContacts = state.contacts.filter(c =>
     !state.contactsSearch || c.name.toLowerCase().includes(state.contactsSearch.toLowerCase()) || c.email.toLowerCase().includes(state.contactsSearch.toLowerCase())
@@ -217,10 +221,20 @@ export default function SettingsPanel({ state }: SettingsPanelProps) {
         <div className="glass-card settings-card-mb">
           <div className="flex items-center justify-between mb-8">
             <h4>Labels</h4>
-            <button className="btn btn-primary btn-sm" onClick={() => {
-              const name = prompt('Label name:');
-              if (name) { labels.add(name, '#0d9488'); state.showToast('Label created'); }
-            }}><Plus size={12} /> Add</button>
+            <div className="flex items-center gap-2">
+              {showLabelInput ? (
+                <>
+                  <input className="input input-max-140" placeholder="Label name" value={newLabelName} onChange={e => setNewLabelName(e.target.value)} autoFocus />
+                  <button className="btn btn-primary btn-sm" onClick={() => {
+                    const name = newLabelName.trim();
+                    if (name) { labels.add(name, '#0d9488'); state.showToast('Label created'); setNewLabelName(''); setShowLabelInput(false); }
+                  }}>Save</button>
+                  <button className="btn btn-ghost btn-sm" onClick={() => { setNewLabelName(''); setShowLabelInput(false); }}><X size={12} /></button>
+                </>
+              ) : (
+                <button className="btn btn-primary btn-sm" onClick={() => setShowLabelInput(true)}><Plus size={12} /> Add</button>
+              )}
+            </div>
           </div>
           {labels.getAll().length === 0 ? (
             <div className="empty-state-sm"><p className="text-sm text-muted">No labels yet.</p></div>
@@ -241,13 +255,24 @@ export default function SettingsPanel({ state }: SettingsPanelProps) {
         <div className="glass-card settings-card-mb">
           <div className="flex items-center justify-between mb-8">
             <h4>Email Filtering Rules</h4>
-            <button className="btn btn-primary btn-sm" onClick={() => {
-              const name = prompt('Rule name:');
-              if (name) {
-                rules.add(name, [{ field: 'subject', operator: 'contains', value: '' }], [{ type: 'label', value: '' }]);
-                state.showToast('Rule created. Edit conditions below.');
-              }
-            }}><Plus size={12} /> Add Rule</button>
+            <div className="flex items-center gap-2">
+              {showRuleInput ? (
+                <>
+                  <input className="input input-max-140" placeholder="Rule name" value={newRuleName} onChange={e => setNewRuleName(e.target.value)} autoFocus />
+                  <button className="btn btn-primary btn-sm" onClick={() => {
+                    const name = newRuleName.trim();
+                    if (name) {
+                      rules.add(name, [{ field: 'subject', operator: 'contains', value: '' }], [{ type: 'label', value: '' }]);
+                      state.showToast('Rule created. Edit conditions below.');
+                      setNewRuleName(''); setShowRuleInput(false);
+                    }
+                  }}>Save</button>
+                  <button className="btn btn-ghost btn-sm" onClick={() => { setNewRuleName(''); setShowRuleInput(false); }}><X size={12} /></button>
+                </>
+              ) : (
+                <button className="btn btn-primary btn-sm" onClick={() => setShowRuleInput(true)}><Plus size={12} /> Add Rule</button>
+              )}
+            </div>
           </div>
           {rules.getAll().length === 0 ? (
             <div className="empty-state-sm"><p className="text-sm text-muted">No rules configured.</p></div>

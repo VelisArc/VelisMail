@@ -12,6 +12,7 @@ import type { DashboardState } from './types';
 
 interface EmailInboxProps {
   emails: Email[];
+  isLoading?: boolean;
   state: DashboardState;
   onRefresh: () => void;
   onToggleStar: (id: string) => void;
@@ -34,16 +35,15 @@ function avatarInitial(name: string): string {
   return (name || '?').charAt(0).toUpperCase();
 }
 
-const EmailRow = memo(({ email, style, state, onOpen }: {
+const EmailRow = memo(({ email, state, onOpen }: {
   email: Email;
-  style: React.CSSProperties;
   state: DashboardState;
   onOpen: (e: Email) => void;
 }) => (
-  <div style={style} className="mail-row-wrapper" onClick={() => onOpen(email)}>
+  <div className="mail-row-wrapper" onClick={() => onOpen(email)}>
     <div className={`mail-row ${email.unread ? 'unread' : ''}`}>
       <div className="mail-row-select" onClick={e => e.stopPropagation()}>
-        <input type="checkbox" checked={state.selectedEmails.has(email.id)} onChange={() => {
+        <input type="checkbox" aria-label={`Select email from ${email.fromName || email.from}`} checked={state.selectedEmails.has(email.id)} onChange={() => {
           const next = new Set(state.selectedEmails);
           if (next.has(email.id)) next.delete(email.id); else next.add(email.id);
           state.setSelectedEmails(next);
@@ -69,7 +69,7 @@ const EmailRow = memo(({ email, style, state, onOpen }: {
 ));
 
 const EmailInbox: FC<EmailInboxProps> = ({
-  emails, state, onRefresh, onToggleStar,
+  emails, isLoading, state, onRefresh, onToggleStar,
   onArchive, onTrash, onReply, onForward,
   onToggleRead, onMarkSpam, onTogglePriority,
 }) => {
@@ -97,7 +97,7 @@ const EmailInbox: FC<EmailInboxProps> = ({
   const openEmail = useCallback((email: Email) => setFocusedEmail(email), []);
   const closeReader = useCallback(() => setFocusedEmail(null), []);
 
-  const conversation = focusedEmail ? parseEmailConversation(focusedEmail.body) : [];
+  const conversation = useMemo(() => focusedEmail ? parseEmailConversation(focusedEmail.body) : [], [focusedEmail]);
 
   const allSelected = filtered.length > 0 && filtered.every(({ email }) => state.selectedEmails.has(email.id));
   const toggleSelectAll = () => {
@@ -111,16 +111,24 @@ const EmailInbox: FC<EmailInboxProps> = ({
   const isTrash = state.activeFolder === 'trash';
 
   const handleDeletePermanently = (id: string) => {
-    mail.deletePermanently(id);
-    closeReader();
-    onRefresh();
+    try {
+      mail.deletePermanently(id);
+      closeReader();
+      onRefresh();
+    } catch (e) {
+      console.error('permanent delete failed', e);
+    }
   };
 
   const handleBulkDeletePermanently = () => {
-    const ids = [...state.selectedEmails];
-    ids.forEach(id => mail.deletePermanently(id));
-    state.setSelectedEmails(new Set());
-    onRefresh();
+    try {
+      const ids = [...state.selectedEmails];
+      ids.forEach(id => mail.deletePermanently(id));
+      state.setSelectedEmails(new Set());
+      onRefresh();
+    } catch (e) {
+      console.error('bulk permanent delete failed', e);
+    }
   };
 
   return (
@@ -252,7 +260,16 @@ const EmailInbox: FC<EmailInboxProps> = ({
           </div>
         ) : (
           <div className="dash-list" style={{ height: '100%', overflow: 'hidden' }}>
-            {filtered.length === 0 ? (
+            {isLoading ? (
+              <div className="dash-list-scroll">
+                {[1,2,3,4,5].map(i => (
+                  <div key={i} className="skeleton-row">
+                    <div className="skeleton-avatar" />
+                    <div><div className="skeleton-line short" /><div className="skeleton-line medium" /></div>
+                  </div>
+                ))}
+              </div>
+            ) : filtered.length === 0 ? (
               <div className="empty-state">
                 <Mail size={48} className="text-muted" />
                 <h3>No messages</h3>
@@ -284,7 +301,6 @@ const EmailInbox: FC<EmailInboxProps> = ({
                   <EmailRow
                     key={email.id}
                     email={email}
-                    style={{}}
                     state={state}
                     onOpen={openEmail}
                   />
