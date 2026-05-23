@@ -92,6 +92,7 @@ export default function BusinessDashboard() {
   const [adminPlanFilter, setAdminPlanFilter] = useState('all');
   const [adminStatusFilter, setAdminStatusFilter] = useState('all');
   const [adminRiskFilter, setAdminRiskFilter] = useState('all');
+  const [adminPage, setAdminPage] = useState(1);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [inviteOpen, setInviteOpen] = useState(false);
   const [inviteName, setInviteName] = useState('');
@@ -167,8 +168,10 @@ export default function BusinessDashboard() {
     if (planId === 'free') { showToast('Free plan activated'); return; }
     setLoadingPayment(planId);
     try {
+      const razorpayKey = import.meta.env.VITE_RAZORPAY_KEY_ID;
+      if (!razorpayKey) { showToast('Payment not configured (VITE_RAZORPAY_KEY_ID missing)', 'error'); setLoadingPayment(null); return; }
       const Razorpay = await loadRazorpayCheckout();
-      if (!Razorpay) { showToast('Payment system unavailable', 'error'); setLoadingPayment(null); return; }
+      if (!Razorpay) { showToast('Payment SDK failed to load', 'error'); setLoadingPayment(null); return; }
       const PLANS = [
         { id: 'free', name: 'Free', priceMonthly: 0, priceAnnual: 0, desc: '1 domain, 5 mailboxes', features: ['1 Custom Domain', '5 Mailboxes', 'Basic Queue', 'Community Support'] },
         { id: 'starter', name: 'Starter', priceMonthly: 299, priceAnnual: 2999, desc: '3 domains, 25 mailboxes', features: ['3 Custom Domains', '25 Mailboxes', 'Queue Monitoring', 'Email Support', 'Basic Templates'] },
@@ -204,20 +207,30 @@ export default function BusinessDashboard() {
     const dom = domainsList.find(d => d.id === domainId);
     if (!dom) return;
     setVerifyingDomainId(domainId);
-    const updated = domains.verify(domainId);
-    if (updated) {
-      const steps: DomainHealth[] = [
-        { key: 'mx', label: 'MX Record', status: (updated.checks.find((c: DomainCheck) => c.key === 'mx')?.status || 'pending') as DomainHealth['status'], detail: 'MX record check', lastCheck: new Date().toISOString() },
-        { key: 'spf', label: 'SPF Record', status: (updated.checks.find((c: DomainCheck) => c.key === 'spf')?.status || 'pending') as DomainHealth['status'], detail: 'SPF record check', lastCheck: new Date().toISOString() },
-        { key: 'dkim', label: 'DKIM Signature', status: (updated.checks.find((c: DomainCheck) => c.key === 'dkim')?.status || 'pending') as DomainHealth['status'], detail: 'DKIM key check', lastCheck: new Date().toISOString() },
-        { key: 'dmarc', label: 'DMARC Policy', status: (updated.checks.find((c: DomainCheck) => c.key === 'dmarc')?.status || 'pending') as DomainHealth['status'], detail: 'DMARC policy check', lastCheck: new Date().toISOString() },
-      ];
-      setDomainVerifySteps(steps);
-    }
+    // Set all steps to 'checking' first to show spinner animation
+    setDomainVerifySteps([
+      { key: 'mx', label: 'MX Record', status: 'checking', detail: 'Checking MX record...', lastCheck: new Date().toISOString() },
+      { key: 'spf', label: 'SPF Record', status: 'checking', detail: 'Checking SPF record...', lastCheck: new Date().toISOString() },
+      { key: 'dkim', label: 'DKIM Signature', status: 'checking', detail: 'Checking DKIM key...', lastCheck: new Date().toISOString() },
+      { key: 'dmarc', label: 'DMARC Policy', status: 'checking', detail: 'Checking DMARC policy...', lastCheck: new Date().toISOString() },
+    ]);
     setDomainVerifyOpen(true);
     setDomainVerifyProviderRecords([]);
-    setVerifyingDomainId('');
-    refreshDomains();
+    // Async verify
+    setTimeout(() => {
+      const updated = domains.verify(domainId);
+      if (updated) {
+        const steps: DomainHealth[] = [
+          { key: 'mx', label: 'MX Record', status: (updated.checks.find((c: DomainCheck) => c.key === 'mx')?.status || 'pending') as DomainHealth['status'], detail: 'MX record check', lastCheck: new Date().toISOString() },
+          { key: 'spf', label: 'SPF Record', status: (updated.checks.find((c: DomainCheck) => c.key === 'spf')?.status || 'pending') as DomainHealth['status'], detail: 'SPF record check', lastCheck: new Date().toISOString() },
+          { key: 'dkim', label: 'DKIM Signature', status: (updated.checks.find((c: DomainCheck) => c.key === 'dkim')?.status || 'pending') as DomainHealth['status'], detail: 'DKIM key check', lastCheck: new Date().toISOString() },
+          { key: 'dmarc', label: 'DMARC Policy', status: (updated.checks.find((c: DomainCheck) => c.key === 'dmarc')?.status || 'pending') as DomainHealth['status'], detail: 'DMARC policy check', lastCheck: new Date().toISOString() },
+        ];
+        setDomainVerifySteps(steps);
+      }
+      refreshDomains();
+      setVerifyingDomainId('');
+    }, 800);
   };
 
   const handleAddDomain = async () => {
@@ -267,7 +280,7 @@ export default function BusinessDashboard() {
     showAddDomain, setShowAddDomain, newDomainInput, setNewDomainInput,
     teamFilter, setTeamFilter, auditFilter, setAuditFilter, adminSearch, setAdminSearch,
     adminPlanFilter, setAdminPlanFilter, adminStatusFilter, setAdminStatusFilter,
-    adminRiskFilter, setAdminRiskFilter, sidebarOpen, setSidebarOpen, user,
+    adminRiskFilter, setAdminRiskFilter, adminPage, setAdminPage, sidebarOpen, setSidebarOpen, user,
     activeDomainName,
     hasRoleAccess, canAccessPlatformAdmin, refreshDomains, refreshTeam, refreshQueue,
     refreshAudit, refreshTemplates, refreshMailboxes, refreshGroups, refreshConnectionUsage,
@@ -280,6 +293,7 @@ export default function BusinessDashboard() {
     previewTemplate, setPreviewTemplate,
     selectedAdminUser, setSelectedAdminUser,
     adminStatusConfirm, setAdminStatusConfirm,
+    adminPage, setAdminPage,
     domainDetails, setDomainDetails, mailboxDetails, setMailboxDetails,
     groupDetails, setGroupDetails,
     mailboxLocalPart, setMailboxLocalPart, mailboxDisplayName, setMailboxDisplayName,

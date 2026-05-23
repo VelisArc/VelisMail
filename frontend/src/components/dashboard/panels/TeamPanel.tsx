@@ -38,10 +38,24 @@ export default function TeamPanel({ state }: TeamPanelProps) {
           }}><X size={14} /></button>
         </div>
       ))}
-      <div className="roles-info-grid">
-        <div className="glass-card"><strong>Admin</strong><span className="text-muted text-sm">Full access to all features</span></div>
-        <div className="glass-card"><strong>Member</strong><span className="text-muted text-sm">Mail, templates, queue, analytics</span></div>
-        <div className="glass-card"><strong>Viewer</strong><span className="text-muted text-sm">Read-only mail and analytics</span></div>
+      <div className="roles-info-detailed">
+        <h4 className="roles-info-title">Role Permissions</h4>
+        <table className="roles-permission-table">
+          <thead>
+            <tr><th>Feature</th><th>Admin</th><th>Member</th><th>Viewer</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Send & Read Mail</td><td><span className="badge badge-success">✓</span></td><td><span className="badge badge-success">✓</span></td><td><span className="badge badge-success">✓</span></td></tr>
+            <tr><td>Manage Templates</td><td><span className="badge badge-success">✓</span></td><td><span className="badge badge-success">✓</span></td><td><span className="badge badge-neutral">—</span></td></tr>
+            <tr><td>Queue Monitoring</td><td><span className="badge badge-success">✓</span></td><td><span className="badge badge-success">✓</span></td><td><span className="badge badge-success">✓</span></td></tr>
+            <tr><td>Domain Management</td><td><span className="badge badge-success">✓</span></td><td><span className="badge badge-neutral">—</span></td><td><span className="badge badge-neutral">—</span></td></tr>
+            <tr><td>Mailbox Management</td><td><span className="badge badge-success">✓</span></td><td><span className="badge badge-neutral">—</span></td><td><span className="badge badge-neutral">—</span></td></tr>
+            <tr><td>Team Management</td><td><span className="badge badge-success">✓</span></td><td><span className="badge badge-neutral">—</span></td><td><span className="badge badge-neutral">—</span></td></tr>
+            <tr><td>Analytics</td><td><span className="badge badge-success">✓</span></td><td><span className="badge badge-success">✓</span></td><td><span className="badge badge-success">✓</span></td></tr>
+            <tr><td>Billing</td><td><span className="badge badge-success">✓</span></td><td><span className="badge badge-neutral">—</span></td><td><span className="badge badge-neutral">—</span></td></tr>
+            <tr><td>Settings</td><td><span className="badge badge-success">✓</span></td><td><span className="badge badge-success">✓</span></td><td><span className="badge badge-neutral">—</span></td></tr>
+          </tbody>
+        </table>
       </div>
     </div>
   );

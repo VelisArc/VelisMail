@@ -15,7 +15,7 @@ import type {
  */
 const DEFAULT_NAVIGATION: NavigationState = {
   accountType: 'business',
-  activeTab: 'domains',
+  activeTab: 'mail',
   activeFolder: 'inbox',
   selectedEmailId: null,
   searchQuery: '',

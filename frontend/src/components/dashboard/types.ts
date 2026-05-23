@@ -105,6 +105,8 @@ export interface DashboardState {
   setAdminStatusFilter: (f: string) => void;
   adminRiskFilter: string;
   setAdminRiskFilter: (f: string) => void;
+  adminPage: number;
+  setAdminPage: (p: number) => void;
   sidebarOpen: boolean;
   setSidebarOpen: (o: boolean) => void;
   user: User | null;

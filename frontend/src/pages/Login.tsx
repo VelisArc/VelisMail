@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { Mail, Lock, Building2, ArrowRight, Eye, ArrowLeft, Globe, Fingerprint, KeyRound, ShieldCheck } from 'lucide-react';
-import { auth, isBusinessSetupReady, teamAccess, type TeamAccessInvite, type User } from '../api/client';
+import { auth, domains, isBusinessSetupReady, teamAccess, type TeamAccessInvite, type User } from '../api/client';
 import LoadingSpinner from '../components/LoadingSpinner';
 import './Login.css';
 
@@ -10,7 +10,7 @@ type RegisterStep = 'form' | 'otp';
 type LoginAccessMode = 'password' | 'team';
 type TeamAccessStep = 'key' | 'email' | 'otp';
 function nextRouteForUser(user: User) {
-  return isBusinessSetupReady(user) ? '/business' : '/business-setup';
+  return isBusinessSetupReady(user) ? '/business?tab=inbox' : '/business-setup';
 }
 
 
@@ -187,6 +187,10 @@ export default function Login() {
       verificationToken: verifiedToken || verificationToken || undefined,
     });
     if (res.success && res.user) {
+      // Auto-add default velismail.online domain so user has a working from address
+      if (!domains.getAll().find(d => d.domain === 'velismail.online')) {
+        domains.register('velismail.online');
+      }
       navigate(nextRouteForUser(res.user), { replace: true });
     } else {
       throw new Error(res.error || 'Registration failed');
@@ -380,7 +384,7 @@ export default function Login() {
             : 'Deploy your secure business communications in seconds.'}</p>
           <div className="login-features">
             <div className="login-feature">
-              <Lock size={18} color="var(--primary-400)" />
+              <Lock size={18} color="var(--accent)" />
               <span>End-to-end encrypted</span>
             </div>
             <div className="login-feature">

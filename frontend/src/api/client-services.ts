@@ -1356,6 +1356,46 @@ export const platformAdmin = {
 
     return next;
   },
+
+  updateUserRole(email: string, role: 'admin' | 'member' | 'viewer'): User | null {
+    const users = loadPersistentUsers();
+    const normalizedEmail = normalizeMailbox(email);
+    const user = users[normalizedEmail];
+    if (!user) return null;
+
+    const next = normalizeSessionUser({ ...user, role });
+    users[normalizedEmail] = next;
+    savePersistentUsers(users);
+
+    const session = auth.getSession();
+    businessAudit.add({
+      action: 'Updated user role',
+      actor: session?.email || 'platform-admin',
+      target: `${normalizedEmail} -> ${role}`,
+      severity: 'info',
+    });
+
+    return next;
+  },
+
+  deleteUser(email: string): boolean {
+    const users = loadPersistentUsers();
+    const normalizedEmail = normalizeMailbox(email);
+    if (!users[normalizedEmail]) return false;
+
+    delete users[normalizedEmail];
+    savePersistentUsers(users);
+
+    const session = auth.getSession();
+    businessAudit.add({
+      action: 'Deleted user',
+      actor: session?.email || 'platform-admin',
+      target: normalizedEmail,
+      severity: 'critical',
+    });
+
+    return true;
+  },
 };
 
 // ---- Connection Usage ----

@@ -88,19 +88,24 @@ ALTER TABLE refresh_tokens ENABLE ROW LEVEL SECURITY;
 ALTER TABLE sessions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE devices ENABLE ROW LEVEL SECURITY;
 
--- RLS Policies - Users can only see their own data
+-- RLS Policies - Users can only see their own data (idempotent via DROP IF EXISTS)
+DROP POLICY IF EXISTS users_tenant_isolation ON users;
 CREATE POLICY users_tenant_isolation ON users
     USING (tenant_id::text = current_setting('velismail.tenant_id', true));
 
+DROP POLICY IF EXISTS passkey_credentials_tenant_isolation ON passkey_credentials;
 CREATE POLICY passkey_credentials_tenant_isolation ON passkey_credentials
     USING (user_id IN (SELECT id FROM users WHERE tenant_id::text = current_setting('velismail.tenant_id', true)));
 
+DROP POLICY IF EXISTS refresh_tokens_tenant_isolation ON refresh_tokens;
 CREATE POLICY refresh_tokens_tenant_isolation ON refresh_tokens
     USING (user_id IN (SELECT id FROM users WHERE tenant_id::text = current_setting('velismail.tenant_id', true)));
 
+DROP POLICY IF EXISTS sessions_tenant_isolation ON sessions;
 CREATE POLICY sessions_tenant_isolation ON sessions
     USING (user_id IN (SELECT id FROM users WHERE tenant_id::text = current_setting('velismail.tenant_id', true)));
 
+DROP POLICY IF EXISTS devices_tenant_isolation ON devices;
 CREATE POLICY devices_tenant_isolation ON devices
     USING (user_id IN (SELECT id FROM users WHERE tenant_id::text = current_setting('velismail.tenant_id', true)));
 
@@ -122,5 +127,6 @@ CREATE INDEX idx_failed_login_attempts_user_id ON failed_login_attempts(user_id)
 -- RLS policy for failed login attempts
 ALTER TABLE failed_login_attempts ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS failed_login_attempts_tenant_isolation ON failed_login_attempts;
 CREATE POLICY failed_login_attempts_tenant_isolation ON failed_login_attempts
     USING (user_id IN (SELECT id FROM users WHERE tenant_id::text = current_setting('velismail.tenant_id', true)));

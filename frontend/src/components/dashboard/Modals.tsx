@@ -278,18 +278,20 @@ function AdminStatusConfirmModal({ state }: { state: DashboardState }) {
 
 function DomainVerifyModal({ state, handleVerifyDomain }: { state: DashboardState; handleVerifyDomain: (id: string) => void }) {
   if (!state.domainVerifyOpen) return null;
+  const isVerifying = state.domainVerifySteps.length > 0 && state.domainVerifySteps.some(s => s.status === 'pending' || s.status === 'checking');
   return (
     <div className="modal-overlay" onClick={() => state.setDomainVerifyOpen(false)}>
       <div className="biz-form-modal glass animate-scale domain-verify-modal" onClick={e => e.stopPropagation()}>
         <div className="compose-header"><h3><CheckCircle2 size={16} /> Domain Verification</h3><button className="btn btn-ghost btn-icon" onClick={() => state.setDomainVerifyOpen(false)}><X size={18} /></button></div>
         <div className="domain-verify-body">
+          {isVerifying && <div className="verify-loading-bar" />}
           {state.domainVerifySteps.map(step => (
-            <div key={step.key} className="flex items-center gap-3 verify-step-row">
-              <div className={`verify-step-icon ${step.status === 'verified' ? 'verify-step-success' : 'verify-step-pending'}`}>
-                {step.status === 'verified' ? <Check size={16} className="text-success" /> : <AlertCircle size={16} className="verify-step-pending-icon" />}
+            <div key={step.key} className={`flex items-center gap-3 verify-step-row ${step.status === 'checking' ? 'verify-step-checking' : ''}`}>
+              <div className={`verify-step-icon ${step.status === 'verified' ? 'verify-step-success' : step.status === 'checking' ? 'verify-step-spinner' : 'verify-step-pending'}`}>
+                {step.status === 'verified' ? <Check size={16} className="text-success" /> : step.status === 'checking' ? <div className="spinner-xs" /> : <AlertCircle size={16} className="verify-step-pending-icon" />}
               </div>
               <div className="verify-step-info"><strong className="text-sm">{step.label}</strong><p className="text-xs text-muted">{step.detail}</p></div>
-              <span className={`badge badge-${step.status === 'verified' ? 'success' : step.status === 'failed' ? 'danger' : 'neutral'}`}>{step.status}</span>
+              <span className={`badge badge-${step.status === 'verified' ? 'success' : step.status === 'failed' ? 'danger' : step.status === 'checking' ? 'neutral' : 'neutral'}`}>{step.status === 'checking' ? 'Checking...' : step.status}</span>
             </div>
           ))}
           {state.domainVerifyProviderRecords.length > 0 && (
