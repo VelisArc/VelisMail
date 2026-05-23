@@ -2312,6 +2312,47 @@
   margin-bottom: 4px;
 }
 
+.logout-text {
+  margin: 8px 0 20px;
+  line-height: 1.5;
+}
+
+.confirm-btn-cancel {
+  min-width: 90px;
+}
+
+.confirm-btn-danger {
+  min-width: 90px;
+}
+
+.panel-section {
+  margin-bottom: 16px;
+}
+
+.domain-card {
+  border: 1px solid var(--border-primary);
+  border-radius: 4px;
+  overflow: hidden;
+  background: var(--bg-surface);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.domain-card:hover {
+  box-shadow: var(--shadow-md);
+}
+
+.billing-toggle-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 0;
+}
+
+.featured {
+  border-color: var(--primary-300) !important;
+}
+
 /* ─── Compose modal fixed height ─── */
 .compose-modal-fixed {
   height: min(85vh, 700px);
@@ -2360,6 +2401,45 @@
   .dns-record-row-flex {
     flex-wrap: wrap;
   }
+
+/* ─── Composer missing classes ─── */
+.to-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  padding: 4px 8px;
+  box-shadow: none;
+  font-size: 0.95rem;
+  color: var(--text-primary);
+}
+
+.to-input:focus {
+  background: var(--bg-hover);
+  outline: none;
+}
+
+.schedule-field {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 6px 14px;
+  border-bottom: 1px solid var(--border-primary);
+}
+
+.subject-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  padding: 4px 8px;
+  box-shadow: none;
+  font-size: 0.95rem;
+  color: var(--text-primary);
+}
+
+.subject-input:focus {
+  background: var(--bg-hover);
+  outline: none;
+}
   .dns-record-name,
   .dns-record-value {
     flex: 1 1 100%;

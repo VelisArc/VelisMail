@@ -214,9 +214,9 @@ export default function Composer({
         </div>
 
         {attachments.length > 0 && (
-          <div className="attachments-list" style={{ padding: '0 20px', display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '16px' }}>
+          <div className="attachments-list">
             {attachments.map((file, i) => (
-              <div key={i} className="attachment-chip" style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '4px 10px', background: 'var(--bg-surface-2)', borderRadius: '4px', fontSize: '0.8rem', border: '1px solid var(--border)' }}>
+              <div key={i} className="attachment-chip" style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '4px 10px', background: 'var(--bg-surface-2)', borderRadius: '3px', fontSize: '0.8rem', border: '1px solid var(--border-primary)' }}>
                 <Paperclip size={12} />
                 <span>{file.name}</span>
                 <button aria-label="Remove attachment" onClick={() => removeAttachment(i)} style={{ color: 'var(--text-muted)', marginLeft: '4px' }}><X size={12} /></button>
@@ -255,9 +255,9 @@ export default function Composer({
       </div>
 
       {showLinkModal && (
-        <div className="modal-overlay" onClick={() => setShowLinkModal(false)} style={{ zIndex: 1000, position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.5)' }}>
-          <div className="glass animate-scale" onClick={e => e.stopPropagation()} style={{ padding: '24px', borderRadius: '12px', width: '100%', maxWidth: '400px', backgroundColor: 'var(--bg-card)', border: '1px solid var(--border)' }}>
-            <h3 style={{ marginTop: 0, marginBottom: '16px', fontSize: '18px' }}>Insert Link</h3>
+        <div className="modal-overlay" onClick={() => setShowLinkModal(false)}>
+          <div className="glass animate-scale" onClick={e => e.stopPropagation()} style={{ padding: '24px', borderRadius: '6px', width: '100%', maxWidth: '400px', backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-primary)' }}>
+            <h3 style={{ marginTop: 0, marginBottom: '16px' }}>Insert Link</h3>
             <input
               type="url"
               className="input"
