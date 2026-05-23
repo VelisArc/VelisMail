@@ -242,7 +242,7 @@ const EmailInbox: FC<EmailInboxProps> = ({
                 items={filtered.map(f => f.email)}
                 itemHeight={ROW_HEIGHT}
                 className="dash-list-virtual"
-                renderItem={(email, index) => (
+                renderItem={(email, _index) => (
                   <EmailRow
                     key={email.id}
                     email={email}

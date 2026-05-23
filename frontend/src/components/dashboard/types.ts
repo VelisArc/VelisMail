@@ -6,7 +6,6 @@ import type {
   BusinessTeamMember,
   BusinessTemplate,
   ConnectionUsage,
-  Email,
   PlatformAdminUserRecord,
   User,
   TeamAccessInvite,
