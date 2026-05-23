@@ -10,7 +10,6 @@ import type { DashboardState } from './types';
 
 interface EmailInboxProps {
   emails: Email[];
-  folderData?: Record<string, unknown>;
   state: DashboardState;
   onSelectEmail: (email: Email) => void;
   onRefresh: () => void;

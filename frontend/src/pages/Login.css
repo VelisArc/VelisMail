@@ -428,3 +428,11 @@
     gap: var(--space-3);
   }
 }
+
+@media (max-width: 375px) {
+  .login-page { padding: 36px 10px 36px; }
+  .login-card { padding: 14px; border-radius: var(--radius-md); }
+  .login-card-header h2 { font-size: var(--text-lg); }
+  .login-card-desc { font-size: var(--text-xs); }
+  .login-brand h1 { font-size: var(--text-xl); }
+}

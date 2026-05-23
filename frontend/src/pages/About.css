@@ -13,8 +13,8 @@
   left: 0;
   right: 0;
   z-index: 50;
-  padding: 14px 0;
-  background: var(--bg-surface);
+  padding: 10px 0;
+  background: var(--bg-body);
   backdrop-filter: blur(16px);
   border-bottom: 1px solid var(--glass-border);
 }
@@ -44,21 +44,13 @@
 /* Hero */
 .about-hero {
   position: relative;
-  padding: 160px 0 80px;
+  padding: 86px 0 38px;
   text-align: center;
   overflow: hidden;
 }
 
 .about-hero-orb {
-  position: absolute;
-  width: 600px;
-  height: 600px;
-  border-radius: 50%;
-  background: radial-gradient(circle, rgba(16, 185, 129, 0.14), transparent 70%);
-  top: -200px;
-  left: 50%;
-  transform: translateX(-50%);
-  pointer-events: none;
+  display: none;
 }
 
 .about-hero-inner h1 {
@@ -76,8 +68,11 @@
 }
 
 /* Mission */
-.about-mission {
-  padding: 80px 0;
+.about-mission,
+.about-values,
+.about-team,
+.about-timeline {
+  padding: 42px 0;
 }
 
 .mission-grid {
@@ -274,13 +269,15 @@
 
 /* CTA */
 .about-cta {
-  padding: 60px 0 80px;
+  padding: 34px 0 48px;
 }
 
 .about-cta-box {
   text-align: center;
-  padding: 60px 40px;
+  padding: 34px 24px;
   background: linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(249, 115, 22, 0.08));
+  border-radius: var(--radius-md);
+  box-shadow: none;
 }
 
 .about-cta-box h2 {
@@ -339,6 +336,17 @@
 
 /* Responsive */
 @media (max-width: 768px) {
+  .about-hero {
+    padding: 72px 0 28px;
+  }
+
+  .about-mission,
+  .about-values,
+  .about-team,
+  .about-timeline {
+    padding: 30px 0;
+  }
+
   .mission-grid {
     grid-template-columns: 1fr;
   }
@@ -362,11 +370,13 @@
   }
 }
 
-/* Final compact about polish */
-.about-nav {
-  padding: 10px 0;
-  background: var(--bg-body);
+@media (max-width: 375px) {
+  .about-hero { padding: 60px 0 24px; }
+  .about-hero-inner h1 { font-size: 1.6rem; }
+  .about-nav-links { gap: 8px; }
+  .about-nav-links a:not(.btn) { font-size: 0.78rem; }
 }
+
 
 .about-hero {
   padding: 86px 0 38px;
@@ -383,10 +393,23 @@
   padding: 42px 0;
 }
 
-.value-card,
-.team-card,
-.timeline-content,
-.about-cta-box {
+.value-card {
+  text-align: center;
+  cursor: default;
+  border-radius: var(--radius-md);
+  box-shadow: none;
+}
+
+.team-card {
+  text-align: center;
+  cursor: default;
+  border-radius: var(--radius-md);
+  box-shadow: none;
+}
+
+.timeline-content {
+  flex: 1;
+  cursor: default;
   border-radius: var(--radius-md);
   box-shadow: none;
 }

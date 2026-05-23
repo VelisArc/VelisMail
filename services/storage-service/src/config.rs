@@ -31,8 +31,10 @@ impl StorageConfig {
             port,
             s3_endpoint: std::env::var("S3_ENDPOINT").unwrap_or_default(),
             s3_region: std::env::var("S3_REGION").unwrap_or_else(|_| "us-east-1".to_string()),
-            s3_access_key: std::env::var("S3_ACCESS_KEY").unwrap_or_default(),
-            s3_secret_key: std::env::var("S3_SECRET_KEY").unwrap_or_default(),
+            s3_access_key: std::env::var("S3_ACCESS_KEY")
+                .expect("S3_ACCESS_KEY must be set in environment"),
+            s3_secret_key: std::env::var("S3_SECRET_KEY")
+                .expect("S3_SECRET_KEY must be set in environment"),
             s3_bucket: std::env::var("S3_BUCKET").unwrap_or_else(|_| "velismail".to_string()),
             db_url: required_env("DATABASE_URL")?,
             max_file_size_mb: std::env::var("MAX_FILE_SIZE_MB")

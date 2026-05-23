@@ -30,9 +30,8 @@ impl GatewayConfig {
             .or_else(|| std::env::var("PORT").ok().and_then(|p| p.parse().ok()))
             .unwrap_or(3000);
 
-        let jwt_secret = std::env::var("JWT_SECRET").unwrap_or_default();
         let otp_signing_secret = std::env::var("OTP_SIGNING_SECRET")
-            .unwrap_or_else(|_| jwt_secret.clone());
+            .expect("OTP_SIGNING_SECRET must be set in environment");
 
         Ok(Self {
             host: std::env::var("GATEWAY_HOST").unwrap_or_else(|_| "0.0.0.0".to_string()),

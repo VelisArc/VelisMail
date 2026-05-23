@@ -3378,45 +3378,6 @@
   }
 }
 
-/* Final integrated dashboard pass: flat controls, no floating slots, no option motion */
-.biz-dash.animate-page,
-.biz-dash .animate-fade,
-.biz-dash .animate-scale,
-.biz-dash .animate-slide-up,
-.biz-dash .animate-pulse {
-  animation: none !important;
-}
-
-.biz-dash .folder-btn,
-.biz-dash .btn,
-.biz-dash .mail-row,
-.biz-dash .mail-card,
-.biz-dash .pricing-card,
-.biz-dash .plan-cta,
-.biz-dash .queue-stat,
-.biz-dash .queue-row,
-.biz-dash .team-row,
-.biz-dash .health-card,
-.biz-dash .template-card,
-.biz-dash .audit-row,
-.biz-dash .dns-table-row,
-.biz-dash .dns-copy-btn,
-.biz-dash .billing-toggle,
-.biz-dash .billing-toggle .toggle-knob {
-  transition: none !important;
-}
-
-.biz-dash .pricing-card:hover,
-.biz-dash .pricing-card.popular:hover,
-.biz-dash .team-row:hover,
-.biz-dash .health-card:hover,
-.biz-dash .audit-row:hover,
-.biz-dash .plan-cta:hover,
-.biz-dash .dns-copy-btn:active {
-  transform: none !important;
-  box-shadow: none !important;
-}
-
 .biz-sidebar .folder-btn {
   color: var(--text-secondary);
   background: transparent;

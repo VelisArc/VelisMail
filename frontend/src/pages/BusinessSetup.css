@@ -6,10 +6,10 @@
 }
 
 .bsetup-nav {
-  height: 40px;
+  min-height: 52px;
   display: flex;
   align-items: center;
-  background: var(--bg-surface);
+  background: var(--bg-body);
   border-bottom: 1px solid var(--glass-border);
   position: sticky;
   top: 0;
@@ -42,14 +42,14 @@
 .bsetup-container {
   max-width: 740px;
   margin: 0 auto;
-  padding: 32px 20px;
+  padding: 22px 16px;
 }
 
 /* Progress Bar — Modern SaaS style */
 .bsetup-progress {
   display: flex;
   justify-content: space-between;
-  margin-bottom: var(--space-16);
+  margin-bottom: 22px;
   position: relative;
 }
 
@@ -115,13 +115,13 @@
 
 /* Onboarding Card */
 .bsetup-card {
-  padding: 22px;
+  padding: 18px;
   background: var(--glass-bg);
   backdrop-filter: blur(24px) saturate(180%);
   -webkit-backdrop-filter: blur(24px) saturate(180%);
   border: 1px solid var(--glass-border);
-  border-radius: var(--radius-xl);
-  box-shadow: var(--glass-shadow);
+  border-radius: var(--radius-md);
+  box-shadow: none;
 }
 
 .bsetup-card h2 {
@@ -138,12 +138,12 @@
   color: var(--text-secondary);
   font-size: 0.85rem;
   line-height: 1.6;
-  margin-bottom: var(--space-10);
+  margin-bottom: 18px;
 }
 
 .bsetup-form {
   display: grid;
-  gap: var(--space-6);
+  gap: 12px;
 }
 
 .bsetup-form .btn-primary {
@@ -155,6 +155,7 @@
 /* DNS & Verification Table */
 .bsetup-dns {
   margin-top: var(--space-4);
+  border-radius: var(--radius-md);
 }
 
 .dns-instruction-text {
@@ -162,6 +163,49 @@
   color: var(--text-secondary);
   margin-bottom: 12px;
   line-height: 1.5;
+}
+
+.bsetup-domain-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.bsetup-domain-header h2 {
+  margin: 0;
+}
+
+.bsetup-dns-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 24px;
+  flex-wrap: wrap;
+}
+
+.bsetup-verif-error {
+  margin-bottom: 16px;
+}
+
+.bsetup-provider-dns {
+  margin-top: 20px;
+}
+
+.bsetup-verif-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 20px;
+}
+
+.bsetup-complete-card {
+  text-align: center;
+}
+
+.bsetup-complete-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  margin-top: 28px;
 }
 
 .dns-table {
@@ -268,54 +312,17 @@
 }
 
 @media (max-width: 768px) {
-  .bsetup-container { padding: var(--space-8) var(--space-4); }
-  .bsetup-card { padding: var(--space-6); }
+  .bsetup-container { padding: 14px 12px; }
+  .bsetup-card { padding: 14px; }
+  .bsetup-progress { margin-bottom: 16px; }
   .bsetup-progress::before { left: var(--space-8); right: var(--space-8); }
   .bsetup-progress-step span { display: none; }
 }
 
-/* Final compact setup polish */
-.bsetup-nav {
-  min-height: 52px;
-  background: var(--bg-body);
-}
-
-.bsetup-container {
-  padding: 22px 16px;
-}
-
-.bsetup-progress {
-  margin-bottom: 22px;
-}
-
-.bsetup-card {
-  padding: 18px;
-  border-radius: var(--radius-md);
-  box-shadow: none;
-}
-
-.bsetup-desc {
-  margin-bottom: 18px;
-}
-
-.bsetup-form {
-  gap: 12px;
-}
-
-.bsetup-dns {
-  border-radius: var(--radius-md);
-}
-
-@media (max-width: 768px) {
-  .bsetup-container {
-    padding: 14px 12px;
-  }
-
-  .bsetup-card {
-    padding: 14px;
-  }
-
-  .bsetup-progress {
-    margin-bottom: 16px;
-  }
+@media (max-width: 375px) {
+  .bsetup-container { padding: 10px 8px; }
+  .bsetup-card { padding: 12px; }
+  .bsetup-progress-step .bsetup-step-num { width: 32px; height: 32px; font-size: 0.8rem; }
+  .bsetup-domain-header { flex-direction: column; gap: 8px; align-items: flex-start; }
+  .bsetup-dns-actions { flex-direction: column; }
 }

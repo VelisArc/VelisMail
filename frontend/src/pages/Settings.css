@@ -12,8 +12,8 @@
 .settings-header {
   display: flex;
   align-items: center;
-  height: 48px;
-  background: var(--bg-surface);
+  height: 44px;
+  background: var(--bg-body);
   border-bottom: 1px solid var(--glass-border);
   position: sticky;
   top: 0;
@@ -41,8 +41,8 @@
 .settings-body {
   display: flex;
   flex: 1;
-  padding: 32px 0;
-  gap: 32px;
+  padding: 18px 0;
+  gap: 18px;
 }
 
 /* Tabs */
@@ -52,13 +52,13 @@
   gap: 4px;
   width: 210px;
   flex-shrink: 0;
-  padding: 14px;
+  padding: 8px;
   height: fit-content;
   position: sticky;
   top: 64px;
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-md);
   border: 1px solid var(--glass-border);
-  background: var(--bg-surface);
+  background: transparent;
 }
 
 .tab-btn {
@@ -92,7 +92,7 @@
 }
 
 .settings-section-header {
-  margin-bottom: 16px;
+  margin-bottom: 10px;
 }
 
 .settings-section-header h2 {
@@ -108,6 +108,8 @@
 /* Add Domain */
 .add-domain-card {
   margin-bottom: 20px;
+  box-shadow: none;
+  border-radius: var(--radius-md);
 }
 
 .add-domain-card h3 {
@@ -244,7 +246,7 @@
 }
 
 /* Profile */
-.profile-card { cursor: default; }
+.profile-card { cursor: default; box-shadow: none; border-radius: var(--radius-md); }
 .profile-card:hover { transform: none; }
 
 .profile-row {
@@ -291,8 +293,10 @@
 
 /* Security */
 .security-card {
-  margin-bottom: 12px;
+  margin-bottom: 10px;
   cursor: default;
+  box-shadow: none;
+  border-radius: var(--radius-md);
 }
 
 .security-card:hover { transform: none; }
@@ -339,78 +343,6 @@
   border-color: rgba(248, 113, 113, 0.2);
 }
 
-/* Appearance */
-.appearance-card{padding:20px}
-.appearance-card h3{display:flex;align-items:center;gap:8px;font-size:.95rem;margin-bottom:8px}
-.appearance-card p{font-size:.85rem;color:var(--text-muted);margin-bottom:16px}
-.theme-options{display:flex;gap:12px}
-.theme-option{display:flex;flex-direction:column;align-items:center;gap:8px;padding:16px 24px;border-radius:var(--radius-md);border:2px solid var(--glass-border);cursor:pointer;transition:all .2s;color:var(--text-muted);min-width:80px}
-.theme-option:hover{border-color:var(--primary);color:var(--text-primary)}
-.theme-option.active{border-color:var(--primary);background:var(--primary-glow);color:var(--primary)}
-.theme-option span{font-size:.8rem;font-weight:500}
-.accent-options{display:flex;gap:10px;flex-wrap:wrap}
-.accent-option{width:32px;height:32px;border-radius:50%;cursor:pointer;border:2px solid transparent;transition:all .2s;background:var(--accent-preview)}
-.accent-option:hover{transform:scale(1.2);border-color:#fff}
-
-/* Responsive */
-@media (max-width: 768px) {
-  .settings-body {
-    flex-direction: column;
-  }
-
-  .settings-tabs {
-    width: 100%;
-    flex-direction: row;
-    position: static;
-  }
-
-  .profile-fields {
-    grid-template-columns: 1fr;
-  }
-
-  .domain-card-top {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-
-  .add-domain-form {
-    flex-direction: column;
-  }
-}
-
-/* Final compact settings polish */
-.settings-header {
-  height: 44px;
-  background: var(--bg-body);
-}
-
-.settings-body {
-  padding: 18px 0;
-  gap: 18px;
-}
-
-.settings-tabs {
-  padding: 8px;
-  border-radius: var(--radius-md);
-  background: transparent;
-}
-
-.settings-section-header {
-  margin-bottom: 10px;
-}
-
-.add-domain-card,
-.security-card,
-.appearance-card,
-.profile-card {
-  box-shadow: none;
-  border-radius: var(--radius-md);
-}
-
-.security-card {
-  margin-bottom: 10px;
-}
-
 .session-row {
   display: flex;
   align-items: center;
@@ -428,22 +360,41 @@
   font-size: 0.9rem;
 }
 
-.theme-option {
-  border-radius: var(--radius-sm);
-  padding: 12px 18px;
-}
+.settings-spacer-xs { margin-top: 8px; }
+.settings-spacer-sm { margin-top: 12px; }
+.settings-spacer-md { margin-top: 16px; }
+.settings-spacer-lg { margin-top: 14px; }
+.settings-ml-xs { margin-left: 8px; }
+.settings-actions-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+.settings-sessions-grid { display: grid; gap: 10px; margin-top: 14px; }
+.settings-header-row { display: flex; justify-content: space-between; align-items: center; }
 
+/* Appearance */
+.appearance-card{padding:20px;box-shadow:none;border-radius:var(--radius-md)}
+.appearance-card h3{display:flex;align-items:center;gap:8px;font-size:.95rem;margin-bottom:8px}
+.appearance-card p{font-size:.85rem;color:var(--text-muted);margin-bottom:16px}
+.theme-options{display:flex;gap:12px}
+.theme-option{display:flex;flex-direction:column;align-items:center;gap:8px;padding:12px 18px;border-radius:var(--radius-sm);border:2px solid var(--glass-border);cursor:pointer;transition:all .2s;color:var(--text-muted);min-width:80px}
+.theme-option:hover{border-color:var(--primary);color:var(--text-primary)}
+.theme-option.active{border-color:var(--primary);background:var(--primary-glow);color:var(--primary)}
+.theme-option span{font-size:.8rem;font-weight:500}
+.accent-options{display:flex;gap:10px;flex-wrap:wrap}
+.accent-option{width:32px;height:32px;border-radius:50%;cursor:pointer;border:2px solid transparent;transition:all .2s;background:var(--accent-preview)}
+.accent-option:hover{transform:scale(1.2);border-color:#fff}
+
+/* Responsive */
 @media (max-width: 768px) {
   .settings-body {
+    flex-direction: column;
     padding: 12px 0;
     gap: 12px;
   }
 
   .settings-tabs {
-    position: static;
     width: 100%;
     flex-direction: row;
     overflow-x: auto;
+    position: static;
   }
 
   .tab-btn {
@@ -454,4 +405,28 @@
   .settings-section-header p {
     display: none;
   }
+
+  .profile-fields {
+    grid-template-columns: 1fr;
+  }
+
+  .domain-card-top {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .add-domain-form {
+    flex-direction: column;
+  }
+}
+
+@media (max-width: 375px) {
+  .settings-header { height: 40px; }
+  .settings-body { padding: 8px 0; gap: 8px; }
+  .settings-tabs { padding: 6px; gap: 2px; overflow-x: auto; }
+  .tab-btn { font-size: 0.72rem; padding: 6px 8px; }
+  .settings-section-header h2 { font-size: 0.95rem; }
+  .settings-section-header p { display: none; }
+  .theme-options { flex-direction: column; gap: 8px; }
+  .theme-option { flex-direction: row; padding: 10px 14px; min-width: 0; }
 }

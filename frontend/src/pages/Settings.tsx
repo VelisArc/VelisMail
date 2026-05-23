@@ -285,7 +285,7 @@ export default function SettingsPage() {
   return (
     <div className="settings-page">
       <header className="settings-header glass">
-        <div className="page-container section-container" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div className="page-container section-container settings-header-row">
           <div className="settings-header-left">
             <Link to="/business" className="btn btn-ghost btn-sm">
               <ArrowLeft size={16} /> Back to Inbox
@@ -331,10 +331,10 @@ export default function SettingsPage() {
                   <div>
                     <h3>{user.displayName}</h3>
                     <span className="badge badge-primary">{user.plan} Plan</span>
-                    <div style={{ marginTop: 8 }}>
-                      <input ref={fileInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleImageChange} />
+                    <div className="settings-spacer-xs">
+                      <input ref={fileInputRef} type="file" accept="image/*" hidden onChange={handleImageChange} />
                       <button className="btn btn-sm" onClick={() => fileInputRef.current?.click()}>Upload Image</button>
-                      {profileImage && <button className="btn btn-sm btn-ghost" onClick={handleRemoveImage} style={{ marginLeft: 8 }}>Remove</button>}
+                      {profileImage && <button className="btn btn-sm btn-ghost settings-ml-xs" onClick={handleRemoveImage}>Remove</button>}
                     </div>
                   </div>
                 </div>
@@ -358,8 +358,8 @@ export default function SettingsPage() {
                     <input className="input" value={new Date(user.createdAt).toLocaleDateString()} disabled />
                   </div>
                 </div>
-                {profileError && <div className="form-error" style={{ marginTop: 12 }}>{profileError}</div>}
-                <button className="btn btn-primary" type="submit" style={{ marginTop: 16 }} disabled={profileSaving}>
+                {profileError && <div className="form-error settings-spacer-sm">{profileError}</div>}
+                <button className="btn btn-primary settings-spacer-md" type="submit" disabled={profileSaving}>
                   {profileSaving ? <LoadingSpinner size="sm" label="Saving profile" /> : <CheckCircle2 size={16} />}
                   Save Changes
                 </button>
@@ -382,8 +382,8 @@ export default function SettingsPage() {
                     <input className="input" type="password" placeholder="New password" value={newPassword} onChange={e => setNewPassword(e.target.value)} />
                     <input className="input" type="password" placeholder="Confirm new password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} />
                   </div>
-                  {securityError && <div className="form-error" style={{ marginTop: 12 }}>{securityError}</div>}
-                  <button className="btn btn-primary btn-sm" type="submit" style={{ marginTop: 12 }} disabled={passwordSaving}>
+                  {securityError && <div className="form-error settings-spacer-sm">{securityError}</div>}
+                  <button className="btn btn-primary btn-sm settings-spacer-sm" type="submit" disabled={passwordSaving}>
                     {passwordSaving ? <LoadingSpinner size="sm" label="Updating password" /> : <CheckCircle2 size={16} />}
                     Update Password
                   </button>
@@ -420,9 +420,9 @@ export default function SettingsPage() {
                     Send Code
                   </button>
                 </div>
-                {recoveryHint && <div className="form-success" style={{ marginTop: 12 }}>{recoveryHint}</div>}
+                {recoveryHint && <div className="form-success settings-spacer-sm">{recoveryHint}</div>}
                 {recoveryChallengeToken && (
-                  <div className="security-fields" style={{ marginTop: 12 }}>
+                  <div className="security-fields settings-spacer-sm">
                     <input
                       className="input"
                       type="text"
@@ -437,7 +437,7 @@ export default function SettingsPage() {
                   </div>
                 )}
                 {user.recoveryEmailVerified && user.recoveryEmail && (
-                  <div className="form-success" style={{ marginTop: 12 }}>
+                  <div className="form-success settings-spacer-sm">
                     Verified recovery email: {user.recoveryEmail}
                   </div>
                 )}
@@ -517,7 +517,7 @@ export default function SettingsPage() {
               <div className="glass-card security-card">
                 <h3><LogOut size={18} /> Session</h3>
                 <p>Log out of your current browser session.</p>
-                <button className="btn btn-secondary" style={{ marginTop: 12 }} onClick={() => setShowLogoutConfirm(true)}>
+                <button className="btn btn-secondary settings-spacer-sm" onClick={() => setShowLogoutConfirm(true)}>
                   <LogOut size={16} /> Log Out
                 </button>
               </div>
@@ -525,7 +525,7 @@ export default function SettingsPage() {
               <div className="glass-card security-card">
                 <h3><Monitor size={18} /> Active Sessions</h3>
                 <p>Review and revoke signed-in devices connected to your account.</p>
-                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
+                <div className="settings-actions-row">
                   <button className="btn btn-secondary btn-sm" onClick={loadSessions} disabled={sessionsLoading}>
                     {sessionsLoading ? <LoadingSpinner size="sm" label="Loading sessions" /> : <RefreshCw size={14} />}
                     {sessionsLoading ? 'Loading' : 'Refresh'}
@@ -534,7 +534,7 @@ export default function SettingsPage() {
                     <Shield size={14} /> Revoke Others
                   </button>
                 </div>
-                <div style={{ display: 'grid', gap: 10, marginTop: 14 }}>
+                <div className="settings-sessions-grid">
                   {sessions.length === 0 && (
                     <p>{sessionsLoading ? 'Loading active sessions...' : 'No active sessions returned by the server.'}</p>
                   )}
@@ -556,7 +556,7 @@ export default function SettingsPage() {
               <div className="glass-card security-card danger-zone">
                 <h3><AlertCircle size={18} color="var(--danger)" /> Account Access</h3>
                 <p>Deactivate your account access while retaining workspace data for administrator-assisted recovery.</p>
-                <button className="btn btn-danger btn-sm" style={{ marginTop: 8 }} onClick={handleDeleteAccount}>
+                <button className="btn btn-danger btn-sm settings-spacer-xs" onClick={handleDeleteAccount}>
                   <Trash2 size={14} /> Deactivate Account
                 </button>
               </div>

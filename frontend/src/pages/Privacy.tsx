@@ -8,7 +8,7 @@ export default function Privacy() {
       <nav className="legal-nav">
         <div className="container legal-nav-inner">
           <Link to="/" className="nav-logo">
-            <img src="/ZeeResizer.png" alt="VelisMail" style={{ height: '24px', width: 'auto' }} />
+            <img src="/ZeeResizer.png" alt="VelisMail" className="legal-nav-logo" />
             <span className="logo-text">VelisMail</span>
           </Link>
           <Link to="/" className="btn btn-ghost btn-sm"><ArrowLeft size={16} /> Back</Link>
@@ -28,26 +28,26 @@ export default function Privacy() {
               At VelisMail, we believe privacy is a fundamental human right. This Privacy Policy details how our Zero-Knowledge Enterprise Email Hosting platform collects, uses, protects, and shares your information. By using VelisMail, you agree to the practices described in this policy.
             </p>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px', marginBottom: '40px', marginTop: '40px' }}>
-              <div className="glass-card" style={{ padding: '20px' }}>
-                <Shield size={22} color="var(--primary)" style={{ marginBottom: '10px' }} />
-                <h3 style={{ margin: '0 0 6px 0', borderBottom: 'none', paddingBottom: 0, fontSize: '1rem' }}>Zero-Knowledge Architecture</h3>
-                <p style={{ margin: 0, fontSize: '0.85rem' }}>We physically cannot read your emails. Your data is encrypted before it reaches our servers.</p>
+            <div className="privacy-cards">
+              <div className="glass-card privacy-card">
+                <Shield size={22} color="var(--primary)" />
+                <h3>Zero-Knowledge Architecture</h3>
+                <p>We physically cannot read your emails. Your data is encrypted before it reaches our servers.</p>
               </div>
-              <div className="glass-card" style={{ padding: '20px' }}>
-                <Database size={22} color="var(--primary)" style={{ marginBottom: '10px' }} />
-                <h3 style={{ margin: '0 0 6px 0', borderBottom: 'none', paddingBottom: 0, fontSize: '1rem' }}>Data Sovereignty</h3>
-                <p style={{ margin: 0, fontSize: '0.85rem' }}>Your data is isolated in secure, compliant vaults. We never sell, share, or analyze your communications.</p>
+              <div className="glass-card privacy-card">
+                <Database size={22} color="var(--primary)" />
+                <h3>Data Sovereignty</h3>
+                <p>Your data is isolated in secure, compliant vaults. We never sell, share, or analyze your communications.</p>
               </div>
-              <div className="glass-card" style={{ padding: '20px' }}>
-                <Lock size={22} color="var(--primary)" style={{ marginBottom: '10px' }} />
-                <h3 style={{ margin: '0 0 6px 0', borderBottom: 'none', paddingBottom: 0, fontSize: '1rem' }}>No Advertising</h3>
-                <p style={{ margin: 0, fontSize: '0.85rem' }}>We do not serve ads, track browsing, or build advertising profiles from your data. Ever.</p>
+              <div className="glass-card privacy-card">
+                <Lock size={22} color="var(--primary)" />
+                <h3>No Advertising</h3>
+                <p>We do not serve ads, track browsing, or build advertising profiles from your data. Ever.</p>
               </div>
-              <div className="glass-card" style={{ padding: '20px' }}>
-                <Eye size={22} color="var(--primary)" style={{ marginBottom: '10px' }} />
-                <h3 style={{ margin: '0 0 6px 0', borderBottom: 'none', paddingBottom: 0, fontSize: '1rem' }}>Full Transparency</h3>
-                <p style={{ margin: 0, fontSize: '0.85rem' }}>We publish exactly what we collect and why. No hidden data pipelines or third-party analytics.</p>
+              <div className="glass-card privacy-card">
+                <Eye size={22} color="var(--primary)" />
+                <h3>Full Transparency</h3>
+                <p>We publish exactly what we collect and why. No hidden data pipelines or third-party analytics.</p>
               </div>
             </div>
           </section>
@@ -168,7 +168,7 @@ export default function Privacy() {
           </section>
 
           <section>
-            <p style={{ textAlign: 'center', marginTop: '40px' }}>Questions about our privacy practices? Contact us at <a href="mailto:support@velismail.online">support@velismail.online</a></p>
+            <p className="privacy-footer-text">Questions about our privacy practices? Contact us at <a href="mailto:support@velismail.online">support@velismail.online</a></p>
           </section>
         </div>
       </div>

@@ -23,9 +23,20 @@
   display: flex;
   align-items: center;
   gap: 16px;
-  padding-bottom: 12px;
-  margin-bottom: 12px;
+  padding: 6px 14px;
   border-bottom: 1px solid var(--border-primary);
+}
+
+.compose-header {
+  padding: 12px 14px;
+}
+
+.compose-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1;
+  overflow-y: auto;
 }
 
 .compose-field > label {
@@ -139,13 +150,14 @@
   flex-direction: column;
   flex: 1 1 auto;
   overflow: hidden;
-  margin: 0 20px 20px;
+  margin: 8px 14px;
   min-height: 180px;
   max-height: clamp(220px, 42vh, 520px);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-sm);
   background: var(--bg-surface-2);
   border: 1px solid var(--border-primary);
   transition: border-color 0.2s;
+  box-shadow: none;
 }
 
 .rich-text-container:focus-within {
@@ -207,7 +219,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 20px;
+  padding: 12px 14px;
   background: var(--bg-surface);
   border-top: 1px solid var(--border-primary);
   flex-shrink: 0;
@@ -292,31 +304,7 @@
   color: var(--danger);
 }
 
-/* Final compact composer polish */
 .compose-modal {
   border-radius: var(--radius-md);
   box-shadow: none;
-}
-
-.compose-header,
-.compose-footer {
-  padding: 12px 14px;
-}
-
-.compose-body {
-  gap: 8px;
-}
-
-.compose-field {
-  padding: 6px 14px;
-}
-
-.rich-text-container {
-  margin: 8px 14px;
-  border-radius: var(--radius-sm);
-  box-shadow: none;
-}
-
-.rich-text-editor {
-  min-height: 170px;
 }

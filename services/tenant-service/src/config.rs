@@ -18,9 +18,8 @@ impl TenantConfig {
         Ok(Self {
             host: std::env::var("TENANT_HOST").unwrap_or_else(|_| "0.0.0.0".to_string()),
             port,
-            db_url: std::env::var("DATABASE_URL").unwrap_or_else(|_| {
-                "postgres://postgres:postgres@localhost:5432/velismail".to_string()
-            }),
+            db_url: std::env::var("DATABASE_URL")
+                .expect("DATABASE_URL must be set in environment"),
         })
     }
 }

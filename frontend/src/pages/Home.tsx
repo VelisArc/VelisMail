@@ -326,7 +326,7 @@ export default function Home() {
           </div>
         </section>
 
-        <section className="section animate-on-scroll" style={{ background: 'var(--bg-surface-2)' }}>
+        <section className="section section-alt animate-on-scroll">
           <div className="container">
             <div className="section-head">
               <span className="section-badge">Solutions</span>
@@ -387,7 +387,7 @@ export default function Home() {
           </div>
         </section>
 
-        <section id="feedback" className="feedback-section animate-on-scroll" style={{ background: 'var(--bg-surface-2)' }}>
+        <section id="feedback" className="feedback-section section-alt animate-on-scroll">
           <div className="container feedback-container">
             <div className="feedback-copy">
               <h2>Building for you.</h2>
@@ -520,7 +520,6 @@ export default function Home() {
                   type="button"
                   className="footer-link"
                   onClick={toggleTheme}
-                  style={{ cursor: 'pointer', textAlign: 'left' }}
                 >
                   {theme === 'dark' ? 'Light Mode' : 'Dark Mode'}
                 </button>

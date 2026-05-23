@@ -307,7 +307,7 @@ export default function BusinessDashboard() {
   if (!isBusinessSetupReady(user)) return <Navigate to="/business-setup" replace />;
 
   return (
-    <div className="biz-dashboard">
+    <div className="biz-dash">
       <Sidebar
         activeBizTab={activeBizTab} setActiveBizTab={setActiveBizTab}
         activeFolder={activeFolder} setActiveFolder={setActiveFolder}

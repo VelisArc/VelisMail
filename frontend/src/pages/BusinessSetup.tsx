@@ -677,8 +677,8 @@ export default function BusinessSetup() {
         {/* Step 2: Domain */}
         {step === 2 && (
           <div className="bsetup-card glass animate-fade">
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-              <h2 style={{ margin: 0 }}><Globe size={22} /> Configure Business Domain</h2>
+            <div className="bsetup-domain-header">
+              <h2><Globe size={22} /> Configure Business Domain</h2>
               <button className="btn btn-ghost btn-sm" onClick={() => { setStep(1); setError(''); }}>
                 <ArrowLeft size={14} /> Back to Infrastructure
               </button>
@@ -753,7 +753,7 @@ export default function BusinessSetup() {
                     );
                   })}
                 </div>
-                <div style={{ display: 'flex', gap: 12, marginTop: 24, flexWrap: 'wrap' }}>
+                <div className="bsetup-dns-actions">
                   <button className="btn btn-primary" onClick={handleDomainVerify}>
                     <CheckCircle2 size={16} /> Verify Domain Manually
                   </button>
@@ -766,12 +766,12 @@ export default function BusinessSetup() {
         {/* Step 3: Verification Scan */}
         {step === 3 && (
           <div className="bsetup-card glass animate-fade">
-            <div className="diag-header" style={{ marginBottom: 20 }}>
+            <div className="diag-header">
               <Wifi size={16} className="animate-pulse" />
               <span>Domain Verification Scan</span>
               <span className="diag-status">Scanning…</span>
             </div>
-            {error && <div className="form-error" style={{ marginBottom: 16 }}>{error}</div>}
+            {error && <div className="form-error bsetup-verif-error">{error}</div>}
             <div className="diag-steps">
               {verifySteps.map((vs, i) => {
                 const StepIcon = vs.icon;
@@ -793,7 +793,7 @@ export default function BusinessSetup() {
               })}
             </div>
             {providerDnsRecords.length > 0 && (
-              <div className="bsetup-dns" style={{ marginTop: 20 }}>
+              <div className="bsetup-dns bsetup-provider-dns">
                 <p className="dns-instruction-text">Provider-side DNS records still required before mail can send and receive:</p>
                 <div className="dns-records-table">
                   <div className="dns-table-header">
@@ -835,7 +835,7 @@ export default function BusinessSetup() {
                 </div>
               </div>
             )}
-            <div style={{ display: 'flex', gap: 12, marginTop: 20 }}>
+            <div className="bsetup-verif-actions">
               <button className="btn btn-ghost" onClick={() => setStep(2)}>Back to DNS Setup</button>
               <button className="btn btn-primary" onClick={handleDomainVerify}>
                 <CheckCircle2 size={16} /> Retry Verification
@@ -846,11 +846,11 @@ export default function BusinessSetup() {
 
         {/* Step 4: Complete */}
         {step === 4 && (
-          <div className="bsetup-card glass animate-scale" style={{ textAlign: 'center' }}>
+          <div className="bsetup-card glass animate-scale bsetup-complete-card">
             <div className="bsetup-success-icon"><CheckCircle2 size={56} color="var(--accent)" /></div>
             <h2>Business Mail Activated!</h2>
             <p className="bsetup-desc">Your domain <strong>{domainInput}</strong> is now verified and connected. Your first business mailbox is <strong>{user.businessMailboxAddress || `admin@${domainInput}`}</strong>.</p>
-            <div style={{ display: 'flex', gap: 12, justifyContent: 'center', marginTop: 28 }}>
+            <div className="bsetup-complete-actions">
               <button className="btn btn-primary" onClick={() => navigate('/business')}>
                 <Mail size={16} /> Open Business Dashboard
               </button>
