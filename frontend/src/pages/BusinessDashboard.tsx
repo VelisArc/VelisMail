@@ -24,6 +24,8 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useEmails } from '../hooks/useMail';
 import './BusinessDashboard.css';
 import './Pricing.css';
+import ContactsPage from './Contacts';
+
 
 function toDomainRecord(domain: CustomDomain): DomainRecord {
   const statusFor = (key: string) => domain.checks?.find((c: DomainCheck) => c.key === key)?.status || 'pending';
@@ -410,6 +412,8 @@ export default function BusinessDashboard() {
         {activeBizTab === 'settings' && <ErrorBoundary><SettingsPanel state={dashboardState} /></ErrorBoundary>}
 
         {activeBizTab === 'billing' && <ErrorBoundary><BillingPanel state={dashboardState} handleBuyPlan={handleBuyPlan} /></ErrorBoundary>}
+        {activeBizTab === 'contacts' && <ErrorBoundary><ContactsPage /></ErrorBoundary>}
+
       </main>
 
       <Modals
