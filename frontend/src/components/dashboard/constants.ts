@@ -1,7 +1,7 @@
 import { Inbox, Shield, Mail, Layers } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
-export type BizTab = 'mail' | 'domains' | 'mailboxes' | 'groups' | 'team' | 'queue' | 'analytics' | 'audit' | 'templates' | 'settings' | 'billing' | 'admin';
+export type BizTab = 'mail' | 'domains' | 'mailboxes' | 'groups' | 'team' | 'queue' | 'analytics' | 'audit' | 'templates' | 'settings' | 'billing' | 'admin' | 'contacts';
 
 export type BizFolder = { id: string; label: string; icon: LucideIcon; badge?: string };
 
@@ -25,7 +25,7 @@ export const PLANS = [
 ];
 
 export const ROLE_ALLOWED_TABS: Record<string, BizTab[]> = {
-  admin: ['mail', 'templates', 'queue', 'domains', 'mailboxes', 'groups', 'team', 'analytics', 'audit', 'settings', 'billing', 'admin'],
-  member: ['mail', 'templates', 'queue', 'analytics', 'team'],
-  viewer: ['mail', 'analytics', 'team'],
+  admin: ['mail', 'templates', 'queue', 'domains', 'mailboxes', 'groups', 'team', 'analytics', 'audit', 'settings', 'billing', 'admin', 'contacts'],
+  member: ['mail', 'templates', 'queue', 'analytics', 'team', 'domains', 'mailboxes', 'groups', 'audit', 'settings', 'billing', 'contacts'],
+  viewer: ['mail', 'analytics', 'team', 'domains', 'mailboxes', 'groups', 'audit', 'settings', 'billing', 'contacts'],
 };

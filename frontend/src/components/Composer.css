@@ -55,7 +55,7 @@
   background: transparent;
   border: none;
   padding: 4px 8px;
-  box-shadow: none;
+  box-shadow: none !important;
   font-size: 0.95rem;
   color: var(--text-primary);
 }
@@ -92,8 +92,8 @@
   overflow-y: auto;
   background: var(--bg-surface-2);
   border: 1px solid var(--glass-border);
-  border-radius: var(--radius-md);
-  box-shadow: var(--glass-shadow);
+  border-radius: 0 !important;
+  box-shadow: none !important;
   z-index: 100;
   display: flex;
   flex-direction: column;
@@ -105,7 +105,7 @@
   align-items: center;
   gap: 12px;
   padding: 8px 12px;
-  border-radius: var(--radius-sm);
+  border-radius: 0 !important;
   cursor: pointer;
   transition: background 0.15s;
 }
@@ -117,7 +117,7 @@
 .autocomplete-avatar {
   width: 28px;
   height: 28px;
-  border-radius: var(--radius-full);
+  border-radius: 0 !important;
   background: var(--primary);
   color: white;
   display: flex;
@@ -153,16 +153,16 @@
   margin: 8px 14px;
   min-height: 180px;
   max-height: clamp(220px, 42vh, 520px);
-  border-radius: var(--radius-sm);
+  border-radius: 0 !important;
   background: var(--bg-surface-2);
   border: 1px solid var(--border-primary);
   transition: border-color 0.2s;
-  box-shadow: none;
+  box-shadow: none !important;
 }
 
 .rich-text-container:focus-within {
   border-color: var(--primary-400);
-  box-shadow: 0 0 0 2px var(--primary-glow);
+  box-shadow: none !important;
 }
 
 .rich-text-toolbar {
@@ -180,7 +180,7 @@
   justify-content: center;
   width: 28px;
   height: 28px;
-  border-radius: 4px;
+  border-radius: 0 !important;
   background: var(--bg-surface);
   border: 1px solid transparent;
   color: var(--text-secondary);
@@ -281,7 +281,7 @@
   padding: 6px 12px;
   background: var(--bg-surface-2);
   border: 1px solid var(--border-primary);
-  border-radius: var(--radius-sm);
+  border-radius: 0 !important;
   font-size: 0.8rem;
   color: var(--text-secondary);
   transition: all var(--transition-fast);
@@ -305,6 +305,6 @@
 }
 
 .compose-modal {
-  border-radius: var(--radius-md);
-  box-shadow: none;
+  border-radius: 0 !important;
+  box-shadow: none !important;
 }
