@@ -23,7 +23,7 @@
 .pricing-page .pricing-orb.orb-a {
   width: 520px;
   height: 520px;
-  background: var(--primary-400);
+  background: var(--accent);
   top: -120px;
   right: -180px;
 }
@@ -54,9 +54,9 @@
   font-weight: 600;
   letter-spacing: 0.05em;
   text-transform: uppercase;
-  background: rgba(var(--primary-rgb, 99, 102, 241), 0.12);
-  color: var(--primary-400);
-  border: 1px solid rgba(var(--primary-rgb, 99, 102, 241), 0.2);
+  background: var(--accent-glow);
+  color: var(--accent);
+  border: 1px solid rgba(20, 184, 166, 0.2);
   margin-bottom: 20px;
 }
 
@@ -68,7 +68,7 @@
 }
 
 .pricing-hero h1 span {
-  background: linear-gradient(135deg, var(--primary-400), var(--accent, #818cf8));
+  background: linear-gradient(135deg, var(--accent), var(--accent-400));
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -115,7 +115,7 @@
 }
 
 .billing-toggle.annual {
-  background: var(--primary-400);
+  background: var(--accent);
 }
 
 .billing-toggle .toggle-knob {
@@ -175,19 +175,19 @@
 
 /* Popular / recommended card */
 .pricing-card.popular {
-  border-color: var(--primary-400);
+  border-color: var(--accent);
   background: linear-gradient(
     180deg,
-    rgba(var(--primary-rgb, 99, 102, 241), 0.06) 0%,
+    var(--accent-glow) 0%,
     var(--bg-surface) 40%
   );
-  box-shadow: 0 0 0 1px var(--primary-400),
-    0 8px 40px rgba(var(--primary-rgb, 99, 102, 241), 0.12);
+  box-shadow: 0 0 0 1px var(--accent),
+    0 8px 40px rgba(20, 184, 166, 0.12);
 }
 
 .pricing-card.popular:hover {
-  box-shadow: 0 0 0 1px var(--primary-400),
-    0 24px 60px rgba(var(--primary-rgb, 99, 102, 241), 0.2);
+  box-shadow: 0 0 0 1px var(--accent),
+    0 24px 60px rgba(20, 184, 166, 0.2);
 }
 
 .popular-badge {
@@ -201,7 +201,7 @@
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  background: linear-gradient(135deg, var(--primary-400), var(--accent, #818cf8));
+  background: linear-gradient(135deg, var(--accent), var(--accent-600));
   color: #fff;
   white-space: nowrap;
 }
@@ -214,12 +214,12 @@
   align-items: center;
   justify-content: center;
   margin-bottom: 16px;
-  background: rgba(var(--primary-rgb, 99, 102, 241), 0.1);
-  color: var(--primary-400);
+  background: var(--accent-glow);
+  color: var(--accent);
 }
 
 .pricing-card.popular .plan-icon {
-  background: linear-gradient(135deg, var(--primary-400), var(--accent, #818cf8));
+  background: linear-gradient(135deg, var(--accent), var(--accent-600));
   color: #fff;
 }
 
@@ -360,19 +360,19 @@
 }
 
 .plan-cta.cta-outline:hover {
-  border-color: var(--primary-400);
-  color: var(--primary-400);
-  background: rgba(var(--primary-rgb, 99, 102, 241), 0.06);
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-glow);
 }
 
 .plan-cta.cta-primary {
-  background: linear-gradient(135deg, var(--primary-400), var(--accent, #818cf8));
+  background: linear-gradient(135deg, var(--accent), var(--accent-600));
   color: #fff;
-  box-shadow: 0 4px 16px rgba(var(--primary-rgb, 99, 102, 241), 0.3);
+  box-shadow: 0 4px 16px rgba(20, 184, 166, 0.3);
 }
 
 .plan-cta.cta-primary:hover {
-  box-shadow: 0 6px 24px rgba(var(--primary-rgb, 99, 102, 241), 0.45);
+  box-shadow: 0 6px 24px rgba(20, 184, 166, 0.45);
   transform: translateY(-1px);
 }
 
@@ -435,7 +435,7 @@
 }
 
 .comparison-table thead th.popular-col {
-  color: var(--primary-400);
+  color: var(--accent);
 }
 
 .comparison-table tbody td {
@@ -457,7 +457,7 @@
 }
 
 .comparison-table tbody tr:hover {
-  background: rgba(var(--primary-rgb, 99, 102, 241), 0.03);
+  background: rgba(20, 184, 166, 0.04);
 }
 
 .comparison-table .check {
@@ -494,7 +494,7 @@
 }
 
 .infra-note-card h3 svg {
-  color: var(--primary-400);
+  color: var(--accent);
 }
 
 .infra-note-card p {
@@ -558,7 +558,7 @@
 }
 
 .faq-item:hover {
-  border-color: rgba(var(--primary-rgb, 99, 102, 241), 0.3);
+  border-color: rgba(20, 184, 166, 0.3);
 }
 
 .faq-question {

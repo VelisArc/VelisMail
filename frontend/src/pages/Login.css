@@ -37,7 +37,7 @@
 
 .login-orb-1 {
   width: 600px; height: 600px;
-  background: var(--primary);
+  background: var(--accent);
   top: -200px; right: -100px;
 }
 
@@ -91,7 +91,7 @@
 }
 
 .login-feature .feature-icon {
-  color: var(--primary-600);
+  color: var(--accent);
   flex-shrink: 0;
 }
 
@@ -115,12 +115,12 @@
   width: 56px;
   height: 56px;
   border-radius: var(--radius-lg);
-  background: var(--primary-glow);
+  background: var(--accent-glow);
   display: flex;
   align-items: center;
   justify-content: center;
   margin: 0 auto var(--space-3);
-  color: var(--primary-600);
+  color: var(--accent);
 }
 
 .login-card-header h2 {
@@ -193,13 +193,13 @@
 }
 
 .login-link {
-  color: var(--primary);
+  color: var(--accent);
   font-weight: var(--font-weight-semibold);
   transition: color var(--transition-fast);
 }
 
 .login-link:hover {
-  color: var(--primary-600);
+  color: var(--accent-600);
 }
 
 .login-footer-links {
@@ -232,7 +232,7 @@
 }
 
 .login-back-link:hover {
-  color: var(--primary);
+  color: var(--accent);
 }
 
 .account-type-grid {
@@ -252,13 +252,13 @@
 }
 
 .account-type-card:hover {
-  border-color: var(--primary-300);
-  background: var(--primary-glow);
+  border-color: var(--accent-300);
+  background: var(--accent-glow);
 }
 
 .account-type-card.selected {
-  border-color: var(--primary);
-  background: var(--primary-glow);
+  border-color: var(--accent);
+  background: var(--accent-glow);
 }
 
 .team-access-hint {
@@ -283,7 +283,7 @@
 
 .team-invite-summary strong {
   text-transform: uppercase;
-  color: var(--primary);
+  color: var(--accent);
   font-size: var(--text-xs);
   letter-spacing: 0.06em;
 }

@@ -664,7 +664,7 @@ textarea.input {
 
 .inline-alert.warning {
   background: var(--warning-50);
-  border: 1px solid rgba(245, 158, 11, 0.15);
+  border: 1px solid rgba(23, 23, 23, 0.15);
   color: var(--warning-500);
 }
 
@@ -1105,7 +1105,7 @@ textarea.input {
 .dns-type-txt { background: rgba(59, 130, 246, 0.12); color: #3b82f6; border: 1px solid rgba(59, 130, 246, 0.2); }
 .dns-type-mx { background: rgba(16, 185, 129, 0.12); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.2); }
 .dns-type-cname { background: rgba(139, 92, 246, 0.12); color: #8b5cf6; border: 1px solid rgba(139, 92, 246, 0.2); }
-.dns-type-a { background: rgba(245, 158, 11, 0.12); color: var(--primary-500); border: 1px solid rgba(245, 158, 11, 0.2); }
+.dns-type-a { background: rgba(23, 23, 23, 0.12); color: var(--primary-500); border: 1px solid rgba(23, 23, 23, 0.2); }
 .dns-type-aaaa { background: rgba(236, 72, 153, 0.12); color: #ec4899; border: 1px solid rgba(236, 72, 153, 0.2); }
 
 .dns-field-value {
