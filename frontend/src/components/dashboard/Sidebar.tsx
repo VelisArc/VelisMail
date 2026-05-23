@@ -1,4 +1,4 @@
-import { LogOut, Mail, Layers, Server, Globe, Inbox, Users, Shield, BarChart3, Activity, Settings, CreditCard, Crown, Plus, User } from 'lucide-react';
+import { LogOut, Mail, Layers, Server, Globe, Inbox, Users, Shield, BarChart3, Activity, Settings, CreditCard, Crown, Plus, User, Menu } from 'lucide-react';
 import type { User as UserType } from '../../api/client';
 import { BIZ_FOLDERS } from './constants';
 import type { BizTab, BizFolder } from './constants';
@@ -32,186 +32,123 @@ export default function Sidebar({
   canAccessPlatformAdmin,
   onShowDomain,
 }: SidebarProps) {
-  const folderBadge = (f: BizFolder) => {
-    if (!f.badge) return undefined;
-    return f.badge;
-  };
+  const folderBadge = (f: BizFolder) => f.badge;
+
+  const NavBtn = ({ tab, icon: Icon, label, onClick }: { tab?: BizTab; icon: any; label: string; onClick?: () => void }) => (
+    <button
+      type="button"
+      className={`side-nav-btn ${tab && activeBizTab === tab ? 'active' : ''}`}
+      onClick={onClick || (tab ? () => { setActiveBizTab(tab); setSidebarOpen(false); } : undefined)}
+    >
+      <Icon size={16} />
+      <span>{label}</span>
+    </button>
+  );
+
+  const Section = ({ label, children }: { label: string; children: React.ReactNode }) => (
+    <>
+      <div className="side-section-label">{label}</div>
+      {children}
+    </>
+  );
 
   return (
     <>
-      {sidebarOpen && (
-        <div className="dash-sidebar-overlay" onClick={() => setSidebarOpen(false)} />
-      )}
-      <aside className={`biz-sidebar glass ${sidebarOpen ? 'sidebar-open' : ''}`}>
-        <div className="dash-brand">
-          <div className="nav-logo">
-            <img src="/ZeeResizer.png" alt="" className="logo-img" />
-            <span className="logo-text">VelisMail</span>
+      <div className="dash-mobile-header">
+        <button type="button" className="dash-mobile-menu-btn" onClick={() => setSidebarOpen(true)}>
+          <Menu size={20} />
+        </button>
+        <div className="dash-mobile-brand">
+          <img src="/ZeeResizer.png" alt="" />
+          <span>VelisMail</span>
+        </div>
+      </div>
+
+      {sidebarOpen && <div className="dash-overlay" onClick={() => setSidebarOpen(false)} />}
+
+      <aside className={`dash-sidebar ${sidebarOpen ? 'open' : ''}`}>
+        <div className="side-header">
+          <div className="side-logo">
+            <img src="/ZeeResizer.png" alt="" />
+            <div>
+              <span className="side-logo-name">VelisMail</span>
+              <span className="side-logo-badge">Business</span>
+            </div>
           </div>
-          <span className="badge badge-neutral">Business</span>
         </div>
 
-        <button type="button" className="btn btn-primary compose-btn" onClick={onCompose}>
-          <Plus size={16} /> Compose
+        <button type="button" className="btn btn-primary side-compose" onClick={onCompose}>
+          <Plus size={16} /> New Message
         </button>
 
-        <nav className="sidebar-folders">
-          <div className="sidebar-section-lbl">Management</div>
-          {user?.role === 'admin' && (
-            <button
-              type="button"
-              className={`folder-btn ${activeBizTab === 'domains' ? 'active' : ''}`}
-              onClick={() => { onShowDomain(); setSidebarOpen(false); }}
-            >
-              <Plus size={14} /> Add Domain
-            </button>
-          )}
-
-          <div className="sidebar-section-lbl">Mail &amp; Communications</div>
-          <button
-            type="button"
-            className={`folder-btn ${activeBizTab === 'mail' ? 'active' : ''}`}
-            onClick={() => { setActiveBizTab('mail'); setSidebarOpen(false); }}
-          >
-            <Mail size={14} /> Mailbox
-          </button>
-
-          {activeBizTab === 'mail' && (
-            <div className="sidebar-sub-folders">
-              {BIZ_FOLDERS.map((f) => (
-                <button
-                  key={f.id}
-                  type="button"
-                  className={`folder-btn sub ${activeFolder === f.id ? 'active' : ''}`}
-                  onClick={() => { setActiveFolder(f.id); setSidebarOpen(false); }}
-                >
-                  <f.icon size={12} /> {f.label}
-                  {folderBadge(f) && <span className="folder-badge">{folderBadge(f)}</span>}
-                </button>
-              ))}
-            </div>
-          )}
+        <nav className="side-nav">
+          <Section label="Mail">
+            <NavBtn tab="mail" icon={Mail} label="Inbox" />
+            {activeBizTab === 'mail' && (
+              <div className="side-sub-nav">
+                {BIZ_FOLDERS.map((f) => (
+                  <button
+                    key={f.id}
+                    type="button"
+                    className={`side-sub-btn ${activeFolder === f.id ? 'active' : ''}`}
+                    onClick={() => { setActiveFolder(f.id); setSidebarOpen(false); }}
+                  >
+                    <f.icon size={13} />
+                    <span>{f.label}</span>
+                    {folderBadge(f) && <span className="side-badge">{folderBadge(f)}</span>}
+                  </button>
+                ))}
+              </div>
+            )}
+          </Section>
 
           {hasRoleAccess('templates') && (
-            <button
-              type="button"
-              className={`folder-btn ${activeBizTab === 'templates' ? 'active' : ''}`}
-              onClick={() => { setActiveBizTab('templates'); setSidebarOpen(false); }}
-            >
-              <Layers size={14} /> Templates
-            </button>
+            <Section label="Content">
+              <NavBtn tab="templates" icon={Layers} label="Templates" />
+            </Section>
           )}
 
           {hasRoleAccess('queue') && (
-            <button
-              type="button"
-              className={`folder-btn ${activeBizTab === 'queue' ? 'active' : ''}`}
-              onClick={() => { setActiveBizTab('queue'); setSidebarOpen(false); }}
-            >
-              <Server size={14} /> Mail Queue
-            </button>
+            <Section label="Operations">
+              <NavBtn tab="queue" icon={Server} label="Mail Queue" />
+            </Section>
           )}
 
-          <div className="sidebar-section-lbl">Organization</div>
+          <Section label="Organization">
+            {user?.role === 'admin' && (
+              <>
+                <NavBtn tab="domains" icon={Globe} label="Domains" />
+                <NavBtn tab="mailboxes" icon={Inbox} label="Mailboxes" />
+                <NavBtn tab="groups" icon={Users} label="Groups" />
+              </>
+            )}
+            {hasRoleAccess('team') && <NavBtn tab="team" icon={Shield} label="Team" />}
+          </Section>
 
-          {user?.role === 'admin' && (
-            <>
-              <button
-                type="button"
-                className={`folder-btn ${activeBizTab === 'domains' ? 'active' : ''}`}
-                onClick={() => { setActiveBizTab('domains'); setSidebarOpen(false); }}
-              >
-                <Globe size={14} /> Domains
-              </button>
-              <button
-                type="button"
-                className={`folder-btn ${activeBizTab === 'mailboxes' ? 'active' : ''}`}
-                onClick={() => { setActiveBizTab('mailboxes'); setSidebarOpen(false); }}
-              >
-                <Inbox size={14} /> Business Mailboxes
-              </button>
-              <button
-                type="button"
-                className={`folder-btn ${activeBizTab === 'groups' ? 'active' : ''}`}
-                onClick={() => { setActiveBizTab('groups'); setSidebarOpen(false); }}
-              >
-                <Users size={14} /> Groups
-              </button>
-            </>
-          )}
-
-          {hasRoleAccess('team') && (
-            <button
-              type="button"
-              className={`folder-btn ${activeBizTab === 'team' ? 'active' : ''}`}
-              onClick={() => { setActiveBizTab('team'); setSidebarOpen(false); }}
-            >
-              <Shield size={14} /> Team Access
-            </button>
-          )}
-
-          <div className="sidebar-section-lbl">Administration</div>
-
-          {hasRoleAccess('analytics') && (
-            <button
-              type="button"
-              className={`folder-btn ${activeBizTab === 'analytics' ? 'active' : ''}`}
-              onClick={() => { setActiveBizTab('analytics'); setSidebarOpen(false); }}
-            >
-              <BarChart3 size={14} /> Analytics
-            </button>
-          )}
-
-          {user?.role === 'admin' && (
-            <>
-              <button
-                type="button"
-                className={`folder-btn ${activeBizTab === 'audit' ? 'active' : ''}`}
-                onClick={() => { setActiveBizTab('audit'); setSidebarOpen(false); }}
-              >
-                <Activity size={14} /> Audit Log
-              </button>
-              <button
-                type="button"
-                className={`folder-btn ${activeBizTab === 'settings' ? 'active' : ''}`}
-                onClick={() => { setActiveBizTab('settings'); setSidebarOpen(false); }}
-              >
-                <Settings size={14} /> Settings
-              </button>
-              <button
-                type="button"
-                className={`folder-btn ${activeBizTab === 'billing' ? 'active' : ''}`}
-                onClick={() => { setActiveBizTab('billing'); setSidebarOpen(false); }}
-              >
-                <CreditCard size={14} /> Billing &amp; Premium
-              </button>
-            </>
-          )}
-
-          {canAccessPlatformAdmin && (
-            <button
-              type="button"
-              className={`folder-btn ${activeBizTab === 'admin' ? 'active' : ''}`}
-              onClick={() => { setActiveBizTab('admin'); setSidebarOpen(false); }}
-            >
-              <Crown size={14} /> Platform Admin
-            </button>
-          )}
+          <Section label="Administration">
+            {hasRoleAccess('analytics') && <NavBtn tab="analytics" icon={BarChart3} label="Analytics" />}
+            {user?.role === 'admin' && (
+              <>
+                <NavBtn tab="audit" icon={Activity} label="Audit Log" />
+                <NavBtn tab="settings" icon={Settings} label="Settings" />
+                <NavBtn tab="billing" icon={CreditCard} label="Billing" />
+              </>
+            )}
+            {canAccessPlatformAdmin && <NavBtn tab="admin" icon={Crown} label="Platform Admin" />}
+          </Section>
         </nav>
 
-        <div className="sidebar-bottom">
-          <div className="sidebar-user-info">
-            <div className="avatar avatar-sm">
-              {user?.email?.charAt(0).toUpperCase() || <User size={14} />}
+        <div className="side-footer">
+          <div className="side-user">
+            <div className="side-avatar">{user?.email?.charAt(0).toUpperCase() || <User size={14} />}</div>
+            <div className="side-user-info">
+              <span className="side-user-name">{user?.displayName || 'User'}</span>
+              <span className="side-user-role">{user?.role || 'member'}</span>
             </div>
-            <div className="sidebar-user-text">
-              <span className="sidebar-user-name">{user?.displayName || 'User'}</span>
-              <span className="sidebar-user-role">{user?.role || 'member'}</span>
-            </div>
+            <button type="button" className="btn btn-ghost btn-icon" onClick={onLogout} aria-label="Log out">
+              <LogOut size={15} />
+            </button>
           </div>
-          <button type="button" className="btn btn-ghost btn-icon sidebar-logout" onClick={onLogout} aria-label="Log out">
-            <LogOut size={16} />
-          </button>
         </div>
       </aside>
     </>
