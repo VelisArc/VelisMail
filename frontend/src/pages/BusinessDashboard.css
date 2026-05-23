@@ -40,7 +40,7 @@
 
 .dash-mobile-menu-btn {
   padding: 6px;
-  border-radius: 8px;
+  border-radius: 4px;
   color: var(--text-primary);
   background: var(--bg-hover);
   border: none;
@@ -176,7 +176,7 @@
   gap: 10px;
   width: 100%;
   padding: 8px 10px;
-  border-radius: 8px;
+  border-radius: 4px;
   font-size: 0.85rem;
   font-weight: 500;
   color: var(--text-secondary);
@@ -193,8 +193,8 @@
 }
 
 .side-nav-btn.active {
-  background: var(--primary-glow);
-  color: var(--primary-600);
+  background: var(--primary-100);
+  color: var(--primary);
   font-weight: 600;
 }
 
@@ -214,7 +214,7 @@
   gap: 8px;
   width: 100%;
   padding: 6px 10px;
-  border-radius: 6px;
+  border-radius: 3px;
   font-size: 0.8rem;
   font-weight: 500;
   color: var(--text-secondary);
@@ -231,9 +231,9 @@
 }
 
 .side-sub-btn.active {
-  color: var(--primary-600);
+  color: var(--primary);
   font-weight: 600;
-  background: var(--primary-glow);
+  background: var(--primary-100);
 }
 
 .side-badge {
@@ -241,9 +241,9 @@
   font-size: 0.65rem;
   font-weight: 600;
   padding: 1px 6px;
-  background: var(--primary-glow);
-  color: var(--primary-600);
-  border-radius: 10px;
+  background: var(--primary-100);
+  color: var(--primary);
+  border-radius: 3px;
   min-width: 16px;
   text-align: center;
   line-height: 1.4;
@@ -265,7 +265,7 @@
 .side-avatar {
   width: 32px;
   height: 32px;
-  border-radius: 8px;
+  border-radius: 4px;
   background: var(--bg-hover);
   border: 1px solid var(--border-primary);
   display: flex;
@@ -561,7 +561,7 @@
 .mail-card {
   background: var(--bg-surface);
   border: 1px solid var(--border-primary);
-  border-radius: 10px;
+  border-radius: 3px;
   padding: 14px;
   cursor: pointer;
   transition: all 0.15s;
@@ -571,7 +571,7 @@
 }
 
 .mail-card:hover {
-  border-color: var(--primary-300);
+  border-color: var(--primary-200);
   box-shadow: 0 2px 8px rgba(0,0,0,0.04);
 }
 
@@ -658,7 +658,7 @@
   margin-bottom: 20px;
   padding: 12px 16px;
   background: var(--bg-surface-2);
-  border-radius: 10px;
+  border-radius: 3px;
   border: 1px solid var(--border-primary);
 }
 
@@ -671,8 +671,8 @@
 .reader-avatar {
   width: 38px;
   height: 38px;
-  border-radius: 10px;
-  background: linear-gradient(135deg, var(--primary), var(--primary-600));
+  border-radius: 4px;
+  background: var(--primary);
   color: #fff;
   display: flex;
   align-items: center;
@@ -719,7 +719,7 @@
   padding: 14px 18px;
   background: var(--bg-surface-2);
   border: 1px dashed var(--border-primary);
-  border-radius: 8px;
+  border-radius: 4px;
 }
 
 /* ─── Compose ─── */
@@ -731,7 +731,7 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  border-radius: 12px;
+  border-radius: 3px;
   box-shadow: 0 20px 60px rgba(0,0,0,0.12);
 }
 
@@ -767,11 +767,11 @@
   align-items: center;
   gap: 6px;
   font-size: 0.82rem;
-  color: var(--primary-600);
+  color: var(--primary);
   font-weight: 600;
-  background: var(--primary-glow);
+  background: var(--primary-100);
   padding: 6px 12px;
-  border-radius: 8px;
+  border-radius: 3px;
 }
 
 /* ─── Domain Cards ─── */
@@ -783,7 +783,7 @@
 
 .domain-card-full {
   border: 1px solid var(--border-primary);
-  border-radius: 12px;
+  border-radius: 3px;
   overflow: hidden;
   background: var(--bg-surface);
 }
@@ -837,7 +837,7 @@
 
 .health-card {
   padding: 12px;
-  border-radius: 8px;
+  border-radius: 4px;
   border: 1px solid var(--border-primary);
   transition: all 0.15s;
 }
@@ -876,7 +876,7 @@
 }
 
 .health-card.verified {
-  border-color: rgba(217, 119, 6, 0.35);
+  border-color: rgba(23, 23, 23, 0.25);
 }
 
 .health-card.failed {
@@ -884,7 +884,7 @@
 }
 
 .health-card.pending {
-  border-color: rgba(245, 158, 11, 0.25);
+  border-color: rgba(163, 163, 163, 0.35);
 }
 
 .domain-health {
@@ -917,7 +917,7 @@
   gap: 10px;
   background: var(--bg-surface-2);
   padding: 8px 12px;
-  border-radius: 6px;
+  border-radius: 3px;
 }
 
 .dns-type-tag {
@@ -957,7 +957,7 @@
   align-items: center;
   gap: 12px;
   padding: 12px 16px;
-  border-radius: 10px;
+  border-radius: 3px;
   background: var(--bg-surface);
   border: 1px solid var(--border-primary);
   transition: all 0.15s;
@@ -1030,7 +1030,7 @@
 
 .role-card {
   padding: 16px;
-  border-radius: 10px;
+  border-radius: 3px;
   border: 1px solid var(--border-primary);
   background: var(--bg-surface-2);
 }
@@ -1075,7 +1075,7 @@
 .queue-stat {
   padding: 14px;
   text-align: center;
-  border-radius: 10px;
+  border-radius: 3px;
   border: 1px solid var(--border-primary);
   background: var(--bg-surface);
 }
@@ -1104,7 +1104,7 @@
 
 .queue-table-wrap {
   overflow-x: auto;
-  border-radius: 10px;
+  border-radius: 3px;
   border: 1px solid var(--border-primary);
   background: var(--bg-surface);
 }
@@ -1199,7 +1199,7 @@
 
 .analytics-card {
   padding: 16px;
-  border-radius: 10px;
+  border-radius: 3px;
   background: var(--bg-surface);
   border: 1px solid var(--border-primary);
 }
@@ -1242,7 +1242,7 @@
 .analytics-bar {
   height: 6px;
   background: var(--bg-surface-2);
-  border-radius: 10px;
+  border-radius: 3px;
   margin-top: 12px;
   overflow: hidden;
 }
@@ -1250,12 +1250,12 @@
 .analytics-bar-fill {
   height: 100%;
   background: var(--primary);
-  border-radius: 10px;
+  border-radius: 3px;
   transition: width 0.3s ease;
 }
 
 .analytics-bar-fill.accent {
-  background: var(--accent);
+  background: var(--primary);
 }
 
 .analytics-bar-fill.warning {
@@ -1268,7 +1268,7 @@
 
 .analytics-charts {
   padding: 18px;
-  border-radius: 10px;
+  border-radius: 3px;
   background: var(--bg-surface);
   border: 1px solid var(--border-primary);
 }
@@ -1298,8 +1298,8 @@
 
 .chart-bar {
   width: 100%;
-  background: linear-gradient(to top, var(--primary), var(--primary-400));
-  border-radius: 4px 4px 0 0;
+  background: var(--primary);
+  border-radius: 2px 2px 0 0;
   opacity: 0.8;
   transition: height 0.3s;
 }
@@ -1330,7 +1330,7 @@
   overflow: hidden;
   background: var(--bg-surface);
   border: 1px solid var(--border-primary);
-  border-radius: 8px;
+  border-radius: 4px;
   transition: transform 0.15s;
 }
 
@@ -1463,7 +1463,7 @@
   padding: 10px;
   border: 1px solid var(--border-primary);
   background: var(--bg-surface-2);
-  border-radius: 6px;
+  border-radius: 3px;
 }
 
 .detail-summary-grid span,
@@ -1492,7 +1492,7 @@
   padding: 10px;
   border: 1px solid var(--border-primary);
   background: var(--bg-surface);
-  border-radius: 6px;
+  border-radius: 3px;
 }
 
 .detail-row > div {
@@ -1517,7 +1517,7 @@
   margin-top: 16px;
   padding: 14px;
   border: 1px solid var(--border-primary);
-  border-radius: 8px;
+  border-radius: 4px;
   background: var(--bg-surface-2);
 }
 
@@ -1540,18 +1540,18 @@
   font-size: 0.78rem;
   color: var(--text-primary);
   padding: 8px 10px;
-  border: 1px solid rgba(216, 115, 0, 0.22);
-  border-radius: 6px;
-  background: rgba(216, 115, 0, 0.06);
+  border: 1px solid var(--border-primary);
+  border-radius: 3px;
+  background: var(--bg-surface-2);
 }
 
 .invite-token-panel {
   display: grid;
   gap: 8px;
   padding: 12px;
-  border: 1px solid rgba(216, 115, 0, 0.22);
-  border-radius: 8px;
-  background: linear-gradient(135deg, rgba(216, 115, 0, 0.08), rgba(45, 212, 191, 0.06));
+  border: 1px solid var(--border-primary);
+  border-radius: 3px;
+  background: var(--bg-surface-2);
 }
 
 .invite-token-header {
@@ -1572,8 +1572,9 @@
 }
 
 .invite-token-header strong {
-  color: var(--primary);
+  color: var(--text-primary);
   font-size: 0.72rem;
+  font-weight: 700;
   white-space: nowrap;
 }
 
@@ -1658,7 +1659,7 @@
 .avatar {
   width: 32px;
   height: 32px;
-  border-radius: 8px;
+  border-radius: 4px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1861,7 +1862,7 @@
   align-items: center;
   gap: 8px;
   padding: 6px 8px;
-  border-radius: 6px;
+  border-radius: 3px;
   font-size: 0.82rem;
   color: var(--text-secondary);
 }
@@ -1874,7 +1875,7 @@
 .mail-grid-card {
   background: var(--bg-surface);
   border: 1px solid var(--border-primary);
-  border-radius: 10px;
+  border-radius: 3px;
   padding: 14px;
   cursor: pointer;
   transition: all 0.15s;
@@ -2218,7 +2219,7 @@
   gap: 8px;
   padding: 8px 12px;
   background: var(--bg-surface-2);
-  border-radius: 6px;
+  border-radius: 3px;
 }
 
 .dns-record-name {

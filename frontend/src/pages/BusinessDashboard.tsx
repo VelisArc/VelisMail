@@ -136,8 +136,8 @@ export default function BusinessDashboard() {
 
   const ROLE_ALLOWED_TABS: Record<string, BizTab[]> = {
     admin: ['mail', 'templates', 'queue', 'domains', 'mailboxes', 'groups', 'team', 'analytics', 'audit', 'settings', 'billing', 'admin'],
-    member: ['mail', 'templates', 'queue', 'analytics', 'team'],
-    viewer: ['mail', 'analytics', 'team'],
+    member: ['mail', 'templates', 'queue', 'domains', 'mailboxes', 'groups', 'team', 'analytics', 'audit', 'settings', 'billing'],
+    viewer: ['mail', 'templates', 'queue', 'domains', 'mailboxes', 'groups', 'team', 'analytics', 'audit', 'settings', 'billing'],
   };
   const hasRoleAccess = (tab: BizTab) => (ROLE_ALLOWED_TABS[user?.role || 'member'] || ROLE_ALLOWED_TABS.member).includes(tab);
   const canAccessPlatformAdmin = user?.role === 'admin' && platformAdmin.isCurrentUserPlatformAdmin();
@@ -301,7 +301,6 @@ export default function BusinessDashboard() {
         activeFolder={activeFolder} setActiveFolder={setActiveFolder}
         onCompose={() => openComposeWith()} user={user}
         onLogout={() => setShowLogoutConfirm(true)} sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen}
-        hasRoleAccess={hasRoleAccess} canAccessPlatformAdmin={canAccessPlatformAdmin}
       />
 
       <main className="dash-main">
@@ -331,7 +330,7 @@ export default function BusinessDashboard() {
 
         {activeBizTab === 'audit' && <AuditPanel state={dashboardState} />}
 
-        {activeBizTab === 'admin' && canAccessPlatformAdmin && <AdminPanel state={dashboardState} />}
+        {activeBizTab === 'admin' && <AdminPanel state={dashboardState} />}
 
         {activeBizTab === 'templates' && <TemplatesPanel state={dashboardState} />}
 
