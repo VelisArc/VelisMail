@@ -18,7 +18,7 @@
 .nav-progress-bar {
   height: 100%;
   background: linear-gradient(90deg, var(--primary-400), var(--accent-400));
-  border-radius: 0 2px 2px 0;
+  border-radius: 0 !important;
   transition: width 0.3s ease;
 }
 
@@ -67,7 +67,7 @@
   background: var(--danger-600);
   border-color: var(--danger-600);
   transform: translateY(-1px);
-  box-shadow: var(--shadow-md);
+  box-shadow: none !important;
 }
 
 /* Badge variants */
@@ -109,8 +109,8 @@
   padding: var(--space-4) var(--space-5);
   background: var(--bg-surface);
   border: 1px solid var(--border-primary);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-lg);
+  border-radius: 0 !important;
+  box-shadow: none !important;
   animation: slideUp 0.3s ease-out both;
   pointer-events: auto;
 }

@@ -1,4 +1,4 @@
-import { LogOut, Mail, Layers, Server, Globe, Inbox, Users, Shield, BarChart3, Activity, Settings, CreditCard, Crown, Plus, User } from 'lucide-react';
+import { LogOut, Mail, Layers, Server, Globe, Inbox, Users, Shield, BarChart3, Activity, Settings, CreditCard, Crown, Plus, User, Contact as ContactIcon } from 'lucide-react';
 import type { User as UserType } from '../../api/client';
 import { BIZ_FOLDERS } from './constants';
 import type { BizTab, BizFolder } from './constants';
@@ -119,6 +119,11 @@ export default function Sidebar({
           </Section>
 
           <Section label="Organization">
+            {hasRoleAccess('contacts') && (
+              <button type="button" className={`side-nav-btn ${activeBizTab === 'contacts' ? 'active' : ''}`} onClick={() => handleNav('contacts')}>
+                <ContactIcon size={16} /> Contacts
+              </button>
+            )}
             {hasRoleAccess('domains') && (
               <button type="button" className={`side-nav-btn ${activeBizTab === 'domains' ? 'active' : ''}`} onClick={() => handleNav('domains')}>
                 <Globe size={16} /> Domains

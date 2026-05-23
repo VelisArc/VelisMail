@@ -28,7 +28,7 @@
 
 .login-orb {
   position: fixed;
-  border-radius: 50%;
+  border-radius: 0 !important;
   filter: blur(120px);
   opacity: 0.04;
   pointer-events: none;
@@ -102,8 +102,8 @@
   padding: var(--space-8);
   background: var(--bg-surface);
   border: 1px solid var(--border-primary);
-  border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-lg);
+  border-radius: 0 !important;
+  box-shadow: none !important;
 }
 
 .login-card-header {
@@ -114,7 +114,7 @@
 .login-icon-wrap {
   width: 56px;
   height: 56px;
-  border-radius: var(--radius-lg);
+  border-radius: 0 !important;
   background: var(--accent-glow);
   display: flex;
   align-items: center;
@@ -141,7 +141,7 @@
   padding: 6px;
   margin-bottom: var(--space-5);
   border: 1px solid var(--border-primary);
-  border-radius: var(--radius-lg);
+  border-radius: 0 !important;
   background: var(--bg-surface-2);
 }
 
@@ -151,7 +151,7 @@
   justify-content: center;
   gap: 8px;
   min-height: 38px;
-  border-radius: var(--radius-md);
+  border-radius: 0 !important;
   color: var(--text-muted);
   font-weight: var(--font-weight-bold);
   font-size: var(--text-sm);
@@ -161,7 +161,7 @@
 .access-mode-switch button.active {
   color: var(--text-primary);
   background: var(--bg-surface);
-  box-shadow: var(--shadow-sm);
+  box-shadow: none !important;
 }
 
 .login-form {
@@ -245,7 +245,7 @@
 .account-type-card {
   padding: var(--space-5);
   border: 1px solid var(--glass-border);
-  border-radius: var(--radius-lg);
+  border-radius: 0 !important;
   transition: all var(--transition-normal);
   text-align: center;
   cursor: pointer;
@@ -276,7 +276,7 @@
   margin-bottom: var(--space-4);
   padding: 12px 14px;
   border: 1px solid var(--glass-border);
-  border-radius: var(--radius-md);
+  border-radius: 0 !important;
   background: var(--bg-surface-2);
   color: var(--text-secondary);
 }
@@ -364,7 +364,7 @@
   .login-card {
     max-width: 100%;
     padding: var(--space-5);
-    border-radius: var(--radius-lg);
+    border-radius: 0 !important;
   }
 
   .login-icon-wrap {
@@ -425,7 +425,7 @@
 
 @media (max-width: 375px) {
   .login-page { padding: 36px 10px 36px; }
-  .login-card { padding: 14px; border-radius: var(--radius-md); }
+  .login-card { padding: 14px; border-radius: 0 !important; }
   .login-card-header h2 { font-size: var(--text-lg); }
   .login-card-desc { font-size: var(--text-xs); }
   .login-brand h1 { font-size: var(--text-xl); }
