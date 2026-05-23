@@ -5,11 +5,32 @@ pub mod jwt;
 pub mod middleware;
 pub mod state;
 
+const MIGRATIONS: &[(&str, &str)] = &[
+    ("001", include_str!("../migrations/001_initial_schema.sql")),
+    ("002", include_str!("../migrations/002_initial_auth.sql")),
+    ("003", include_str!("../migrations/003_password_auth.sql")),
+    ("004", include_str!("../migrations/004_recovery_email_and_password_reset.sql")),
+    ("005", include_str!("../migrations/005_user_settings.sql")),
+];
+
+async fn run_migrations(db: &sqlx::PgPool) -> anyhow::Result<()> {
+    for (version, sql) in MIGRATIONS {
+        for statement in sql.split(';') {
+            let trimmed = statement.trim();
+            if !trimmed.is_empty() && !trimmed.starts_with("--") {
+                sqlx::query(trimmed).execute(db).await?;
+            }
+        }
+        tracing::info!("Auth migration {version} applied");
+    }
+    Ok(())
+}
+
 pub async fn run_service() -> anyhow::Result<()> {
     let config = config::AuthConfig::from_env()?;
     let state = state::AuthState::new(config.clone()).await?;
 
-    sqlx::migrate!("./migrations").run(&state.db).await?;
+    run_migrations(&state.db).await?;
 
     let protected_routes = axum::Router::new()
         .route("/me", axum::routing::get(handlers::get_current_user))
