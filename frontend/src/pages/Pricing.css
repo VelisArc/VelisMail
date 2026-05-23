@@ -127,7 +127,7 @@
   border-radius: 50%;
   background: #fff;
   transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
+  box-shadow: none;
 }
 
 .billing-toggle.annual .toggle-knob {
@@ -170,7 +170,7 @@
 
 .pricing-card:hover {
   transform: translateY(-4px);
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+  box-shadow: none;
 }
 
 /* Popular / recommended card */
@@ -181,13 +181,11 @@
     var(--accent-glow) 0%,
     var(--bg-surface) 40%
   );
-  box-shadow: 0 0 0 1px var(--accent),
-    0 8px 40px rgba(20, 184, 166, 0.12);
+  box-shadow: none;
 }
 
 .pricing-card.popular:hover {
-  box-shadow: 0 0 0 1px var(--accent),
-    0 24px 60px rgba(20, 184, 166, 0.2);
+  box-shadow: none;
 }
 
 .popular-badge {
@@ -368,22 +366,22 @@
 .plan-cta.cta-primary {
   background: linear-gradient(135deg, var(--accent), var(--accent-600));
   color: #fff;
-  box-shadow: 0 4px 16px rgba(20, 184, 166, 0.3);
+  box-shadow: none;
 }
 
 .plan-cta.cta-primary:hover {
-  box-shadow: 0 6px 24px rgba(20, 184, 166, 0.45);
+  box-shadow: none;
   transform: translateY(-1px);
 }
 
 .plan-cta.cta-gradient {
   background: linear-gradient(135deg, #6366f1, #8b5cf6, #a855f7);
   color: #fff;
-  box-shadow: 0 4px 16px rgba(139, 92, 246, 0.3);
+  box-shadow: none;
 }
 
 .plan-cta.cta-gradient:hover {
-  box-shadow: 0 6px 24px rgba(139, 92, 246, 0.45);
+  box-shadow: none;
   transform: translateY(-1px);
 }
 
