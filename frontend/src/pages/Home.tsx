@@ -1,25 +1,10 @@
 import { Link } from 'react-router-dom';
 import { useEffect, useState, useCallback, useRef } from 'react';
 import {
-  ArrowRight,
-  CheckCircle2,
-  Cloud,
-  Database,
-  Fingerprint,
-  Globe,
-  Key,
-  Lock,
-  Menu,
-  Server,
-  Shield,
-  Sparkles,
-  X,
-  Zap,
-  Briefcase,
-  Users,
-  Settings,
-  ChevronDown,
-  ArrowUp,
+  ArrowRight, CheckCircle2, Database, Fingerprint,
+  Globe, Lock, Menu, Shield, Sparkles,
+  X, Zap, Users, ChevronDown,
+  ArrowUp, BarChart3, Activity,
 } from 'lucide-react';
 import { auth, fetchApiResponse, isBusinessSetupReady } from '../api/client';
 import HomeOpsScene from '../components/HomeOpsScene';
@@ -27,34 +12,39 @@ import SEO from '../components/SEO';
 import './Home.css';
 
 const features = [
-  { icon: Lock, title: 'End-to-end encrypted mail flow', desc: 'Protect messages in transit and at rest with secure delivery defaults, strict policy controls, and resilient infrastructure.' },
-  { icon: Fingerprint, title: 'Recovery-backed business access', desc: 'Use verified recovery emails, strong password controls, and scoped workspace access for teams without weak shared credentials.' },
-  { icon: Globe, title: 'Domain reputation management', desc: 'Ship with DNS ownership checks, provider record validation, and verification tooling that keeps setup honest.' },
-  { icon: Server, title: 'Operational visibility', desc: 'Track queue health, audit activity, templates, sender identities, and domain readiness from one business console.' },
-  { icon: Shield, title: 'Compliance-ready controls', desc: 'Support regulated teams with clear activity records, mailbox governance, and data-sovereignty-friendly architecture.' },
-  { icon: Database, title: 'Bring your own infrastructure', desc: 'Connect your database and provider stack while keeping operational workflows centralized inside the VelisMail workspace.' },
-  { icon: Users, title: 'Role-aware team operations', desc: 'Invite admins, members, and viewers with scoped access, audit history, and confirmation flows for sensitive permission changes.' },
-  { icon: Briefcase, title: 'Mailbox governance', desc: 'Manage primary senders, aliases, shared inboxes, distribution groups, and domain-specific identities from one console.' },
-  { icon: Settings, title: 'Delivery workflow controls', desc: 'Use templates, mail queue inspection, scheduled send, retry controls, bulk actions, and message filters for daily operations.' },
-  { icon: CheckCircle2, title: 'DNS verification diagnostics', desc: 'Run guided checks for MX, SPF, DKIM, DMARC, provider credentials, and sender-domain readiness with actionable results.' },
-  { icon: Sparkles, title: 'Professional operator experience', desc: 'Clean dashboard patterns, focused modals, searchable folders, readable message views, and fast navigation for busy teams.' },
-  { icon: Cloud, title: 'Provider flexibility', desc: 'Work with supported mail providers and custom infrastructure while keeping the VelisMail UX consistent for every workspace.' },
+  { icon: Lock, title: 'End-to-End Encryption', desc: 'Messages encrypted in transit and at rest with zero-knowledge architecture. Your data stays yours.' },
+  { icon: Fingerprint, title: 'Zero Trust Access', desc: 'Passwordless auth with hardware-backed keys. Revoke devices instantly, recover securely.' },
+  { icon: Globe, title: 'Smart DNS Management', desc: 'Automated SPF, DKIM, and DMARC verification. One-click domain setup with guided diagnostics.' },
+  { icon: BarChart3, title: 'Delivery Analytics', desc: 'Track queue health, delivery rates, and audit trails with real-time operational dashboards.' },
+  { icon: Users, title: 'Team Collaboration', desc: 'Role-based access for admins, members, and viewers. Shared inboxes and distribution groups.' },
+  { icon: Database, title: 'Bring Your Own Stack', desc: 'Connect your own database and mail provider. Full control over your infrastructure.' },
+];
+
+const steps = [
+  { num: '01', title: 'Connect Your Domain', desc: 'Add your business domain and verify ownership with automatic DNS record generation.' },
+  { num: '02', title: 'Provision Your Team', desc: 'Create mailboxes, set up groups, and invite team members with granular permission controls.' },
+  { num: '03', title: 'Go Secure', desc: 'Start sending encrypted email with real-time monitoring, audit logs, and delivery insights.' },
 ];
 
 const stats = [
-  { value: '256-bit', label: 'Encryption', icon: Key },
-  { value: '99.99%', label: 'Uptime SLA', icon: Cloud },
+  { value: '256-bit', label: 'Encryption', icon: Lock },
+  { value: '99.99%', label: 'Uptime', icon: Activity },
   { value: '<50ms', label: 'Routing', icon: Zap },
-  { value: '10m', label: 'OTP Window', icon: Fingerprint },
-  { value: '9+', label: 'Mail Views', icon: Server },
-  { value: 'Zero Trust', label: 'Access', icon: Shield },
+  { value: 'Zero Trust', label: 'Architecture', icon: Shield },
+];
+
+const solutions = [
+  { title: 'Enterprise Security', desc: 'Full compliance controls, audit trails, and zero-trust architecture for security-conscious organizations.' },
+  { title: 'Regulated Industries', desc: 'Healthcare, finance, and legal teams rely on our data sovereignty and verifiable encryption.' },
+  { title: 'Remote Teams', desc: 'Global edge infrastructure ensures low-latency communication for distributed workforces.' },
+  { title: 'Scaling Startups', desc: 'From 10 to 10,000 users with instant provisioning and predictable per-user pricing.' },
 ];
 
 const faqs = [
-  { q: 'How does the end-to-end encryption work?', a: 'We utilize a combination of robust public-key cryptography (RSA-4096) for message transit and AES-256 for data at rest. Your private keys never leave your secure enclave.' },
-  { q: 'Can I migrate my existing email history?', a: 'Yes. Our automated migration tools support IMAP import from major providers including Google Workspace and Microsoft 365 with zero downtime.' },
-  { q: 'What happens if I lose my device?', a: 'Our passwordless authentication system allows administrators to instantly revoke device tokens and provision new access credentials without compromising account security.' },
-  { q: 'Is custom branding supported?', a: 'Absolutely. Enterprise tier customers can white-label the entire webmail interface with custom logos, colors, and dedicated login portals.' },
+  { q: 'How does encryption work?', a: 'Messages are encrypted with RSA-4096 in transit and AES-256 at rest. Your private keys never leave your device.' },
+  { q: 'Can I migrate from Gmail or Outlook?', a: 'Yes. Our migration tools support IMAP import from Google Workspace and Microsoft 365 with zero downtime.' },
+  { q: 'What happens if a device is lost?', a: 'Admins can revoke device access instantly. Users can re-authenticate via recovery email without data loss.' },
+  { q: 'Is custom branding available?', a: 'Enterprise plans include white-labeling with custom logos, colors, domains, and dedicated support.' },
 ];
 
 type SubmissionState = { type: 'success' | 'info' | 'error'; message: string } | null;
@@ -185,7 +175,7 @@ export default function Home() {
 
           <div className={`nav-links ${mobileMenuOpen ? 'open' : ''}`}>
             <a href="#features" className="nav-link" onClick={closeMobileMenu}>Features</a>
-            <a href="#feedback" className="nav-link" onClick={closeMobileMenu}>Community</a>
+            <a href="#solutions" className="nav-link" onClick={closeMobileMenu}>Solutions</a>
             <Link to="/pricing" className="nav-link" onClick={closeMobileMenu}>Pricing</Link>
             <Link to="/about" className="nav-link" onClick={closeMobileMenu}>About</Link>
             <div className="nav-divider" role="separator" />
@@ -216,20 +206,20 @@ export default function Home() {
             </div>
 
             <h1 className="hero-title">
-              Business Email
-              <span className="gradient-text">Operations Refined.</span>
+              Email That Works
+              <span className="gradient-text">For Everyone.</span>
             </h1>
 
             <p className="hero-subtitle">
-              The next-generation secure communication platform. Built for modern organizations
-              with end-to-end encryption, Zero Trust access, and absolute data sovereignty.
+              Secure, encrypted business email with zero-trust architecture. Manage your
+              domains, team, and delivery workflows from one unified console.
             </p>
 
             <div className="hero-actions">
               <Link to={getDashboardLink()} className="btn btn-primary btn-lg">
                 {getDashboardText()} <ArrowRight size={20} aria-hidden="true" />
               </Link>
-              <a href="#features" className="btn btn-secondary btn-lg">Explore Features</a>
+              <a href="#features" className="btn btn-secondary btn-lg">See How It Works</a>
             </div>
 
             <div className="hero-stats">
@@ -254,10 +244,10 @@ export default function Home() {
         <section id="features" className="section animate-on-scroll">
           <div className="container">
             <div className="section-head">
-              <span className="section-badge">Platform Capabilities</span>
-              <h2 className="section-title">Engineered for security, built for teams.</h2>
+              <span className="section-badge">Platform</span>
+              <h2 className="section-title">Everything you need, nothing you don't.</h2>
               <p className="section-desc">
-                Everything you need to manage business email at scale — from encryption to delivery workflows.
+                Core capabilities designed for real teams handling real email at scale.
               </p>
             </div>
 
@@ -275,68 +265,56 @@ export default function Home() {
           </div>
         </section>
 
-        <section className="section animate-on-scroll">
+        <section className="section section-alt animate-on-scroll">
           <div className="container">
             <div className="section-head">
-              <span className="section-badge">Deployment</span>
-              <h2 className="section-title">Seamless Integration Process.</h2>
+              <span className="section-badge">How It Works</span>
+              <h2 className="section-title">Three steps to secure email.</h2>
               <p className="section-desc">
-                Deploy VelisMail across your entire organization in three simple steps.
+                Get your team up and running in minutes, not days.
               </p>
             </div>
 
             <div className="steps-grid">
-              <div className="step-card">
-                <div className="step-number" aria-hidden="true">1</div>
-                <h3>Configure Domain</h3>
-                <p>Add your business domains and automatically verify DNS settings for SPF, DKIM, and DMARC without leaving the dashboard.</p>
-              </div>
-              <div className="step-card">
-                <div className="step-number" aria-hidden="true">2</div>
-                <h3>Provision Users</h3>
-                <p>Create mailboxes manually or sync your existing active directory to instantly provision access for your entire team.</p>
-              </div>
-              <div className="step-card">
-                <div className="step-number" aria-hidden="true">3</div>
-                <h3>Start Communicating</h3>
-                <p>Users log in via secure, passwordless authentication and instantly access their encrypted inbox from any modern browser.</p>
-              </div>
+              {steps.map((step) => (
+                <div key={step.num} className="step-card">
+                  <div className="step-number" aria-hidden="true">{step.num}</div>
+                  <h3>{step.title}</h3>
+                  <p>{step.desc}</p>
+                </div>
+              ))}
             </div>
           </div>
         </section>
 
-        <section className="section section-alt animate-on-scroll">
+        <section id="solutions" className="section animate-on-scroll">
           <div className="container">
             <div className="section-head">
-              <span className="section-badge">Solutions</span>
-              <h2 className="section-title">Built for Modern Organizations.</h2>
+              <span className="section-badge">Use Cases</span>
+              <h2 className="section-title">Built for the way you work.</h2>
+              <p className="section-desc">
+                From startups to regulated enterprises, VelisMail adapts to your needs.
+              </p>
             </div>
             <div className="solutions-grid">
-              <div className="solution-card">
-                <h3>Enterprise Security Teams</h3>
-                <p>Enforce strict compliance policies, audit all internal and external communication logs, and mandate zero-trust architecture across all endpoints.</p>
-              </div>
-              <div className="solution-card">
-                <h3>Regulated Industries</h3>
-                <p>Perfect for healthcare, finance, and legal sectors where data sovereignty and verifiable end-to-end encryption are legal requirements.</p>
-              </div>
-              <div className="solution-card">
-                <h3>Global Remote Teams</h3>
-                <p>Ensure low-latency, highly available communication streams regardless of geographical location, backed by our distributed edge infrastructure.</p>
-              </div>
-              <div className="solution-card">
-                <h3>Rapidly Scaling Startups</h3>
-                <p>Grow from 10 to 10,000 employees with instant mailbox provisioning, predictable pricing, and zero on-premise hardware maintenance.</p>
-              </div>
+              {solutions.map((s) => (
+                <div key={s.title} className="solution-card">
+                  <h3>{s.title}</h3>
+                  <p>{s.desc}</p>
+                </div>
+              ))}
             </div>
           </div>
         </section>
 
-        <section className="section animate-on-scroll">
+        <section id="faq" className="section section-alt animate-on-scroll">
           <div className="container">
             <div className="section-head">
               <span className="section-badge">Support</span>
-              <h2 className="section-title">Frequently Asked Questions.</h2>
+              <h2 className="section-title">Common questions.</h2>
+              <p className="section-desc">
+                Everything you need to know about VelisMail.
+              </p>
             </div>
 
             <div className="faq-list">
@@ -366,34 +344,29 @@ export default function Home() {
           </div>
         </section>
 
-        <section id="feedback" className="feedback-section section-alt animate-on-scroll">
+        <section id="feedback" className="section animate-on-scroll">
           <div className="container feedback-container">
             <div className="feedback-copy">
-              <h2>Building for you.</h2>
+              <span className="section-badge">Community</span>
+              <h2>Help shape VelisMail.</h2>
               <p>
-                VelisMail is shaped by the teams who use it. Your suggestions, bug reports,
-                and feature requests go directly to our engineering team.
+                Your feedback goes directly to our engineering team. Every suggestion
+                and report helps us build a better platform.
               </p>
               <div className="feedback-benefits">
                 <div className="feedback-benefit">
-                  <CheckCircle2 size={20} className="benefit-icon" aria-hidden="true" />
-                  <div>
-                    <strong>Direct Line</strong>
-                    <span>To Developers</span>
-                  </div>
+                  <CheckCircle2 size={18} className="benefit-icon" aria-hidden="true" />
+                  <span>Direct line to developers</span>
                 </div>
                 <div className="feedback-benefit">
-                  <CheckCircle2 size={20} className="benefit-icon" aria-hidden="true" />
-                  <div>
-                    <strong>Fast Iteration</strong>
-                    <span>Weekly Updates</span>
-                  </div>
+                  <CheckCircle2 size={18} className="benefit-icon" aria-hidden="true" />
+                  <span>Weekly iteration cycles</span>
                 </div>
               </div>
             </div>
 
             <div className="feedback-form-card">
-              <h3>Share your thoughts</h3>
+              <h3>Send us a note</h3>
               {feedbackState && (
                 <div className={`inline-alert ${feedbackState.type}`} role="alert">
                   {feedbackState.message}
@@ -402,7 +375,7 @@ export default function Home() {
               <form className="inline-form" onSubmit={handleFeedbackSubmit}>
                 <div className="form-grid">
                   <div className="form-group">
-                    <label className="form-label" htmlFor="feedback-name">Your Name</label>
+                    <label className="form-label" htmlFor="feedback-name">Name</label>
                     <input
                       id="feedback-name"
                       className="input"
@@ -413,7 +386,7 @@ export default function Home() {
                     />
                   </div>
                   <div className="form-group">
-                    <label className="form-label" htmlFor="feedback-email">Work Email</label>
+                    <label className="form-label" htmlFor="feedback-email">Email</label>
                     <input
                       id="feedback-email"
                       className="input"
@@ -426,7 +399,7 @@ export default function Home() {
                   </div>
                 </div>
                 <div className="form-group">
-                  <label className="form-label" htmlFor="feedback-type">Feedback Type</label>
+                  <label className="form-label" htmlFor="feedback-type">Type</label>
                   <select
                     id="feedback-type"
                     className="input"
@@ -445,14 +418,14 @@ export default function Home() {
                     id="feedback-message"
                     className="input"
                     rows={4}
-                    placeholder="Tell us what we can do better..."
+                    placeholder="What can we do better?"
                     value={feedbackForm.message}
                     onChange={(e) => setFeedbackForm((prev) => ({ ...prev, message: e.target.value }))}
                     required
                   />
                 </div>
                 <button type="submit" className="btn btn-primary feedback-submit" disabled={feedbackSending}>
-                  {feedbackSending ? 'Submitting...' : 'Submit Feedback'}
+                  {feedbackSending ? 'Sending...' : 'Submit Feedback'}
                 </button>
               </form>
             </div>
@@ -468,7 +441,7 @@ export default function Home() {
                 <img src="/ZeeResizer.png" alt="" className="home-logo-img" />
                 <span>VelisMail</span>
               </div>
-              <p>Securing enterprise communications since 2026. Built for teams that demand privacy, reliability, and control.</p>
+              <p>Secure, encrypted email for modern teams.</p>
             </div>
 
             <div className="footer-column">
@@ -476,18 +449,17 @@ export default function Home() {
               <div className="footer-link-list">
                 <a href="#features" className="footer-link">Features</a>
                 <Link to="/pricing" className="footer-link">Pricing</Link>
-                <Link to="/status" className="footer-link">Network Status</Link>
-                <Link to="/docs" className="footer-link">Documentation</Link>
+                <Link to="/status" className="footer-link">Status</Link>
+                <Link to="/docs" className="footer-link">Docs</Link>
               </div>
             </div>
             <div className="footer-column">
               <h4>Company</h4>
               <div className="footer-link-list">
-                <Link to="/about" className="footer-link">About Us</Link>
-                <Link to="/privacy" className="footer-link">Privacy Policy</Link>
-                <Link to="/terms" className="footer-link">Terms of Service</Link>
-                <Link to="/cookies" className="footer-link">Cookie Policy</Link>
-                <Link to="/security" className="footer-link">Security Policy</Link>
+                <Link to="/about" className="footer-link">About</Link>
+                <Link to="/privacy" className="footer-link">Privacy</Link>
+                <Link to="/terms" className="footer-link">Terms</Link>
+                <Link to="/security" className="footer-link">Security</Link>
               </div>
             </div>
             <div className="footer-column">
@@ -504,7 +476,7 @@ export default function Home() {
             <div className="footer-bottom-links">
               <Link to="/security" className="footer-link">Security</Link>
               <Link to="/aup" className="footer-link">AUP</Link>
-              <Link to="/refund" className="footer-link">Refund Policy</Link>
+              <Link to="/refund" className="footer-link">Refund</Link>
             </div>
           </div>
         </div>
