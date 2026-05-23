@@ -1,3 +1,4 @@
+import { get, set, del } from 'idb-keyval';
 import { getConnectionHostLabel } from '../config/providers';
 import type {
   User, DnsRecord,
@@ -45,6 +46,57 @@ export const DURABLE_STORAGE_KEYS = new Set<string>([
 ]);
 
 export const memoryDB: Record<string, unknown> = {};
+
+// ---- IndexedDB-backed email store ----
+const EMAIL_STORE_PREFIX = 'velismail_emails_idx_';
+
+function emailIndexedDBKey(userId: string): string {
+  return `${EMAIL_STORE_PREFIX}${userId}`;
+}
+
+let emailIndexedDBReady = false;
+
+export async function loadEmailsFromIndexedDB(userId: string): Promise<Email[] | null> {
+  try {
+    const key = emailIndexedDBKey(userId);
+    const data = await get<Email[]>(key);
+    if (Array.isArray(data)) {
+      emailIndexedDBReady = true;
+      return data;
+    }
+  } catch {
+    /* IndexedDB unavailable, fall through */
+  }
+  return null;
+}
+
+export async function saveEmailsToIndexedDB(userId: string, emails: Email[]): Promise<void> {
+  try {
+    const key = emailIndexedDBKey(userId);
+    await set(key, emails);
+    emailIndexedDBReady = true;
+  } catch {
+    /* IndexedDB unavailable */
+  }
+}
+
+export function deleteEmailsFromIndexedDB(userId: string): void {
+  const key = emailIndexedDBKey(userId);
+  del(key).catch(() => {});
+}
+
+// Async version of saveDB for emails — writes to both memory cache and IndexedDB
+export function saveEmailsSyncAndAsync(key: string, data: Email[]) {
+  saveDB(key, data);
+  const session = getSessionSafe();
+  if (session?.id && emailIndexedDBReady) {
+    saveEmailsToIndexedDB(session.id, data).catch(() => {});
+  }
+}
+
+export function isEmailIndexedDBReady(): boolean {
+  return emailIndexedDBReady;
+}
 
 export function loadDB<T>(key: string, fallback: T): T {
   if (DURABLE_STORAGE_KEYS.has(key) || key.startsWith(`${STORAGE_KEYS.emails}_`) || key.startsWith(`${STORAGE_KEYS.domains}_`) || key.startsWith(`${STORAGE_KEYS.businessMailboxes}_`) || key.startsWith(`${STORAGE_KEYS.businessGroups}_`) || key.startsWith(`${STORAGE_KEYS.businessTeam}_`) || key.startsWith(`${STORAGE_KEYS.businessTemplates}_`) || key.startsWith(`${STORAGE_KEYS.businessQueue}_`) || key.startsWith(`${STORAGE_KEYS.businessAudit}_`) || key.startsWith(`${STORAGE_KEYS.contacts}_`) || key.startsWith(`${STORAGE_KEYS.signatures}_`)) {
@@ -584,8 +636,27 @@ export function getUserFromPersistentStore(email: string): User | null {
   return users[normalizeMailbox(email)] || null;
 }
 
+export async function initEmailsAsync(): Promise<Email[]> {
+  const session = getSessionSafe();
+  if (session?.id) {
+    const idxEmails = await loadEmailsFromIndexedDB(session.id);
+    if (idxEmails) {
+      emailsCache = idxEmails;
+      saveDB(STORAGE_KEYS.emails, idxEmails);
+      return idxEmails;
+    }
+  }
+  const stored = loadUserDB<Email[]>(STORAGE_KEYS.emails, SEED_EMAILS);
+  emailsCache = stored;
+  if (session?.id && stored.length > 0) {
+    saveEmailsToIndexedDB(session.id, stored).catch(() => {});
+  }
+  return stored;
+}
+
 export function initEmails(): Email[] {
-  return loadUserDB<Email[]>(STORAGE_KEYS.emails, SEED_EMAILS);
+  emailsCache = loadUserDB<Email[]>(STORAGE_KEYS.emails, SEED_EMAILS);
+  return emailsCache;
 }
 
 export let emailsCache = initEmails();
@@ -1276,7 +1347,7 @@ export function folderMatchesBusinessView(email: Email, folder: string): boolean
 }
 
 export function mutateEmail(id: string, updater: (email: Email) => Email | void): Email | undefined {
-  emailsCache = loadUserDB<Email[]>(STORAGE_KEYS.emails, SEED_EMAILS);
+  emailsCache = emailsCache.length > 0 ? emailsCache : loadUserDB<Email[]>(STORAGE_KEYS.emails, SEED_EMAILS);
   let changed: Email | undefined;
   emailsCache = emailsCache.map((entry) => {
     if (entry.id !== id) return entry;
@@ -1284,7 +1355,7 @@ export function mutateEmail(id: string, updater: (email: Email) => Email | void)
     changed = updated;
     return updated;
   });
-  saveUserDB(STORAGE_KEYS.emails, emailsCache);
+  saveEmailsSyncAndAsync(STORAGE_KEYS.emails, emailsCache);
   if (changed) syncBusinessEmailToDb(changed);
   return changed;
 }

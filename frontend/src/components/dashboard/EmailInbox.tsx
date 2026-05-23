@@ -1,8 +1,9 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useDeferredValue, memo, useCallback, useRef, useEffect, type FC } from 'react';
+import { FixedSizeList as List } from 'react-window';
 import {
   Mail, Star, Archive, Trash2, Search, Paperclip, ArrowLeft,
   Reply, Forward,
-  RefreshCcw, List, Grid, SortAsc, SortDesc, Menu, User,
+  RefreshCcw, List as ListIcon, Grid, SortAsc, SortDesc, Menu, User,
 } from 'lucide-react';
 import type { Email } from '../../api/client';
 import { parseEmailConversation, getEmailPreview } from './utils';
@@ -11,7 +12,6 @@ import type { DashboardState } from './types';
 interface EmailInboxProps {
   emails: Email[];
   state: DashboardState;
-  onSelectEmail: (email: Email) => void;
   onRefresh: () => void;
   onToggleStar: (id: string) => void;
   onArchive: (ids: string[]) => void;
@@ -20,26 +20,83 @@ interface EmailInboxProps {
   onForward: (email: Email) => void;
 }
 
-export default function EmailInbox({
-  emails, state, onSelectEmail, onRefresh, onToggleStar,
+const ROW_HEIGHT = 64;
+
+const EmailRow = memo(({ email, style, state, onOpen }: {
+  email: Email;
+  style: React.CSSProperties;
+  state: DashboardState;
+  onOpen: (e: Email) => void;
+}) => (
+  <div style={style}>
+    <div className={`mail-row ${email.unread ? 'unread' : ''}`} onClick={() => onOpen(email)}>
+      <div className="mail-row-select">
+        <input type="checkbox" checked={state.selectedEmails.has(email.id)} onChange={() => {
+          const next = new Set(state.selectedEmails);
+          if (next.has(email.id)) { next.delete(email.id); } else { next.add(email.id); }
+          state.setSelectedEmails(next);
+        }} onClick={e => e.stopPropagation()} />
+      </div>
+      <div className="avatar avatar-sm" onClick={e => e.stopPropagation()}>
+        <User size={14} />
+      </div>
+      <div className="mail-row-main" onClick={e => e.stopPropagation()}>
+        <strong className="mail-from">{email.fromName || email.from}</strong>
+        <span className="mail-subj">{email.subject || '(No subject)'}</span>
+        <span className="mail-preview">{getEmailPreview(email.body, 100)}</span>
+      </div>
+      <div className="mail-row-meta">
+        <span className="mail-date">{new Date(email.date).toLocaleDateString()}</span>
+        {email.starred && <Star size={12} className="text-primary" />}
+        {email.hasAttachment && <Paperclip size={12} className="text-muted" />}
+      </div>
+    </div>
+  </div>
+));
+
+const EmailInbox: FC<EmailInboxProps> = ({
+  emails, state, onRefresh, onToggleStar,
   onArchive, onTrash, onReply, onForward,
-}: EmailInboxProps) {
+}) => {
   const [focusedEmail, setFocusedEmail] = useState<Email | null>(null);
-  const filtered = useMemo(() => {
-    const q = state.searchQuery.toLowerCase();
-    return emails.filter(e => {
-      if (state.mailStatusFilter === 'unread' && !e.unread) return false;
-      if (state.mailStatusFilter === 'read' && e.unread) return false;
-      if (state.mailStatusFilter === 'starred' && !e.starred) return false;
-      if (state.mailStatusFilter === 'attachments' && !e.hasAttachment) return false;
-      if (!q) return true;
-      return e.subject?.toLowerCase().includes(q) || e.from?.toLowerCase().includes(q) || e.body?.toLowerCase().includes(q) || e.fromName?.toLowerCase().includes(q);
-    }).sort((a, b) => {
-      const da = new Date(a.date).getTime();
-      const db = new Date(b.date).getTime();
-      return state.sortOrder === 'desc' ? db - da : da - db;
+  const deferredQuery = useDeferredValue(state.searchQuery);
+  const listRef = useRef<HTMLDivElement>(null);
+  const [listWidth, setListWidth] = useState(800);
+  const [listHeight, setListHeight] = useState(600);
+
+  useEffect(() => {
+    const el = listRef.current;
+    if (!el) return;
+    const obs = new ResizeObserver(entries => {
+      for (const entry of entries) {
+        setListWidth(entry.contentRect.width);
+        setListHeight(entry.contentRect.height);
+      }
     });
-  }, [emails, state.searchQuery, state.mailStatusFilter, state.sortOrder]);
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, []);
+
+  const filtered = useMemo(() => {
+    const q = deferredQuery.toLowerCase();
+    const withTimestamps = emails.map(e => ({
+      email: e,
+      time: new Date(e.date).getTime(),
+    }));
+    const matched = withTimestamps.filter(({ email }) => {
+      if (state.mailStatusFilter === 'unread' && !email.unread) return false;
+      if (state.mailStatusFilter === 'read' && email.unread) return false;
+      if (state.mailStatusFilter === 'starred' && !email.starred) return false;
+      if (state.mailStatusFilter === 'attachments' && !email.hasAttachment) return false;
+      if (!q) return true;
+      return email.subject?.toLowerCase().includes(q) || email.from?.toLowerCase().includes(q) || email.body?.toLowerCase().includes(q) || email.fromName?.toLowerCase().includes(q);
+    });
+    matched.sort((a, b) => state.sortOrder === 'desc' ? b.time - a.time : a.time - b.time);
+    return matched;
+  }, [emails, deferredQuery, state.mailStatusFilter, state.sortOrder]);
+
+  const openEmail = useCallback((email: Email) => setFocusedEmail(email), []);
+  const closeReader = useCallback(() => setFocusedEmail(null), []);
 
   const conversation = focusedEmail ? parseEmailConversation(focusedEmail.body) : [];
 
@@ -56,7 +113,7 @@ export default function EmailInbox({
           <span className="badge badge-neutral">{filtered.length}</span>
           <button type="button" className="btn btn-ghost btn-icon" onClick={onRefresh} aria-label="Refresh"><RefreshCcw size={16} /></button>
           <button type="button" className="btn btn-ghost btn-icon" onClick={() => state.setViewMode(state.viewMode === 'list' ? 'grid' : 'list')} aria-label="Toggle view">
-            {state.viewMode === 'list' ? <Grid size={16} /> : <List size={16} />}
+            {state.viewMode === 'list' ? <Grid size={16} /> : <ListIcon size={16} />}
           </button>
           <button type="button" className="btn btn-ghost btn-icon" onClick={() => state.setSortOrder(state.sortOrder === 'desc' ? 'asc' : 'desc')} aria-label="Toggle sort">
             {state.sortOrder === 'desc' ? <SortDesc size={16} /> : <SortAsc size={16} />}
@@ -88,14 +145,14 @@ export default function EmailInbox({
         {focusedEmail ? (
           <div className="dash-reader">
             <div className="reader-toolbar">
-              <button type="button" className="btn btn-ghost btn-icon" onClick={() => setFocusedEmail(null)}><ArrowLeft size={18} /></button>
+              <button type="button" className="btn btn-ghost btn-icon" onClick={closeReader}><ArrowLeft size={18} /></button>
               <button type="button" className="btn btn-ghost btn-sm" onClick={() => onReply(focusedEmail)}><Reply size={14} /> Reply</button>
               <button type="button" className="btn btn-ghost btn-sm" onClick={() => onForward(focusedEmail)}><Forward size={14} /> Forward</button>
               <button type="button" className={`btn btn-ghost btn-sm ${focusedEmail.starred ? 'text-primary' : ''}`} onClick={() => onToggleStar(focusedEmail.id)}><Star size={14} /></button>
-              <button type="button" className="btn btn-ghost btn-sm" onClick={() => { onArchive([focusedEmail.id]); setFocusedEmail(null); }}>
+              <button type="button" className="btn btn-ghost btn-sm" onClick={() => { onArchive([focusedEmail.id]); closeReader(); }}>
                 <Archive size={14} /> Archive
               </button>
-              <button type="button" className="btn btn-ghost btn-sm btn-danger" onClick={() => { onTrash([focusedEmail.id]); setFocusedEmail(null); }}>
+              <button type="button" className="btn btn-ghost btn-sm btn-danger" onClick={() => { onTrash([focusedEmail.id]); closeReader(); }}>
                 <Trash2 size={14} /> Trash
               </button>
             </div>
@@ -130,7 +187,7 @@ export default function EmailInbox({
             )}
           </div>
         ) : (
-          <div className="dash-list">
+          <div className="dash-list" ref={listRef}>
             {filtered.length === 0 ? (
               <div className="empty-state">
                 <Mail size={48} className="text-muted" />
@@ -139,8 +196,8 @@ export default function EmailInbox({
               </div>
             ) : state.viewMode === 'grid' ? (
               <div className="mail-grid">
-                {filtered.map(email => (
-                  <div key={email.id} className={`mail-grid-card ${email.unread ? 'unread' : ''}`} onClick={() => { setFocusedEmail(email); onSelectEmail(email); }}>
+                {filtered.map(({ email }) => (
+                  <div key={email.id} className={`mail-grid-card ${email.unread ? 'unread' : ''}`} onClick={() => openEmail(email)}>
                     <div className="flex items-center gap-2">
                       <div className="avatar avatar-sm"><User size={14} /></div>
                       <strong className="truncate">{email.fromName || email.from}</strong>
@@ -152,36 +209,27 @@ export default function EmailInbox({
                 ))}
               </div>
             ) : (
-              <div className="mail-list">
-                {filtered.map(email => (
-                  <div key={email.id} className={`mail-row ${email.unread ? 'unread' : ''}`} onClick={() => { setFocusedEmail(email); onSelectEmail(email); }}>
-                    <div className="mail-row-select">
-                      <input type="checkbox" checked={state.selectedEmails.has(email.id)} onChange={() => {
-                        const next = new Set(state.selectedEmails);
-                        if (next.has(email.id)) { next.delete(email.id); } else { next.add(email.id); }
-                        state.setSelectedEmails(next);
-                      }} onClick={e => e.stopPropagation()} />
-                    </div>
-                    <div className="avatar avatar-sm" onClick={e => e.stopPropagation()}>
-                      <User size={14} />
-                    </div>
-                    <div className="mail-row-main" onClick={e => e.stopPropagation()}>
-                      <strong className="mail-from">{email.fromName || email.from}</strong>
-                      <span className="mail-subj">{email.subject || '(No subject)'}</span>
-                      <span className="mail-preview">{getEmailPreview(email.body, 100)}</span>
-                    </div>
-                    <div className="mail-row-meta">
-                      <span className="mail-date">{new Date(email.date).toLocaleDateString()}</span>
-                      {email.starred && <Star size={12} className="text-primary" />}
-                      {email.hasAttachment && <Paperclip size={12} className="text-muted" />}
-                    </div>
-                  </div>
-                ))}
-              </div>
+              <List
+                height={listHeight}
+                itemCount={filtered.length}
+                itemSize={ROW_HEIGHT}
+                width={listWidth}
+              >
+                {({ index, style }) => (
+                  <EmailRow
+                    email={filtered[index].email}
+                    style={style}
+                    state={state}
+                    onOpen={openEmail}
+                  />
+                )}
+              </List>
             )}
           </div>
         )}
       </div>
     </div>
   );
-}
+};
+
+export default memo(EmailInbox);

@@ -49,7 +49,6 @@ export default function BusinessDashboard() {
 
   const [activeBizTab, setActiveBizTab] = useState<BizTab>(() => (navigation?.activeTab as BizTab) || 'mail');
   const [activeFolder, setActiveFolder] = useState(navigation?.activeFolder || 'inbox');
-  const [selectedEmail, setSelectedEmail] = useState<Email | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [composeOpen, setComposeOpen] = useState(false);
   const [composeTo, setComposeTo] = useState('');
@@ -246,16 +245,16 @@ export default function BusinessDashboard() {
     refreshTeam(); setPendingRoleChange(null); showToast('Role updated');
   };
 
-  const handleBulkAction = async (action: string) => {
-    const ids = [...selectedEmails];
-    if (!ids.length) return;
+  const handleBulkAction = async (action: string, ids?: string[]) => {
+    const targetIds = ids || [...selectedEmails];
+    if (!targetIds.length) return;
     try {
-      if (action === 'archive') { await Promise.all(ids.map(id => mail.archive(id))); showToast('Archived'); }
-      else if (action === 'trash') { await Promise.all(ids.map(id => mail.trash(activeDomainName, id))); showToast('Trashed'); }
-      else if (action === 'star') { await Promise.all(ids.map(id => mail.toggleStar(id))); showToast('Starred'); }
-      else if (action === 'read') { await Promise.all(ids.map(id => mail.markRead(id))); showToast('Marked read'); }
-      else if (action === 'unread') { await Promise.all(ids.map(id => mail.markUnread(id))); showToast('Marked unread'); }
-      refetch(); setSelectedEmails(new Set());
+      if (action === 'archive') { await Promise.all(targetIds.map(id => mail.archive(id))); showToast('Archived'); }
+      else if (action === 'trash') { await Promise.all(targetIds.map(id => mail.trash(activeDomainName, id))); showToast('Trashed'); }
+      else if (action === 'star') { await Promise.all(targetIds.map(id => mail.toggleStar(id))); showToast('Starred'); }
+      else if (action === 'read') { await Promise.all(targetIds.map(id => mail.markRead(id))); showToast('Marked read'); }
+      else if (action === 'unread') { await Promise.all(targetIds.map(id => mail.markUnread(id))); showToast('Marked unread'); }
+      refetch(); if (!ids) setSelectedEmails(new Set());
     } catch { showToast('Action failed', 'error'); }
   };
 
@@ -263,7 +262,7 @@ export default function BusinessDashboard() {
 
   const dashboardState: DashboardState = {
     activeBizTab, setActiveBizTab, activeFolder, setActiveFolder,
-    selectedEmail, setSelectedEmail, searchQuery, setSearchQuery,
+    searchQuery, setSearchQuery,
     composeOpen, setComposeOpen, composeTo, setComposeTo, composeSubject, setComposeSubject,
     composeBody, setComposeBody, sending, setSending, selectedFromAddress, setSelectedFromAddress,
     annual, setAnnual, loadingPayment, setLoadingPayment, toast, showToast,
@@ -318,13 +317,12 @@ export default function BusinessDashboard() {
 
       <main className="dash-main">
         {activeBizTab === 'mail' && (
-          <EmailInbox
+            <EmailInbox
             emails={emails} state={dashboardState}
-            onSelectEmail={(e) => setSelectedEmail(e)}
             onRefresh={() => refetch()}
             onToggleStar={(id) => { mail.toggleStar(id); refetch(); }}
-            onArchive={() => handleBulkAction('archive')}
-            onTrash={() => handleBulkAction('trash')}
+            onArchive={(ids) => handleBulkAction('archive', ids)}
+            onTrash={(ids) => handleBulkAction('trash', ids)}
             onReply={handleReply} onForward={handleForward}
           />
         )}

@@ -32,7 +32,8 @@ import {
   SEED_EMAILS,
   normalizeBusinessEmailFromDb, syncBusinessEmailToDb,
   businessEmailDbRouteUnavailable, setBusinessEmailDbRouteUnavailable,
-  folderMatchesBusinessView, mutateEmail,
+   folderMatchesBusinessView, mutateEmail,
+   saveEmailsSyncAndAsync,
   normalizeStoredDomain, buildDnsRecords, buildDomainChecks,
   sessionHasMismatch, mergeDnsRecords,
   isLegacyDnsRecord,
@@ -940,7 +941,7 @@ export const mail = {
 
       if (response.ok && response.data?.success && Array.isArray(response.data.emails)) {
         sourceEmails = response.data.emails.map((entry) => normalizeBusinessEmailFromDb(entry));
-        saveUserDB(STORAGE_KEYS.emails, sourceEmails);
+        saveEmailsSyncAndAsync(STORAGE_KEYS.emails, sourceEmails);
       } else if (response.status === 404) {
         setBusinessEmailDbRouteUnavailable(true);
       }
@@ -1011,7 +1012,7 @@ export const mail = {
       };
       const scheduledCache = reloadEmailsCacheFromStorage();
       scheduledCache.unshift(email);
-      saveUserDB(STORAGE_KEYS.emails, scheduledCache);
+      saveEmailsSyncAndAsync(STORAGE_KEYS.emails, scheduledCache);
       businessAudit.add({
         action: 'Scheduled business email',
         actor: fromAddr,
@@ -1067,7 +1068,7 @@ export const mail = {
     const sendCache = reloadEmailsCacheFromStorage();
     const filteredCache = sendCache.filter(existing => existing.id !== email.id);
     filteredCache.unshift(email);
-    saveUserDB(STORAGE_KEYS.emails, filteredCache);
+    saveEmailsSyncAndAsync(STORAGE_KEYS.emails, filteredCache);
 
     if (session?.businessDbUrl) {
       syncBusinessEmailToDb(email);
@@ -1117,7 +1118,7 @@ export const mail = {
       folder: 'sent', unread: false, starred: false, labels: [], hasAttachment: false,
     };
     emailsCache.unshift(email);
-    saveUserDB(STORAGE_KEYS.emails, emailsCache);
+    saveEmailsSyncAndAsync(STORAGE_KEYS.emails, emailsCache);
     return email;
   },
 
@@ -1177,7 +1178,7 @@ export const mail = {
   markAllRead(folder: string) {
     const markAllCache = reloadEmailsCacheFromStorage();
     const updatedCache = markAllCache.map(e => folderMatchesBusinessView(e, folder) ? { ...e, unread: false } : e);
-    saveUserDB(STORAGE_KEYS.emails, updatedCache);
+    saveEmailsSyncAndAsync(STORAGE_KEYS.emails, updatedCache);
   },
 
   async dispatchScheduledDue(domain?: string): Promise<number> {
@@ -1229,7 +1230,7 @@ export const mail = {
           };
           const dispatchCache = reloadEmailsCacheFromStorage();
           dispatchCache.unshift(fallbackEmail);
-          saveUserDB(STORAGE_KEYS.emails, dispatchCache);
+           saveEmailsSyncAndAsync(STORAGE_KEYS.emails, dispatchCache);
           syncBusinessEmailToDb(fallbackEmail);
         }
         businessAudit.add({

@@ -21,8 +21,6 @@ export interface DashboardState {
   setActiveBizTab: (tab: BizTab) => void;
   activeFolder: string;
   setActiveFolder: (f: string) => void;
-  selectedEmail: Email | null;
-  setSelectedEmail: (e: Email | null) => void;
   searchQuery: string;
   setSearchQuery: (q: string) => void;
   composeOpen: boolean;

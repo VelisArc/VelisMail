@@ -885,25 +885,54 @@ textarea.input {
   100% { opacity: 1; filter: blur(0); transform: scale(1) translateY(0); }
 }
 
-@keyframes countUp {
-  from { opacity: 0; transform: translateY(10px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
 @keyframes shimmer {
   0% { background-position: -200% 0; }
   100% { background-position: 200% 0; }
-}
-
-@keyframes float {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-10px); }
 }
 
 @keyframes glow {
   0%, 100% { box-shadow: 0 0 8px var(--primary-glow); }
   50% { box-shadow: 0 0 24px var(--primary-glow), 0 0 48px var(--primary-glow); }
 }
+
+/* Modern loading overlay */
+.loading-overlay {
+  position: fixed; inset: 0; z-index: 9999;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(23, 23, 23, 0.7);
+  backdrop-filter: blur(4px);
+  animation: fadeIn 0.2s ease-out;
+}
+.loading-overlay .spinner {
+  width: 40px; height: 40px;
+  border: 3px solid rgba(255,255,255,0.1);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Skeleton loading for email list */
+.skeleton-row {
+  height: 64px; display: flex; align-items: center; gap: 12px;
+  padding: 0 16px; border-bottom: 1px solid var(--border);
+}
+.skeleton-avatar {
+  width: 36px; height: 36px; border-radius: 50%;
+  background: linear-gradient(90deg, var(--border) 25%, var(--hover) 50%, var(--border) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+  flex-shrink: 0;
+}
+.skeleton-line {
+  height: 14px; border-radius: 4px;
+  background: linear-gradient(90deg, var(--border) 25%, var(--hover) 50%, var(--border) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+}
+.skeleton-line.short { width: 120px; }
+.skeleton-line.medium { width: 200px; }
+.skeleton-line.long { width: 300px; }
 
 /* Animation Utility Classes */
 .animate-fade,
@@ -918,7 +947,6 @@ textarea.input {
 .animate-slideUp { animation: slideUp 0.5s ease-out both; }
 .animate-page { animation: pageEnter 0.7s cubic-bezier(0.16, 1, 0.3, 1) both; }
 .animate-pulse { animation: pulse 2s ease-in-out infinite; }
-.animate-float { animation: float 3s ease-in-out infinite; }
 
 /* Stagger helpers */
 .stagger-children > * { animation: fadeInUp 0.5s ease-out both; }
