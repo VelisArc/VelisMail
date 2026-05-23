@@ -19,7 +19,7 @@ export default function TemplatesPanel({ state }: TemplatesPanelProps) {
             <p className="text-xs text-muted">{t.body?.slice(0, 100)}...</p>
             <div className="flex gap-2 mt-8">
               <button className="btn btn-ghost btn-sm" onClick={() => state.setPreviewTemplate(t)}><Eye size={12} /> Preview</button>
-              <button className="btn btn-ghost btn-sm" onClick={() => { businessTemplates.delete(state.activeDomainName, t.id); state.refreshTemplates(); }}><Trash2 size={12} /> Delete</button>
+              <button className="btn btn-ghost btn-sm" onClick={() => { try { businessTemplates.delete(state.activeDomainName, t.id); state.refreshTemplates(); state.showToast('Deleted'); } catch { state.showToast('Delete failed', 'error'); } }}><Trash2 size={12} /> Delete</button>
             </div>
           </div>
         ))}

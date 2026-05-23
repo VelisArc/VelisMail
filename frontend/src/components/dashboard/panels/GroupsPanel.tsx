@@ -16,11 +16,16 @@ export default function GroupsPanel({ state }: GroupsPanelProps) {
         <span className="text-muted">@{state.activeDomainName}</span>
         <input className="input flex-1" placeholder="Members (comma-separated emails)" value={state.groupMembers} onChange={e => state.setGroupMembers(e.target.value)} />
         <button className="btn btn-primary btn-sm" onClick={() => {
-          businessGroups.create(state.activeDomainName, { name: state.groupName, localPart: state.groupLocalPart, members: state.groupMembers.split(',').map(s => s.trim()).filter(Boolean) });
-          state.refreshGroups();
-          state.setGroupName('');
-          state.setGroupLocalPart('');
-          state.setGroupMembers('');
+          try {
+            businessGroups.create(state.activeDomainName, { name: state.groupName, localPart: state.groupLocalPart, members: state.groupMembers.split(',').map(s => s.trim()).filter(Boolean) });
+            state.refreshGroups();
+            state.setGroupName('');
+            state.setGroupLocalPart('');
+            state.setGroupMembers('');
+            state.showToast('Group created');
+          } catch (e) {
+            state.showToast(e instanceof Error ? e.message : 'Failed to create group', 'error');
+          }
         }}><Plus size={14} /> Create</button>
       </div>
       {state.domainGroups.length === 0 ? (

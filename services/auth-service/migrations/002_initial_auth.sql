@@ -120,9 +120,9 @@ CREATE TABLE IF NOT EXISTS failed_login_attempts (
 );
 
 -- Indexes for failed login attempts
-CREATE INDEX idx_failed_login_attempts_email ON failed_login_attempts(email);
-CREATE INDEX idx_failed_login_attempts_attempted_at ON failed_login_attempts(attempted_at);
-CREATE INDEX idx_failed_login_attempts_user_id ON failed_login_attempts(user_id);
+CREATE INDEX IF NOT EXISTS idx_failed_login_attempts_email ON failed_login_attempts(email);
+CREATE INDEX IF NOT EXISTS idx_failed_login_attempts_attempted_at ON failed_login_attempts(attempted_at);
+CREATE INDEX IF NOT EXISTS idx_failed_login_attempts_user_id ON failed_login_attempts(user_id);
 
 -- RLS policy for failed login attempts
 ALTER TABLE failed_login_attempts ENABLE ROW LEVEL SECURITY;

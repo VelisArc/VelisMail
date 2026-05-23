@@ -20,10 +20,15 @@ export default function MailboxesPanel({ state }: MailboxesPanelProps) {
           <option value="primary">Primary</option><option value="alias">Alias</option><option value="shared">Shared</option>
         </select>
         <button className="btn btn-primary btn-sm" onClick={() => {
-          businessMailboxes.create(state.activeDomainName, { localPart: state.mailboxLocalPart, displayName: state.mailboxDisplayName, kind: state.mailboxKind });
-          state.refreshMailboxes();
-          state.setMailboxLocalPart('');
-          state.setMailboxDisplayName('');
+          try {
+            businessMailboxes.create(state.activeDomainName, { localPart: state.mailboxLocalPart, displayName: state.mailboxDisplayName, kind: state.mailboxKind });
+            state.refreshMailboxes();
+            state.setMailboxLocalPart('');
+            state.setMailboxDisplayName('');
+            state.showToast('Mailbox created');
+          } catch (e) {
+            state.showToast(e instanceof Error ? e.message : 'Failed to create mailbox', 'error');
+          }
         }}><Plus size={14} /> Add</button>
       </div>
       <div className="team-list">
