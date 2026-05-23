@@ -269,7 +269,7 @@ function AdminStatusConfirmModal({ state }: { state: DashboardState }) {
             const newStatus = state.adminStatusConfirm!.status;
             platformAdmin.updateUserStatus(email, newStatus as 'active' | 'suspended' | 'deactivated');
             state.setAdminStatusConfirm(null); state.showToast(`User ${newStatus}`);
-            state.refreshAdminUsers ? state.refreshAdminUsers() : state.refreshTeam();
+            if (state.refreshAdminUsers) state.refreshAdminUsers(); else state.refreshTeam();
           }}>
             {state.adminStatusConfirm.step === 1 ? 'Continue' : state.adminStatusConfirm.status === 'suspended' ? 'Confirm Suspend' : 'Confirm Reactivate'}
           </button>
