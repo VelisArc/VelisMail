@@ -1,4 +1,5 @@
-import { Globe, Plus, Menu, RefreshCcw, Copy, Shield } from 'lucide-react';
+import { Globe, Plus, Menu, RefreshCcw, Copy, Shield, Trash2 } from 'lucide-react';
+import { domains } from '../../../api/client';
 import type { DashboardState } from '../types';
 
 interface DomainsPanelProps {
@@ -38,6 +39,7 @@ export default function DomainsPanel({ state, handleAddDomain, handleVerifyDomai
               <div className="domain-card-actions">
                 <button className="btn btn-ghost btn-sm" onClick={e => { e.stopPropagation(); handleVerifyDomain(dom.id); }}><RefreshCcw size={12} /> Verify</button>
                 <button className="btn btn-ghost btn-sm" onClick={e => { e.stopPropagation(); state.copyToClipboard(dom.domain); state.showToast('Copied'); }}><Copy size={12} /></button>
+                <button className="btn btn-ghost btn-sm btn-danger" onClick={e => { e.stopPropagation(); state.setConfirmAction({ title: 'Delete Domain', message: `Delete ${dom.domain}? This cannot be undone.`, onConfirm: () => { try { domains.deleteDomain(dom.id); state.refreshDomains(); state.showToast('Domain deleted'); } catch (err) { console.error('delete domain failed', err); state.showToast('Delete failed', 'error'); } } }); }}><Trash2 size={12} /></button>
               </div>
             </div>
           ))}

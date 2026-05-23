@@ -727,7 +727,7 @@ export function normalizeBusinessMailboxEntry(entry: Partial<BusinessMailbox>, d
   const normalizedDomain = normalizeDomainInput(domain);
   const address = normalizeMailbox(entry.address || `admin@${normalizedDomain}`);
   return {
-    id: entry.id || `mbx_${Math.random().toString(36).slice(2, 10)}`,
+    id: entry.id || `mbx_${crypto.randomUUID().split('-').join('').slice(0, 8)}`,
     domain: normalizedDomain,
     address,
     displayName: entry.displayName?.trim() || address.split('@')[0],
@@ -744,7 +744,7 @@ export function normalizeBusinessGroupEntry(entry: Partial<BusinessGroup>, domai
   const normalizedDomain = normalizeDomainInput(domain);
   const address = normalizeMailbox(entry.address || `team@${normalizedDomain}`);
   return {
-    id: entry.id || `grp_${Math.random().toString(36).slice(2, 10)}`,
+    id: entry.id || `grp_${crypto.randomUUID().split('-').join('').slice(0, 8)}`,
     domain: normalizedDomain,
     name: entry.name?.trim() || address.split('@')[0],
     address,
@@ -865,7 +865,7 @@ export function normalizeBusinessQueueEntry(entry: Partial<BusinessMailQueueItem
     ? entry.recipients.map((recipient) => normalizeMailbox(recipient)).filter(Boolean)
     : String(entry.to || '').split(',').map((recipient) => normalizeMailbox(recipient)).filter(Boolean);
   return {
-    id: entry.id || `queue_${Math.random().toString(36).slice(2, 10)}`,
+    id: entry.id || `queue_${crypto.randomUUID().split('-').join('').slice(0, 8)}`,
     domain: normalizeDomainInput(entry.domain || ''),
     fromAddress: normalizeMailbox(entry.fromAddress || ''),
     to: recipients.join(', '),
@@ -1074,7 +1074,7 @@ export function buildDomainChecks(domain: string, verificationToken: string): Do
 
 export function normalizeStoredDomain(domain: Partial<CustomDomain> & { id: string; domain: string; status?: 'pending' | 'verified' | 'failed' }): CustomDomain {
   const normalizedDomain = normalizeDomainInput(domain.domain);
-  const verificationToken = domain.verificationToken || 'velismail-verify=' + Math.random().toString(36).slice(2, 14);
+  const verificationToken = domain.verificationToken || 'velismail-verify=' + crypto.randomUUID().split('-').join('').slice(0, 12);
   const fallbackChecks = buildDomainChecks(normalizedDomain, verificationToken);
   const checks = Array.isArray(domain.checks) && domain.checks.length > 0 ? domain.checks : fallbackChecks;
   const storedDnsRecords = Array.isArray(domain.dnsRecords) ? domain.dnsRecords : [];

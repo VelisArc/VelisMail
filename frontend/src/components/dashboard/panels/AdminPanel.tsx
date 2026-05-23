@@ -34,7 +34,7 @@ export default function AdminPanel({ state }: AdminPanelProps) {
           <option value="all">All Plans</option><option value="free">Free</option><option value="starter">Starter</option><option value="business">Business</option><option value="enterprise">Enterprise</option>
         </select>
         <select className="input input-auto" value={state.adminStatusFilter} onChange={e => state.setAdminStatusFilter(e.target.value)}>
-          <option value="all">All Status</option><option value="active">Active</option><option value="suspended">Suspended</option>
+          <option value="all">All Status</option><option value="active">Active</option><option value="suspended">Suspended</option><option value="deactivated">Deactivated</option>
         </select>
       </div>
       <div className="admin-list-header">
@@ -51,7 +51,7 @@ export default function AdminPanel({ state }: AdminPanelProps) {
             <button className="btn btn-ghost btn-sm" onClick={e => { e.stopPropagation(); state.setAdminStatusConfirm({ record: u, status: u.status === 'active' ? 'suspended' : 'active', step: 1 }); }}>
               {u.status === 'active' ? 'Suspend' : 'Reactivate'}
             </button>
-            <button className="btn btn-ghost btn-sm btn-danger" title="Delete user" onClick={e => { e.stopPropagation(); if (confirm(`Delete user ${u.user.email}?`)) { platformAdmin.deleteUser(u.user.email); state.setAdminUsers(platformAdmin.getUsers()); state.showToast('User deleted'); } }}><Trash2 size={12} /></button>
+            <button className="btn btn-ghost btn-sm btn-danger" title="Delete user" onClick={e => { e.stopPropagation(); state.setConfirmAction({ title: 'Delete User', message: `Permanently delete ${u.user.email}? This cannot be undone.`, onConfirm: () => { platformAdmin.deleteUser(u.user.email); state.setAdminUsers(platformAdmin.getUsers()); state.showToast('User deleted'); } }); }}><Trash2 size={12} /></button>
           </div>
         </div>
       ))}

@@ -31,7 +31,7 @@ function SignatureEditor({ state, sig }: { state: DashboardState; sig?: Signatur
               state.setSignatureEditorName('');
               state.setSignatureEditorContent('');
               state.showToast(isEdit ? 'Signature updated' : 'Signature created');
-            } catch { state.showToast('Failed to save signature', 'error'); }
+            } catch (e) { console.error('save signature failed', e); state.showToast('Failed to save signature', 'error'); }
           }}>{isEdit ? 'Update' : 'Create'} Signature</button>
         </div>
       </div>
@@ -66,7 +66,7 @@ function ContactEditor({ state, contact }: { state: DashboardState; contact?: Co
               state.setContactEditorPhone('');
               state.setContactEditorCompany('');
               state.showToast(isEdit ? 'Contact updated' : 'Contact created');
-            } catch { state.showToast('Failed to save contact', 'error'); }
+            } catch (e) { console.error('save contact failed', e); state.showToast('Failed to save contact', 'error'); }
           }}>{isEdit ? 'Update' : 'Create'} Contact</button>
         </div>
       </div>
@@ -128,7 +128,7 @@ export default function SettingsPanel({ state }: SettingsPanelProps) {
                 {sig.isDefault && <span className="badge badge-success">Default</span>}
                 <button className="btn btn-ghost btn-sm" onClick={() => { signatures.setDefault(sig.id); state.refreshSignatures(); }}><Star size={12} /></button>
                 <button className="btn btn-ghost btn-sm" onClick={() => { state.setEditingSignatureId(sig.id); state.setSignatureEditorName(sig.name); state.setSignatureEditorContent(sig.content); state.setSignatureEditorOpen(true); }}><Edit3 size={12} /></button>
-                <button className="btn btn-ghost btn-sm btn-danger" onClick={() => { try { signatures.remove(sig.id); state.refreshSignatures(); state.showToast('Deleted'); } catch { state.showToast('Delete failed', 'error'); } }}><Trash2 size={12} /></button>
+                <button className="btn btn-ghost btn-sm btn-danger" onClick={() => { try { signatures.remove(sig.id); state.refreshSignatures(); state.showToast('Deleted'); } catch (e) { console.error('delete signature failed', e); state.showToast('Delete failed', 'error'); } }}><Trash2 size={12} /></button>
               </div>
             ))
           )}
@@ -157,7 +157,7 @@ export default function SettingsPanel({ state }: SettingsPanelProps) {
                 <button className="btn btn-ghost btn-sm" onClick={() => { contacts.toggleFavorite(c.id); state.refreshContacts(); }}><Star size={12} className={c.favorite ? 'text-primary' : ''} /></button>
                 <button className="btn btn-ghost btn-sm" onClick={() => { state.setEditingContactId(c.id); state.setContactEditorName(c.name); state.setContactEditorEmail(c.email); state.setContactEditorPhone(c.phone || ''); state.setContactEditorCompany(c.company || ''); state.setContactEditorOpen(true); }}><Edit3 size={12} /></button>
                 <button className="btn btn-ghost btn-sm" onClick={() => { state.copyToClipboard(c.email); state.showToast('Email copied'); }}><Copy size={12} /></button>
-                <button className="btn btn-ghost btn-sm btn-danger" onClick={() => { try { contacts.remove(c.id); state.refreshContacts(); state.showToast('Deleted'); } catch { state.showToast('Delete failed', 'error'); } }}><X size={12} /></button>
+                <button className="btn btn-ghost btn-sm btn-danger" onClick={() => { try { contacts.remove(c.id); state.refreshContacts(); state.showToast('Deleted'); } catch (e) { console.error('delete contact failed', e); state.showToast('Delete failed', 'error'); } }}><X size={12} /></button>
               </div>
             ))
           )}
@@ -182,7 +182,7 @@ export default function SettingsPanel({ state }: SettingsPanelProps) {
                 </div>
                 <span className="text-xs text-muted">{new Date(s.lastActive).toLocaleDateString()}</span>
                 {!s.current && (
-                  <button className="btn btn-ghost btn-sm btn-danger" onClick={async () => { try { await auth.revokeSession(s.id); state.refreshSessions(); state.showToast('Session revoked'); } catch { state.showToast('Failed', 'error'); } }}><X size={12} /> Revoke</button>
+                  <button className="btn btn-ghost btn-sm btn-danger" onClick={async () => { try { await auth.revokeSession(s.id); state.refreshSessions(); state.showToast('Session revoked'); } catch (e) { console.error('revoke session failed', e); state.showToast('Failed', 'error'); } }}><X size={12} /> Revoke</button>
                 )}
               </div>
             ))

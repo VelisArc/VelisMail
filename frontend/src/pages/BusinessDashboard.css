@@ -1520,6 +1520,25 @@
 .input-max-200 { max-width: 200px; }
 .input-max-250 { max-width: 250px; }
 
+.color-picker-sm { width: 28px; height: 28px; padding: 0; border: 1px solid var(--border-primary); border-radius: 4px; cursor: pointer; }
+
+.domain-health-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  padding: 16px 20px;
+}
+
+.roles-info-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-top: 24px;
+  padding: 16px;
+  background: var(--bg-surface-2);
+  border-radius: var(--radius-md);
+}
+
 /* ─── Composer Inputs ─── */
 .to-input {
   flex: 1;

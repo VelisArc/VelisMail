@@ -1,4 +1,4 @@
-import { Mail, Plus, Menu, CheckCircle2, Inbox } from 'lucide-react';
+import { Mail, Plus, Menu, CheckCircle2, Inbox, Trash2 } from 'lucide-react';
 import { businessMailboxes } from '../../../api/client';
 import type { DashboardState } from '../types';
 import type { BusinessMailbox } from '../../../api/client';
@@ -17,7 +17,7 @@ export default function MailboxesPanel({ state }: MailboxesPanelProps) {
         <span className="text-muted">@{state.activeDomainName}</span>
         <input className="input input-max-200" placeholder="Display name" value={state.mailboxDisplayName} onChange={e => state.setMailboxDisplayName(e.target.value)} />
         <select className="input input-max-140" value={state.mailboxKind} onChange={e => state.setMailboxKind(e.target.value as BusinessMailbox['kind'])}>
-          <option value="primary">Primary</option><option value="alias">Alias</option><option value="shared">Shared</option>
+          <option value="primary">Primary</option><option value="mailbox">Mailbox</option><option value="alias">Alias</option><option value="shared">Shared</option>
         </select>
         <button className="btn btn-primary btn-sm" onClick={() => {
           try {
@@ -38,6 +38,7 @@ export default function MailboxesPanel({ state }: MailboxesPanelProps) {
             <div className="team-member-info"><strong>{mbx.displayName || mbx.address}</strong><span className="text-muted">{mbx.address}</span></div>
             <span className="badge badge-neutral">{mbx.kind}</span>
             <button className="btn btn-ghost btn-sm" onClick={e => { e.stopPropagation(); state.setSelectedFromAddress(mbx.address); state.showToast('Sender set'); }}><CheckCircle2 size={14} /> Set Sender</button>
+            <button className="btn btn-ghost btn-sm btn-danger" onClick={e => { e.stopPropagation(); try { businessMailboxes.remove(state.activeDomainName, mbx.address); state.refreshMailboxes(); state.showToast('Deleted'); } catch (err) { console.error('delete mailbox failed', err); state.showToast('Delete failed', 'error'); } }}><Trash2 size={14} /></button>
           </div>
         ))}
       </div>

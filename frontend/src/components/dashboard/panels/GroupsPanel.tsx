@@ -1,4 +1,4 @@
-import { Users, Plus, Menu } from 'lucide-react';
+import { Users, Plus, Menu, Trash2 } from 'lucide-react';
 import { businessGroups } from '../../../api/client';
 import type { DashboardState } from '../types';
 
@@ -37,6 +37,7 @@ export default function GroupsPanel({ state }: GroupsPanelProps) {
               <strong>{g.name || g.address}</strong>
               <span className="text-muted text-sm">{g.address}</span>
               <span className="text-xs text-muted">{g.members.length} members</span>
+              <button className="btn btn-ghost btn-sm btn-danger mt-8" onClick={e => { e.stopPropagation(); try { businessGroups.remove(state.activeDomainName, g.address); state.refreshGroups(); state.showToast('Deleted'); } catch (err) { console.error('delete group failed', err); state.showToast('Delete failed', 'error'); } }}><Trash2 size={12} /> Delete</button>
             </div>
           ))}
         </div>

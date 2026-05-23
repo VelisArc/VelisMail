@@ -435,7 +435,7 @@ export const businessAudit = {
   add(entry: Omit<BusinessAuditEntry, 'id' | 'timestamp'> & Partial<Pick<BusinessAuditEntry, 'id' | 'timestamp'>>) {
     const all = this.getAll();
     const nextEntry: BusinessAuditEntry = {
-      id: entry.id || `aud_${Math.random().toString(36).slice(2, 10)}`,
+      id: entry.id || `aud_${crypto.randomUUID().split('-').join('').slice(0, 8)}`,
       timestamp: entry.timestamp || new Date().toISOString(),
       action: entry.action,
       actor: entry.actor,
@@ -1062,7 +1062,7 @@ export const mail = {
       throw error;
     }
     const email: Email = {
-      id: 'bem_' + Math.random().toString(36).slice(2, 8),
+      id: 'bem_' + crypto.randomUUID().split('-')[0],
       from: fromAddr,
       fromName: selectedMailbox.displayName || session?.displayName || 'Business',
       to: expandedRecipients, subject, body,
@@ -1114,7 +1114,7 @@ export const mail = {
       }),
     });
     const email: Email = {
-      id: 'em_' + Math.random().toString(36).slice(2, 8),
+      id: 'em_' + crypto.randomUUID().split('-')[0],
       from: session?.email || 'you@velismail.online',
       fromName: session?.displayName || 'You',
       to, subject, body,
@@ -1687,7 +1687,7 @@ export const contacts = {
   add(data: Omit<Contact, 'id' | 'favorite' | 'createdAt'>): Contact {
     const all = this.getAll();
     const c: Contact = {
-      id: 'ct_' + Math.random().toString(36).slice(2, 8),
+      id: 'ct_' + crypto.randomUUID().split('-')[0],
       ...data,
       group: data.group || 'General',
       favorite: false,
@@ -1764,7 +1764,7 @@ export const signatures = {
   add(name: string, content: string): Signature {
     const all = this.getAll();
     const sig: Signature = {
-      id: 'sig_' + Math.random().toString(36).slice(2, 8),
+      id: 'sig_' + crypto.randomUUID().split('-')[0],
       name, content,
       isDefault: all.length === 0,
     };
@@ -1845,7 +1845,7 @@ export const labels = {
   },
   add(name: string, color: string): Label {
     const all = loadLabels();
-    const label: Label = { id: `lbl_${Math.random().toString(36).slice(2, 8)}`, name, color };
+    const label: Label = { id: `lbl_${crypto.randomUUID().split('-')[0]}`, name, color };
     all.push(label);
     saveLabels(all);
     return label;
@@ -1866,7 +1866,7 @@ export const rules = {
   },
   add(name: string, conditions: EmailRuleCondition[], actions: EmailRuleAction[]): EmailRule {
     const all = loadRules();
-    const rule: EmailRule = { id: `rule_${Math.random().toString(36).slice(2, 8)}`, name, conditions, actions, enabled: true };
+    const rule: EmailRule = { id: `rule_${crypto.randomUUID().split('-')[0]}`, name, conditions, actions, enabled: true };
     all.push(rule);
     saveRules(all);
     return rule;

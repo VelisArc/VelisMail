@@ -59,7 +59,6 @@ export default function Sidebar({
               <span className="side-logo-badge">Business</span>
             </div>
           </div>
-          <p className="side-header-copy">Private mail workspace with queues, templates, and delivery controls.</p>
         </div>
 
         <button type="button" className="btn btn-primary side-compose" onClick={onCompose}>

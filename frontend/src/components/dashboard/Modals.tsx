@@ -2,7 +2,7 @@ import { X, UserCheck, CheckCircle2, Copy, Shield, AlertTriangle, LogOut, Mail, 
 import Composer from '../Composer';
 import type { DashboardState } from './types';
 import { formatRelative, copyToClipboard, providerRecordType } from './utils';
-import { businessTemplates, platformAdmin, teamAccess } from '../../api/client';
+import { businessTemplates, platformAdmin, teamAccess, connections } from '../../api/client';
 
 interface ModalsProps {
   state: DashboardState;
@@ -84,7 +84,7 @@ function TemplateEditorModal({ state }: { state: DashboardState }) {
             <input className="input" placeholder="Template name" value={state.templateName} onChange={e => state.setTemplateName(e.target.value)} />
             <input className="input" placeholder="Subject line" value={state.templateSubject} onChange={e => state.setTemplateSubject(e.target.value)} />
             <textarea className="input" rows={8} placeholder="Email body..." value={state.templateBody} onChange={e => state.setTemplateBody(e.target.value)} />
-            <button className="btn btn-primary" onClick={() => { const all = businessTemplates.getAll(); const newTemplate = { id: 'tpl_' + Math.random().toString(36).slice(2, 8), name: state.templateName, subject: state.templateSubject, body: state.templateBody, usageCount: 0 }; all.unshift(newTemplate); businessTemplates.save(all); state.refreshTemplates(); state.setTemplateEditorOpen(false); state.showToast('Template saved'); }}>Save Template</button>
+            <button className="btn btn-primary" onClick={() => { const all = businessTemplates.getAll(); const newTemplate = { id: 'tpl_' + crypto.randomUUID().split('-')[0], name: state.templateName, subject: state.templateSubject, body: state.templateBody, usageCount: 0 }; all.unshift(newTemplate); businessTemplates.save(all); state.refreshTemplates(); state.setTemplateEditorOpen(false); state.showToast('Template saved'); }}>Save Template</button>
           </div>
         )}
       </div>
@@ -321,6 +321,25 @@ function DomainVerifyModal({ state, handleVerifyDomain }: { state: DashboardStat
   );
 }
 
+function RevokeConnectionModal({ state }: { state: DashboardState }) {
+  if (!state.confirmRevokeId) return null;
+  return (
+    <div className="modal-overlay" onClick={() => state.setConfirmRevokeId(null)} role="dialog" aria-modal="true" aria-label="Revoke connection">
+      <div className="biz-form-modal glass animate-scale confirm-modal" onClick={e => e.stopPropagation()}>
+        <div className="modal-body-center">
+          <div className="modal-icon-danger"><AlertTriangle size={24} /></div>
+          <h3 className="confirm-title">Revoke Connection</h3>
+          <p className="text-sm text-muted">Are you sure you want to revoke this connection? This action cannot be undone.</p>
+        </div>
+        <div className="modal-actions-border">
+          <button className="btn btn-ghost confirm-btn-cancel" onClick={() => state.setConfirmRevokeId(null)}>Cancel</button>
+          <button className="btn btn-danger confirm-btn-confirm" onClick={() => { try { connections.revoke(state.confirmRevokeId!); state.setConfirmRevokeId(null); state.showToast('Connection revoked'); } catch (e) { console.error('revoke connection failed', e); state.showToast('Revoke failed', 'error'); } }}>Yes, Revoke</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ToastNotification({ state }: { state: DashboardState }) {
   if (!state.toast) return null;
   const isError = state.toast.type === 'error';
@@ -348,6 +367,7 @@ export default function Modals({ state, handleVerifyDomain, confirmRoleChangeSte
       {state.pendingRoleChange && <RoleChangeConfirmModal state={state} confirmRoleChangeStep={confirmRoleChangeStep} />}
       {state.confirmAction && <ConfirmActionModal state={state} />}
       {state.adminStatusConfirm && <AdminStatusConfirmModal state={state} />}
+      {state.confirmRevokeId && <RevokeConnectionModal state={state} />}
       {state.domainVerifyOpen && <DomainVerifyModal state={state} handleVerifyDomain={handleVerifyDomain} />}
       <ToastNotification state={state} />
     </>
