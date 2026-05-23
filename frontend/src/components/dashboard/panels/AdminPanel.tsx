@@ -1,5 +1,5 @@
-import { Crown, RefreshCcw, User, Menu, Shield, Trash2, ArrowUpDown } from 'lucide-react';
-import { platformAdmin } from '../../api/client';
+import { Crown, RefreshCcw, User, Menu, Shield, Trash2 } from 'lucide-react';
+import { platformAdmin } from '../../../api/client';
 import type { DashboardState } from '../types';
 
 interface AdminPanelProps {

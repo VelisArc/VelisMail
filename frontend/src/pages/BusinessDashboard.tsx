@@ -293,7 +293,6 @@ export default function BusinessDashboard() {
     previewTemplate, setPreviewTemplate,
     selectedAdminUser, setSelectedAdminUser,
     adminStatusConfirm, setAdminStatusConfirm,
-    adminPage, setAdminPage,
     domainDetails, setDomainDetails, mailboxDetails, setMailboxDetails,
     groupDetails, setGroupDetails,
     mailboxLocalPart, setMailboxLocalPart, mailboxDisplayName, setMailboxDisplayName,
