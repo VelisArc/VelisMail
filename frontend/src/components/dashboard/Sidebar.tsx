@@ -1,4 +1,4 @@
-import { LogOut, Mail, Layers, Server, Globe, Inbox, Users, Shield, BarChart3, Activity, Settings, CreditCard, Crown, Plus, User, Menu } from 'lucide-react';
+import { LogOut, Mail, Layers, Server, Globe, Inbox, Users, Shield, BarChart3, Activity, Settings, CreditCard, Crown, Plus, User } from 'lucide-react';
 import type { User as UserType } from '../../api/client';
 import { BIZ_FOLDERS } from './constants';
 import type { BizTab, BizFolder } from './constants';
@@ -48,16 +48,6 @@ export default function Sidebar({
 
   return (
     <>
-      <div className="dash-mobile-header">
-        <button type="button" className="dash-mobile-menu-btn" onClick={() => setSidebarOpen(true)} aria-label="Open dashboard navigation">
-          <Menu size={20} />
-        </button>
-        <div className="dash-mobile-brand">
-          <img src="/ZeeResizer.png" alt="" />
-          <span>VelisMail</span>
-        </div>
-      </div>
-
       {sidebarOpen && <div className="dash-overlay" onClick={() => setSidebarOpen(false)} />}
 
       <aside className={`dash-sidebar ${sidebarOpen ? 'open' : ''}`}>
@@ -69,6 +59,7 @@ export default function Sidebar({
               <span className="side-logo-badge">Business</span>
             </div>
           </div>
+          <p className="side-header-copy">Private mail workspace with queues, templates, and delivery controls.</p>
         </div>
 
         <button type="button" className="btn btn-primary side-compose" onClick={onCompose}>

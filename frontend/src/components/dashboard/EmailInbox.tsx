@@ -1,4 +1,4 @@
-import { useState, useMemo, useDeferredValue, memo, useCallback, useRef, useEffect, type FC } from 'react';
+import { useState, useMemo, useDeferredValue, memo, useCallback, type FC } from 'react';
 import {
   Mail, Star, Archive, Trash2, Search, Paperclip, ArrowLeft,
   Reply, Forward,
@@ -17,54 +17,6 @@ interface EmailInboxProps {
   onTrash: (ids: string[]) => void;
   onReply: (email: Email) => void;
   onForward: (email: Email) => void;
-}
-
-const ROW_HEIGHT = 64;
-const OVERSCAN = 5;
-
-function VirtualList<T>({ items, itemHeight, renderItem, className }: {
-  items: T[];
-  itemHeight: number;
-  renderItem: (item: T, index: number) => React.ReactNode;
-  className?: string;
-}) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const [scrollTop, setScrollTop] = useState(0);
-  const [containerHeight, setContainerHeight] = useState(600);
-
-  useEffect(() => {
-    const el = containerRef.current;
-    if (!el) return;
-    const obs = new ResizeObserver(entries => {
-      for (const entry of entries) {
-        setContainerHeight(entry.contentRect.height);
-      }
-    });
-    obs.observe(el);
-    return () => obs.disconnect();
-  }, []);
-
-  const handleScroll = useCallback(() => {
-    if (containerRef.current) {
-      setScrollTop(containerRef.current.scrollTop);
-    }
-  }, []);
-
-  const totalHeight = items.length * itemHeight;
-  const startIndex = Math.max(0, Math.floor(scrollTop / itemHeight) - OVERSCAN);
-  const endIndex = Math.min(items.length, Math.ceil((scrollTop + containerHeight) / itemHeight) + OVERSCAN);
-  const visibleItems = items.slice(startIndex, endIndex);
-  const offsetY = startIndex * itemHeight;
-
-  return (
-    <div ref={containerRef} onScroll={handleScroll} className={className} style={{ overflow: 'auto', height: '100%' }}>
-      <div style={{ height: totalHeight, position: 'relative' }}>
-        <div style={{ position: 'absolute', top: 0, left: 0, right: 0, transform: `translateY(${offsetY}px)` }}>
-          {visibleItems.map((item, i) => renderItem(item, startIndex + i))}
-        </div>
-      </div>
-    </div>
-  );
 }
 
 const EmailRow = memo(({ email, style, state, onOpen }: {
@@ -86,9 +38,11 @@ const EmailRow = memo(({ email, style, state, onOpen }: {
         <User size={14} />
       </div>
       <div className="mail-row-main" onClick={e => e.stopPropagation()}>
-        <strong className="mail-from">{email.fromName || email.from}</strong>
-        <span className="mail-subj">{email.subject || '(No subject)'}</span>
-        <span className="mail-preview">{getEmailPreview(email.body, 100)}</span>
+        <div className="mail-row-headline">
+          <strong className="mail-from">{email.fromName || email.from}</strong>
+          <span className="mail-subj">{email.subject || '(No subject)'}</span>
+        </div>
+        <span className="mail-preview">{getEmailPreview(email.body, 140)}</span>
       </div>
       <div className="mail-row-meta">
         <span className="mail-date">{new Date(email.date).toLocaleDateString()}</span>
@@ -131,13 +85,15 @@ const EmailInbox: FC<EmailInboxProps> = ({
 
   return (
     <div className="dash-panel">
-      <div className="panel-header">
-        <button type="button" className="btn btn-ghost btn-icon sidebar-toggle" onClick={() => state.setSidebarOpen(true)} aria-label="Open menu">
-          <Menu size={20} />
-        </button>
-        <h3>
-          <Mail size={18} /> {state.activeFolder.charAt(0).toUpperCase() + state.activeFolder.slice(1)}
-        </h3>
+      <div className="panel-header mail-panel-header">
+        <div className="mail-panel-title">
+          <button type="button" className="btn btn-ghost btn-icon sidebar-toggle" onClick={() => state.setSidebarOpen(true)} aria-label="Open menu">
+            <Menu size={20} />
+          </button>
+          <h3>
+            <Mail size={18} /> {state.activeFolder.charAt(0).toUpperCase() + state.activeFolder.slice(1)}
+          </h3>
+        </div>
         <div className="panel-header-actions">
           <span className="badge badge-neutral">{filtered.length}</span>
           <button type="button" className="btn btn-ghost btn-icon" onClick={onRefresh} aria-label="Refresh"><RefreshCcw size={16} /></button>
@@ -150,24 +106,28 @@ const EmailInbox: FC<EmailInboxProps> = ({
         </div>
       </div>
 
-      <div className="dash-search">
-        <Search size={14} className="search-icon" />
-        <input
-          className="input search-input"
-          placeholder="Search mail..."
-          value={state.searchQuery}
-          onChange={e => state.setSearchQuery(e.target.value)}
-        />
-        {['all', 'unread', 'read', 'starred', 'attachments'].map(f => (
-          <button
-            key={f}
-            type="button"
-            className={`btn btn-sm ${state.mailStatusFilter === f ? 'btn-primary' : 'btn-ghost'}`}
-            onClick={() => state.setMailStatusFilter(f)}
-          >
-            {f.charAt(0).toUpperCase() + f.slice(1)}
-          </button>
-        ))}
+      <div className="dash-search mail-search-bar">
+        <div className="mail-search-input">
+          <Search size={14} className="search-icon" />
+          <input
+            className="input search-input"
+            placeholder="Search mail..."
+            value={state.searchQuery}
+            onChange={e => state.setSearchQuery(e.target.value)}
+          />
+        </div>
+        <div className="mail-filter-tabs">
+          {['all', 'unread', 'read', 'starred', 'attachments'].map(f => (
+            <button
+              key={f}
+              type="button"
+              className={`btn btn-sm ${state.mailStatusFilter === f ? 'btn-primary' : 'btn-ghost'}`}
+              onClick={() => state.setMailStatusFilter(f)}
+            >
+              {f.charAt(0).toUpperCase() + f.slice(1)}
+            </button>
+          ))}
+        </div>
       </div>
 
       <div className="dash-body">
@@ -224,7 +184,7 @@ const EmailInbox: FC<EmailInboxProps> = ({
                 <p className="text-muted">Your {state.activeFolder} folder is empty.</p>
               </div>
             ) : state.viewMode === 'grid' ? (
-              <div className="mail-grid" style={{ overflow: 'auto', height: '100%' }}>
+              <div className="mail-grid">
                 {filtered.map(({ email }) => (
                   <div key={email.id} className={`mail-grid-card ${email.unread ? 'unread' : ''}`} onClick={() => openEmail(email)}>
                     <div className="flex items-center gap-2">
@@ -238,20 +198,17 @@ const EmailInbox: FC<EmailInboxProps> = ({
                 ))}
               </div>
             ) : (
-              <VirtualList
-                items={filtered.map(f => f.email)}
-                itemHeight={ROW_HEIGHT}
-                className="dash-list-virtual"
-                renderItem={(email, _index) => (
+              <div className="dash-list-scroll">
+                {filtered.map(({ email }) => (
                   <EmailRow
                     key={email.id}
                     email={email}
-                    style={{ height: ROW_HEIGHT }}
+                    style={{}}
                     state={state}
                     onOpen={openEmail}
                   />
-                )}
-              />
+                ))}
+              </div>
             )}
           </div>
         )}
