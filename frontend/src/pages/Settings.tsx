@@ -3,7 +3,7 @@ import { Navigate, useNavigate, Link } from 'react-router-dom';
 import {
   Shield, ArrowLeft, CheckCircle2, AlertCircle,
   RefreshCw, User as UserIcon, Lock, Mail, Trash2,
-  LogOut,
+  LogOut, Monitor, Smartphone,
 } from 'lucide-react';
 import { auth, isBusinessSetupReady, type ActiveSession, type User } from '../api/client';
 import LoadingSpinner from '../components/LoadingSpinner';
