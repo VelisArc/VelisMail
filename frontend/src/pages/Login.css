@@ -11,7 +11,7 @@
   position: relative;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 80px var(--space-6) 40px;
+  padding: 80px var(--space-6) 120px;
   background: var(--bg-body);
 }
 
@@ -50,15 +50,18 @@
 .login-container {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: var(--space-12);
   max-width: 1100px;
   width: 100%;
   z-index: 1;
+  margin: 0 auto;
 }
 
 .login-brand {
   flex: 1;
   max-width: 480px;
+  text-align: left;
 }
 
 .login-brand h1 {
@@ -203,8 +206,10 @@
 }
 
 .login-footer-links {
-  position: fixed;
+  position: absolute;
   bottom: var(--space-8);
+  left: 50%;
+  transform: translateX(-50%);
   display: flex;
   gap: var(--space-6);
   font-size: var(--text-sm);
