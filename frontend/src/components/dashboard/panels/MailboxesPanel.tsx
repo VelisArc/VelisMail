@@ -13,9 +13,9 @@ export default function MailboxesPanel({ state }: MailboxesPanelProps) {
       <div className="panel-header"><button className="btn btn-ghost btn-icon sidebar-toggle" onClick={() => state.setSidebarOpen(true)}><Menu size={16} /></button><h3><Inbox size={16} /> Business Mailboxes</h3></div>
       <p className="text-sm text-muted panel-section">Create and manage mailbox addresses for your domain.</p>
       <div className="panel-inline-form">
-        <input className="input input-max-200" placeholder="Local part (e.g., hello)" value={state.mailboxLocalPart} onChange={e => state.setMailboxLocalPart(e.target.value)} />
+        <input className="input input-max-170" placeholder="Local part (e.g., hello)" value={state.mailboxLocalPart} onChange={e => state.setMailboxLocalPart(e.target.value)} />
         <span className="text-muted">@{state.activeDomainName}</span>
-        <input className="input input-max-200" placeholder="Display name" value={state.mailboxDisplayName} onChange={e => state.setMailboxDisplayName(e.target.value)} />
+        <input className="input input-max-170" placeholder="Display name" value={state.mailboxDisplayName} onChange={e => state.setMailboxDisplayName(e.target.value)} />
         <select className="input input-max-140" value={state.mailboxKind} onChange={e => state.setMailboxKind(e.target.value as BusinessMailbox['kind'])}>
           <option value="primary">Primary</option><option value="mailbox">Mailbox</option><option value="alias">Alias</option><option value="shared">Shared</option>
         </select>

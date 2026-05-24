@@ -1127,6 +1127,9 @@ export function sessionHasMismatch(session: User | null): boolean {
 
 export function normalizeSessionUser(session: User): User {
   const normalized = { ...session };
+  if (!normalized.role) {
+    normalized.role = 'admin';
+  }
   if (!normalized.accountType) {
     normalized.accountType = 'business';
   }

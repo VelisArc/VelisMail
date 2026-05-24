@@ -2,11 +2,10 @@ import { useState, useMemo, useDeferredValue, memo, useCallback, type FC } from 
 import {
   Mail, Star, Archive, Trash2, Search, Paperclip, ArrowLeft,
   Reply, Forward, RefreshCcw, List as ListIcon, Grid,
-  SortAsc, SortDesc, Menu, CheckSquare, Square, Trash,
+  SortAsc, SortDesc, Menu, CheckSquare, Square,
   Eye, EyeOff, Shield, AlertTriangle,
 } from 'lucide-react';
 import type { Email } from '../../api/client';
-import { mail } from '../../api/client';
 import { parseEmailConversation, getEmailPreview } from './utils';
 import type { DashboardState } from './types';
 
@@ -110,27 +109,6 @@ const EmailInbox: FC<EmailInboxProps> = ({
 
   const isTrash = state.activeFolder === 'trash';
 
-  const handleDeletePermanently = (id: string) => {
-    try {
-      mail.deletePermanently(id);
-      closeReader();
-      onRefresh();
-    } catch (e) {
-      console.error('permanent delete failed', e);
-    }
-  };
-
-  const handleBulkDeletePermanently = () => {
-    try {
-      const ids = [...state.selectedEmails];
-      ids.forEach(id => mail.deletePermanently(id));
-      state.setSelectedEmails(new Set());
-      onRefresh();
-    } catch (e) {
-      console.error('bulk permanent delete failed', e);
-    }
-  };
-
   return (
     <div className="dash-panel">
       <div className="panel-header mail-panel-header">
@@ -184,9 +162,6 @@ const EmailInbox: FC<EmailInboxProps> = ({
           <button className="btn btn-ghost btn-sm" onClick={() => state.setSelectedEmails(new Set())}><Square size={14} /> Clear</button>
           <button className="btn btn-ghost btn-sm" onClick={() => { onArchive([...state.selectedEmails]); state.setSelectedEmails(new Set()); }}><Archive size={14} /> Archive</button>
           <button className="btn btn-ghost btn-sm" onClick={() => { onTrash([...state.selectedEmails]); state.setSelectedEmails(new Set()); }}><Trash2 size={14} /> Trash</button>
-          {isTrash && (
-            <button className="btn btn-ghost btn-sm btn-danger" onClick={handleBulkDeletePermanently}><Trash size={14} /> Delete Forever</button>
-          )}
         </div>
       )}
 
@@ -218,13 +193,9 @@ const EmailInbox: FC<EmailInboxProps> = ({
                   <Archive size={14} /> Archive
                 </button>
               )}
-              {!isTrash ? (
+              {!isTrash && (
                 <button type="button" className="btn btn-ghost btn-sm btn-danger" onClick={() => { onTrash([focusedEmail.id]); closeReader(); }}>
                   <Trash2 size={14} /> Trash
-                </button>
-              ) : (
-                <button type="button" className="btn btn-ghost btn-sm btn-danger" onClick={() => handleDeletePermanently(focusedEmail.id)}>
-                  <Trash size={14} /> Delete Forever
                 </button>
               )}
             </div>
