@@ -19,9 +19,9 @@ export const BIZ_FOLDERS: BizFolder[] = [
 
 export const PLANS = [
   { id: 'free', name: 'Free', priceMonthly: 0, priceAnnual: 0, desc: '1 domain, 5 mailboxes', features: ['1 Custom Domain', '5 Mailboxes', 'Basic Queue', 'Community Support'] },
-  { id: 'starter', name: 'Starter', priceMonthly: 299, priceAnnual: 2999, desc: '3 domains, 25 mailboxes', features: ['3 Custom Domains', '25 Mailboxes', 'Queue Monitoring', 'Email Support', 'Basic Templates'] },
-  { id: 'business', name: 'Business', priceMonthly: 999, priceAnnual: 9999, desc: '10 domains, unlimited mailboxes', features: ['10 Custom Domains', 'Unlimited Mailboxes', 'Priority Queue', 'Advanced Templates', 'Team Access', 'Audit Logs', 'Priority Support'] },
-  { id: 'enterprise', name: 'Enterprise', priceMonthly: 2499, priceAnnual: 24999, desc: 'Unlimited domains & users', features: ['Unlimited Domains', 'Unlimited Mailboxes', 'Dedicated Queue', 'Custom Templates', 'Bulk Operations', 'SLA Guarantee', 'Phone Support', 'White Label'] },
+  { id: 'starter', name: 'Starter', priceMonthly: 299, priceAnnual: Math.round(299 * 12 * 0.84), desc: '3 domains, 25 mailboxes', features: ['3 Custom Domains', '25 Mailboxes', 'Queue Monitoring', 'Email Support', 'Basic Templates'] },
+  { id: 'business', name: 'Business', priceMonthly: 999, priceAnnual: Math.round(999 * 12 * 0.84), desc: '10 domains, unlimited mailboxes', features: ['10 Custom Domains', 'Unlimited Mailboxes', 'Priority Queue', 'Advanced Templates', 'Team Access', 'Audit Logs', 'Priority Support'] },
+  { id: 'enterprise', name: 'Enterprise', priceMonthly: 2499, priceAnnual: Math.round(2499 * 12 * 0.84), desc: 'Unlimited domains & users', features: ['Unlimited Domains', 'Unlimited Mailboxes', 'Dedicated Queue', 'Custom Templates', 'Bulk Operations', 'SLA Guarantee', 'Phone Support', 'White Label'] },
 ];
 
 export const ROLE_ALLOWED_TABS: Record<string, BizTab[]> = {

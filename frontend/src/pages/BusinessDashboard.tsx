@@ -191,7 +191,7 @@ export default function BusinessDashboard() {
   const refreshContacts = useCallback(() => setContactsList(contacts.getAll()), []);
   const refreshSessions = useCallback(async () => { try { const res = await auth.listSessions(); if (res.success) setActiveSessions(res.sessions); } catch (e) { console.error('refresh sessions failed', e); } }, []);
 
-  useEffect(() => { refreshTeam(); refreshQueue(); refreshAudit(); refreshTemplates(); refreshConnectionUsage(); }, [activeDomainName, refreshTeam, refreshQueue, refreshAudit, refreshTemplates, refreshConnectionUsage]);
+  useEffect(() => { refreshTeam(); refreshQueue(); refreshAudit(); refreshTemplates(); refreshConnectionUsage(); refreshMailboxes(); }, [activeDomainName, refreshTeam, refreshQueue, refreshAudit, refreshTemplates, refreshConnectionUsage, refreshMailboxes]);
 
   const handleSendEmail = useCallback(async () => {
     if (!composeTo || !composeSubject) { showToast('Recipient and subject required', 'error'); return; }
@@ -209,15 +209,20 @@ export default function BusinessDashboard() {
     if (planId === 'free') { showToast('Free plan activated'); return; }
     setLoadingPayment(planId);
     try {
-      const razorpayKey = import.meta.env.VITE_RAZORPAY_KEY_ID || 'rzp_test_dummy_key';
+      const razorpayKey = import.meta.env.VITE_RAZORPAY_KEY_ID;
+      if (!razorpayKey) {
+        showToast('Razorpay payment gateway is not configured', 'error');
+        setLoadingPayment(null);
+        return;
+      }
 
       const Razorpay = await loadRazorpayCheckout();
       if (!Razorpay) { showToast('Payment SDK failed to load', 'error'); setLoadingPayment(null); return; }
       const PLANS = [
         { id: 'free', name: 'Free', priceMonthly: 0, priceAnnual: 0, desc: '1 domain, 5 mailboxes', features: ['1 Custom Domain', '5 Mailboxes', 'Basic Queue', 'Community Support'] },
-        { id: 'starter', name: 'Starter', priceMonthly: 299, priceAnnual: 2999, desc: '3 domains, 25 mailboxes', features: ['3 Custom Domains', '25 Mailboxes', 'Queue Monitoring', 'Email Support', 'Basic Templates'] },
-        { id: 'business', name: 'Business', priceMonthly: 999, priceAnnual: 9999, desc: '10 domains, unlimited mailboxes', features: ['10 Custom Domains', 'Unlimited Mailboxes', 'Priority Queue', 'Advanced Templates', 'Team Access', 'Audit Logs', 'Priority Support'] },
-        { id: 'enterprise', name: 'Enterprise', priceMonthly: 2499, priceAnnual: 24999, desc: 'Unlimited domains & users', features: ['Unlimited Domains', 'Unlimited Mailboxes', 'Dedicated Queue', 'Custom Templates', 'Bulk Operations', 'SLA Guarantee', 'Phone Support', 'White Label'] },
+        { id: 'starter', name: 'Starter', priceMonthly: 299, priceAnnual: Math.round(299 * 12 * 0.84), desc: '3 domains, 25 mailboxes', features: ['3 Custom Domains', '25 Mailboxes', 'Queue Monitoring', 'Email Support', 'Basic Templates'] },
+        { id: 'business', name: 'Business', priceMonthly: 999, priceAnnual: Math.round(999 * 12 * 0.84), desc: '10 domains, unlimited mailboxes', features: ['10 Custom Domains', 'Unlimited Mailboxes', 'Priority Queue', 'Advanced Templates', 'Team Access', 'Audit Logs', 'Priority Support'] },
+        { id: 'enterprise', name: 'Enterprise', priceMonthly: 2499, priceAnnual: Math.round(2499 * 12 * 0.84), desc: 'Unlimited domains & users', features: ['Unlimited Domains', 'Unlimited Mailboxes', 'Dedicated Queue', 'Custom Templates', 'Bulk Operations', 'SLA Guarantee', 'Phone Support', 'White Label'] },
       ];
       const plan = PLANS.find(p => p.id === planId);
       if (!plan) { showToast('Plan not found', 'error'); setLoadingPayment(null); return; }

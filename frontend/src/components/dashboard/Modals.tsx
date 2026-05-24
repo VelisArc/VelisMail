@@ -20,8 +20,11 @@ function ComposeModal({ state }: { state: DashboardState }) {
           initialBody={state.composeBody}
           fromControl={
             <select className="input input-auto" value={state.selectedFromAddress} onChange={e => state.setSelectedFromAddress(e.target.value)}>
-              <option value="">Default</option>
-              {state.domainMailboxes.map(m => <option key={m.address} value={m.address}>{m.address}</option>)}
+              {state.domainMailboxes && state.domainMailboxes.length > 0 ? (
+                state.domainMailboxes.map(m => <option key={m.address} value={m.address}>{m.address}</option>)
+              ) : (
+                <option value="">no-reply@{state.activeDomainName || 'System Default'}</option>
+              )}
             </select>
           }
           onSend={(to, subject, body) => {
