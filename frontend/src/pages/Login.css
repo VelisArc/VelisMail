@@ -603,9 +603,15 @@
     gap: var(--space-3);
   }
 
+  .login-orb {
+    display: none;
+  }
+
   .login-footer-links {
     position: static;
     width: 100%;
+    left: auto;
+    transform: none;
     margin-top: var(--space-8);
     justify-content: center;
     flex-wrap: wrap;
