@@ -25,7 +25,7 @@ const plans = [
     annualPrice: 0,
     popular: false,
     cta: 'Get Started Free',
-    ctaStyle: 'btn-outline',
+    ctaStyle: 'cta-outline',
     features: [
       { text: '3,000 emails/mo', highlight: true },
       { text: '100 emails/day limit', highlight: false },
@@ -53,7 +53,7 @@ const plans = [
     annualPrice: Math.round(299 * 12 * 0.84),
     popular: false,
     cta: 'Start 14-Day Trial',
-    ctaStyle: 'btn-outline',
+    ctaStyle: 'cta-outline',
     features: [
       { text: '150,000 emails/mo', highlight: true },
       { text: 'No daily email limit', highlight: false },
@@ -81,7 +81,7 @@ const plans = [
     annualPrice: Math.round(999 * 12 * 0.84),
     popular: true,
     cta: 'Start 14-Day Trial',
-    ctaStyle: 'btn-primary',
+    ctaStyle: 'cta-primary',
     features: [
       { text: '750,000 emails/mo', highlight: true },
       { text: 'No daily email limit', highlight: false },
@@ -108,7 +108,7 @@ const plans = [
     annualPrice: Math.round(2499 * 12 * 0.84),
     popular: false,
     cta: 'Start 14-Day Trial',
-    ctaStyle: 'btn-primary',
+    ctaStyle: 'cta-primary',
     features: [
       { text: 'Unlimited emails', highlight: true },
       { text: 'No daily email limit', highlight: false },
