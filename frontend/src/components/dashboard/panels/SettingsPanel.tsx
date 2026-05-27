@@ -87,7 +87,7 @@ export default function SettingsPanel({ state }: SettingsPanelProps) {
 
   return (
     <div className="dash-panel">
-      <div className="panel-header"><button className="btn btn-ghost btn-icon sidebar-toggle" onClick={() => state.setSidebarOpen(true)}><Menu size={16} /></button><h3><Settings size={16} /> Settings</h3></div>
+      <div className="panel-header"><button className="toolbar-icon sidebar-toggle" onClick={() => state.setSidebarOpen(true)}><Menu size={16} /></button><h3><Settings size={16} /> Settings</h3></div>
 
       <div className="settings-tabs">
         {(['notifications', 'signatures', 'contacts', 'security', 'autoreply', 'labels', 'rules', 'connections'] as const).map(tab => (

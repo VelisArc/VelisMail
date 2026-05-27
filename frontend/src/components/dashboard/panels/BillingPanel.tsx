@@ -16,7 +16,7 @@ export default function BillingPanel({ state, handleBuyPlan }: BillingPanelProps
     <div className="dash-panel billing-panel">
       <div className="panel-header billing-header">
         <div className="mail-panel-title">
-          <button className="btn btn-ghost btn-icon sidebar-toggle" onClick={() => state.setSidebarOpen(true)} aria-label="Open menu"><Menu size={16} /></button>
+          <button className="toolbar-icon sidebar-toggle" onClick={() => state.setSidebarOpen(true)} aria-label="Open menu"><Menu size={16} /></button>
           <h3><CreditCard size={16} /> Billing & Premium</h3>
         </div>
         <span className="badge badge-neutral">Current: {state.user?.plan || 'Free'}</span>

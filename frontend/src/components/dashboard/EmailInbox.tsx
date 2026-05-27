@@ -1,9 +1,9 @@
 import { useState, useMemo, useDeferredValue, memo, useCallback, type FC } from 'react';
 import {
   Mail, Star, Archive, Trash2, Search, Paperclip, ArrowLeft,
-  Reply, Forward, RefreshCcw, List as ListIcon, Grid,
-  SortAsc, SortDesc, Menu, CheckSquare, Square, Trash,
-  Eye, EyeOff, Shield, AlertTriangle,
+  Reply, Forward, RefreshCcw, List as ListIcon, LayoutGrid,
+  ArrowUpDown, Menu, CheckSquare, Square, Trash,
+  Eye, EyeOff, Shield, AlertTriangle, X,
 } from 'lucide-react';
 import type { Email } from '../../api/client';
 import { mail } from '../../api/client';
@@ -74,6 +74,7 @@ const EmailInbox: FC<EmailInboxProps> = ({
   onToggleRead, onMarkSpam, onTogglePriority,
 }) => {
   const [focusedEmail, setFocusedEmail] = useState<Email | null>(null);
+  const [searchExpanded, setSearchExpanded] = useState(false);
   const deferredQuery = useDeferredValue(state.searchQuery);
 
   const filtered = useMemo(() => {
@@ -141,103 +142,119 @@ const EmailInbox: FC<EmailInboxProps> = ({
 
   return (
     <div className="dash-panel">
-      <div className="mail-command-center" aria-label="Mailbox controls">
-        <div className="mail-command-row mail-command-primary">
-          <div className="mail-panel-title">
-            <button type="button" className="btn btn-ghost btn-icon sidebar-toggle" onClick={() => state.setSidebarOpen(true)} aria-label="Open menu">
-              <Menu size={16} />
-            </button>
-            <h3>
-              <Mail size={18} /> {folderTitle}
-            </h3>
-            <span className="badge badge-neutral">{filtered.length}</span>
-          </div>
-          <div className="mail-action-cluster" aria-label="Mailbox actions">
-            <span className="mail-control-label">Actions</span>
-            <button type="button" className="btn btn-ghost btn-icon" onClick={onRefresh} aria-label="Refresh"><RefreshCcw size={16} /></button>
-            <button type="button" className="btn btn-ghost btn-icon" onClick={() => state.setViewMode(state.viewMode === 'list' ? 'grid' : 'list')} aria-label="Toggle view">
-              {state.viewMode === 'list' ? <Grid size={16} /> : <ListIcon size={16} />}
-            </button>
-            <button type="button" className="btn btn-ghost btn-icon" onClick={() => state.setSortOrder(state.sortOrder === 'desc' ? 'asc' : 'desc')} aria-label="Toggle sort">
-              {state.sortOrder === 'desc' ? <SortDesc size={16} /> : <SortAsc size={16} />}
-            </button>
-          </div>
-        </div>
-        <div className="mail-command-row mail-command-search">
-          <label className="mail-search-input">
-            <Search size={14} className="search-icon" />
-            <input
-              className="input search-input"
-              placeholder="Search mail..."
-              value={state.searchQuery}
-              onChange={e => state.setSearchQuery(e.target.value)}
-            />
-          </label>
-        </div>
-        <div className="mail-command-row mail-command-filters">
-          <span className="mail-control-label">Filters</span>
-          <div className="mail-filter-tabs">
-            {filterOptions.map(f => (
-              <button
-                key={f.id}
-                type="button"
-                className={`btn btn-sm ${state.mailStatusFilter === f.id ? 'btn-primary' : 'btn-ghost'}`}
-                onClick={() => state.setMailStatusFilter(f.id)}
-              >
-                {f.label}
+      {/* ── Compact Single-Row Toolbar ── */}
+      <div className="inbox-toolbar" role="toolbar" aria-label="Mailbox controls">
+        <button type="button" className="toolbar-icon sidebar-toggle" onClick={() => state.setSidebarOpen(true)} aria-label="Open menu">
+          <Menu size={16} />
+        </button>
+        <h3 className="inbox-title">
+          <Mail size={15} /> {folderTitle}
+          <span className="inbox-count">{filtered.length}</span>
+        </h3>
+
+        <div className="toolbar-spacer" />
+
+        {/* Inline search */}
+        <div className={`toolbar-search ${searchExpanded ? 'expanded' : ''}`}>
+          {searchExpanded ? (
+            <>
+              <Search size={13} className="toolbar-search-icon" />
+              <input
+                className="toolbar-search-input"
+                placeholder="Search..."
+                value={state.searchQuery}
+                onChange={e => state.setSearchQuery(e.target.value)}
+                autoFocus
+              />
+              <button type="button" className="toolbar-icon" onClick={() => { setSearchExpanded(false); state.setSearchQuery(''); }} aria-label="Close search">
+                <X size={13} />
               </button>
-            ))}
-          </div>
+            </>
+          ) : (
+            <button type="button" className="toolbar-icon" onClick={() => setSearchExpanded(true)} aria-label="Search">
+              <Search size={14} />
+            </button>
+          )}
         </div>
+
+        {/* Action icons */}
+        <button type="button" className="toolbar-icon" onClick={onRefresh} aria-label="Refresh" title="Refresh">
+          <RefreshCcw size={14} />
+        </button>
+        <button type="button" className="toolbar-icon" onClick={() => state.setViewMode(state.viewMode === 'list' ? 'grid' : 'list')} aria-label="Toggle view" title={state.viewMode === 'list' ? 'Grid view' : 'List view'}>
+          {state.viewMode === 'list' ? <LayoutGrid size={14} /> : <ListIcon size={14} />}
+        </button>
+        <button type="button" className="toolbar-icon" onClick={() => state.setSortOrder(state.sortOrder === 'desc' ? 'asc' : 'desc')} aria-label="Toggle sort" title={state.sortOrder === 'desc' ? 'Oldest first' : 'Newest first'}>
+          <ArrowUpDown size={14} />
+        </button>
       </div>
 
+      {/* ── Compact Filter Pills ── */}
+      <div className="inbox-filters" role="tablist" aria-label="Email filters">
+        {filterOptions.map(f => (
+          <button
+            key={f.id}
+            type="button"
+            role="tab"
+            aria-selected={state.mailStatusFilter === f.id}
+            className={`filter-pill ${state.mailStatusFilter === f.id ? 'active' : ''}`}
+            onClick={() => state.setMailStatusFilter(f.id)}
+          >
+            {f.label}
+          </button>
+        ))}
+      </div>
+
+      {/* ── Bulk Actions Bar ── */}
       {state.selectedEmails.size > 0 && (
-        <div className="bulk-bar">
+        <div className="bulk-bar" role="toolbar" aria-label="Bulk actions">
           <span className="text-xs text-muted">{state.selectedEmails.size} selected</span>
-          <button className="btn btn-ghost btn-sm" onClick={() => state.setSelectedEmails(new Set())}><Square size={14} /> Clear</button>
-          <button className="btn btn-ghost btn-sm" onClick={() => { onArchive([...state.selectedEmails]); state.setSelectedEmails(new Set()); }}><Archive size={14} /> Archive</button>
-          <button className="btn btn-ghost btn-sm" onClick={() => { onTrash([...state.selectedEmails]); state.setSelectedEmails(new Set()); }}><Trash2 size={14} /> Trash</button>
+          <button className="toolbar-icon" onClick={() => state.setSelectedEmails(new Set())} aria-label="Clear selection" title="Clear"><Square size={13} /></button>
+          <button className="toolbar-icon" onClick={() => { onArchive([...state.selectedEmails]); state.setSelectedEmails(new Set()); }} aria-label="Archive selected" title="Archive"><Archive size={13} /></button>
+          <button className="toolbar-icon" onClick={() => { onTrash([...state.selectedEmails]); state.setSelectedEmails(new Set()); }} aria-label="Trash selected" title="Trash"><Trash2 size={13} /></button>
           {isTrash && (
-            <button className="btn btn-ghost btn-sm btn-danger" onClick={handleBulkDeletePermanently}><Trash size={14} /> Delete Forever</button>
+            <button className="toolbar-icon toolbar-icon-danger" onClick={handleBulkDeletePermanently} aria-label="Delete forever" title="Delete Forever"><Trash size={13} /></button>
           )}
         </div>
       )}
 
+      {/* ── Main Content ── */}
       <div className="dash-body">
         {focusedEmail ? (
           <div className="dash-reader">
             <div className="reader-toolbar">
-              <button type="button" className="btn btn-ghost btn-icon" onClick={closeReader}><ArrowLeft size={16} /></button>
-              <button type="button" className="btn btn-ghost btn-sm" onClick={() => onReply(focusedEmail)}><Reply size={14} /> Reply</button>
-              <button type="button" className="btn btn-ghost btn-sm" onClick={() => onForward(focusedEmail)}><Forward size={14} /> Forward</button>
-              <button type="button" className={`btn btn-ghost btn-sm ${focusedEmail.starred ? 'text-primary' : ''}`} onClick={() => onToggleStar(focusedEmail.id)}><Star size={14} /></button>
+              <button type="button" className="toolbar-icon" onClick={closeReader} aria-label="Back"><ArrowLeft size={15} /></button>
+              <button type="button" className="toolbar-icon" onClick={() => onReply(focusedEmail)} aria-label="Reply" title="Reply"><Reply size={14} /></button>
+              <button type="button" className="toolbar-icon" onClick={() => onForward(focusedEmail)} aria-label="Forward" title="Forward"><Forward size={14} /></button>
+              <button type="button" className={`toolbar-icon ${focusedEmail.starred ? 'toolbar-icon-active' : ''}`} onClick={() => onToggleStar(focusedEmail.id)} aria-label="Star" title="Star"><Star size={14} /></button>
               {onToggleRead && (
-                <button type="button" className="btn btn-ghost btn-sm" onClick={() => { onToggleRead(focusedEmail.id, focusedEmail.unread); closeReader(); }}>
-                  {focusedEmail.unread ? <Eye size={14} /> : <EyeOff size={14} />} {focusedEmail.unread ? 'Mark Read' : 'Mark Unread'}
+                <button type="button" className="toolbar-icon" onClick={() => { onToggleRead(focusedEmail.id, focusedEmail.unread); closeReader(); }} aria-label={focusedEmail.unread ? 'Mark read' : 'Mark unread'} title={focusedEmail.unread ? 'Mark Read' : 'Mark Unread'}>
+                  {focusedEmail.unread ? <Eye size={14} /> : <EyeOff size={14} />}
                 </button>
               )}
               {onMarkSpam && state.activeFolder !== 'spam' && state.activeFolder !== 'trash' && (
-                <button type="button" className="btn btn-ghost btn-sm" onClick={() => { onMarkSpam(focusedEmail.id); closeReader(); }}>
-                  <AlertTriangle size={14} /> Spam
+                <button type="button" className="toolbar-icon" onClick={() => { onMarkSpam(focusedEmail.id); closeReader(); }} aria-label="Mark spam" title="Spam">
+                  <AlertTriangle size={14} />
                 </button>
               )}
               {onTogglePriority && (
-                <button type="button" className="btn btn-ghost btn-sm" onClick={() => { onTogglePriority(focusedEmail.id); }}>
-                  <Shield size={14} /> {focusedEmail.labels?.includes('priority') ? 'Unmark' : 'Priority'}
+                <button type="button" className="toolbar-icon" onClick={() => { onTogglePriority(focusedEmail.id); }} aria-label="Toggle priority" title="Priority">
+                  <Shield size={14} />
                 </button>
               )}
+              <div className="toolbar-spacer" />
               {!isTrash && (
-                <button type="button" className="btn btn-ghost btn-sm" onClick={() => { onArchive([focusedEmail.id]); closeReader(); }}>
-                  <Archive size={14} /> Archive
+                <button type="button" className="toolbar-icon" onClick={() => { onArchive([focusedEmail.id]); closeReader(); }} aria-label="Archive" title="Archive">
+                  <Archive size={14} />
                 </button>
               )}
               {!isTrash ? (
-                <button type="button" className="btn btn-ghost btn-sm btn-danger" onClick={() => { onTrash([focusedEmail.id]); closeReader(); }}>
-                  <Trash2 size={14} /> Trash
+                <button type="button" className="toolbar-icon toolbar-icon-danger" onClick={() => { onTrash([focusedEmail.id]); closeReader(); }} aria-label="Trash" title="Trash">
+                  <Trash2 size={14} />
                 </button>
               ) : (
-                <button type="button" className="btn btn-ghost btn-sm btn-danger" onClick={() => handleDeletePermanently(focusedEmail.id)}>
-                  <Trash size={14} /> Delete Forever
+                <button type="button" className="toolbar-icon toolbar-icon-danger" onClick={() => handleDeletePermanently(focusedEmail.id)} aria-label="Delete forever" title="Delete Forever">
+                  <Trash size={14} />
                 </button>
               )}
             </div>
@@ -305,7 +322,7 @@ const EmailInbox: FC<EmailInboxProps> = ({
             ) : (
               <div className="dash-list-scroll">
                 {filtered.length > 20 && (
-                  <div className="mail-select-all" onClick={toggleSelectAll}>
+                  <div className="mail-select-all" onClick={toggleSelectAll} role="button" tabIndex={0} aria-label={allSelected ? 'Deselect all' : 'Select all'}>
                     {allSelected ? <CheckSquare size={14} /> : <Square size={14} />}
                     <span>{allSelected ? 'Deselect all' : 'Select all'} ({filtered.length})</span>
                   </div>

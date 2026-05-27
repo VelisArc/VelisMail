@@ -15,7 +15,7 @@ export default function AuditPanel({ state }: AuditPanelProps) {
 
   return (
     <div className="dash-panel">
-      <div className="panel-header"><button className="btn btn-ghost btn-icon sidebar-toggle" onClick={() => state.setSidebarOpen(true)}><Menu size={16} /></button><h3><Activity size={16} /> Audit Log</h3>
+      <div className="panel-header"><button className="toolbar-icon sidebar-toggle" onClick={() => state.setSidebarOpen(true)}><Menu size={16} /></button><h3><Activity size={16} /> Audit Log</h3>
         <select className="input input-auto" value={state.auditFilter} onChange={e => state.setAuditFilter(e.target.value)}>
           <option value="all">All Events</option><option value="info">Info</option><option value="warn">Warning</option><option value="critical">Critical</option>
         </select>

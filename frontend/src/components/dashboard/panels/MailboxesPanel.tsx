@@ -10,7 +10,7 @@ interface MailboxesPanelProps {
 export default function MailboxesPanel({ state }: MailboxesPanelProps) {
   return (
     <div className="dash-panel">
-      <div className="panel-header"><button className="btn btn-ghost btn-icon sidebar-toggle" onClick={() => state.setSidebarOpen(true)}><Menu size={16} /></button><h3><Inbox size={16} /> Business Mailboxes</h3></div>
+      <div className="panel-header"><button className="toolbar-icon sidebar-toggle" onClick={() => state.setSidebarOpen(true)}><Menu size={16} /></button><h3><Inbox size={16} /> Business Mailboxes</h3></div>
       <p className="text-sm text-muted panel-section">Create and manage mailbox addresses for your domain.</p>
       <div className="panel-inline-form">
         <input className="input input-max-200" placeholder="Local part (e.g., hello)" value={state.mailboxLocalPart} onChange={e => state.setMailboxLocalPart(e.target.value)} />

@@ -380,128 +380,172 @@
 }
 
 /* ═══════════════════════════════════════════
-   Mail Inbox
+   Mail Inbox — Compact Toolbar
    ═══════════════════════════════════════════ */
 
-.mail-panel-header {
-  align-items: flex-start;
+.inbox-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border-primary);
+  background: var(--bg-surface);
+  flex-shrink: 0;
+  min-height: 44px;
 }
 
-.mail-command-center {
-  display: grid;
-  gap: 8px;
-  padding: 10px;
-  margin-bottom: 12px;
-  border: 1px solid var(--border-primary);
-  border-radius: 0 !important;
-  background: var(--bg-surface);
+.inbox-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.88rem;
+  font-weight: 700;
+  white-space: nowrap;
+  letter-spacing: -0.01em;
+}
+
+.inbox-count {
+  font-size: 0.68rem;
+  font-weight: 600;
+  padding: 1px 6px;
+  background: var(--accent-glow);
+  color: var(--accent);
+  min-width: 18px;
+  text-align: center;
+  line-height: 1.4;
+}
+
+.toolbar-spacer {
+  flex: 1;
+  min-width: 4px;
+}
+
+.toolbar-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all 0.12s ease;
+}
+
+.toolbar-icon:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.toolbar-icon:active {
+  transform: scale(0.92);
+}
+
+.toolbar-icon-active {
+  color: var(--accent);
+}
+
+.toolbar-icon-danger {
+  color: var(--danger);
+}
+
+.toolbar-icon-danger:hover {
+  background: var(--danger-glow);
+}
+
+/* ── Inline Search ── */
+.toolbar-search {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  transition: width 0.2s ease;
+}
+
+.toolbar-search.expanded {
+  flex: 1;
+  max-width: 280px;
+  background: var(--bg-hover);
+  padding: 0 6px;
+  min-height: 30px;
+}
+
+.toolbar-search-icon {
+  color: var(--text-muted);
   flex-shrink: 0;
 }
 
-.mail-command-row {
+.toolbar-search-input {
+  flex: 1;
+  border: none;
+  background: transparent;
+  font-size: 0.8rem;
+  color: var(--text-primary);
+  outline: none;
+  min-width: 0;
+  padding: 4px 0;
+}
+
+.toolbar-search-input::placeholder {
+  color: var(--text-placeholder);
+}
+
+/* ── Filter Pills ── */
+.inbox-filters {
   display: flex;
   align-items: center;
-  gap: 10px;
-  min-width: 0;
+  gap: 4px;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--border-primary);
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  flex-shrink: 0;
 }
 
-.mail-command-primary {
-  justify-content: space-between;
+.inbox-filters::-webkit-scrollbar {
+  display: none;
 }
 
-.mail-command-search {
-  align-items: stretch;
-}
-
-.mail-command-filters {
+.filter-pill {
+  display: inline-flex;
   align-items: center;
+  padding: 3px 10px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  border: 1px solid var(--border-primary);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+  min-height: 26px;
 }
 
+.filter-pill:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.filter-pill.active {
+  background: var(--primary);
+  color: white;
+  border-color: var(--primary);
+}
+
+/* Keep panel header styles for non-mail panels */
 .mail-panel-title {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
   min-width: 0;
 }
 
 .mail-panel-title h3 {
   min-width: 0;
   white-space: nowrap;
-}
-
-.mail-action-cluster {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 4px;
-  min-width: 0;
-  flex-shrink: 0;
-}
-
-.mail-action-cluster .btn-icon {
-  width: 34px;
-  height: 34px;
-}
-
-.mail-control-label {
-  font-size: 0.66rem;
-  line-height: 1;
-  font-weight: 800;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--text-muted);
-  flex-shrink: 0;
-}
-
-.mail-search-bar {
-  display: flex;
-  align-items: stretch;
-  justify-content: space-between;
-  padding: 10px 14px;
-  border: 1px solid var(--border-primary);
-  border-radius: 0 !important;
-  background: var(--bg-surface);
-  box-shadow: none !important;
-  gap: 12px;
-}
-
-.mail-search-input {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex: 1;
-  min-width: 0;
-  min-height: 38px;
-  padding: 0 10px;
-  border: 1px solid var(--border-primary);
-  background: var(--bg-surface);
-}
-
-.mail-search-input .search-input {
-  border: none;
-  box-shadow: none !important;
-  background: transparent;
-  padding: 0;
-  min-height: auto;
-}
-
-.mail-filter-tabs {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-wrap: nowrap;
-  justify-content: flex-start;
-  min-width: 0;
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-width: thin;
-}
-
-.mail-filter-tabs .btn {
-  flex: 0 0 auto;
-  min-height: 30px;
-  padding-inline: 10px;
-  font-size: 0.75rem;
 }
 
 /* ─── Mail List ─── */
@@ -1729,9 +1773,6 @@
   max-height: 35vh;
 }
 
-/* ─── dead class kept for backward compat ─── */
-.biz-sidebar { display: none; }
-
 /* ═══════════════════════════════════════════
    Responsive — Tablet (≤1024px)
    ═══════════════════════════════════════════ */
@@ -1785,49 +1826,54 @@
   .biz-dash {
     min-height: 100dvh;
     height: auto;
-    overflow: visible;
+    overflow-y: auto;
+    overflow-x: hidden;
   }
   .dash-main {
-    overflow: visible;
+    overflow-y: auto;
+    overflow-x: hidden;
     min-height: 100dvh;
   }
   .dash-sidebar {
     width: min(84vw, 320px);
   }
-  .biz-panel {
-    padding: 16px;
-  }
   .dash-panel {
-    min-height: 100dvh;
-    padding: 16px 14px 18px;
-    overflow: visible;
+    min-height: 0;
+    padding: 0;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
   }
+
+  /* ── Compact Toolbar Mobile ── */
+  .inbox-toolbar {
+    padding: 6px 10px;
+    gap: 2px;
+  }
+  .inbox-title {
+    font-size: 0.82rem;
+    gap: 4px;
+  }
+  .toolbar-icon {
+    width: 32px;
+    height: 32px;
+  }
+  .toolbar-search.expanded {
+    max-width: none;
+  }
+  .inbox-filters {
+    padding: 5px 10px;
+    gap: 3px;
+  }
+  .filter-pill {
+    padding: 2px 8px;
+    font-size: 0.7rem;
+    min-height: 24px;
+  }
+
   .panel-header {
     flex-direction: row;
     flex-wrap: wrap;
-  }
-  .mail-panel-header {
-    align-items: center;
-    gap: 12px;
-  }
-  .mail-command-center {
-    gap: 8px;
-    padding: 9px;
-    margin-bottom: 10px;
-  }
-  .mail-command-primary {
-    gap: 8px;
-  }
-  .mail-action-cluster .mail-control-label {
-    display: none;
-  }
-  .mail-panel-title {
-    flex: 1;
-    justify-content: flex-start;
-    gap: 8px;
-  }
-  .mail-panel-title h3 {
-    font-size: 0.95rem;
+    padding: 10px 14px;
   }
   .panel-header-actions {
     width: auto;
@@ -1842,39 +1888,13 @@
     width: 34px;
     height: 34px;
   }
-  .mail-search-bar {
-    padding: 10px;
-    border-radius: 0 !important;
-    gap: 10px;
-    flex-direction: column;
-  }
-  .mail-search-input {
-    min-height: 40px;
-  }
-  .mail-command-filters {
-    align-items: flex-start;
-    gap: 8px;
-  }
-  .mail-filter-tabs {
-    justify-content: flex-start;
-    overflow-x: auto;
-    flex-wrap: nowrap;
-    padding-bottom: 2px;
-    gap: 6px;
-  }
-  .mail-filter-tabs .btn {
-    flex: 0 0 auto;
-    min-height: 34px;
-    padding-inline: 10px;
-    font-size: 0.78rem;
-  }
   .mail-row {
     align-items: flex-start;
     padding: 10px 12px;
     min-height: 0;
   }
   .mail-row-main {
-    gap: 6px;
+    gap: 4px;
   }
   .mail-row-headline {
     flex-direction: column;
@@ -1895,7 +1915,7 @@
   .mail-row-meta {
     min-width: 58px;
     align-items: flex-end;
-    gap: 8px;
+    gap: 6px;
     padding-top: 2px;
   }
   .dash-list-scroll {
@@ -1920,6 +1940,11 @@
     max-height: 100dvh;
     border-radius: 0 !important;
   }
+  .reader-toolbar {
+    flex-wrap: wrap;
+    padding: 6px 10px;
+    gap: 2px;
+  }
   .reader-content {
     padding: 16px;
   }
@@ -1929,13 +1954,18 @@
   .analytics-grid {
     grid-template-columns: 1fr;
   }
+
+  /* ── Billing/Premium — FIXED SCROLL ── */
+  .billing-panel {
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    padding: 14px 14px 40px;
+    min-height: 0;
+  }
   .billing-grid {
     grid-template-columns: 1fr;
     gap: 12px;
     margin-top: 12px;
-  }
-  .billing-panel {
-    padding-bottom: 32px;
   }
   .billing-plan-card {
     padding: 16px;
@@ -1948,6 +1978,9 @@
     border-bottom: 1px solid var(--border-primary);
     margin: 0 -14px 8px;
     padding: 10px 14px;
+  }
+  .billing-header {
+    padding: 0 0 8px;
   }
   .admin-controls-bar {
     flex-direction: column;
@@ -1966,5 +1999,32 @@
   .dns-record-name,
   .dns-record-value {
     flex: 1 1 100%;
+  }
+
+  /* ── Reader Mobile ── */
+  .reader-header {
+    padding: 12px 14px 4px;
+  }
+  .reader-header h2 {
+    font-size: 1rem;
+  }
+  .reader-meta {
+    padding: 10px 14px;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .reader-body {
+    padding: 14px;
+  }
+  .reader-date {
+    width: 100%;
+    margin-left: 0;
+    margin-top: 4px;
+  }
+
+  /* ── Bulk Bar Mobile ── */
+  .bulk-bar {
+    padding: 5px 10px;
+    gap: 4px;
   }
 }

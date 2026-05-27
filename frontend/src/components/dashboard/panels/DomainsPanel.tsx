@@ -12,7 +12,7 @@ export default function DomainsPanel({ state, handleAddDomain, handleVerifyDomai
   return (
     <div className="dash-panel">
       <div className="panel-header">
-        <button className="btn btn-ghost btn-icon sidebar-toggle" onClick={() => state.setSidebarOpen(true)}><Menu size={16} /></button>
+        <button className="toolbar-icon sidebar-toggle" onClick={() => state.setSidebarOpen(true)}><Menu size={16} /></button>
         <h3><Globe size={16} /> Domains</h3>
         <button className="btn btn-primary btn-sm" onClick={() => state.setShowAddDomain(!state.showAddDomain)}><Plus size={12} /> Add Domain</button>
       </div>

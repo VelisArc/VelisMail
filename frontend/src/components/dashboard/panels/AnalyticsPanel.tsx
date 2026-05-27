@@ -8,7 +8,7 @@ interface AnalyticsPanelProps {
 export default function AnalyticsPanel({ state }: AnalyticsPanelProps) {
   return (
     <div className="dash-panel">
-      <div className="panel-header"><button className="btn btn-ghost btn-icon sidebar-toggle" onClick={() => state.setSidebarOpen(true)}><Menu size={16} /></button><h3><BarChart3 size={16} /> Analytics</h3><button className="btn btn-ghost btn-sm" onClick={state.refreshQueue}><RefreshCcw size={12} /></button></div>
+      <div className="panel-header"><button className="toolbar-icon sidebar-toggle" onClick={() => state.setSidebarOpen(true)}><Menu size={16} /></button><h3><BarChart3 size={16} /> Analytics</h3><button className="btn btn-ghost btn-sm" onClick={state.refreshQueue}><RefreshCcw size={12} /></button></div>
       <div className="analytics-grid">
         {[
           { label: 'Emails Sent', value: state.mailQueue.filter(i => i.status === 'sent').length, icon: Send },

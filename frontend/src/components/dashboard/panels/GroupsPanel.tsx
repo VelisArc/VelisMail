@@ -9,7 +9,7 @@ interface GroupsPanelProps {
 export default function GroupsPanel({ state }: GroupsPanelProps) {
   return (
     <div className="dash-panel">
-      <div className="panel-header"><button className="btn btn-ghost btn-icon sidebar-toggle" onClick={() => state.setSidebarOpen(true)}><Menu size={16} /></button><h3><Users size={16} /> Distribution Groups</h3></div>
+      <div className="panel-header"><button className="toolbar-icon sidebar-toggle" onClick={() => state.setSidebarOpen(true)}><Menu size={16} /></button><h3><Users size={16} /> Distribution Groups</h3></div>
       <div className="panel-inline-form flex-wrap">
         <input className="input input-max-180" placeholder="Group name" value={state.groupName} onChange={e => state.setGroupName(e.target.value)} />
         <input className="input input-max-160" placeholder="Local part" value={state.groupLocalPart} onChange={e => state.setGroupLocalPart(e.target.value)} />

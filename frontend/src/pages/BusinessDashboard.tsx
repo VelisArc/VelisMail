@@ -219,17 +219,22 @@ export default function BusinessDashboard() {
       const Razorpay = await loadRazorpayCheckout();
       if (!Razorpay) { showToast('Payment SDK failed to load', 'error'); setLoadingPayment(null); return; }
       const billingCycle = annual ? 'annual' : 'monthly';
-      const amount = annual ? plan.priceAnnual : plan.priceMonthly;
+      const amountRupees = annual ? plan.priceAnnual : plan.priceMonthly;
       const order = await fetchAPI('/payments/create-order', {
         method: 'POST',
         body: JSON.stringify({
-          amount: amount * 100,
+          amount: amountRupees * 100,
           currency: 'INR',
           plan: plan.id,
           billing: billingCycle,
           email: user?.email,
         }),
       });
+      if (!order.success && order.message) {
+        showToast(order.message, 'error');
+        setLoadingPayment(null);
+        return;
+      }
       const razorpayKey = order.razorpay_key_id || import.meta.env.VITE_RAZORPAY_KEY_ID;
       const orderId = order.order_id || order.id;
       if (!razorpayKey || !orderId) {
@@ -239,13 +244,13 @@ export default function BusinessDashboard() {
       }
       const rzp = new Razorpay({
         key: razorpayKey,
-        amount: order.amount || amount * 100,
+        amount: order.amount || amountRupees * 100,
         currency: order.currency || 'INR',
         order_id: orderId,
         name: 'VelisMail', description: `${plan.name} - ${annual ? 'Annual' : 'Monthly'}`,
         handler: async (response: Record<string, string>) => {
           try {
-            await fetchAPI('/payments/verify', {
+            const verifyResult = await fetchAPI('/payments/verify', {
               method: 'POST',
               body: JSON.stringify({
                 razorpay_payment_id: response.razorpay_payment_id,
@@ -253,9 +258,13 @@ export default function BusinessDashboard() {
                 razorpay_signature: response.razorpay_signature,
               }),
             });
-            const updated = auth.updateSettings({ plan: plan.name, billingCycle });
-            if (updated.user) setUser(updated.user);
-            showToast(`${plan.name} plan activated`);
+            if (verifyResult.success) {
+              const updated = auth.updateSettings({ plan: plan.name, billingCycle });
+              if (updated.user) setUser(updated.user);
+              showToast(`${plan.name} plan activated`);
+            } else {
+              showToast(verifyResult.message || 'Payment verification failed', 'error');
+            }
           } catch (error) {
             console.error('payment verification error', error);
             showToast('Payment verification failed', 'error');
@@ -273,6 +282,7 @@ export default function BusinessDashboard() {
       setLoadingPayment(null);
     }
   };
+
 
   const handleReply = (email: Email) => {
     const replyBody = buildReplyQuote(email);

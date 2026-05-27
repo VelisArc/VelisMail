@@ -15,7 +15,7 @@ export default function TeamPanel({ state }: TeamPanelProps) {
 
   return (
     <div className="dash-panel">
-      <div className="panel-header"><button className="btn btn-ghost btn-icon sidebar-toggle" onClick={() => state.setSidebarOpen(true)}><Menu size={20} /></button><h3><Shield size={16} /> Team Access</h3><button className="btn btn-primary btn-sm" onClick={() => state.setInviteOpen(true)}><Plus size={12} /> Invite Member</button></div>
+      <div className="panel-header"><button className="toolbar-icon sidebar-toggle" onClick={() => state.setSidebarOpen(true)}><Menu size={20} /></button><h3><Shield size={16} /> Team Access</h3><button className="btn btn-primary btn-sm" onClick={() => state.setInviteOpen(true)}><Plus size={12} /> Invite Member</button></div>
       <div className="flex gap-2 panel-section">
         {['all', 'admin', 'member', 'viewer'].map(f => (
           <button key={f} className={`btn btn-sm ${state.teamFilter === f ? 'btn-primary' : 'btn-ghost'}`} onClick={() => state.setTeamFilter(f)}>

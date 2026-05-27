@@ -22,7 +22,7 @@ export default function AdminPanel({ state }: AdminPanelProps) {
 
   return (
     <div className="dash-panel">
-      <div className="panel-header"><button className="btn btn-ghost btn-icon sidebar-toggle" onClick={() => state.setSidebarOpen(true)}><Menu size={20} /></button><h3><Crown size={16} /> Platform Admin</h3><button className="btn btn-ghost btn-sm" onClick={() => { state.setAdminUsers(platformAdmin.getUsers()); state.showToast('Refreshed'); }}><RefreshCcw size={12} /></button></div>
+      <div className="panel-header"><button className="toolbar-icon sidebar-toggle" onClick={() => state.setSidebarOpen(true)}><Menu size={20} /></button><h3><Crown size={16} /> Platform Admin</h3><button className="btn btn-ghost btn-sm" onClick={() => { state.setAdminUsers(platformAdmin.getUsers()); state.showToast('Refreshed'); }}><RefreshCcw size={12} /></button></div>
       <div className="admin-grid-4">
         {[ { label: 'Total Users', value: state.adminUsers.length }, { label: 'Active', value: state.adminUsers.filter(u => u.status === 'active').length }, { label: 'Suspended', value: state.adminUsers.filter(u => u.status === 'suspended').length }, { label: 'Paid Plans', value: state.adminUsers.filter(u => u.plan !== 'free').length }].map(s => (
           <div key={s.label} className="glass-card admin-stat"><strong className="queue-stat-value">{s.value}</strong><span className="text-muted text-sm">{s.label}</span></div>

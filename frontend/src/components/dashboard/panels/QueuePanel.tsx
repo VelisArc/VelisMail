@@ -17,7 +17,7 @@ export default function QueuePanel({ state }: QueuePanelProps) {
 
   return (
     <div className="dash-panel">
-      <div className="panel-header"><button className="btn btn-ghost btn-icon sidebar-toggle" onClick={() => state.setSidebarOpen(true)}><Menu size={16} /></button><h3><Server size={16} /> Mail Queue</h3><div className="panel-header-actions">
+      <div className="panel-header"><button className="toolbar-icon sidebar-toggle" onClick={() => state.setSidebarOpen(true)}><Menu size={16} /></button><h3><Server size={16} /> Mail Queue</h3><div className="panel-header-actions">
         <button className="btn btn-ghost btn-sm" onClick={() => state.setShowQueueFilters(!state.showQueueFilters)}><Filter size={12} /></button>
         <button className="btn btn-ghost btn-sm" onClick={state.refreshQueue}><RefreshCcw size={12} /></button>
         <button className="btn btn-primary btn-sm" onClick={() => { businessQueue.runDue(state.activeDomainName); state.refreshQueue(); state.showToast('Due items triggered'); }}><Zap size={12} /> Run Due</button>
