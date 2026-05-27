@@ -316,7 +316,7 @@
   -webkit-overflow-scrolling: touch;
 }
 
-.sidebar-toggle {
+.toolbar-icon.sidebar-toggle {
   display: none;
 }
 
@@ -1795,7 +1795,7 @@
   .dash-overlay {
     display: block;
   }
-  .sidebar-toggle {
+  .toolbar-icon.sidebar-toggle {
     display: inline-flex;
   }
   .admin-grid-4 {
