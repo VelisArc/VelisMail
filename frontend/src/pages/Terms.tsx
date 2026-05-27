@@ -87,7 +87,7 @@ export default function Terms() {
           <section>
             <h2>5. Billing, Subscriptions, and Infrastructure</h2>
             <p>
-              VelisMail operates on a per-workspace subscription model with four tiers: Free, Starter (₹799/mo), Business (₹2,499/mo), and Enterprise (₹6,999/mo). Prices are listed in Indian Rupees (INR) and are subject to applicable taxes (e.g., 18% GST).
+              VelisMail operates on a per-workspace subscription model with four tiers: Free, Starter (₹299/mo), Business (₹999/mo), and Enterprise (₹2,499/mo). Prices are listed in Indian Rupees (INR) and are subject to applicable taxes (e.g., 18% GST).
             </p>
             <p>
               <strong>Bring Your Own Infrastructure (BYOI):</strong> You connect your own PostgreSQL database and Email API (e.g., SendGrid, Postmark, Resend). Your VelisMail subscription tier establishes maximum thresholds for monthly email volume, daily sending limits (Free plan only), and storage capacity. Purchasing a VelisMail premium plan does not upgrade your external provider limits — you must ensure your third-party providers can handle your volume independently.

@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
-import { auth, businessAudit, businessGroups, businessMailboxes, businessQueue, businessTeam, businessTemplates, connections, domains, isBusinessSetupReady, mail, platformAdmin, signatures, contacts, type BusinessAuditEntry, type BusinessGroup, type BusinessMailbox, type BusinessTeamMember, type BusinessTemplate, type ConnectionUsage, type CustomDomain, type Email, type PlatformAdminUserRecord, type DomainCheck, type TeamAccessInvite, type Signature, type Contact, type ActiveSession } from '../api/client';
+import { auth, businessAudit, businessGroups, businessMailboxes, businessQueue, businessTeam, businessTemplates, connections, domains, fetchAPI, isBusinessSetupReady, mail, platformAdmin, signatures, contacts, type BusinessAuditEntry, type BusinessGroup, type BusinessMailbox, type BusinessTeamMember, type BusinessTemplate, type ConnectionUsage, type CustomDomain, type Email, type PlatformAdminUserRecord, type DomainCheck, type TeamAccessInvite, type Signature, type Contact, type ActiveSession } from '../api/client';
 import Sidebar from '../components/dashboard/Sidebar';
-import { ROLE_ALLOWED_TABS, type BizTab } from '../components/dashboard/constants';
+import { PLANS, ROLE_ALLOWED_TABS, type BizTab } from '../components/dashboard/constants';
 import EmailInbox from '../components/dashboard/EmailInbox';
 import ErrorBoundary from '../components/ErrorBoundary';
 import { copyToClipboard, loadRazorpayCheckout, buildReplyQuote } from '../components/dashboard/utils';
@@ -47,7 +47,7 @@ function toDomainRecord(domain: CustomDomain): DomainRecord {
 
 export default function BusinessDashboard() {
   const navigate = useNavigate();
-  const [user] = useState(auth.getSession());
+  const [user, setUser] = useState(auth.getSession());
   const navigation = useNavigation();
   const { updateNavigation } = useSessionActions();
   const queryClient = useQueryClient();
@@ -191,7 +191,7 @@ export default function BusinessDashboard() {
   const refreshContacts = useCallback(() => setContactsList(contacts.getAll()), []);
   const refreshSessions = useCallback(async () => { try { const res = await auth.listSessions(); if (res.success) setActiveSessions(res.sessions); } catch (e) { console.error('refresh sessions failed', e); } }, []);
 
-  useEffect(() => { refreshTeam(); refreshQueue(); refreshAudit(); refreshTemplates(); refreshConnectionUsage(); refreshMailboxes(); }, [activeDomainName, refreshTeam, refreshQueue, refreshAudit, refreshTemplates, refreshConnectionUsage, refreshMailboxes]);
+  useEffect(() => { refreshTeam(); refreshQueue(); refreshAudit(); refreshTemplates(); refreshConnectionUsage(); refreshMailboxes(); refreshGroups(); }, [activeDomainName, refreshTeam, refreshQueue, refreshAudit, refreshTemplates, refreshConnectionUsage, refreshMailboxes, refreshGroups]);
 
   const handleSendEmail = useCallback(async () => {
     if (!composeTo || !composeSubject) { showToast('Recipient and subject required', 'error'); return; }
@@ -206,31 +206,63 @@ export default function BusinessDashboard() {
   }, [activeDomainName, composeTo, composeSubject, composeBody, selectedFromAddress, queryClient, showToast]);
 
   const handleBuyPlan = async (planId: string) => {
-    if (planId === 'free') { showToast('Free plan activated'); return; }
+    const plan = PLANS.find(p => p.id === planId);
+    if (!plan) { showToast('Plan not found', 'error'); return; }
+    if (planId === 'free') {
+      const updated = auth.updateSettings({ plan: 'Free', billingCycle: annual ? 'annual' : 'monthly' });
+      if (updated.user) setUser(updated.user);
+      showToast('Free plan activated');
+      return;
+    }
     setLoadingPayment(planId);
     try {
-      const razorpayKey = import.meta.env.VITE_RAZORPAY_KEY_ID;
-      if (!razorpayKey) {
-        showToast('Razorpay payment gateway is not configured', 'error');
+      const Razorpay = await loadRazorpayCheckout();
+      if (!Razorpay) { showToast('Payment SDK failed to load', 'error'); setLoadingPayment(null); return; }
+      const billingCycle = annual ? 'annual' : 'monthly';
+      const amount = annual ? plan.priceAnnual : plan.priceMonthly;
+      const order = await fetchAPI('/payments/create-order', {
+        method: 'POST',
+        body: JSON.stringify({
+          amount: amount * 100,
+          currency: 'INR',
+          plan: plan.id,
+          billing: billingCycle,
+          email: user?.email,
+        }),
+      });
+      const razorpayKey = order.razorpay_key_id || import.meta.env.VITE_RAZORPAY_KEY_ID;
+      const orderId = order.order_id || order.id;
+      if (!razorpayKey || !orderId) {
+        showToast('Payment gateway is not ready. Check Razorpay server keys.', 'error');
         setLoadingPayment(null);
         return;
       }
-
-      const Razorpay = await loadRazorpayCheckout();
-      if (!Razorpay) { showToast('Payment SDK failed to load', 'error'); setLoadingPayment(null); return; }
-      const PLANS = [
-        { id: 'free', name: 'Free', priceMonthly: 0, priceAnnual: 0, desc: '1 domain, 5 mailboxes', features: ['1 Custom Domain', '5 Mailboxes', 'Basic Queue', 'Community Support'] },
-        { id: 'starter', name: 'Starter', priceMonthly: 299, priceAnnual: Math.round(299 * 12 * 0.84), desc: '3 domains, 25 mailboxes', features: ['3 Custom Domains', '25 Mailboxes', 'Queue Monitoring', 'Email Support', 'Basic Templates'] },
-        { id: 'business', name: 'Business', priceMonthly: 999, priceAnnual: Math.round(999 * 12 * 0.84), desc: '10 domains, unlimited mailboxes', features: ['10 Custom Domains', 'Unlimited Mailboxes', 'Priority Queue', 'Advanced Templates', 'Team Access', 'Audit Logs', 'Priority Support'] },
-        { id: 'enterprise', name: 'Enterprise', priceMonthly: 2499, priceAnnual: Math.round(2499 * 12 * 0.84), desc: 'Unlimited domains & users', features: ['Unlimited Domains', 'Unlimited Mailboxes', 'Dedicated Queue', 'Custom Templates', 'Bulk Operations', 'SLA Guarantee', 'Phone Support', 'White Label'] },
-      ];
-      const plan = PLANS.find(p => p.id === planId);
-      if (!plan) { showToast('Plan not found', 'error'); setLoadingPayment(null); return; }
-      const amount = annual ? plan.priceAnnual : plan.priceMonthly;
       const rzp = new Razorpay({
-        key: razorpayKey, amount: amount * 100, currency: 'INR',
+        key: razorpayKey,
+        amount: order.amount || amount * 100,
+        currency: order.currency || 'INR',
+        order_id: orderId,
         name: 'VelisMail', description: `${plan.name} - ${annual ? 'Annual' : 'Monthly'}`,
-        handler: () => { showToast(`${plan.name} plan activated`); setLoadingPayment(null); },
+        handler: async (response: Record<string, string>) => {
+          try {
+            await fetchAPI('/payments/verify', {
+              method: 'POST',
+              body: JSON.stringify({
+                razorpay_payment_id: response.razorpay_payment_id,
+                razorpay_order_id: response.razorpay_order_id,
+                razorpay_signature: response.razorpay_signature,
+              }),
+            });
+            const updated = auth.updateSettings({ plan: plan.name, billingCycle });
+            if (updated.user) setUser(updated.user);
+            showToast(`${plan.name} plan activated`);
+          } catch (error) {
+            console.error('payment verification error', error);
+            showToast('Payment verification failed', 'error');
+          } finally {
+            setLoadingPayment(null);
+          }
+        },
         modal: { ondismiss: () => setLoadingPayment(null) },
       });
       rzp.on('payment.failed', () => { showToast('Payment failed', 'error'); setLoadingPayment(null); });

@@ -3578,12 +3578,12 @@ pub struct VerifyPaymentRequest {
 
 fn expected_subscription_amount_paise(plan: &str, billing: &str) -> Option<u64> {
     let rupees = match (plan, billing) {
-        ("starter", "monthly") => 799,
-        ("starter", "annual") => 8054,
-        ("business", "monthly") => 2499,
-        ("business", "annual") => 25190,
-        ("enterprise", "monthly") => 6999,
-        ("enterprise", "annual") => 70550,
+        ("starter", "monthly") => 299,
+        ("starter", "annual") => 3014,
+        ("business", "monthly") => 999,
+        ("business", "annual") => 10070,
+        ("enterprise", "monthly") => 2499,
+        ("enterprise", "annual") => 25190,
         _ => return None,
     };
     Some(rupees * 100)
