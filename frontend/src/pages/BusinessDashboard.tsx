@@ -267,7 +267,11 @@ export default function BusinessDashboard() {
       });
       rzp.on('payment.failed', () => { showToast('Payment failed', 'error'); setLoadingPayment(null); });
       rzp.open();
-    } catch (e) { console.error('payment error', e); showToast('Payment error', 'error'); setLoadingPayment(null); }
+    } catch (e) {
+      console.error('payment error', e);
+      showToast(e instanceof Error ? e.message : 'Payment error', 'error');
+      setLoadingPayment(null);
+    }
   };
 
   const handleReply = (email: Email) => {

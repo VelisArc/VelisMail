@@ -109,6 +109,14 @@ const EmailInbox: FC<EmailInboxProps> = ({
   };
 
   const isTrash = state.activeFolder === 'trash';
+  const folderTitle = state.activeFolder.charAt(0).toUpperCase() + state.activeFolder.slice(1);
+  const filterOptions = [
+    { id: 'all', label: 'All' },
+    { id: 'unread', label: 'Unread' },
+    { id: 'read', label: 'Read' },
+    { id: 'starred', label: 'Starred' },
+    { id: 'attachments', label: 'Attach' },
+  ];
 
   const handleDeletePermanently = (id: string) => {
     try {
@@ -133,48 +141,53 @@ const EmailInbox: FC<EmailInboxProps> = ({
 
   return (
     <div className="dash-panel">
-      <div className="panel-header mail-panel-header">
-        <div className="mail-panel-title">
-          <button type="button" className="btn btn-ghost btn-icon sidebar-toggle" onClick={() => state.setSidebarOpen(true)} aria-label="Open menu">
-            <Menu size={16} />
-          </button>
-          <h3>
-            <Mail size={18} /> {state.activeFolder.charAt(0).toUpperCase() + state.activeFolder.slice(1)}
-          </h3>
-        </div>
-        <div className="panel-header-actions">
-          <span className="badge badge-neutral">{filtered.length}</span>
-          <button type="button" className="btn btn-ghost btn-icon" onClick={onRefresh} aria-label="Refresh"><RefreshCcw size={16} /></button>
-          <button type="button" className="btn btn-ghost btn-icon" onClick={() => state.setViewMode(state.viewMode === 'list' ? 'grid' : 'list')} aria-label="Toggle view">
-            {state.viewMode === 'list' ? <Grid size={16} /> : <ListIcon size={16} />}
-          </button>
-          <button type="button" className="btn btn-ghost btn-icon" onClick={() => state.setSortOrder(state.sortOrder === 'desc' ? 'asc' : 'desc')} aria-label="Toggle sort">
-            {state.sortOrder === 'desc' ? <SortDesc size={16} /> : <SortAsc size={16} />}
-          </button>
-        </div>
-      </div>
-
-      <div className="dash-search mail-search-bar">
-        <div className="mail-search-input">
-          <Search size={14} className="search-icon" />
-          <input
-            className="input search-input"
-            placeholder="Search mail..."
-            value={state.searchQuery}
-            onChange={e => state.setSearchQuery(e.target.value)}
-          />
-        </div>
-        <div className="mail-filter-tabs">
-          {['all', 'unread', 'read', 'starred', 'attachments'].map(f => (
-            <button
-              key={f}
-              type="button"
-              className={`btn btn-sm ${state.mailStatusFilter === f ? 'btn-primary' : 'btn-ghost'}`}
-              onClick={() => state.setMailStatusFilter(f)}
-            >
-              {f.charAt(0).toUpperCase() + f.slice(1)}
+      <div className="mail-command-center" aria-label="Mailbox controls">
+        <div className="mail-command-row mail-command-primary">
+          <div className="mail-panel-title">
+            <button type="button" className="btn btn-ghost btn-icon sidebar-toggle" onClick={() => state.setSidebarOpen(true)} aria-label="Open menu">
+              <Menu size={16} />
             </button>
-          ))}
+            <h3>
+              <Mail size={18} /> {folderTitle}
+            </h3>
+            <span className="badge badge-neutral">{filtered.length}</span>
+          </div>
+          <div className="mail-action-cluster" aria-label="Mailbox actions">
+            <span className="mail-control-label">Actions</span>
+            <button type="button" className="btn btn-ghost btn-icon" onClick={onRefresh} aria-label="Refresh"><RefreshCcw size={16} /></button>
+            <button type="button" className="btn btn-ghost btn-icon" onClick={() => state.setViewMode(state.viewMode === 'list' ? 'grid' : 'list')} aria-label="Toggle view">
+              {state.viewMode === 'list' ? <Grid size={16} /> : <ListIcon size={16} />}
+            </button>
+            <button type="button" className="btn btn-ghost btn-icon" onClick={() => state.setSortOrder(state.sortOrder === 'desc' ? 'asc' : 'desc')} aria-label="Toggle sort">
+              {state.sortOrder === 'desc' ? <SortDesc size={16} /> : <SortAsc size={16} />}
+            </button>
+          </div>
+        </div>
+        <div className="mail-command-row mail-command-search">
+          <label className="mail-search-input">
+            <Search size={14} className="search-icon" />
+            <input
+              className="input search-input"
+              placeholder="Search mail..."
+              value={state.searchQuery}
+              onChange={e => state.setSearchQuery(e.target.value)}
+            />
+          </label>
+        </div>
+        <div className="mail-command-row mail-command-filters">
+          <span className="mail-control-label">Filters</span>
+          <div className="mail-filter-tabs">
+            {filterOptions.map(f => (
+              <button
+                key={f.id}
+                type="button"
+                className={`btn btn-sm ${state.mailStatusFilter === f.id ? 'btn-primary' : 'btn-ghost'}`}
+                onClick={() => state.setMailStatusFilter(f.id)}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 

@@ -3561,7 +3561,7 @@ mod tests {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CreateOrderRequest {
-    pub amount: u64,
+    pub amount: Option<u64>,
     pub currency: String,
     pub plan: Option<String>,
     pub billing: Option<String>,
@@ -3625,14 +3625,16 @@ pub async fn create_payment_order(
             })),
         );
     };
-    if payload.amount != expected_amount {
-        return (
-            StatusCode::BAD_REQUEST,
-            Json(json!({
-                "success": false,
-                "message": "Payment amount does not match the selected subscription plan."
-            })),
-        );
+    if let Some(requested_amount) = payload.amount {
+        if requested_amount != expected_amount {
+            tracing::warn!(
+                requested_amount,
+                expected_amount,
+                plan = %plan,
+                billing = %billing,
+                "Ignoring stale client payment amount and using server-side plan price"
+            );
+        }
     }
     if !payload.currency.eq_ignore_ascii_case("INR") {
         return (
@@ -3648,6 +3650,15 @@ pub async fn create_payment_order(
     let amount = expected_amount;
     let currency = payload.currency.to_ascii_uppercase();
     let receipt_email = payload.email.unwrap_or_else(|| "workspace".to_string());
+    let receipt_suffix: String = uuid::Uuid::new_v4()
+        .simple()
+        .to_string()
+        .chars()
+        .take(18)
+        .collect();
+    let plan_prefix: String = plan.chars().take(3).collect();
+    let billing_prefix = billing.chars().next().unwrap_or('m');
+    let receipt = format!("vm_{plan_prefix}_{billing_prefix}_{receipt_suffix}");
 
     let res = client
         .post("https://api.razorpay.com/v1/orders")
@@ -3658,7 +3669,7 @@ pub async fn create_payment_order(
         .json(&json!({
             "amount": amount,
             "currency": currency,
-            "receipt": format!("{}_{}_{}", plan, billing, uuid::Uuid::new_v4().simple()),
+            "receipt": receipt,
             "notes": {
                 "plan": plan,
                 "billing": billing,
@@ -3697,16 +3708,26 @@ pub async fn create_payment_order(
             } else {
                 let status = response.status();
                 let error_text = response.text().await.unwrap_or_default();
+                let gateway_message = serde_json::from_str::<Value>(&error_text)
+                    .ok()
+                    .and_then(|body| {
+                        body.pointer("/error/description")
+                            .and_then(Value::as_str)
+                            .or_else(|| body.pointer("/error/reason").and_then(Value::as_str))
+                            .map(str::to_string)
+                    })
+                    .unwrap_or_else(|| "Payment gateway rejected the order request.".to_string());
                 tracing::error!(
                     "Razorpay order creation failed: {} - {}",
                     status,
                     error_text
                 );
                 (
-                    status,
+                    StatusCode::BAD_GATEWAY,
                     Json(json!({
                         "success": false,
-                        "message": "Payment gateway error during order creation."
+                        "message": gateway_message,
+                        "gatewayStatus": status.as_u16()
                     })),
                 )
             }
