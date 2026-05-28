@@ -56,7 +56,7 @@
   height: fit-content;
   position: sticky;
   top: 64px;
-  border-radius: 0 !important;
+  border-radius: var(--radius-lg);
   border: 1px solid var(--glass-border);
   background: transparent;
 }
@@ -66,7 +66,7 @@
   align-items: center;
   gap: 8px;
   padding: 7px 10px;
-  border-radius: 0 !important;
+  border-radius: var(--radius-lg);
   font-size: 0.8rem;
   font-weight: 500;
   color: var(--text-secondary);
@@ -108,8 +108,8 @@
 /* Add Domain */
 .add-domain-card {
   margin-bottom: 20px;
-  box-shadow: none !important;
-  border-radius: 0 !important;
+  box-shadow: var(--shadow-xs);
+  border-radius: var(--radius-lg);
 }
 
 .add-domain-card h3 {
@@ -225,7 +225,7 @@
 .dns-type {
   display: inline-block;
   padding: 2px 8px;
-  border-radius: 0 !important;
+  border-radius: var(--radius-lg);
   font-weight: 700;
   font-size: 0.7rem;
   background: rgba(16, 185, 129, 0.12);
@@ -246,7 +246,7 @@
 }
 
 /* Profile */
-.profile-card { cursor: default; box-shadow: none !important; border-radius: 0 !important; }
+.profile-card { cursor: default; box-shadow: var(--shadow-xs); border-radius: var(--radius-lg); }
 .profile-card:hover { transform: none; }
 
 .profile-row {
@@ -258,7 +258,7 @@
 .profile-avatar-lg {
   width: 42px;
   height: 42px;
-  border-radius: 0 !important;
+  border-radius: var(--radius-lg);
   background: linear-gradient(135deg, var(--primary), var(--primary-600));
   display: flex;
   align-items: center;
@@ -295,8 +295,8 @@
 .security-card {
   margin-bottom: 10px;
   cursor: default;
-  box-shadow: none !important;
-  border-radius: 0 !important;
+  box-shadow: var(--shadow-xs);
+  border-radius: var(--radius-lg);
 }
 
 .security-card:hover { transform: none; }
@@ -350,7 +350,7 @@
   gap: 12px;
   padding: 12px;
   border: 1px solid var(--border);
-  border-radius: 0 !important;
+  border-radius: var(--radius-lg);
   background: var(--bg-surface);
 }
 

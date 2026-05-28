@@ -138,7 +138,7 @@
 .value-icon {
   width: 52px;
   height: 52px;
-  border-radius: 0 !important;
+  border-radius: var(--radius-lg);
   background: rgba(16, 185, 129, 0.12);
   color: var(--primary-400);
   display: flex;
@@ -177,7 +177,7 @@
 .team-avatar {
   width: 64px;
   height: 64px;
-  border-radius: 0 !important;
+  border-radius: var(--radius-lg);
   background: linear-gradient(135deg, var(--primary), var(--accent));
   display: flex;
   align-items: center;
@@ -225,7 +225,7 @@
   bottom: 0;
   width: 2px;
   background: linear-gradient(to bottom, var(--primary), var(--accent));
-  border-radius: 0 !important;
+  border-radius: var(--radius-lg);
 }
 
 .timeline-item {
@@ -238,9 +238,9 @@
 .timeline-dot {
   width: 12px;
   height: 12px;
-  border-radius: 0 !important;
+  border-radius: var(--radius-lg);
   background: var(--primary);
-  box-shadow: none !important;
+  box-shadow: var(--shadow-xs);
   flex-shrink: 0;
   margin-top: 20px;
   margin-left: 14px;
@@ -276,8 +276,8 @@
   text-align: center;
   padding: 34px 24px;
   background: linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(249, 115, 22, 0.08));
-  border-radius: 0 !important;
-  box-shadow: none !important;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-xs);
 }
 
 .about-cta-box h2 {
@@ -396,22 +396,22 @@
 .value-card {
   text-align: center;
   cursor: default;
-  border-radius: 0 !important;
-  box-shadow: none !important;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-xs);
 }
 
 .team-card {
   text-align: center;
   cursor: default;
-  border-radius: 0 !important;
-  box-shadow: none !important;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-xs);
 }
 
 .timeline-content {
   flex: 1;
   cursor: default;
-  border-radius: 0 !important;
-  box-shadow: none !important;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-xs);
 }
 
 .about-cta {

@@ -108,7 +108,7 @@
   top: 14px;
   width: 5px;
   height: 5px;
-  border-radius: 0 !important;
+  border-radius: var(--radius-lg);
   background: var(--primary-400);
 }
 

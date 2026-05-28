@@ -80,7 +80,7 @@
 .bsetup-step-num {
   width: 40px;
   height: 40px;
-  border-radius: 0 !important;
+  border-radius: var(--radius-lg);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -96,7 +96,7 @@
   background: var(--primary);
   border-color: var(--primary);
   color: white;
-  box-shadow: none !important;
+  box-shadow: var(--shadow-xs);
 }
 
 .bsetup-progress-step.active {
@@ -120,8 +120,8 @@
   backdrop-filter: blur(24px) saturate(180%);
   -webkit-backdrop-filter: blur(24px) saturate(180%);
   border: 1px solid var(--glass-border);
-  border-radius: 0 !important;
-  box-shadow: none !important;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-xs);
 }
 
 .bsetup-card h2 {
@@ -155,7 +155,7 @@
 /* DNS & Verification Table */
 .bsetup-dns {
   margin-top: var(--space-4);
-  border-radius: 0 !important;
+  border-radius: var(--radius-lg);
 }
 
 .dns-instruction-text {
@@ -213,7 +213,7 @@
   border-collapse: separate;
   border-spacing: 0;
   background: var(--bg-surface-2);
-  border-radius: 0 !important;
+  border-radius: var(--radius-lg);
   overflow: hidden;
   border: 1px solid var(--glass-border);
 }
@@ -242,7 +242,7 @@
   color: var(--primary-400);
   background: var(--primary-glow);
   padding: 2px 8px;
-  border-radius: 0 !important;
+  border-radius: var(--radius-lg);
   font-size: 0.7rem;
 }
 
@@ -258,7 +258,7 @@
   height: 72px;
   background: var(--primary-glow);
   border: 2px solid var(--border-accent);
-  border-radius: 0 !important;
+  border-radius: var(--radius-lg);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -278,7 +278,7 @@
   padding: var(--space-4);
   background: var(--bg-surface-2);
   border: 1px solid var(--glass-border);
-  border-radius: 0 !important;
+  border-radius: var(--radius-lg);
   display: flex;
   gap: var(--space-4);
   align-items: flex-start;

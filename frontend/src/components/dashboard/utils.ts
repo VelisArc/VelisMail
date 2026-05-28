@@ -186,8 +186,25 @@ export function getEmailPreview(body: string, maxLength: number): string {
   return text.length > maxLength ? `${text.slice(0, Math.max(0, maxLength - 1)).trimEnd()}…` : text;
 }
 
+export function stripHtmlTags(html: string): string {
+  return html
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/p>/gi, '\n')
+    .replace(/<\/div>/gi, '\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&nbsp;/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
 export function buildReplyQuote(email: Email): string {
-  const quotedText = getPrimaryConversationText(email.body)
+  const cleanBody = stripHtmlTags(getPrimaryConversationText(email.body));
+  const quotedText = cleanBody
     .split('\n')
     .map(line => line.trim() ? `> ${line}` : '>')
     .join('\n');

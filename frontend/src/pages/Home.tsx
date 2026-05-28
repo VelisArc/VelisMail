@@ -7,7 +7,7 @@ import {
   ArrowUp, BarChart3, Activity,
 } from 'lucide-react';
 import { auth, fetchApiResponse, isBusinessSetupReady } from '../api/client';
-import HomeOpsScene from '../components/HomeOpsScene';
+
 import SEO from '../components/SEO';
 import './Home.css';
 
@@ -233,7 +233,32 @@ export default function Home() {
               ))}
             </div>
           </div>
-          <HomeOpsScene />
+          <div className="hero-visual" aria-hidden="true">
+            <div className="hero-visual-inner">
+              <div className="hero-float-card hero-float-1">
+                <div className="hero-float-icon">✉️</div>
+                <div className="hero-float-lines"><span></span><span></span></div>
+              </div>
+              <div className="hero-float-card hero-float-2">
+                <div className="hero-float-icon">🔒</div>
+                <div className="hero-float-lines"><span></span><span></span></div>
+              </div>
+              <div className="hero-float-card hero-float-3">
+                <div className="hero-float-icon">⚡</div>
+                <div className="hero-float-lines"><span></span><span></span></div>
+              </div>
+              <div className="hero-orbit-ring"></div>
+              <div className="hero-orbit-ring hero-orbit-ring-2"></div>
+              <div className="hero-center-badge">
+                <Shield size={28} />
+                <span>Encrypted</span>
+              </div>
+              <div className="hero-dots">
+                <span></span><span></span><span></span>
+                <span></span><span></span><span></span>
+              </div>
+            </div>
+          </div>
         </div>
       </section>
 

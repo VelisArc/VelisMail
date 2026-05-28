@@ -48,9 +48,18 @@ export default function Composer({
   const [savedRange, setSavedRange] = useState<Range | null>(null);
 
   useEffect(() => {
-    if (editorRef.current && initialBody) {
-      const formattedBody = initialBody.replace(/\n/g, '<br>');
+    setTo(initialTo);
+  }, [initialTo]);
+
+  useEffect(() => {
+    setSubject(initialSubject);
+  }, [initialSubject]);
+
+  useEffect(() => {
+    if (editorRef.current) {
+      const formattedBody = (initialBody || '').replace(/\n/g, '<br>');
       editorRef.current.innerHTML = DOMPurify.sanitize(formattedBody);
+      setBodyHtml(editorRef.current.innerHTML);
     }
   }, [initialBody]);
 
@@ -216,10 +225,10 @@ export default function Composer({
         {attachments.length > 0 && (
           <div className="attachments-list">
             {attachments.map((file, i) => (
-              <div key={i} className="attachment-chip" style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '4px 10px', background: 'var(--bg-surface-2)', borderRadius: '3px', fontSize: '0.8rem', border: '1px solid var(--border-primary)' }}>
+              <div key={i} className="attachment-chip">
                 <Paperclip size={12} />
                 <span>{file.name}</span>
-                <button aria-label="Remove attachment" onClick={() => removeAttachment(i)} style={{ color: 'var(--text-muted)', marginLeft: '4px' }}><X size={12} /></button>
+                <button aria-label="Remove attachment" className="attachment-remove" onClick={() => removeAttachment(i)}><X size={12} /></button>
               </div>
             ))}
           </div>
@@ -256,8 +265,8 @@ export default function Composer({
 
       {showLinkModal && (
         <div className="modal-overlay" onClick={() => setShowLinkModal(false)}>
-          <div className="glass animate-scale" onClick={e => e.stopPropagation()} style={{ padding: '24px', borderRadius: '6px', width: '100%', maxWidth: '400px', backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-primary)' }}>
-            <h3 style={{ marginTop: 0, marginBottom: '16px' }}>Insert Link</h3>
+          <div className="link-modal glass animate-scale" onClick={e => e.stopPropagation()}>
+            <h3>Insert Link</h3>
             <input
               type="url"
               className="input"
@@ -265,7 +274,6 @@ export default function Composer({
               value={linkUrl}
               onChange={e => setLinkUrl(e.target.value)}
               autoFocus
-              style={{ width: '100%', marginBottom: '20px' }}
               onKeyDown={e => {
                 if (e.key === 'Enter') {
                   e.preventDefault();
@@ -283,7 +291,7 @@ export default function Composer({
                 }
               }}
             />
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
+            <div className="link-modal-actions">
               <button className="btn btn-secondary" onClick={() => setShowLinkModal(false)}>Cancel</button>
               <button className="btn btn-primary" onClick={() => {
                 if (linkUrl) {
