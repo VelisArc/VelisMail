@@ -912,6 +912,113 @@ export const businessTemplates = {
 };
 
 // ---- Email/Mail Functions ----
+export function applyEmailRules(emails: Email[]): Email[] {
+  const activeRules = loadRules().filter(r => r.enabled);
+  if (activeRules.length === 0) return emails;
+
+  let changedAny = false;
+  const updated = emails.map(email => {
+    let emailCopy = { ...email };
+    let emailChanged = false;
+
+    for (const rule of activeRules) {
+      const matches = rule.conditions.every(cond => {
+        let fieldVal = '';
+        if (cond.field === 'subject') fieldVal = email.subject || '';
+        else if (cond.field === 'from') fieldVal = email.from || '';
+        else if (cond.field === 'body') fieldVal = email.body || '';
+
+        const testVal = String(cond.value || '').toLowerCase();
+        fieldVal = fieldVal.toLowerCase();
+
+        if (cond.operator === 'equals') return fieldVal === testVal;
+        if (cond.operator === 'startsWith') return fieldVal.startsWith(testVal);
+        return fieldVal.includes(testVal); // 'contains'
+      });
+
+      if (matches) {
+        for (const action of rule.actions) {
+          if (action.type === 'label' && action.value) {
+            const labelSet = new Set(emailCopy.labels || []);
+            if (!labelSet.has(action.value)) {
+              labelSet.add(action.value);
+              emailCopy.labels = Array.from(labelSet);
+              emailChanged = true;
+            }
+          } else if (action.type === 'move' && action.value) {
+            if (emailCopy.folder !== action.value) {
+              emailCopy.folder = action.value;
+              emailChanged = true;
+            }
+          } else if (action.type === 'star') {
+            if (!emailCopy.starred) {
+              emailCopy.starred = true;
+              emailChanged = true;
+            }
+          } else if (action.type === 'markRead') {
+            if (emailCopy.unread) {
+              emailCopy.unread = false;
+              emailChanged = true;
+            }
+          }
+        }
+      }
+    }
+
+    if (emailChanged) {
+      changedAny = true;
+      return emailCopy;
+    }
+    return email;
+  });
+
+  if (changedAny) {
+    saveEmailsSyncAndAsync(STORAGE_KEYS.emails, updated);
+  }
+  return updated;
+}
+
+export function processAutoReply(domain: string, emails: Email[]) {
+  try {
+    const ar = autoReply.get();
+    if (ar.enabled && ar.body) {
+      const autoRepliedIds = loadDB<string[]>('velismail_autoreplied_ids', []);
+      const newRepliedIds = [...autoRepliedIds];
+      let sentAny = false;
+
+      for (const email of emails) {
+        if (email.folder === 'inbox' && !autoRepliedIds.includes(email.id)) {
+          if (ar.onlyContacts) {
+            const allContacts = loadUserDB<Contact[]>(STORAGE_KEYS.contacts, []);
+            const isContact = allContacts.some(c => c.email.toLowerCase() === email.from.toLowerCase());
+            if (!isContact) continue;
+          }
+
+          newRepliedIds.push(email.id);
+          sentAny = true;
+          
+          const replySubject = email.subject.startsWith('Re:') ? email.subject : `Re: ${email.subject}`;
+          const replyBody = `${ar.body}\n\nOn ${new Date(email.date).toLocaleString()}, ${email.fromName || email.from} wrote:\n> ${email.body.replace(/\n/g, '\n> ')}`;
+
+          setTimeout(async () => {
+            try {
+              await mail.sendBusiness(domain, [email.from], replySubject, replyBody);
+            } catch (err) {
+              console.error('Failed to send auto-reply', err);
+            }
+          }, 100);
+        }
+      }
+
+      if (sentAny) {
+        saveDB('velismail_autoreplied_ids', newRepliedIds);
+      }
+    }
+  } catch (e) {
+    console.error('Auto-reply processing error', e);
+  }
+}
+
 export const mail = {
   getByFolder(folder: string): Email[] {
     const cached = reloadEmailsCacheFromStorage();
@@ -950,6 +1057,9 @@ export const mail = {
         setBusinessEmailDbRouteUnavailable(true);
       }
     }
+
+    sourceEmails = applyEmailRules(sourceEmails);
+    processAutoReply(domain, sourceEmails);
 
     const normalizeDomain = (addr: string) => (addr && addr.includes('@')) ? addr.split('@')[1].toLowerCase() : '';
     return sourceEmails.filter((e: Email) => {

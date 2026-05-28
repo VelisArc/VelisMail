@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { Navigate, useNavigate } from 'react-router-dom';
+import { Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { auth, businessAudit, businessGroups, businessMailboxes, businessQueue, businessTeam, businessTemplates, connections, domains, fetchAPI, isBusinessSetupReady, mail, platformAdmin, signatures, contacts, type BusinessAuditEntry, type BusinessGroup, type BusinessMailbox, type BusinessTeamMember, type BusinessTemplate, type ConnectionUsage, type CustomDomain, type Email, type PlatformAdminUserRecord, type DomainCheck, type TeamAccessInvite, type Signature, type Contact, type ActiveSession } from '../api/client';
 import Sidebar from '../components/dashboard/Sidebar';
 import { PLANS, ROLE_ALLOWED_TABS, type BizTab } from '../components/dashboard/constants';
@@ -47,6 +47,7 @@ function toDomainRecord(domain: CustomDomain): DomainRecord {
 
 export default function BusinessDashboard() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [user, setUser] = useState(auth.getSession());
   const navigation = useNavigation();
   const { updateNavigation } = useSessionActions();
@@ -83,8 +84,23 @@ export default function BusinessDashboard() {
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
   const [selectedEmails, setSelectedEmails] = useState<Set<string>>(new Set());
   const [mailStatusFilter, setMailStatusFilter] = useState('all');
-  const [notificationEnabled, setNotificationEnabled] = useState(true);
-  const [soundEnabled, setSoundEnabled] = useState(true);
+  const [notificationEnabled, setNotificationEnabled] = useState(() => {
+    const saved = localStorage.getItem('velismail_notification_enabled');
+    return saved !== null ? saved === 'true' : true;
+  });
+  const [soundEnabled, setSoundEnabled] = useState(() => {
+    const saved = localStorage.getItem('velismail_sound_enabled');
+    return saved !== null ? saved === 'true' : true;
+  });
+
+  const handleToggleNotification = (val: boolean) => {
+    setNotificationEnabled(val);
+    localStorage.setItem('velismail_notification_enabled', String(val));
+  };
+  const handleToggleSound = (val: boolean) => {
+    setSoundEnabled(val);
+    localStorage.setItem('velismail_sound_enabled', String(val));
+  };
   const [showQueueFilters, setShowQueueFilters] = useState(false);
   const [queueStatusFilter, setQueueStatusFilter] = useState('all');
   const [templateSearch, setTemplateSearch] = useState('');
@@ -172,8 +188,14 @@ export default function BusinessDashboard() {
       if ((e.ctrlKey || e.metaKey) && e.key === 'n') { e.preventDefault(); openComposeWith(); }
     };
     window.addEventListener('keydown', handler);
+
+    if (location.state && (location.state as any).composeTo) {
+      openComposeWith((location.state as any).composeTo);
+      window.history.replaceState({}, document.title);
+    }
+
     return () => window.removeEventListener('keydown', handler);
-  }, []);
+  }, [location.state]);
 
   const { data: emails = [], isLoading: emailsLoading, refetch } = useEmails(activeDomainName, activeFolder);
 
@@ -364,8 +386,8 @@ export default function BusinessDashboard() {
     teamMembers, setTeamMembers, mailQueue, setMailQueue, auditLog, setAuditLog,
     templates, setTemplates, connectionUsage, setConnectionUsage, adminUsers, setAdminUsers,
     sortOrder, setSortOrder, viewMode, setViewMode, selectedEmails, setSelectedEmails,
-    mailStatusFilter, setMailStatusFilter, notificationEnabled, setNotificationEnabled,
-    soundEnabled, setSoundEnabled, showQueueFilters, setShowQueueFilters,
+    mailStatusFilter, setMailStatusFilter, notificationEnabled, setNotificationEnabled: handleToggleNotification,
+    soundEnabled, setSoundEnabled: handleToggleSound, showQueueFilters, setShowQueueFilters,
     queueStatusFilter, setQueueStatusFilter, templateSearch, setTemplateSearch,
     showAddDomain, setShowAddDomain, newDomainInput, setNewDomainInput,
     teamFilter, setTeamFilter, auditFilter, setAuditFilter, adminSearch, setAdminSearch,

@@ -114,7 +114,9 @@ export function nextMeaningfulLineIndex(lines: string[], fromIndex: number): num
 export type ConversationSegment = { kind: 'message' | 'quote'; lines: string[] };
 
 export function parseEmailConversation(body: string): ConversationSegment[] {
-  const lines = normalizeMailBody(body).split('\n');
+  const isHtml = /<[a-z][\s\S]*>/i.test(body);
+  const cleanBody = isHtml ? stripHtmlTags(body) : body;
+  const lines = normalizeMailBody(cleanBody).split('\n');
   const segments: ConversationSegment[] = [];
   let currentMessage: string[] = [];
   let currentQuote: string[] = [];

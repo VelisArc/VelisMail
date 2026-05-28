@@ -1,35 +1,77 @@
-import { useState } from 'react';
-import { Settings, Menu, X, Plus, Edit3, Star, Trash2, Copy, Shield, Search, Power } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import {
+  Settings, Menu, X, Plus, Edit3, Star, Trash2, Copy, Shield, Search, Power,
+  Bell, Users, RotateCcw, Tag, Sliders, Link
+} from 'lucide-react';
 import { signatures, contacts, auth, autoReply, labels, rules } from '../../../api/client';
 import type { DashboardState } from '../types';
-import type { Signature, Contact } from '../../../api/client';
+import type { Signature, Contact, EmailRule, EmailRuleCondition, EmailRuleAction, Label } from '../../../api/client';
 
 interface SettingsPanelProps {
   state: DashboardState;
 }
 
+function ToggleSwitch({ checked, onChange, label, sublabel }: { checked: boolean; onChange: (v: boolean) => void; label: string; sublabel?: string }) {
+  return (
+    <div className="flex items-center justify-between w-full max-w-lg py-3 px-4 rounded-xl bg-hover-light border border-primary-10/5 backdrop-blur-sm transition-all hover:border-primary-10/20">
+      <div className="flex flex-col gap-1">
+        <span className="text-sm font-semibold text-primary">{label}</span>
+        {sublabel && <span className="text-xs text-muted">{sublabel}</span>}
+      </div>
+      <button
+        type="button"
+        className={`toggle-switch ${checked ? 'active' : ''}`}
+        onClick={() => onChange(!checked)}
+        aria-label={label}
+        aria-pressed={checked}
+      >
+        <div className="toggle-knob" />
+      </button>
+    </div>
+  );
+}
+
 function SignatureEditor({ state, sig }: { state: DashboardState; sig?: Signature }) {
+  const [name, setName] = useState('');
+  const [content, setContent] = useState('');
+
+  useEffect(() => {
+    if (sig) {
+      setName(sig.name);
+      setContent(sig.content);
+    } else {
+      setName('');
+      setContent('');
+    }
+  }, [sig, state.signatureEditorOpen]);
+
   const isEdit = !!sig;
   if (!state.signatureEditorOpen) return null;
+
   return (
     <div className="modal-overlay" onClick={() => { state.setSignatureEditorOpen(false); state.setEditingSignatureId(null); }}>
-      <div className="biz-form-modal glass" onClick={e => e.stopPropagation()}>
-        <div className="compose-header"><h3>{isEdit ? 'Edit Signature' : 'New Signature'}</h3><button className="btn btn-ghost btn-icon" onClick={() => { state.setSignatureEditorOpen(false); state.setEditingSignatureId(null); }}><X size={16} /></button></div>
+      <div className="biz-form-modal glass animate-scale" onClick={e => e.stopPropagation()}>
+        <div className="compose-header">
+          <h3>{isEdit ? 'Edit Signature' : 'New Signature'}</h3>
+          <button className="btn btn-ghost btn-icon" onClick={() => { state.setSignatureEditorOpen(false); state.setEditingSignatureId(null); }}><X size={16} /></button>
+        </div>
         <div className="invite-form">
-          <input className="input" placeholder="Signature name" value={state.signatureEditorName} onChange={e => state.setSignatureEditorName(e.target.value)} />
-          <textarea className="input" rows={5} placeholder="Signature HTML or plain text..." value={state.signatureEditorContent} onChange={e => state.setSignatureEditorContent(e.target.value)} />
-          <button className="btn btn-primary" onClick={() => {
+          <label className="text-xs font-semibold text-muted mb-2 block">Signature Name</label>
+          <input className="input" placeholder="e.g. Professional, Personal" value={name} onChange={e => setName(e.target.value)} />
+          
+          <label className="text-xs font-semibold text-muted mt-4 mb-2 block">Content (HTML or Text)</label>
+          <textarea className="input" rows={6} placeholder="Kind regards,&#10;John Doe" value={content} onChange={e => setContent(e.target.value)} />
+          
+          <button className="btn btn-primary mt-6" onClick={() => {
             try {
               if (isEdit && state.editingSignatureId) {
-                signatures.update(state.editingSignatureId, { name: state.signatureEditorName, content: state.signatureEditorContent });
+                signatures.update(state.editingSignatureId, { name, content });
               } else {
-                signatures.add(state.signatureEditorName, state.signatureEditorContent);
+                signatures.add(name, content);
               }
               state.refreshSignatures();
               state.setSignatureEditorOpen(false);
               state.setEditingSignatureId(null);
-              state.setSignatureEditorName('');
-              state.setSignatureEditorContent('');
               state.showToast(isEdit ? 'Signature updated' : 'Signature created');
             } catch (e) { console.error('save signature failed', e); state.showToast('Failed to save signature', 'error'); }
           }}>{isEdit ? 'Update' : 'Create'} Signature</button>
@@ -40,31 +82,50 @@ function SignatureEditor({ state, sig }: { state: DashboardState; sig?: Signatur
 }
 
 function ContactEditor({ state, contact }: { state: DashboardState; contact?: Contact }) {
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
+  const [company, setCompany] = useState('');
+
+  useEffect(() => {
+    if (contact) {
+      setName(contact.name);
+      setEmail(contact.email);
+      setPhone(contact.phone || '');
+      setCompany(contact.company || '');
+    } else {
+      setName('');
+      setEmail('');
+      setPhone('');
+      setCompany('');
+    }
+  }, [contact, state.contactEditorOpen]);
+
   const isEdit = !!contact;
   if (!state.contactEditorOpen) return null;
+
   return (
     <div className="modal-overlay" onClick={() => { state.setContactEditorOpen(false); state.setEditingContactId(null); }}>
-      <div className="biz-form-modal glass" onClick={e => e.stopPropagation()}>
-        <div className="compose-header"><h3>{isEdit ? 'Edit Contact' : 'New Contact'}</h3><button className="btn btn-ghost btn-icon" onClick={() => { state.setContactEditorOpen(false); state.setEditingContactId(null); }}><X size={16} /></button></div>
+      <div className="biz-form-modal glass animate-scale" onClick={e => e.stopPropagation()}>
+        <div className="compose-header">
+          <h3>{isEdit ? 'Edit Contact' : 'New Contact'}</h3>
+          <button className="btn btn-ghost btn-icon" onClick={() => { state.setContactEditorOpen(false); state.setEditingContactId(null); }}><X size={16} /></button>
+        </div>
         <div className="invite-form">
-          <input className="input" placeholder="Full name" value={state.contactEditorName} onChange={e => state.setContactEditorName(e.target.value)} />
-          <input className="input" placeholder="Email address" type="email" value={state.contactEditorEmail} onChange={e => state.setContactEditorEmail(e.target.value)} />
-          <input className="input" placeholder="Phone" value={state.contactEditorPhone} onChange={e => state.setContactEditorPhone(e.target.value)} />
-          <input className="input" placeholder="Company" value={state.contactEditorCompany} onChange={e => state.setContactEditorCompany(e.target.value)} />
-          <button className="btn btn-primary" onClick={() => {
+          <input className="input" placeholder="Full name" value={name} onChange={e => setName(e.target.value)} />
+          <input className="input" placeholder="Email address" type="email" value={email} onChange={e => setEmail(e.target.value)} />
+          <input className="input" placeholder="Phone" value={phone} onChange={e => setPhone(e.target.value)} />
+          <input className="input" placeholder="Company" value={company} onChange={e => setCompany(e.target.value)} />
+          <button className="btn btn-primary mt-4" onClick={() => {
             try {
               if (isEdit && state.editingContactId) {
-                contacts.update(state.editingContactId, { name: state.contactEditorName, email: state.contactEditorEmail, phone: state.contactEditorPhone, company: state.contactEditorCompany });
+                contacts.update(state.editingContactId, { name, email, phone, company });
               } else {
-                contacts.add({ name: state.contactEditorName, email: state.contactEditorEmail, phone: state.contactEditorPhone, company: state.contactEditorCompany, group: 'default' });
+                contacts.add({ name, email, phone, company, group: 'default' });
               }
               state.refreshContacts();
               state.setContactEditorOpen(false);
               state.setEditingContactId(null);
-              state.setContactEditorName('');
-              state.setContactEditorEmail('');
-              state.setContactEditorPhone('');
-              state.setContactEditorCompany('');
               state.showToast(isEdit ? 'Contact updated' : 'Contact created');
             } catch (e) { console.error('save contact failed', e); state.showToast('Failed to save contact', 'error'); }
           }}>{isEdit ? 'Update' : 'Create'} Contact</button>
@@ -74,251 +135,536 @@ function ContactEditor({ state, contact }: { state: DashboardState; contact?: Co
   );
 }
 
+function RuleEditorModal({
+  open,
+  onClose,
+  rule,
+  onSave,
+  customLabels
+}: {
+  open: boolean;
+  onClose: () => void;
+  rule: EmailRule | null;
+  onSave: (name: string, conditions: EmailRuleCondition[], actions: EmailRuleAction[]) => void;
+  customLabels: Label[];
+}) {
+  const [name, setName] = useState('');
+  const [condField, setCondField] = useState<EmailRuleCondition['field']>('subject');
+  const [condOp, setCondOp] = useState<EmailRuleCondition['operator']>('contains');
+  const [condVal, setCondVal] = useState('');
+  const [actType, setActType] = useState<EmailRuleAction['type']>('label');
+  const [actVal, setActVal] = useState('');
+
+  useEffect(() => {
+    if (rule) {
+      setName(rule.name);
+      const cond = rule.conditions[0] || { field: 'subject', operator: 'contains', value: '' };
+      setCondField(cond.field);
+      setCondOp(cond.operator);
+      setCondVal(cond.value);
+      const act = rule.actions[0] || { type: 'label', value: '' };
+      setActType(act.type);
+      setActVal(act.value || '');
+    } else {
+      setName('');
+      setCondField('subject');
+      setCondOp('contains');
+      setCondVal('');
+      setActType('label');
+      setActVal('');
+    }
+  }, [rule, open]);
+
+  // Adjust action value when type changes
+  useEffect(() => {
+    if (!rule) {
+      if (actType === 'move') setActVal('inbox');
+      else if (actType === 'label') setActVal(customLabels[0]?.name || 'Work');
+      else setActVal('');
+    }
+  }, [actType, customLabels, rule]);
+
+  if (!open) return null;
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="biz-form-modal glass animate-scale" onClick={e => e.stopPropagation()}>
+        <div className="compose-header">
+          <h3>{rule ? 'Edit Filtering Rule' : 'New Filtering Rule'}</h3>
+          <button className="btn btn-ghost btn-icon" onClick={onClose}><X size={16} /></button>
+        </div>
+        <div className="invite-form">
+          <label className="text-xs font-semibold text-muted mb-2 block">Rule Name</label>
+          <input className="input mb-4" placeholder="e.g. Move Spams, Label Work" value={name} onChange={e => setName(e.target.value)} />
+          
+          <div className="divider mb-4" />
+          
+          <label className="text-xs font-semibold text-primary mb-2 block">Condition</label>
+          <div className="flex flex-col gap-2 mb-4">
+            <select className="input" value={condField} onChange={e => setCondField(e.target.value as EmailRuleCondition['field'])}>
+              <option value="subject">Subject</option>
+              <option value="from">From Address</option>
+              <option value="body">Body Content</option>
+            </select>
+            <select className="input" value={condOp} onChange={e => setCondOp(e.target.value as EmailRuleCondition['operator'])}>
+              <option value="contains">Contains</option>
+              <option value="equals">Equals</option>
+              <option value="startsWith">Starts With</option>
+            </select>
+            <input className="input" placeholder="Value to match..." value={condVal} onChange={e => setCondVal(e.target.value)} />
+          </div>
+
+          <div className="divider mb-4" />
+
+          <label className="text-xs font-semibold text-primary mb-2 block">Action</label>
+          <div className="flex flex-col gap-2">
+            <select className="input" value={actType} onChange={e => setActType(e.target.value as EmailRuleAction['type'])}>
+              <option value="label">Add Label</option>
+              <option value="move">Move to Folder</option>
+              <option value="star">Star Email</option>
+              <option value="markRead">Mark as Read</option>
+            </select>
+            
+            {actType === 'label' && (
+              <select className="input" value={actVal} onChange={e => setActVal(e.target.value)}>
+                {customLabels.length > 0 ? (
+                  customLabels.map(l => <option key={l.id} value={l.name}>{l.name}</option>)
+                ) : (
+                  <>
+                    <option value="Work">Work</option>
+                    <option value="Personal">Personal</option>
+                    <option value="Urgent">Urgent</option>
+                  </>
+                )}
+              </select>
+            )}
+
+            {actType === 'move' && (
+              <select className="input" value={actVal} onChange={e => setActVal(e.target.value)}>
+                <option value="inbox">Inbox</option>
+                <option value="archive">Archive</option>
+                <option value="trash">Trash</option>
+                <option value="spam">Spam</option>
+                <option value="priority">Priority</option>
+              </select>
+            )}
+          </div>
+
+          <button className="btn btn-primary mt-6 w-full" disabled={!name.trim() || !condVal.trim()} onClick={() => {
+            onSave(
+              name.trim(),
+              [{ field: condField, operator: condOp, value: condVal.trim() }],
+              [{ type: actType, value: (actType === 'star' || actType === 'markRead') ? '' : actVal }]
+            );
+          }}>
+            Save Rule
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function SettingsPanel({ state }: SettingsPanelProps) {
-  const [activeSettingsTab, setActiveSettingsTab] = useState<'notifications' | 'signatures' | 'contacts' | 'security' | 'connections' | 'autoreply' | 'labels' | 'rules'>('notifications');
+  const [activeSettingsTab, setActiveSettingsTab] = useState<'notifications' | 'signatures' | 'contacts' | 'security' | 'autoreply' | 'labels' | 'rules' | 'connections'>('notifications');
+  
+  // Custom states
   const [newLabelName, setNewLabelName] = useState('');
   const [showLabelInput, setShowLabelInput] = useState(false);
-  const [newRuleName, setNewRuleName] = useState('');
-  const [showRuleInput, setShowRuleInput] = useState(false);
+  const [autoReplyState, setAutoReplyState] = useState(() => autoReply.get());
+  
+  // Rule editor modal states
+  const [ruleModalOpen, setRuleModalOpen] = useState(false);
+  const [selectedRule, setSelectedRule] = useState<EmailRule | null>(null);
 
   const filteredContacts = state.contacts.filter(c =>
     !state.contactsSearch || c.name.toLowerCase().includes(state.contactsSearch.toLowerCase()) || c.email.toLowerCase().includes(state.contactsSearch.toLowerCase())
   );
 
+  const handleToggleAutoReply = (enabled: boolean) => {
+    if (enabled) {
+      autoReply.enable(autoReplyState.subject || 'Out of office', autoReplyState.body || '');
+    } else {
+      autoReply.disable();
+    }
+    setAutoReplyState(autoReply.get());
+    state.showToast(enabled ? 'Auto-reply responder enabled' : 'Auto-reply responder disabled');
+  };
+
+  const handleSaveAutoReplyText = () => {
+    autoReply.set(autoReplyState);
+    state.showToast('Vacation responder messages saved');
+  };
+
+  const handleRuleSave = (name: string, conditions: EmailRuleCondition[], actions: EmailRuleAction[]) => {
+    if (selectedRule) {
+      rules.update(selectedRule.id, { name, conditions, actions });
+      state.showToast('Filtering rule updated');
+    } else {
+      rules.add(name, conditions, actions);
+      state.showToast('New filtering rule created');
+    }
+    setRuleModalOpen(false);
+    setSelectedRule(null);
+  };
+
+  const TABS = [
+    { id: 'notifications', label: 'Notifications', icon: Bell },
+    { id: 'signatures', label: 'Signatures', icon: Edit3 },
+    { id: 'contacts', label: 'Contacts', icon: Users },
+    { id: 'security', label: 'Active Sessions', icon: Shield },
+    { id: 'autoreply', label: 'Auto-Reply', icon: RotateCcw },
+    { id: 'labels', label: 'Labels', icon: Tag },
+    { id: 'rules', label: 'Filtering Rules', icon: Sliders },
+    { id: 'connections', label: 'Connections', icon: Link },
+  ] as const;
+
   return (
     <div className="dash-panel">
-      <div className="panel-header"><button className="toolbar-icon sidebar-toggle" onClick={() => state.setSidebarOpen(true)}><Menu size={16} /></button><h3><Settings size={16} /> Settings</h3></div>
-
-      <div className="settings-tabs">
-        {(['notifications', 'signatures', 'contacts', 'security', 'autoreply', 'labels', 'rules', 'connections'] as const).map(tab => (
-          <button key={tab} className={`btn btn-sm ${activeSettingsTab === tab ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setActiveSettingsTab(tab)}>
-            {tab.charAt(0).toUpperCase() + tab.slice(1)}
-          </button>
-        ))}
+      <div className="panel-header">
+        <button className="toolbar-icon sidebar-toggle" onClick={() => state.setSidebarOpen(true)}>
+          <Menu size={16} />
+        </button>
+        <h3><Settings size={16} /> Settings</h3>
       </div>
 
-      {activeSettingsTab === 'notifications' && (
-        <div className="glass-card settings-card-mb">
-          <h4>Notifications</h4>
-          <div className="flex items-center gap-4 mt-8">
-            <label className="flex items-center gap-2"><input type="checkbox" checked={state.notificationEnabled} onChange={e => state.setNotificationEnabled(e.target.checked)} /> <span className="text-sm">Enable notifications</span></label>
-            <label className="flex items-center gap-2"><input type="checkbox" checked={state.soundEnabled} onChange={e => state.setSoundEnabled(e.target.checked)} /> <span className="text-sm">Play sounds</span></label>
-          </div>
-          <div className="mt-12">
-            <h5 className="text-sm mb-4">Default Sending Domain</h5>
-            <select className="input input-auto" value={state.activeDomainName} onChange={e => state.setActiveDomain(state.domainsList.find(d => d.domain === e.target.value)?.id || '')}>
-              {state.domainsList.map(d => <option key={d.id} value={d.domain}>{d.domain}</option>)}
-            </select>
-          </div>
-        </div>
-      )}
+      <div className="settings-body">
+        <nav className="settings-tabs">
+          {TABS.map(({ id, label, icon: Icon }) => (
+            <button
+              key={id}
+              type="button"
+              className={`tab-btn ${activeSettingsTab === id ? 'active' : ''}`}
+              onClick={() => setActiveSettingsTab(id)}
+            >
+              <Icon size={15} />
+              <span>{label}</span>
+            </button>
+          ))}
+        </nav>
 
-      {activeSettingsTab === 'signatures' && (
-        <div className="glass-card settings-card-mb">
-          <div className="flex items-center justify-between mb-8">
-            <h4>Email Signatures</h4>
-            <button className="btn btn-primary btn-sm" onClick={() => { state.setEditingSignatureId(null); state.setSignatureEditorName(''); state.setSignatureEditorContent(''); state.setSignatureEditorOpen(true); }}><Plus size={12} /> Add</button>
-          </div>
-          {state.signatures.length === 0 ? (
-            <div className="empty-state-sm"><p className="text-sm text-muted">No signatures yet.</p></div>
-          ) : (
-            state.signatures.map(sig => (
-              <div key={sig.id} className="team-member-row">
-                <div className="team-member-info"><strong>{sig.name}</strong><span className="text-xs text-muted text-block">{sig.content.slice(0, 60)}...</span></div>
-                {sig.isDefault && <span className="badge badge-success">Default</span>}
-                <button className="btn btn-ghost btn-sm" onClick={() => { signatures.setDefault(sig.id); state.refreshSignatures(); }}><Star size={12} /></button>
-                <button className="btn btn-ghost btn-sm" onClick={() => { state.setEditingSignatureId(sig.id); state.setSignatureEditorName(sig.name); state.setSignatureEditorContent(sig.content); state.setSignatureEditorOpen(true); }}><Edit3 size={12} /></button>
-                <button className="btn btn-ghost btn-sm btn-danger" onClick={() => { try { signatures.remove(sig.id); state.refreshSignatures(); state.showToast('Deleted'); } catch (e) { console.error('delete signature failed', e); state.showToast('Delete failed', 'error'); } }}><Trash2 size={12} /></button>
+        <div className="settings-content">
+          {activeSettingsTab === 'notifications' && (
+            <div className="glass-card animate-fade">
+              <div className="settings-section-header mb-6">
+                <h4>System Notifications</h4>
+                <p className="text-xs text-muted">Configure desktop alerts and sound cues for incoming messages.</p>
               </div>
-            ))
-          )}
-        </div>
-      )}
-
-      {activeSettingsTab === 'contacts' && (
-        <div className="glass-card settings-card-mb">
-          <div className="flex items-center justify-between mb-8">
-            <h4>Contacts</h4>
-            <button className="btn btn-primary btn-sm" onClick={() => { state.setEditingContactId(null); state.setContactEditorName(''); state.setContactEditorEmail(''); state.setContactEditorPhone(''); state.setContactEditorCompany(''); state.setContactEditorOpen(true); }}><Plus size={12} /> Add</button>
-          </div>
-          <div className="dash-search mail-search-bar" style={{ padding: 0, marginBottom: 8 }}>
-            <div className="mail-search-input">
-              <Search size={14} className="search-icon" />
-              <input className="input search-input" placeholder="Search contacts..." value={state.contactsSearch} onChange={e => state.setContactsSearch(e.target.value)} />
-            </div>
-          </div>
-          {filteredContacts.length === 0 ? (
-            <div className="empty-state-sm"><p className="text-sm text-muted">No contacts found.</p></div>
-          ) : (
-            filteredContacts.map(c => (
-              <div key={c.id} className="team-member-row">
-                <div className="avatar avatar-sm">{c.name.charAt(0).toUpperCase()}</div>
-                <div className="team-member-info"><strong>{c.name}</strong><span className="text-muted">{c.email}{c.company ? ` · ${c.company}` : ''}</span></div>
-                <button className="btn btn-ghost btn-sm" onClick={() => { contacts.toggleFavorite(c.id); state.refreshContacts(); }}><Star size={12} className={c.favorite ? 'text-primary' : ''} /></button>
-                <button className="btn btn-ghost btn-sm" onClick={() => { state.setEditingContactId(c.id); state.setContactEditorName(c.name); state.setContactEditorEmail(c.email); state.setContactEditorPhone(c.phone || ''); state.setContactEditorCompany(c.company || ''); state.setContactEditorOpen(true); }}><Edit3 size={12} /></button>
-                <button className="btn btn-ghost btn-sm" onClick={() => { state.copyToClipboard(c.email); state.showToast('Email copied'); }}><Copy size={12} /></button>
-                <button className="btn btn-ghost btn-sm btn-danger" onClick={() => { try { contacts.remove(c.id); state.refreshContacts(); state.showToast('Deleted'); } catch (e) { console.error('delete contact failed', e); state.showToast('Delete failed', 'error'); } }}><X size={12} /></button>
+              <div className="flex flex-col gap-4 mt-6">
+                <ToggleSwitch
+                  checked={state.notificationEnabled}
+                  onChange={state.setNotificationEnabled}
+                  label="Desktop Notifications"
+                  sublabel="Display banner alerts on your screen when new emails arrive."
+                />
+                <ToggleSwitch
+                  checked={state.soundEnabled}
+                  onChange={state.setSoundEnabled}
+                  label="Play Alerts Sound"
+                  sublabel="Play a pleasant notification chime for new emails."
+                />
               </div>
-            ))
-          )}
-        </div>
-      )}
-
-      {activeSettingsTab === 'security' && (
-        <div className="glass-card settings-card-mb">
-          <h4>Active Sessions</h4>
-          <p className="text-sm text-muted mb-8">Manage devices and sessions connected to your account.</p>
-          {state.activeSessions.length === 0 ? (
-            <div className="empty-state-sm"><p className="text-sm text-muted">No active sessions. Click refresh to load.</p>
-              <button className="btn btn-ghost btn-sm mt-4" onClick={state.refreshSessions}>Load Sessions</button>
+              <div className="divider my-6" />
+              <div className="mt-6 max-w-md">
+                <h5 className="text-sm font-semibold text-primary mb-2">Default Sending Domain</h5>
+                <p className="text-xs text-muted mb-4">Choose which custom domain is selected by default in your composer.</p>
+                <select className="input" value={state.activeDomainName} onChange={e => state.setActiveDomain(state.domainsList.find(d => d.domain === e.target.value)?.id || '')}>
+                  {state.domainsList.map(d => <option key={d.id} value={d.domain}>{d.domain}</option>)}
+                </select>
+              </div>
             </div>
-          ) : (
-            state.activeSessions.map(s => (
-              <div key={s.id} className="team-member-row">
-                <div className="avatar avatar-sm"><Shield size={12} /></div>
-                <div className="team-member-info">
-                  <strong>{s.userAgent ? s.userAgent.slice(0, 40) : 'Unknown device'}</strong>
-                  <span className="text-muted">{s.ipAddress}{s.current ? ' · Current' : ''}</span>
+          )}
+
+          {activeSettingsTab === 'signatures' && (
+            <div className="glass-card animate-fade">
+              <div className="settings-section-header flex items-center justify-between mb-6">
+                <div>
+                  <h4>Email Signatures</h4>
+                  <p className="text-xs text-muted">Create default endings to attach automatically to outgoing emails.</p>
                 </div>
-                <span className="text-xs text-muted">{new Date(s.lastActive).toLocaleDateString()}</span>
-                {!s.current && (
-                  <button className="btn btn-ghost btn-sm btn-danger" onClick={async () => { try { await auth.revokeSession(s.id); state.refreshSessions(); state.showToast('Session revoked'); } catch (e) { console.error('revoke session failed', e); state.showToast('Failed', 'error'); } }}><X size={12} /> Revoke</button>
-                )}
+                <button className="btn btn-primary btn-sm" onClick={() => { state.setEditingSignatureId(null); state.setSignatureEditorOpen(true); }}><Plus size={12} /> Add Signature</button>
               </div>
-            ))
-          )}
-        </div>
-      )}
-
-      {activeSettingsTab === 'autoreply' && (
-        <div className="glass-card settings-card-mb">
-          <h4>Auto-Reply / Vacation Responder</h4>
-          <div className="mt-8">
-            <label className="flex items-center gap-2 mb-8">
-              <input type="checkbox" checked={autoReply.get().enabled} onChange={e => {
-                const cur = autoReply.get();
-                if (e.target.checked) { autoReply.enable(cur.subject || 'Out of office', cur.body || ''); }
-                else { autoReply.disable(); }
-              }} />
-              <span className="text-sm">Enable auto-reply</span>
-            </label>
-            <input className="input mb-4" placeholder="Subject (e.g., Out of office)" value={autoReply.get().subject} onChange={e => {
-              const cur = autoReply.get(); autoReply.set({ ...cur, subject: e.target.value });
-            }} />
-            <textarea className="input mb-4" rows={4} placeholder="Body message..." value={autoReply.get().body} onChange={e => {
-              const cur = autoReply.get(); autoReply.set({ ...cur, body: e.target.value });
-            }} />
-            <div className="flex items-center gap-4">
-              <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={autoReply.get().onlyContacts || false} onChange={e => {
-                const cur = autoReply.get(); autoReply.set({ ...cur, onlyContacts: e.target.checked });
-              }} /> Only send to contacts</label>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {activeSettingsTab === 'labels' && (
-        <div className="glass-card settings-card-mb">
-          <div className="flex items-center justify-between mb-8">
-            <h4>Labels</h4>
-            <div className="flex items-center gap-2">
-              {showLabelInput ? (
-                <>
-                  <input className="input input-max-140" placeholder="Label name" value={newLabelName} onChange={e => setNewLabelName(e.target.value)} autoFocus />
-                  <button className="btn btn-primary btn-sm" onClick={() => {
-                    const name = newLabelName.trim();
-                    if (name) { labels.add(name, '#0d9488'); state.showToast('Label created'); setNewLabelName(''); setShowLabelInput(false); }
-                  }}>Save</button>
-                  <button className="btn btn-ghost btn-sm" onClick={() => { setNewLabelName(''); setShowLabelInput(false); }}><X size={12} /></button>
-                </>
+              
+              {state.signatures.length === 0 ? (
+                <div className="empty-state-sm py-8"><p className="text-sm text-muted">No signatures created yet.</p></div>
               ) : (
-                <button className="btn btn-primary btn-sm" onClick={() => setShowLabelInput(true)}><Plus size={12} /> Add</button>
+                <div className="flex flex-col gap-3">
+                  {state.signatures.map(sig => (
+                    <div key={sig.id} className="team-member-row hover:border-accent-20 transition-all">
+                      <div className="team-member-info">
+                        <strong>{sig.name}</strong>
+                        <span className="text-xs text-muted text-block line-clamp-1 mt-1 font-mono bg-primary-5/5 p-1 rounded border border-primary-5/10">{sig.content.slice(0, 100)}{sig.content.length > 100 ? '...' : ''}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {sig.isDefault ? (
+                          <span className="badge badge-success">Default</span>
+                        ) : (
+                          <button className="btn btn-ghost btn-sm" title="Set as default" onClick={() => { signatures.setDefault(sig.id); state.refreshSignatures(); }}><Star size={12} /></button>
+                        )}
+                        <button className="btn btn-ghost btn-sm" title="Edit" onClick={() => { state.setEditingSignatureId(sig.id); state.setSignatureEditorOpen(true); }}><Edit3 size={12} /></button>
+                        <button className="btn btn-ghost btn-sm btn-danger" title="Delete" onClick={() => { try { signatures.remove(sig.id); state.refreshSignatures(); state.showToast('Deleted signature'); } catch (e) { console.error('delete signature failed', e); state.showToast('Delete failed', 'error'); } }}><Trash2 size={12} /></button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               )}
             </div>
-          </div>
-          {labels.getAll().length === 0 ? (
-            <div className="empty-state-sm"><p className="text-sm text-muted">No labels yet.</p></div>
-          ) : (
-            labels.getAll().map(lbl => (
-              <div key={lbl.id} className="team-member-row">
-                <div className="avatar avatar-sm" style={{ background: lbl.color + '30', color: lbl.color }}>{lbl.name.charAt(0).toUpperCase()}</div>
-                <div className="team-member-info"><strong>{lbl.name}</strong></div>
-                <input type="color" value={lbl.color} onChange={e => { labels.update(lbl.id, { color: e.target.value }); }} className="color-picker-sm" />
-                <button className="btn btn-ghost btn-sm btn-danger" onClick={() => { labels.remove(lbl.id); state.showToast('Deleted'); }}><Trash2 size={12} /></button>
-              </div>
-            ))
           )}
-        </div>
-      )}
 
-      {activeSettingsTab === 'rules' && (
-        <div className="glass-card settings-card-mb">
-          <div className="flex items-center justify-between mb-8">
-            <h4>Email Filtering Rules</h4>
-            <div className="flex items-center gap-2">
-              {showRuleInput ? (
-                <>
-                  <input className="input input-max-140" placeholder="Rule name" value={newRuleName} onChange={e => setNewRuleName(e.target.value)} autoFocus />
-                  <button className="btn btn-primary btn-sm" onClick={() => {
-                    const name = newRuleName.trim();
-                    if (name) {
-                      rules.add(name, [{ field: 'subject', operator: 'contains', value: '' }], [{ type: 'label', value: '' }]);
-                      state.showToast('Rule created. Edit conditions below.');
-                      setNewRuleName(''); setShowRuleInput(false);
-                    }
-                  }}>Save</button>
-                  <button className="btn btn-ghost btn-sm" onClick={() => { setNewRuleName(''); setShowRuleInput(false); }}><X size={12} /></button>
-                </>
+          {activeSettingsTab === 'contacts' && (
+            <div className="glass-card animate-fade">
+              <div className="settings-section-header flex items-center justify-between mb-6">
+                <div>
+                  <h4>Contacts Directory</h4>
+                  <p className="text-xs text-muted">Manage your addresses book and shortcut suggestions.</p>
+                </div>
+                <button className="btn btn-primary btn-sm" onClick={() => { state.setEditingContactId(null); state.setContactEditorOpen(true); }}><Plus size={12} /> Add Contact</button>
+              </div>
+
+              <div className="dash-search mail-search-bar" style={{ padding: 0, marginBottom: 12 }}>
+                <div className="mail-search-input">
+                  <Search size={14} className="search-icon" />
+                  <input className="input search-input" placeholder="Search contacts..." value={state.contactsSearch} onChange={e => state.setContactsSearch(e.target.value)} />
+                </div>
+              </div>
+
+              {filteredContacts.length === 0 ? (
+                <div className="empty-state-sm py-8"><p className="text-sm text-muted">No contacts found.</p></div>
               ) : (
-                <button className="btn btn-primary btn-sm" onClick={() => setShowRuleInput(true)}><Plus size={12} /> Add Rule</button>
+                <div className="flex flex-col gap-2 max-h-[400px] overflow-y-auto pr-1">
+                  {filteredContacts.map(c => (
+                    <div key={c.id} className="team-member-row py-2">
+                      <div className="avatar avatar-sm" style={{ background: `hsl(${c.name.charCodeAt(0) * 7 % 360}, 60%, 85%)`, color: `hsl(${c.name.charCodeAt(0) * 7 % 360}, 60%, 35%)` }}>{c.name.charAt(0).toUpperCase()}</div>
+                      <div className="team-member-info">
+                        <strong>{c.name}</strong>
+                        <span className="text-xs text-muted">{c.email}{c.company ? ` · ${c.company}` : ''}</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <button className="btn btn-ghost btn-sm" onClick={() => { contacts.toggleFavorite(c.id); state.refreshContacts(); }}><Star size={12} className={c.favorite ? 'text-primary fill-primary' : 'text-muted'} /></button>
+                        <button className="btn btn-ghost btn-sm" onClick={() => { state.setEditingContactId(c.id); state.setContactEditorOpen(true); }}><Edit3 size={12} /></button>
+                        <button className="btn btn-ghost btn-sm" title="Copy Address" onClick={() => { state.copyToClipboard(c.email); state.showToast('Email copied'); }}><Copy size={12} /></button>
+                        <button className="btn btn-ghost btn-sm btn-danger" onClick={() => { try { contacts.remove(c.id); state.refreshContacts(); state.showToast('Deleted contact'); } catch (e) { console.error('delete contact failed', e); state.showToast('Delete failed', 'error'); } }}><Trash2 size={12} /></button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               )}
             </div>
-          </div>
-          {rules.getAll().length === 0 ? (
-            <div className="empty-state-sm"><p className="text-sm text-muted">No rules configured.</p></div>
-          ) : (
-            rules.getAll().map(rule => (
-              <div key={rule.id} className="glass-card mb-8" style={{ padding: 12 }}>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <button className="btn btn-ghost btn-sm" onClick={() => { rules.toggle(rule.id); }}><Power size={12} className={rule.enabled ? 'text-success' : 'text-muted'} /></button>
-                    <strong className="text-sm">{rule.name}</strong>
+          )}
+
+          {activeSettingsTab === 'security' && (
+            <div className="glass-card animate-fade">
+              <div className="settings-section-header mb-6">
+                <h4>Active Sessions</h4>
+                <p className="text-xs text-muted">Review and disconnect devices that are signed into your workspace.</p>
+              </div>
+              {state.activeSessions.length === 0 ? (
+                <div className="empty-state-sm py-8">
+                  <p className="text-sm text-muted">No active sessions loaded.</p>
+                  <button className="btn btn-ghost btn-sm mt-4 border border-primary-10/20" onClick={state.refreshSessions}>Load Active Sessions</button>
+                </div>
+              ) : (
+                <div className="flex flex-col gap-3">
+                  {state.activeSessions.map(s => (
+                    <div key={s.id} className="team-member-row hover:border-accent-20 transition-all">
+                      <div className="avatar avatar-sm bg-primary-10/10 text-primary"><Shield size={12} /></div>
+                      <div className="team-member-info">
+                        <strong>{s.userAgent ? s.userAgent.slice(0, 45) : 'Unknown device'}</strong>
+                        <span className="text-xs text-muted">{s.ipAddress}{s.current ? ' · Active Now' : ''}</span>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <span className="text-xs text-muted font-mono">{new Date(s.lastActive).toLocaleDateString()}</span>
+                        {!s.current && (
+                          <button className="btn btn-ghost btn-sm btn-danger px-2" onClick={async () => { try { await auth.revokeSession(s.id); state.refreshSessions(); state.showToast('Session revoked'); } catch (e) { console.error('revoke session failed', e); state.showToast('Failed', 'error'); } }}><X size={12} /> Revoke</button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {activeSettingsTab === 'autoreply' && (
+            <div className="glass-card animate-fade">
+              <div className="settings-section-header mb-6">
+                <h4>Auto-Reply Responder</h4>
+                <p className="text-xs text-muted">Automatically send vacation responses to incoming messages during out-of-office hours.</p>
+              </div>
+              <div className="flex flex-col gap-6">
+                <ToggleSwitch
+                  checked={autoReplyState.enabled}
+                  onChange={handleToggleAutoReply}
+                  label="Enable Out-of-Office Responder"
+                  sublabel="Turn on automatic email replies when a message is received in your inbox."
+                />
+                
+                <div className="flex flex-col gap-4 mt-2 max-w-xl">
+                  <div>
+                    <label className="text-xs font-semibold text-muted mb-2 block">Response Subject</label>
+                    <input className="input" placeholder="Subject (e.g. Out of office)" value={autoReplyState.subject || ''} onChange={e => {
+                      setAutoReplyState(prev => ({ ...prev, subject: e.target.value }));
+                    }} />
                   </div>
-                  <button className="btn btn-ghost btn-sm btn-danger" onClick={() => { rules.remove(rule.id); }}><Trash2 size={12} /></button>
-                </div>
-                <div className="text-xs text-muted mt-4">
-                  {rule.conditions.map((c, i) => (
-                    <span key={i}>If <strong>{c.field}</strong> {c.operator} "{c.value}"{i < rule.conditions.length - 1 ? ' AND ' : ''}</span>
-                  ))}
-                  <span> → </span>
-                  {rule.actions.map((a, i) => (
-                    <span key={i}>{a.type}{a.value ? `: ${a.value}` : ''}{i < rule.actions.length - 1 ? ', ' : ''}</span>
-                  ))}
-                </div>
-              </div>
-            ))
-          )}
-        </div>
-      )}
+                  <div>
+                    <label className="text-xs font-semibold text-muted mb-2 block">Response Message Body</label>
+                    <textarea className="input font-sans" rows={5} placeholder="Thank you for contacting me. I am currently out of office..." value={autoReplyState.body || ''} onChange={e => {
+                      setAutoReplyState(prev => ({ ...prev, body: e.target.value }));
+                    }} />
+                  </div>
+                  
+                  <div className="flex items-center gap-3 py-2">
+                    <button
+                      type="button"
+                      className={`toggle-switch toggle-switch-sm ${autoReplyState.onlyContacts ? 'active' : ''}`}
+                      onClick={() => setAutoReplyState(prev => ({ ...prev, onlyContacts: !prev.onlyContacts }))}
+                    >
+                      <div className="toggle-knob" />
+                    </button>
+                    <span className="text-xs font-medium text-muted">Only send auto-replies to saved contacts</span>
+                  </div>
 
-      {activeSettingsTab === 'connections' && (
-        <div className="glass-card">
-          <h4>Connected Infrastructure</h4>
-          {state.connectionUsage.length === 0 ? (
-            <div className="empty-state-sm"><p className="text-sm text-muted">No connections configured.</p></div>
-          ) : (
-            state.connectionUsage.map(c => (
-              <div key={c.id} className="flex items-center justify-between connection-row">
-                <div><strong className="text-sm">{c.label}</strong><span className="text-xs text-muted"> {c.maskedValue} ({c.provider || 'N/A'})</span></div>
-                <button className="btn btn-ghost btn-sm btn-danger" onClick={() => state.setConfirmRevokeId(c.id)}><X size={12} /> Revoke</button>
+                  <button className="btn btn-primary mt-2" onClick={handleSaveAutoReplyText}>Save Message Texts</button>
+                </div>
               </div>
-            ))
+            </div>
+          )}
+
+          {activeSettingsTab === 'labels' && (
+            <div className="glass-card animate-fade">
+              <div className="settings-section-header flex items-center justify-between mb-6">
+                <div>
+                  <h4>Inbox Labels</h4>
+                  <p className="text-xs text-muted">Create colored badges to categorize and organize your mailbox threads.</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  {showLabelInput ? (
+                    <>
+                      <input className="input input-max-140" placeholder="Label name" value={newLabelName} onChange={e => setNewLabelName(e.target.value)} autoFocus />
+                      <button className="btn btn-primary btn-sm" onClick={() => {
+                        const name = newLabelName.trim();
+                        if (name) { labels.add(name, '#0d9488'); state.showToast('Label created'); setNewLabelName(''); setShowLabelInput(false); }
+                      }}>Save</button>
+                      <button className="btn btn-ghost btn-sm" onClick={() => { setNewLabelName(''); setShowLabelInput(false); }}><X size={12} /></button>
+                    </>
+                  ) : (
+                    <button className="btn btn-primary btn-sm" onClick={() => setShowLabelInput(true)}><Plus size={12} /> Add Label</button>
+                  )}
+                </div>
+              </div>
+
+              {labels.getAll().length === 0 ? (
+                <div className="empty-state-sm py-8"><p className="text-sm text-muted">No custom labels created yet.</p></div>
+              ) : (
+                <div className="flex flex-col gap-2">
+                  {labels.getAll().map(lbl => (
+                    <div key={lbl.id} className="team-member-row">
+                      <div className="avatar avatar-sm font-semibold" style={{ background: lbl.color + '20', color: lbl.color }}>{lbl.name.charAt(0).toUpperCase()}</div>
+                      <div className="team-member-info"><strong>{lbl.name}</strong></div>
+                      <div className="flex items-center gap-3">
+                        <input type="color" value={lbl.color} onChange={e => { labels.update(lbl.id, { color: e.target.value }); state.refreshDomains(); }} className="color-picker-sm cursor-pointer" />
+                        <button className="btn btn-ghost btn-sm btn-danger" onClick={() => { labels.remove(lbl.id); state.showToast('Deleted label'); }}><Trash2 size={12} /></button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {activeSettingsTab === 'rules' && (
+            <div className="glass-card animate-fade">
+              <div className="settings-section-header flex items-center justify-between mb-6">
+                <div>
+                  <h4>Email Filtering Rules</h4>
+                  <p className="text-xs text-muted">Automate your inbox by triggering events like labeling, starring, or moving folders based on criteria.</p>
+                </div>
+                <button className="btn btn-primary btn-sm" onClick={() => { setSelectedRule(null); setRuleModalOpen(true); }}><Plus size={12} /> Add Rule</button>
+              </div>
+
+              {rules.getAll().length === 0 ? (
+                <div className="empty-state-sm py-8"><p className="text-sm text-muted">No email routing rules configured.</p></div>
+              ) : (
+                <div className="flex flex-col gap-4">
+                  {rules.getAll().map(rule => (
+                    <div key={rule.id} className="glass-card p-4 border border-primary-5/10 relative hover:border-primary-10/20 transition-all">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <button className="btn btn-ghost btn-sm p-1" title={rule.enabled ? 'Disable' : 'Enable'} onClick={() => { rules.toggle(rule.id); state.refreshDomains(); }}>
+                            <Power size={14} className={rule.enabled ? 'text-success' : 'text-muted'} />
+                          </button>
+                          <strong className="text-sm font-semibold text-primary">{rule.name}</strong>
+                        </div>
+                        <div className="flex gap-1">
+                          <button className="btn btn-ghost btn-sm" title="Edit Rule" onClick={() => { setSelectedRule(rule); setRuleModalOpen(true); }}><Edit3 size={12} /></button>
+                          <button className="btn btn-ghost btn-sm btn-danger" title="Delete Rule" onClick={() => { rules.remove(rule.id); state.showToast('Deleted filtering rule'); }}><Trash2 size={12} /></button>
+                        </div>
+                      </div>
+                      
+                      <div className="mt-3 p-3 rounded-lg bg-primary-5/5 border border-primary-5/10 flex flex-col gap-2">
+                        <div className="text-xs text-muted flex items-center gap-2">
+                          <span className="font-semibold text-primary">IF</span>
+                          {rule.conditions.map((c, i) => (
+                            <span key={i} className="bg-primary-5/10 py-1 px-2 rounded border border-primary-5/20 font-mono">
+                              <strong>{c.field}</strong> {c.operator === 'startsWith' ? 'starts with' : c.operator} <span className="text-primary font-sans">"{c.value}"</span>
+                              {i < rule.conditions.length - 1 ? ' AND ' : ''}
+                            </span>
+                          ))}
+                        </div>
+                        <div className="text-xs text-muted flex items-center gap-2">
+                          <span className="font-semibold text-success">THEN</span>
+                          {rule.actions.map((a, i) => (
+                            <span key={i} className="bg-success-5/10 py-1 px-2 rounded border border-success-5/20 font-mono text-success">
+                              {a.type === 'label' ? 'add label' : a.type === 'move' ? 'move to' : a.type === 'star' ? 'star email' : 'mark read'}
+                              {a.value ? `: ${a.value}` : ''}
+                              {i < rule.actions.length - 1 ? ', ' : ''}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {activeSettingsTab === 'connections' && (
+            <div className="glass-card animate-fade">
+              <div className="settings-section-header mb-6">
+                <h4>Infrastructure Credentials</h4>
+                <p className="text-xs text-muted">Manage keys and database urls for custom database integrations.</p>
+              </div>
+              {state.connectionUsage.length === 0 ? (
+                <div className="empty-state-sm py-8"><p className="text-sm text-muted">No infrastructure connections configured.</p></div>
+              ) : (
+                <div className="flex flex-col gap-3">
+                  {state.connectionUsage.map(c => (
+                    <div key={c.id} className="flex items-center justify-between connection-row p-3 rounded-lg bg-hover-light border border-primary-5/5">
+                      <div>
+                        <strong className="text-sm font-semibold text-primary">{c.label}</strong>
+                        <span className="text-xs text-muted font-mono block mt-1">{c.maskedValue} ({c.provider || 'N/A'})</span>
+                      </div>
+                      <button className="btn btn-ghost btn-sm btn-danger border border-danger/10 hover:bg-danger-glow" onClick={() => state.setConfirmRevokeId(c.id)}><X size={12} /> Revoke</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           )}
         </div>
-      )}
+      </div>
 
       <SignatureEditor state={state} sig={state.editingSignatureId ? state.signatures.find(s => s.id === state.editingSignatureId) : undefined} />
       <ContactEditor state={state} contact={state.editingContactId ? state.contacts.find(c => c.id === state.editingContactId) : undefined} />
+      
+      <RuleEditorModal
+        open={ruleModalOpen}
+        onClose={() => { setRuleModalOpen(false); setSelectedRule(null); }}
+        rule={selectedRule}
+        onSave={handleRuleSave}
+        customLabels={labels.getAll()}
+      />
     </div>
   );
 }

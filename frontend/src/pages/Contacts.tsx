@@ -103,9 +103,8 @@ export default function Contacts() {
     setEditMode(true);
   };
 
-  const handleComposeToContact = (_email: string) => {
-    navigate('/business');
-    // Could use a state management solution to pass compose data
+  const handleComposeToContact = (email: string) => {
+    navigate('/business', { state: { composeTo: email } });
   };
 
   // Groups

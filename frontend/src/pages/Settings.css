@@ -81,8 +81,10 @@
 }
 
 .tab-btn.active {
-  background: rgba(16, 185, 129, 0.12);
-  color: var(--primary-400);
+  background: var(--accent-glow);
+  color: var(--accent);
+  font-weight: 600;
+  border-left: 3px solid var(--accent);
 }
 
 /* Content */
@@ -228,8 +230,8 @@
   border-radius: var(--radius-lg);
   font-weight: 700;
   font-size: 0.7rem;
-  background: rgba(16, 185, 129, 0.12);
-  color: var(--primary-400);
+  background: var(--accent-glow);
+  color: var(--accent);
 }
 
 .dns-name {

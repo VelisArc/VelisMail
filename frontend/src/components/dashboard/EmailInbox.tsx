@@ -95,7 +95,12 @@ const EmailInbox: FC<EmailInboxProps> = ({
     return matched;
   }, [emails, deferredQuery, state.mailStatusFilter, state.sortOrder]);
 
-  const openEmail = useCallback((email: Email) => setFocusedEmail(email), []);
+  const openEmail = useCallback((email: Email) => {
+    setFocusedEmail(email);
+    if (email.unread && onToggleRead) {
+      onToggleRead(email.id, email.unread);
+    }
+  }, [onToggleRead]);
   const closeReader = useCallback(() => setFocusedEmail(null), []);
 
   const conversation = useMemo(() => focusedEmail ? parseEmailConversation(focusedEmail.body) : [], [focusedEmail]);
@@ -321,7 +326,7 @@ const EmailInbox: FC<EmailInboxProps> = ({
               </div>
             ) : (
               <div className="dash-list-scroll">
-                {filtered.length > 20 && (
+                {filtered.length > 0 && (
                   <div className="mail-select-all" onClick={toggleSelectAll} role="button" tabIndex={0} aria-label={allSelected ? 'Deselect all' : 'Select all'}>
                     {allSelected ? <CheckSquare size={14} /> : <Square size={14} />}
                     <span>{allSelected ? 'Deselect all' : 'Select all'} ({filtered.length})</span>
