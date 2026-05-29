@@ -918,7 +918,7 @@ export function applyEmailRules(emails: Email[]): Email[] {
 
   let changedAny = false;
   const updated = emails.map(email => {
-    let emailCopy = { ...email };
+    const emailCopy = { ...email };
     let emailChanged = false;
 
     for (const rule of activeRules) {

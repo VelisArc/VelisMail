@@ -189,8 +189,9 @@ export default function BusinessDashboard() {
     };
     window.addEventListener('keydown', handler);
 
-    if (location.state && (location.state as any).composeTo) {
-      openComposeWith((location.state as any).composeTo);
+    const routerState = location.state as { composeTo?: string } | null;
+    if (routerState && typeof routerState.composeTo === 'string') {
+      openComposeWith(routerState.composeTo);
       window.history.replaceState({}, document.title);
     }
 
