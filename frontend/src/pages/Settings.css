@@ -1,6 +1,6 @@
-/* ===========================
-   Settings Page Styles
-   =========================== */
+/* ====================================================================
+   VelisMail — Premium Settings & Preferences Style Sheet
+   ==================================================================== */
 
 .settings-page {
   min-height: 100vh;
@@ -12,8 +12,9 @@
 .settings-header {
   display: flex;
   align-items: center;
-  height: 44px;
-  background: var(--bg-body);
+  height: 56px;
+  background: var(--glass-bg-strong);
+  backdrop-filter: blur(20px);
   border-bottom: 1px solid var(--glass-border);
   position: sticky;
   top: 0;
@@ -23,54 +24,57 @@
 .settings-header-left {
   display: flex;
   align-items: center;
-  gap: 20px;
+  gap: var(--space-4);
 }
 
 .settings-header-left h1 {
-  font-size: 1rem;
+  font-size: var(--text-base);
+  font-weight: var(--font-weight-bold);
 }
 
 .settings-header-right {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-size: 0.8rem;
-  font-weight: 500;
+  gap: var(--space-2);
+  font-size: var(--text-xs);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-muted);
 }
 
 .settings-body {
   display: flex;
   flex: 1;
-  padding: 18px 0;
-  gap: 18px;
+  padding: var(--space-5) 0;
+  gap: var(--space-6);
 }
 
-/* Tabs */
+/* ─── Sidebar Settings Tabs ─── */
 .settings-tabs {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  width: 210px;
+  width: 230px;
   flex-shrink: 0;
-  padding: 8px;
+  padding: var(--space-3);
   height: fit-content;
   position: sticky;
-  top: 64px;
-  border-radius: var(--radius-lg);
+  top: 76px;
+  border-radius: var(--radius-xl);
   border: 1px solid var(--glass-border);
-  background: transparent;
+  background: var(--glass-bg);
+  box-shadow: var(--shadow-xs);
 }
 
 .tab-btn {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 7px 10px;
+  gap: var(--space-3);
+  padding: 10px 14px;
   border-radius: var(--radius-lg);
-  font-size: 0.8rem;
-  font-weight: 500;
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-medium);
   color: var(--text-secondary);
-  transition: all 0.15s ease;
+  transition: all var(--transition-fast);
   width: 100%;
   text-align: left;
 }
@@ -83,84 +87,86 @@
 .tab-btn.active {
   background: var(--accent-glow);
   color: var(--accent);
-  font-weight: 600;
+  font-weight: var(--font-weight-bold);
   border-left: 3px solid var(--accent);
 }
 
-/* Content */
+/* ─── Settings Contents ─── */
 .settings-content {
   flex: 1;
   min-width: 0;
 }
 
 .settings-section-header {
-  margin-bottom: 10px;
+  margin-bottom: var(--space-5);
+  border-bottom: 1px solid var(--glass-border);
+  padding-bottom: var(--space-3);
 }
 
 .settings-section-header h2 {
-  font-size: 1.1rem;
+  font-size: var(--text-lg);
+  font-weight: var(--font-weight-extrabold);
   margin-bottom: 4px;
 }
 
 .settings-section-header p {
-  color: var(--text-muted);
-  font-size: 0.78rem;
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
 }
 
-/* Add Domain */
+/* Domain setup */
 .add-domain-card {
-  margin-bottom: 20px;
-  box-shadow: var(--shadow-xs);
-  border-radius: var(--radius-lg);
+  margin-bottom: var(--space-5);
 }
 
 .add-domain-card h3 {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-size: 1rem;
-  margin-bottom: 14px;
+  gap: var(--space-2);
+  font-size: var(--text-base);
+  font-weight: var(--font-weight-bold);
+  margin-bottom: var(--space-3);
 }
 
 .add-domain-form {
   display: flex;
-  gap: 10px;
+  gap: var(--space-3);
 }
 
 .add-domain-form .input {
   flex: 1;
 }
 
-/* Empty */
+/* Empty domain states */
 .empty-domains {
   text-align: center;
-  padding: 48px 24px;
-  cursor: default;
+  padding: var(--space-10) var(--space-6);
+  color: var(--text-muted);
 }
 
 .empty-domains h3 {
-  margin: 16px 0 8px;
-  font-size: 1.1rem;
+  margin: var(--space-4) 0 var(--space-2);
+  font-size: var(--text-lg);
+  color: var(--text-primary);
 }
 
 .empty-domains p {
-  color: var(--text-muted);
-  font-size: 0.9rem;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
 }
 
-/* Domain List */
+/* Domain Cards */
 .domain-list {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--space-4);
 }
 
 .domain-card {
-  cursor: default;
-}
-
-.domain-card:hover {
-  transform: none;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-xl);
+  padding: var(--space-5);
 }
 
 .domain-card-top {
@@ -168,105 +174,63 @@
   justify-content: space-between;
   align-items: center;
   flex-wrap: wrap;
-  gap: 12px;
+  gap: var(--space-3);
 }
 
 .domain-info {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--space-3);
 }
 
 .domain-name {
-  font-weight: 600;
-  font-size: 1rem;
+  font-weight: var(--font-weight-bold);
+  font-size: var(--text-base);
 }
 
 .domain-actions {
   display: flex;
-  gap: 8px;
+  gap: var(--space-2);
   align-items: center;
 }
 
-/* DNS Records */
+/* DNS Setup tables */
 .dns-records {
-  margin-top: 16px;
-  padding-top: 16px;
+  margin-top: var(--space-5);
+  padding-top: var(--space-5);
   border-top: 1px solid var(--glass-border);
 }
 
 .dns-instructions {
-  font-size: 0.85rem;
-  color: var(--text-muted);
-  margin-bottom: 12px;
-}
-
-.dns-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 0.82rem;
-}
-
-.dns-table th {
-  text-align: left;
-  padding: 8px 10px;
-  color: var(--text-muted);
-  font-weight: 600;
-  font-size: 0.75rem;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  border-bottom: 1px solid var(--glass-border);
-}
-
-.dns-table td {
-  padding: 8px 10px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.02);
+  font-size: var(--text-xs);
   color: var(--text-secondary);
+  margin-bottom: var(--space-3);
 }
 
-.dns-type {
-  display: inline-block;
-  padding: 2px 8px;
-  border-radius: var(--radius-lg);
-  font-weight: 700;
-  font-size: 0.7rem;
-  background: var(--accent-glow);
-  color: var(--accent);
+/* Profiles */
+.profile-card {
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-xl);
+  padding: var(--space-5);
 }
-
-.dns-name {
-  font-family: 'Courier New', monospace;
-  font-size: 0.78rem;
-  word-break: break-all;
-}
-
-.dns-value {
-  font-family: 'Courier New', monospace;
-  font-size: 0.78rem;
-  word-break: break-all;
-  max-width: 300px;
-}
-
-/* Profile */
-.profile-card { cursor: default; box-shadow: var(--shadow-xs); border-radius: var(--radius-lg); }
-.profile-card:hover { transform: none; }
 
 .profile-row {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--space-3);
 }
 
 .profile-avatar-lg {
-  width: 42px;
-  height: 42px;
-  border-radius: var(--radius-lg);
-  background: linear-gradient(135deg, var(--primary), var(--primary-600));
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius-xl);
+  background: linear-gradient(135deg, var(--primary), var(--accent-600));
   display: flex;
   align-items: center;
   justify-content: center;
-  font-weight: 800;
-  font-size: 1rem;
+  font-weight: var(--font-weight-bold);
+  font-size: var(--text-lg);
   color: white;
 }
 
@@ -277,8 +241,8 @@
 .profile-fields {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 12px;
-  margin-top: 10px;
+  gap: var(--space-4);
+  margin-top: var(--space-4);
 }
 
 .profile-field {
@@ -288,95 +252,101 @@
 }
 
 .profile-field label {
-  font-size: 0.72rem;
-  font-weight: 600;
-  color: var(--text-muted);
+  font-size: var(--text-xs);
+  font-weight: var(--font-weight-bold);
+  color: var(--text-secondary);
 }
 
-/* Security */
+/* Security Panels */
 .security-card {
-  margin-bottom: 10px;
-  cursor: default;
-  box-shadow: var(--shadow-xs);
-  border-radius: var(--radius-lg);
+  margin-bottom: var(--space-3);
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-xl);
+  padding: var(--space-5);
 }
-
-.security-card:hover { transform: none; }
 
 .security-card h3 {
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-size: 0.88rem;
-  margin-bottom: 6px;
+  gap: var(--space-2);
+  font-size: var(--text-base);
+  font-weight: var(--font-weight-bold);
+  margin-bottom: var(--space-1);
 }
 
 .security-card p {
-  color: var(--text-muted);
-  font-size: 0.78rem;
-  margin-bottom: 8px;
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  margin-bottom: var(--space-3);
 }
 
 .security-fields {
   display: flex;
   flex-direction: column;
-  gap: 16px;
-  max-width: 440px;
+  gap: var(--space-4);
+  max-width: 480px;
 }
 
 .key-info {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  margin-top: 8px;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
 }
 
 .key-row {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 8px 0;
+  padding: var(--space-2) 0;
   border-bottom: 1px solid var(--glass-border);
-  font-size: 0.88rem;
+  font-size: var(--text-sm);
   color: var(--text-secondary);
 }
 
+/* ─── Red Alert Danger Zone ─── */
 .danger-zone {
-  border-color: rgba(248, 113, 113, 0.2);
+  border-color: rgba(239, 68, 68, 0.25);
+  background: linear-gradient(180deg, rgba(239, 68, 68, 0.02) 0%, transparent 100%);
+}
+
+.danger-zone h3 {
+  color: var(--danger);
 }
 
 .session-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  padding: 12px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-xl);
   background: var(--bg-surface);
 }
 
 .session-row p {
   margin: 4px 0 0;
-  color: var(--text-muted);
-  font-size: 0.9rem;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
 }
 
 .settings-spacer-xs { margin-top: 8px; }
 .settings-spacer-sm { margin-top: 12px; }
 .settings-spacer-md { margin-top: 16px; }
-.settings-spacer-lg { margin-top: 14px; }
+.settings-spacer-lg { margin-top: 20px; }
 .settings-ml-xs { margin-left: 8px; }
-.settings-actions-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
-.settings-sessions-grid { display: grid; gap: 10px; margin-top: 14px; }
+.settings-actions-row { display: flex; gap: var(--space-2); flex-wrap: wrap; margin-top: 12px; }
+.settings-sessions-grid { display: grid; gap: var(--space-2); margin-top: 14px; }
 .settings-header-row { display: flex; justify-content: space-between; align-items: center; }
 
-/* Responsive */
+/* ─── Responsive Matrix ─── */
 @media (max-width: 768px) {
   .settings-body {
     flex-direction: column;
-    padding: 12px 0;
-    gap: 12px;
+    padding: var(--space-4) 0;
+    gap: var(--space-4);
   }
 
   .settings-tabs {
@@ -407,13 +377,4 @@
   .add-domain-form {
     flex-direction: column;
   }
-}
-
-@media (max-width: 375px) {
-  .settings-header { height: 40px; }
-  .settings-body { padding: 8px 0; gap: 8px; }
-  .settings-tabs { padding: 6px; gap: 2px; overflow-x: auto; }
-  .tab-btn { font-size: 0.72rem; padding: 6px 8px; }
-  .settings-section-header h2 { font-size: 0.95rem; }
-  .settings-section-header p { display: none; }
 }
