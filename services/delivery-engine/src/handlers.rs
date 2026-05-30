@@ -11,9 +11,11 @@ use axum::{
     http::StatusCode,
     Json,
 };
+use base64::Engine as _;
 use serde::Deserialize;
 use serde_json::json;
 use uuid::Uuid;
+
 
 // ────────────────────────────────────────────────────────────
 // Health check
@@ -31,7 +33,7 @@ pub async fn health_check(
         redis
             .get_multiplexed_async_connection()
             .await
-            .and_then(|mut conn| {
+            .and_then(|conn| {
                 // Use a simple future wrapper
                 Ok(conn)
             })
@@ -92,7 +94,7 @@ pub async fn dkim_sign(
         })?;
 
     let signer = DkimSigner::new(&state.config.dkim_selector, &request.domain, private_key)
-        .map_err(|e| velismail_common::AppError::Internal)?;
+        .map_err(|_| velismail_common::AppError::Internal)?;
 
     let default_headers = vec![
         "from".to_string(),

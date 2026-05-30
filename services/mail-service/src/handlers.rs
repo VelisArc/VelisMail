@@ -2,7 +2,6 @@
 
 use crate::models::{
     CreateEmailRequest, EmailMoveRequest, EmailSearchRequest, EmailUpdateRequest, FolderStats,
-    PaginationQuery,
 };
 use crate::state::MailState;
 use axum::{
@@ -124,7 +123,7 @@ async fn ensure_business_emails_table(pool: &PgPool) -> Result<(), String> {
         "thread_id VARCHAR(255)",
         "message_id VARCHAR(512)",
     ] {
-        let col_name = col.split_whitespace().next().unwrap_or("");
+        let _col_name = col.split_whitespace().next().unwrap_or("");
         let stmt =
             format!("ALTER TABLE business_emails ADD COLUMN IF NOT EXISTS {col};");
         let _ = sqlx::query(&stmt).execute(pool).await;
@@ -193,38 +192,21 @@ fn business_db_url_from_parts(
         .map(str::to_string)
 }
 
-async fn read_business_emails(db_url: &str) -> (StatusCode, Json<Value>) {
-    let pool = match get_business_pool(db_url).await {
-        Ok(pool) => pool,
-        Err(e) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({"success": false, "error": format!("DB Error: {}", e)})),
-            )
-        }
-    };
+async fn read_business_emails(db_url: &str) -> Result<Json<Value>, velismail_common::AppError> {
+    let pool = get_business_pool(db_url)
+        .await
+        .map_err(|e| velismail_common::AppError::Database(sqlx::Error::Configuration(e.to_string().into())))?;
 
-    if let Err(e) = ensure_business_emails_table(&pool).await {
-        return (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({"success": false, "error": format!("Schema Error: {}", e)})),
-        );
-    }
+    ensure_business_emails_table(&pool)
+        .await
+        .map_err(|_| velismail_common::AppError::Internal)?;
 
-    let rows = match sqlx::query(
+    let rows = sqlx::query(
         "SELECT id, sender, sender_name, recipients, subject, body, folder, created_at, is_read, is_starred, has_attachment, html_body, in_reply_to, thread_id, message_id FROM business_emails ORDER BY created_at DESC",
     )
     .fetch_all(&pool)
     .await
-    {
-        Ok(rows) => rows,
-        Err(e) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({"success": false, "error": format!("Query Error: {}", e)})),
-            )
-        }
-    };
+    .map_err(velismail_common::AppError::Database)?;
 
     let emails: Vec<Value> = rows
         .into_iter()
@@ -251,10 +233,7 @@ async fn read_business_emails(db_url: &str) -> (StatusCode, Json<Value>) {
         })
         .collect();
 
-    (
-        StatusCode::OK,
-        Json(json!({"success": true, "emails": emails})),
-    )
+    Ok(Json(json!({"success": true, "emails": emails})))
 }
 
 // ────────────────────────────────────────────────────────────
@@ -290,14 +269,11 @@ pub async fn get_business_emails(
     State(_state): State<MailState>,
     Query(query): Query<BusinessEmailsQuery>,
     headers: HeaderMap,
-) -> (StatusCode, Json<Value>) {
+) -> Result<Json<Value>, velismail_common::AppError> {
     let db_url = match business_db_url_from_parts(&headers, query.db_url.as_deref(), None) {
         Some(url) => url,
         None => {
-            return (
-                StatusCode::BAD_REQUEST,
-                Json(json!({"success": false, "error": "Missing business database URL"})),
-            )
+            return Err(velismail_common::AppError::BadRequest("Missing business database URL".to_string()));
         }
     };
 
@@ -307,13 +283,10 @@ pub async fn get_business_emails(
 pub async fn query_business_emails(
     State(_state): State<MailState>,
     Json(payload): Json<BusinessEmailsRequest>,
-) -> (StatusCode, Json<Value>) {
+) -> Result<Json<Value>, velismail_common::AppError> {
     let db_url = payload.db_url.trim();
     if db_url.is_empty() {
-        return (
-            StatusCode::BAD_REQUEST,
-            Json(json!({"success": false, "error": "Missing business database URL"})),
-        );
+        return Err(velismail_common::AppError::BadRequest("Missing business database URL".to_string()));
     }
 
     read_business_emails(db_url).await
@@ -324,7 +297,7 @@ pub async fn save_business_email(
     Query(query): Query<BusinessEmailsQuery>,
     headers: HeaderMap,
     Json(payload): Json<SaveBusinessEmailRequest>,
-) -> (StatusCode, Json<Value>) {
+) -> Result<Json<Value>, velismail_common::AppError> {
     let db_url = match business_db_url_from_parts(
         &headers,
         query.db_url.as_deref(),
@@ -332,34 +305,22 @@ pub async fn save_business_email(
     ) {
         Some(url) => url,
         None => {
-            return (
-                StatusCode::BAD_REQUEST,
-                Json(json!({"success": false, "error": "Missing business database URL"})),
-            )
+            return Err(velismail_common::AppError::BadRequest("Missing business database URL".to_string()));
         }
     };
 
-    let pool = match get_business_pool(&db_url).await {
-        Ok(pool) => pool,
-        Err(e) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({"success": false, "error": format!("DB Error: {}", e)})),
-            )
-        }
-    };
+    let pool = get_business_pool(&db_url)
+        .await
+        .map_err(|e| velismail_common::AppError::Database(sqlx::Error::Configuration(e.to_string().into())))?;
 
-    if let Err(e) = ensure_business_emails_table(&pool).await {
-        return (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({"success": false, "error": format!("Schema Error: {}", e)})),
-        );
-    }
+    ensure_business_emails_table(&pool)
+        .await
+        .map_err(|_| velismail_common::AppError::Internal)?;
 
     let email = payload.email;
     let recipients = serde_json::to_string(&email.to).unwrap_or_else(|_| "[]".to_string());
 
-    match sqlx::query(
+    sqlx::query(
         "INSERT INTO business_emails (id, sender, sender_name, recipients, subject, body, html_body, folder, created_at, is_read, is_starred, has_attachment, in_reply_to, thread_id, message_id)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
          ON CONFLICT (id) DO UPDATE SET
@@ -395,13 +356,9 @@ pub async fn save_business_email(
     .bind(&email.message_id)
     .execute(&pool)
     .await
-    {
-        Ok(_) => (StatusCode::OK, Json(json!({"success": true}))),
-        Err(e) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({"success": false, "error": format!("Insert Error: {}", e)})),
-        ),
-    }
+    .map_err(velismail_common::AppError::Database)?;
+
+    Ok(Json(json!({"success": true})))
 }
 
 // ────────────────────────────────────────────────────────────
