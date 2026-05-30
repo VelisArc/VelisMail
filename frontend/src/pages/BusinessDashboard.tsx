@@ -310,7 +310,15 @@ export default function BusinessDashboard() {
   const handleReply = (email: Email) => {
     const replyBody = buildReplyQuote(email);
     const replySubject = email.subject?.startsWith('Re:') ? email.subject : `Re: ${email.subject}`;
-    openComposeWith(email.from, replySubject, replyBody);
+    
+    // Determine the reply recipient (TO address)
+    const myAddresses = new Set((domainMailboxes || []).map(m => m.address.toLowerCase()));
+    if (user?.email) myAddresses.add(user.email.toLowerCase());
+    
+    const isFromMe = myAddresses.has(email.from.toLowerCase());
+    const replyToAddress = isFromMe ? (Array.isArray(email.to) ? email.to.join(', ') : email.to) : email.from;
+    
+    openComposeWith(replyToAddress, replySubject, replyBody);
   };
 
   const handleForward = (email: Email) => {

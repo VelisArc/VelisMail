@@ -554,17 +554,44 @@ textarea.input {
   animation: overlayFadeIn 0.2s ease-out;
 }
 
-.modal {
+.modal,
+.biz-form-modal,
+.add-contact-modal,
+.compose-modal,
+.role-change-modal,
+.confirm-modal,
+.logout-modal,
+.admin-status-modal,
+.domain-verify-modal {
   background: var(--bg-surface);
-  border: 1px solid var(--border-primary);
-  border-radius: var(--radius-2xl);
-  padding: var(--space-8);
+  border: 1px solid var(--border-accent);
+  padding: var(--space-6);
   width: 100%;
   max-width: 520px;
   max-height: 90vh;
   overflow-y: auto;
-  box-shadow: var(--shadow-xl);
-  animation: modalSlideUp 0.3s ease-out;
+  box-shadow: none;
+  animation: slideUp var(--transition-normal) ease-out;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  color: var(--text-primary);
+}
+
+.compose-modal,
+.compose-modal-fixed {
+  max-width: 680px;
+}
+
+.domain-verify-modal {
+  max-width: 600px;
+}
+
+.confirm-modal,
+.logout-modal,
+.role-change-modal,
+.admin-status-modal {
+  max-width: 440px;
 }
 
 .modal-wide {
