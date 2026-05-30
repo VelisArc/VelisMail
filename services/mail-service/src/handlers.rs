@@ -6,7 +6,7 @@ use crate::models::{
 use crate::state::MailState;
 use axum::{
     extract::{Path, Query, State},
-    http::{HeaderMap, StatusCode},
+    http::HeaderMap,
     Json,
 };
 use lettre::{
@@ -45,14 +45,28 @@ fn normalize_business_db_url(db_url: &str) -> String {
 async fn get_business_pool(db_url: &str) -> Result<PgPool, String> {
     let normalized_url = normalize_business_db_url(db_url);
 
-    // 1. Try to find and check existing pool
-    if let Ok(mut pools) = BUSINESS_POOLS.lock() {
-        if let Some(cached) = pools.get_mut(&normalized_url) {
-            // Check health before reuse
-            if sqlx::query("SELECT 1").execute(&cached.pool).await.is_ok() {
-                cached.last_used = std::time::Instant::now();
-                return Ok(cached.pool.clone());
-            } else {
+    // 1. Try to find existing pool
+    let pool_to_check = {
+        if let Ok(pools) = BUSINESS_POOLS.lock() {
+            pools.get(&normalized_url).map(|cached| cached.pool.clone())
+        } else {
+            None
+        }
+    };
+
+    if let Some(pool) = pool_to_check {
+        // Check health without holding the lock
+        if sqlx::query("SELECT 1").execute(&pool).await.is_ok() {
+            // Re-acquire lock to update last_used
+            if let Ok(mut pools) = BUSINESS_POOLS.lock() {
+                if let Some(cached) = pools.get_mut(&normalized_url) {
+                    cached.last_used = std::time::Instant::now();
+                }
+            }
+            return Ok(pool);
+        } else {
+            // Health check failed, remove from cache
+            if let Ok(mut pools) = BUSINESS_POOLS.lock() {
                 pools.remove(&normalized_url);
             }
         }
@@ -265,7 +279,6 @@ pub async fn health_check(
 // Business email endpoints
 // ────────────────────────────────────────────────────────────
 
-#[axum::debug_handler]
 pub async fn get_business_emails(
     State(_state): State<MailState>,
     Query(query): Query<BusinessEmailsQuery>,
@@ -281,7 +294,6 @@ pub async fn get_business_emails(
     read_business_emails(&db_url).await
 }
 
-#[axum::debug_handler]
 pub async fn query_business_emails(
     State(_state): State<MailState>,
     Json(payload): Json<BusinessEmailsRequest>,
@@ -294,7 +306,6 @@ pub async fn query_business_emails(
     read_business_emails(db_url).await
 }
 
-#[axum::debug_handler]
 pub async fn save_business_email(
     State(_state): State<MailState>,
     Query(query): Query<BusinessEmailsQuery>,
