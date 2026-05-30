@@ -10,3 +10,4 @@ zeroize.workspace = true
 serde.workspace = true
 anyhow.workspace = true
 tokio.workspace = true
+base64.workspace = true
