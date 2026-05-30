@@ -1310,8 +1310,8 @@ pub async fn register_device(
     .bind(&req.device_name)
     .bind(&req.platform)
     .bind(&req.browser)
-    .bind(&req.os)
-    .bind(&device_id.to_string())
+    .bind(req.os)
+    .bind(device_id.to_string())
     .execute(&state.db)
     .await?;
 
