@@ -157,7 +157,7 @@ pub async fn upload_multipart(
     })? {
         let file_name = field
             .file_name()
-            .map(|n| sanitize_filename(n))
+            .map(sanitize_filename)
             .unwrap_or_else(|| "upload.bin".to_string());
         let content_type = field
             .content_type()

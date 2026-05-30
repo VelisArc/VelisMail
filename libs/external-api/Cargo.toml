@@ -1,7 +1,7 @@
 [package]
 name = "velismail-external-api"
-version = "3.5.1"
-edition = "2021"
+version.workspace = true
+edition.workspace = true
 description = "External API adapter component for VelisMail"
 license = "MIT"
 authors = ["VelisMail Team"]

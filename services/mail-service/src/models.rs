@@ -39,6 +39,7 @@ pub struct EmailMoveRequest {
 }
 
 /// Full-text email search request.
+#[allow(dead_code)]
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct EmailSearchRequest {
@@ -63,6 +64,7 @@ pub struct FolderStats {
 }
 
 /// Pagination query parameters for email listing.
+#[allow(dead_code)]
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PaginationQuery {
