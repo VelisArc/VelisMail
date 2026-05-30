@@ -11,16 +11,62 @@ use axum::{
 use std::time::Duration;
 use tower_http::cors::{AllowOrigin, CorsLayer};
 
-/// Clone-safe token-bucket style limiter for axum middleware.
+use std::net::IpAddr;
+use axum::http::HeaderMap;
+
+fn get_client_ip(headers: &HeaderMap) -> IpAddr {
+    let candidate = headers
+        .get("x-forwarded-for")
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.split(',').next())
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .or_else(|| {
+            headers
+                .get("x-real-ip")
+                .and_then(|value| value.to_str().ok())
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+        })
+        .unwrap_or("0.0.0.0")
+        .trim()
+        .trim_matches('"')
+        .to_string();
+
+    let without_port = candidate
+        .strip_prefix('[')
+        .and_then(|value| value.split(']').next())
+        .map(str::to_string)
+        .or_else(|| {
+            if candidate.matches(':').count() == 1 {
+                candidate.split(':').next().map(str::to_string)
+            } else {
+                Some(candidate.clone())
+            }
+        })
+        .unwrap_or(candidate);
+
+    without_port
+        .parse::<IpAddr>()
+        .unwrap_or_else(|_| IpAddr::V4(std::net::Ipv4Addr::new(0, 0, 0, 0)))
+}
+
+/// Keyed rate limiter using governor keyed by client IP.
 pub async fn rate_limit(
     State(state): State<AuthState>,
     request: Request,
     next: Next,
 ) -> Result<Response, StatusCode> {
-    match state.rate_limiter.clone().try_acquire_owned() {
-        Ok(_permit) => Ok(next.run(request).await),
+    let ip = get_client_ip(request.headers());
+    match state.rate_limiter.check_key(&ip) {
+        Ok(_) => Ok(next.run(request).await),
         Err(_) => Err(StatusCode::TOO_MANY_REQUESTS),
     }
+}
+
+/// Request ID extraction/generation middleware.
+pub async fn request_id(request: Request, next: Next) -> Response {
+    velismail_common::middleware::request_id_middleware(request, next).await
 }
 
 /// CORS layer

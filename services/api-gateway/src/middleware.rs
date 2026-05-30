@@ -99,6 +99,18 @@ pub async fn security_headers(request: Request<Body>, next: Next) -> Response {
         axum::http::header::HeaderName::from_static("permissions-policy"),
         HeaderValue::from_static("camera=(), microphone=(), geolocation=(), payment=()"),
     );
+    // Content-Security-Policy — restrict resource origins
+    headers.insert(
+        axum::http::header::HeaderName::from_static("content-security-policy"),
+        HeaderValue::from_static(
+            "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+        ),
+    );
+    // HTTP Strict Transport Security (HSTS) — enforce HTTPS
+    headers.insert(
+        axum::http::header::HeaderName::from_static("strict-transport-security"),
+        HeaderValue::from_static("max-age=31536000; includeSubDomains; preload"),
+    );
     // Remove server identity header
     headers.remove(axum::http::header::SERVER);
 

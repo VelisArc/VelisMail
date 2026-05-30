@@ -6,6 +6,12 @@ mod state;
 pub async fn run_service() -> anyhow::Result<()> {
     let config = config::GatewayConfig::from_env()?;
     let state = state::AppState::new(config.clone()).await?;
+
+    // Run gateway migrations if DB is connected
+    if let Some(db) = &state.db {
+        run_migrations(db).await?;
+    }
+
     let cors = build_cors_layer(&config.frontend_url);
 
     let app = axum::Router::new()
@@ -25,9 +31,38 @@ pub async fn run_service() -> anyhow::Result<()> {
 
     let addr = format!("{}:{}", config.host, config.port);
     let listener = tokio::net::TcpListener::bind(&addr).await?;
-    tracing::info!("API Gateway listening on {}", addr);
-    axum::serve(listener, app).await?;
+    tracing::info!(
+        service = "api-gateway",
+        version = env!("CARGO_PKG_VERSION"),
+        address = %addr,
+        "API Gateway started"
+    );
+    axum::serve(listener, app)
+        .with_graceful_shutdown(shutdown_signal())
+        .await?;
 
+    Ok(())
+}
+
+const MIGRATIONS: &[(&str, &str)] = &[
+    ("001", include_str!("../migrations/001_gateway_persistence.sql")),
+];
+
+async fn run_migrations(db: &sqlx::PgPool) -> anyhow::Result<()> {
+    for (version, sql) in MIGRATIONS {
+        let clean: String = sql
+            .lines()
+            .filter(|l| !l.trim().starts_with("--"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        for stmt in clean.split(';') {
+            let trimmed = stmt.trim();
+            if !trimmed.is_empty() {
+                let _ = sqlx::query(trimmed).execute(db).await;
+            }
+        }
+        tracing::info!("Gateway migration {version} applied");
+    }
     Ok(())
 }
 
@@ -102,4 +137,28 @@ fn build_cors_layer(frontend_url: &str) -> tower_http::cors::CorsLayer {
         .allow_headers(allowed_headers)
         .allow_credentials(true)
         .max_age(std::time::Duration::from_secs(3600))
+}
+
+async fn shutdown_signal() {
+    let ctrl_c = async {
+        tokio::signal::ctrl_c()
+            .await
+            .expect("failed to install Ctrl+C handler");
+    };
+
+    #[cfg(unix)]
+    let terminate = async {
+        tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+            .expect("failed to install signal handler")
+            .recv()
+            .await;
+    };
+
+    #[cfg(not(unix))]
+    let terminate = std::future::pending::<()>();
+
+    tokio::select! {
+        _ = ctrl_c => { tracing::info!("Received Ctrl+C, shutting down api-gateway..."); }
+        _ = terminate => { tracing::info!("Received SIGTERM, shutting down api-gateway..."); }
+    }
 }

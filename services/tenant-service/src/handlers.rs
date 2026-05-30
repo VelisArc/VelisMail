@@ -13,12 +13,23 @@ use crate::models::{AddDomainRequest, CreateTenantRequest, UpdateTenantRequest};
 use crate::service::TenantService;
 use crate::state::TenantState;
 
-pub async fn health_check() -> Json<serde_json::Value> {
-    Json(json!({
-        "status": "healthy",
-        "service": "tenant-service",
-        "version": env!("CARGO_PKG_VERSION"),
-        "timestamp": chrono::Utc::now().to_rfc3339()
+pub async fn health_check(
+    State(state): State<TenantState>,
+) -> Json<serde_json::Value> {
+    let db_healthy = sqlx::query("SELECT 1")
+        .execute(&state.db)
+        .await
+        .is_ok();
+
+    let health = velismail_common::HealthResponse::new(
+        "tenant-service",
+        env!("CARGO_PKG_VERSION"),
+        db_healthy,
+        None,
+        None,
+    );
+    Json(serde_json::to_value(health).unwrap_or_else(|_| {
+        json!({"status": "UNHEALTHY", "service": "tenant-service"})
     }))
 }
 

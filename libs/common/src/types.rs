@@ -100,3 +100,80 @@ impl Pagination {
         (self.page - 1) * self.per_page
     }
 }
+
+/// Thread ID wrapper
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
+pub struct ThreadId(pub Uuid);
+
+/// Attachment ID wrapper
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
+pub struct AttachmentId(pub Uuid);
+
+/// Domain ID wrapper
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
+pub struct DomainId(pub Uuid);
+
+/// Email Message with RFC 5322 compliance and metadata
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EmailMessage {
+    pub id: EmailId,
+    pub tenant_id: TenantId,
+    pub user_id: UserId,
+    pub thread_id: ThreadId,
+    pub from_address: String,
+    pub from_name: Option<String>,
+    pub to_addresses: Vec<String>,
+    pub cc_addresses: Option<Vec<String>>,
+    pub bcc_addresses: Option<Vec<String>>,
+    pub reply_to: Option<String>,
+    pub in_reply_to: Option<String>,
+    pub references: Option<Vec<String>>,
+    pub message_id: String,
+    pub subject: String,
+    pub body_plain: Option<String>,
+    pub body_html: Option<String>,
+    pub status: MessageStatus,
+    pub encryption: EncryptionStatus,
+    pub folder: FolderType,
+    pub is_starred: bool,
+    pub has_attachments: bool,
+    pub size_bytes: i64,
+    pub sent_at: Option<DateTime<Utc>>,
+    pub received_at: Option<DateTime<Utc>>,
+    pub created_at: DateTime<Utc>,
+}
+
+/// Email Thread for conversation views
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EmailThread {
+    pub id: ThreadId,
+    pub tenant_id: TenantId,
+    pub subject: String,
+    pub messages: Vec<EmailMessage>,
+    pub last_message_at: DateTime<Utc>,
+    pub message_count: u32,
+}
+
+/// Contact Entry for address book
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ContactEntry {
+    pub id: Uuid,
+    pub tenant_id: TenantId,
+    pub user_id: UserId,
+    pub email: String,
+    pub name: Option<String>,
+    pub phone: Option<String>,
+    pub notes: Option<String>,
+    pub created_at: DateTime<Utc>,
+}
+
+/// Categorization and tagging options
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum Label {
+    Important,
+    Work,
+    Personal,
+    Receipt,
+    Travel,
+    Custom(String),
+}

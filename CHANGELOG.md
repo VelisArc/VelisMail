@@ -1,5 +1,54 @@
 # Changelog
 
+## v4.0.0 - Industry-Standard Production Upgrade
+
+### Added
+- **Mail Service**: Complete `send_email()` with HTML multipart (text + HTML via RFC 5322), CC/BCC support, threading (In-Reply-To, References, Message-ID), and platform DB storage.
+- **Mail Service**: 7 new endpoints — `GET/PATCH/DELETE /emails/:id`, `POST /emails/:id/move`, `GET /threads/:id`, `GET /folders`, `POST /search`.
+- **Mail Service**: Platform emails migration with full-text search indexes.
+- **Delivery Engine**: DKIM signing & verification using ED25519 via ring with relaxed/relaxed canonicalization (RFC 6376).
+- **Delivery Engine**: SPF record parsing and IP authorization checking with CIDR matching (RFC 7208).
+- **Delivery Engine**: DMARC policy evaluation with strict/relaxed alignment (RFC 7489).
+- **Delivery Engine**: Postgres-backed delivery queue with status lifecycle (pending → processing → delivered / failed / dead_letter), priority ordering, and exponential backoff retry.
+- **Delivery Engine**: Bounce handling with hard/soft classification via SMTP enhanced status codes (RFC 3463), automatic suppression list, and domain-level bounce rate statistics.
+- **Delivery Engine**: Deliverability score endpoint combining DKIM/SPF/DMARC config status and bounce rate.
+- **Delivery Engine**: Background queue worker polling every 5 seconds with per-item async processing.
+- **Storage Service**: Multipart form upload endpoint (`POST /upload/multipart`).
+- **Storage Service**: File listing with pagination (`GET /list`).
+- **Storage Service**: File metadata endpoint (`GET /metadata/*key`).
+- **API Gateway**: Content-Security-Policy (CSP) header restricting resource origins.
+- **API Gateway**: HTTP Strict Transport Security (HSTS) header with 1-year max-age and preload.
+- **API Gateway**: Optional Postgres persistence for team invites and inbound routes (previously in-memory only).
+- **API Gateway**: Gateway persistence migration (team_invites + inbound_routes tables).
+- **All Services**: Graceful shutdown via `Ctrl+C` / `SIGTERM` signal handlers with clean connection pool drain.
+- **All Services**: Structured startup banners with service name, version, and bind address.
+- **All Services**: Deep health checks using `velismail_common::HealthResponse` with live DB/Redis/S3 connectivity verification.
+- **Workspace**: OpenAPI dependencies (`utoipa`, `utoipa-swagger-ui`) added to workspace and API gateway.
+
+### Changed
+- **Workspace**: Version bumped from 3.5.1 to 4.0.0.
+- **Workspace**: Centralized all dependency versions in workspace Cargo.toml — individual services now use workspace references instead of inline versions.
+- **Workspace**: Added `multipart` feature to axum, `timeout` feature to tower-http.
+- **Workspace**: Release profile optimized with `opt-level = "s"` for smaller binaries.
+- **Mail Service**: `send_email()` rewritten from stub to production-grade SMTP delivery with structured error handling.
+- **Mail Service**: Business email pool upgraded with LRU eviction at 50 connections and health-check-before-reuse.
+- **Mail Service**: All `row.try_get::<T, _>(0)` positional index access replaced with named column access (`row.try_get("column_name")`).
+- **Storage Service**: `get_quota()` reads from `DEFAULT_QUOTA_BYTES` environment variable instead of hardcoded 5GB value.
+- **API Gateway**: `AppState` now includes optional `PgPool` for persistence, with graceful fallback to in-memory when `DATABASE_URL` is not set.
+
+### Security
+- **API Gateway**: Added `Content-Security-Policy` header blocking inline scripts, restricting resource origins.
+- **API Gateway**: Added `Strict-Transport-Security` header enforcing HTTPS with 1-year max-age, includeSubDomains, and preload.
+- **Delivery Engine**: Bounce suppression list prevents sending to addresses that have hard-bounced.
+
+### Known Limitations
+- Full WebAuthn/passkey cryptographic verification is still disabled and returns `501`.
+- API Gateway routes.rs is still a monolith (3,800+ lines) — modular split deferred to v4.1.
+- Delivery queue worker currently marks items as delivered (SMTP integration placeholder for production).
+- SPF `a`, `mx`, and `include` mechanisms require async DNS resolution (not yet implemented).
+
+---
+
 ## v3.5.1 - Production hardening release
 
 ### Added

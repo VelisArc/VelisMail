@@ -57,8 +57,39 @@ pub async fn run_service() -> anyhow::Result<()> {
 
     let addr = format!("{}:{}", config.host, config.port);
     let listener = tokio::net::TcpListener::bind(&addr).await?;
-    tracing::info!("Tenant Service listening on {}", addr);
-    axum::serve(listener, app).await?;
+    tracing::info!(
+        service = "tenant-service",
+        version = env!("CARGO_PKG_VERSION"),
+        address = %addr,
+        "Tenant Service started"
+    );
+    axum::serve(listener, app)
+        .with_graceful_shutdown(shutdown_signal())
+        .await?;
 
     Ok(())
+}
+
+async fn shutdown_signal() {
+    let ctrl_c = async {
+        tokio::signal::ctrl_c()
+            .await
+            .expect("failed to install Ctrl+C handler");
+    };
+
+    #[cfg(unix)]
+    let terminate = async {
+        tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+            .expect("failed to install signal handler")
+            .recv()
+            .await;
+    };
+
+    #[cfg(not(unix))]
+    let terminate = std::future::pending::<()>();
+
+    tokio::select! {
+        _ = ctrl_c => { tracing::info!("Received Ctrl+C, shutting down tenant-service..."); }
+        _ = terminate => { tracing::info!("Received SIGTERM, shutting down tenant-service..."); }
+    }
 }

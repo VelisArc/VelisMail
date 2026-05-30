@@ -20,6 +20,8 @@ pub struct GatewayConfig {
     // External APIs
     pub razorpay_key_id: String,
     pub razorpay_key_secret: String,
+    // Optional DB for gateway persistence (team invites, inbound routes)
+    pub db_url: Option<String>,
 }
 
 impl GatewayConfig {
@@ -56,6 +58,7 @@ impl GatewayConfig {
                 .unwrap_or_else(|_| "http://delivery-engine:3005".to_string()),
             razorpay_key_id: std::env::var("RAZORPAY_KEY_ID").unwrap_or_default(),
             razorpay_key_secret: std::env::var("RAZORPAY_KEY_SECRET").unwrap_or_default(),
+            db_url: std::env::var("DATABASE_URL").ok().filter(|v| !v.trim().is_empty()),
         })
     }
 }

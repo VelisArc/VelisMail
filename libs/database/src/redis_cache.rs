@@ -138,6 +138,45 @@ impl CacheManager {
 
         Ok(set.is_some())
     }
+
+    /// Get and deserialize a JSON value from cache
+    pub async fn get_json<T: serde::de::DeserializeOwned>(&mut self, key: &str) -> Result<Option<T>> {
+        if let Some(val_str) = self.get(key).await? {
+            let val = serde_json::from_str(&val_str)?;
+            Ok(Some(val))
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// Serialize and set a value in cache with TTL
+    pub async fn set_json<T: serde::Serialize>(&mut self, key: &str, value: &T, ttl_seconds: u64) -> Result<()> {
+        let val_str = serde_json::to_string(value)?;
+        self.set(key, &val_str, ttl_seconds).await
+    }
+
+    /// Cache-aside helper. Tries to fetch from cache; on miss, invokes `fallback`,
+    /// caches the result, and returns it.
+    pub async fn cached<T, F, Fut>(&mut self, key: &str, ttl_seconds: u64, fallback: F) -> Result<T>
+    where
+        T: serde::Serialize + serde::de::DeserializeOwned,
+        F: FnOnce() -> Fut,
+        Fut: std::future::Future<Output = Result<T>>,
+    {
+        if let Some(cached_val) = self.get_json::<T>(key).await? {
+            return Ok(cached_val);
+        }
+        let fresh_val = fallback().await?;
+        self.set_json(key, &fresh_val, ttl_seconds).await?;
+        Ok(fresh_val)
+    }
+
+    /// Verify connectivity to Redis
+    pub async fn check_health(&mut self) -> Result<()> {
+        let mut conn = self.redis.get_multiplexed_async_connection().await?;
+        redis::cmd("PING").query_async::<_, ()>(&mut conn).await?;
+        Ok(())
+    }
 }
 
 /// Cache key helpers

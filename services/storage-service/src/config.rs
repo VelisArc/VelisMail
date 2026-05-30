@@ -12,6 +12,7 @@ pub struct StorageConfig {
     pub db_url: String,
     pub max_file_size_mb: u32,
     pub encryption_key: String,
+    pub default_quota_bytes: i64,
 }
 
 fn required_env(name: &str) -> Result<String> {
@@ -40,6 +41,10 @@ impl StorageConfig {
                 .and_then(|p| p.parse().ok())
                 .unwrap_or(50),
             encryption_key: required_env("ENCRYPTION_KEY")?,
+            default_quota_bytes: std::env::var("DEFAULT_QUOTA_BYTES")
+                .ok()
+                .and_then(|p| p.parse().ok())
+                .unwrap_or(5_368_709_120), // 5GB default
         })
     }
 }

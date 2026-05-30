@@ -5,8 +5,12 @@ use anyhow::Result;
 use axum::extract::FromRef;
 use sqlx::PgPool;
 use std::sync::Arc;
-use std::time::Duration;
-use tokio::sync::Semaphore;
+
+pub type IpRateLimiter = governor::RateLimiter<
+    std::net::IpAddr,
+    governor::state::keyed::DefaultKeyedState<std::net::IpAddr>,
+    governor::clock::DefaultClock,
+>;
 
 #[derive(Clone, FromRef)]
 pub struct AuthState {
@@ -15,7 +19,7 @@ pub struct AuthState {
     pub redis: Option<Arc<redis::Client>>,
     pub jwt_manager: Arc<JwtManager>,
     pub account_lock: Arc<AccountLockManager>,
-    pub rate_limiter: Arc<Semaphore>,
+    pub rate_limiter: Arc<IpRateLimiter>,
 }
 
 impl AuthState {
@@ -45,21 +49,9 @@ impl AuthState {
             config.lockout_duration_minutes,
             config.failed_attempt_window_minutes,
         ));
-        let rate_limit_capacity = config.rate_limit_per_minute.max(1) as usize;
-        let rate_limiter = Arc::new(Semaphore::new(rate_limit_capacity));
-        {
-            let limiter = rate_limiter.clone();
-            tokio::spawn(async move {
-                let mut interval = tokio::time::interval(Duration::from_secs(60));
-                loop {
-                    interval.tick().await;
-                    let available = limiter.available_permits();
-                    if available < rate_limit_capacity {
-                        limiter.add_permits(rate_limit_capacity - available);
-                    }
-                }
-            });
-        }
+        let rate_limit_capacity = config.rate_limit_per_minute.max(1) as u32;
+        let limit = std::num::NonZeroU32::new(rate_limit_capacity).unwrap();
+        let rate_limiter = Arc::new(governor::RateLimiter::keyed(governor::Quota::per_minute(limit)));
 
         Ok(Self {
             config,

@@ -134,9 +134,15 @@ impl ErrorResponse {
     }
 }
 
+tokio::task_local! {
+    pub static CORRELATION_ID: String;
+}
+
 impl axum::response::IntoResponse for AppError {
     fn into_response(self) -> axum::response::Response {
-        let (status, error_response) = match &self {
+        let request_id = CORRELATION_ID.try_with(|id| id.clone()).ok().unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+
+        let (status, mut error_response) = match &self {
             AppError::NotFound(msg) => (
                 axum::http::StatusCode::NOT_FOUND,
                 ErrorResponse::new("NOT_FOUND", msg),
@@ -165,12 +171,48 @@ impl axum::response::IntoResponse for AppError {
                 axum::http::StatusCode::SERVICE_UNAVAILABLE,
                 ErrorResponse::new("SERVICE_UNAVAILABLE", "Service temporarily unavailable"),
             ),
+            AppError::Validation(err) => {
+                let details = serde_json::json!({
+                    "field": err.field,
+                    "message": err.message
+                });
+                (
+                    axum::http::StatusCode::BAD_REQUEST,
+                    ErrorResponse::with_details("VALIDATION_ERROR", &err.to_string(), details),
+                )
+            }
+            AppError::Auth(auth_err) => {
+                let (sec_status, code) = match auth_err {
+                    AuthError::InvalidCredentials => (axum::http::StatusCode::UNAUTHORIZED, "INVALID_CREDENTIALS"),
+                    AuthError::TokenExpired => (axum::http::StatusCode::UNAUTHORIZED, "TOKEN_EXPIRED"),
+                    AuthError::InvalidToken => (axum::http::StatusCode::UNAUTHORIZED, "INVALID_TOKEN"),
+                    AuthError::PasskeyFailed => (axum::http::StatusCode::UNAUTHORIZED, "PASSKEY_VERIFICATION_FAILED"),
+                    AuthError::ZKPFailed => (axum::http::StatusCode::UNAUTHORIZED, "ZKP_VERIFICATION_FAILED"),
+                    AuthError::AccountLocked => (axum::http::StatusCode::FORBIDDEN, "ACCOUNT_LOCKED"),
+                    AuthError::MFARequired => (axum::http::StatusCode::FORBIDDEN, "MFA_REQUIRED"),
+                    AuthError::DeviceNotTrusted => (axum::http::StatusCode::FORBIDDEN, "DEVICE_NOT_TRUSTED"),
+                };
+                (sec_status, ErrorResponse::new(code, &auth_err.to_string()))
+            }
             _ => (
                 axum::http::StatusCode::INTERNAL_SERVER_ERROR,
                 ErrorResponse::new("INTERNAL_ERROR", "Internal server error"),
             ),
         };
 
-        (status, axum::Json(error_response)).into_response()
+        error_response.request_id = Some(request_id.clone());
+
+        let mut res = (status, axum::Json(error_response)).into_response();
+        if let Ok(hv) = axum::http::HeaderValue::from_str(&request_id) {
+            res.headers_mut().insert(
+                axum::http::header::HeaderName::from_static("x-request-id"),
+                hv.clone(),
+            );
+            res.headers_mut().insert(
+                axum::http::header::HeaderName::from_static("x-correlation-id"),
+                hv,
+            );
+        }
+        res
     }
 }

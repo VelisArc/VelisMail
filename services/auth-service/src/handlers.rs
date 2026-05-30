@@ -28,12 +28,32 @@ use validator::Validate;
 use velismail_common::{UserId, UserRole};
 
 /// Health check
-pub async fn health_check() -> Json<serde_json::Value> {
-    Json(json!({
-        "status": "healthy",
-        "service": "auth-service",
-        "version": env!("CARGO_PKG_VERSION"),
-        "timestamp": chrono::Utc::now().to_rfc3339()
+pub async fn health_check(
+    State(state): State<AuthState>,
+) -> Json<serde_json::Value> {
+    let db_healthy = sqlx::query("SELECT 1")
+        .execute(&state.db)
+        .await
+        .is_ok();
+
+    let redis_healthy = if let Some(redis) = &state.redis {
+        redis
+            .get_multiplexed_async_connection()
+            .await
+            .is_ok()
+    } else {
+        false
+    };
+
+    let health = velismail_common::HealthResponse::new(
+        "auth-service",
+        env!("CARGO_PKG_VERSION"),
+        db_healthy,
+        Some(redis_healthy),
+        None,
+    );
+    Json(serde_json::to_value(health).unwrap_or_else(|_| {
+        json!({"status": "UNHEALTHY", "service": "auth-service"})
     }))
 }
 
@@ -132,7 +152,7 @@ async fn send_otp_email(
     email: &str,
     display_name: &str,
     otp: &str,
-) -> Result<(), StatusCode> {
+) -> Result<(), velismail_common::AppError> {
     let text_body = format!(
         "Hello {},\n\nYour VelisMail verification code is {}.\nThis code expires in {} minutes.\n",
         if display_name.trim().is_empty() {
@@ -162,7 +182,7 @@ async fn send_otp_email(
             .await
             .map_err(|err| {
                 tracing::error!("otp resend delivery request failed for {}: {}", email, err);
-                StatusCode::BAD_GATEWAY
+                velismail_common::AppError::MailDelivery(err.to_string())
             })?;
 
         if response.status().is_success() {
@@ -177,7 +197,10 @@ async fn send_otp_email(
             status,
             body
         );
-        return Err(StatusCode::BAD_GATEWAY);
+        return Err(velismail_common::AppError::MailDelivery(format!(
+            "Resend rejected delivery with status {}: {}",
+            status, body
+        )));
     }
 
     let credentials = Credentials::new(
@@ -190,11 +213,11 @@ async fn send_otp_email(
             .config
             .otp_from_email
             .parse()
-            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?,
+            .map_err(|_| velismail_common::AppError::Internal)?,
     );
     let to = Mailbox::new(
         Some(display_name.to_string()),
-        email.parse().map_err(|_| StatusCode::BAD_REQUEST)?,
+        email.parse().map_err(|_| velismail_common::AppError::BadRequest("Invalid email".to_string()))?,
     );
 
     let message = Message::builder()
@@ -203,7 +226,7 @@ async fn send_otp_email(
         .subject("Your VelisMail verification code")
         .header(ContentType::TEXT_PLAIN)
         .body(text_body)
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        .map_err(|_| velismail_common::AppError::Internal)?;
 
     let transport_builder = match state.config.smtp_port {
         465 => SmtpTransport::relay(&state.config.smtp_host).map_err(|err| {
@@ -213,7 +236,7 @@ async fn send_otp_email(
                 state.config.smtp_port,
                 err
             );
-            StatusCode::BAD_GATEWAY
+            velismail_common::AppError::MailDelivery(err.to_string())
         })?,
         587 => SmtpTransport::starttls_relay(&state.config.smtp_host).map_err(|err| {
             tracing::error!(
@@ -222,7 +245,7 @@ async fn send_otp_email(
                 state.config.smtp_port,
                 err
             );
-            StatusCode::BAD_GATEWAY
+            velismail_common::AppError::MailDelivery(err.to_string())
         })?,
         _ => SmtpTransport::builder_dangerous(&state.config.smtp_host).port(state.config.smtp_port),
     };
@@ -239,7 +262,7 @@ async fn send_otp_email(
             email,
             err
         );
-        StatusCode::BAD_GATEWAY
+        velismail_common::AppError::MailDelivery(err.to_string())
     })?;
 
     Ok(())
@@ -249,21 +272,7 @@ async fn reserve_daily_otp_send(
     state: &AuthState,
     email: &str,
     purpose: &str,
-) -> Result<(), StatusCode> {
-    sqlx::query(
-        "CREATE TABLE IF NOT EXISTS otp_rate_limits (
-            email TEXT NOT NULL,
-            purpose TEXT NOT NULL,
-            day DATE NOT NULL,
-            count INTEGER NOT NULL DEFAULT 0,
-            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-            PRIMARY KEY (email, purpose, day)
-        )",
-    )
-    .execute(&state.db)
-    .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-
+) -> Result<(), velismail_common::AppError> {
     let row = sqlx::query(
         "INSERT INTO otp_rate_limits (email, purpose, day, count, updated_at)
          VALUES ($1, $2, CURRENT_DATE, 1, NOW())
@@ -275,11 +284,10 @@ async fn reserve_daily_otp_send(
     .bind(email)
     .bind(purpose)
     .fetch_optional(&state.db)
-    .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    .await?;
 
     if row.is_none() {
-        return Err(StatusCode::TOO_MANY_REQUESTS);
+        return Err(velismail_common::AppError::RateLimitExceeded);
     }
 
     Ok(())
@@ -657,7 +665,7 @@ async fn login_password_inner(
 pub async fn send_otp(
     State(state): State<AuthState>,
     Json(request): Json<SendOtpRequest>,
-) -> Result<Json<serde_json::Value>, StatusCode> {
+) -> Result<Json<serde_json::Value>, velismail_common::AppError> {
     let purpose = request
         .purpose
         .clone()
@@ -676,7 +684,7 @@ pub async fn send_otp(
     let (normalized_email, display_name) = if purpose == "password_reset" {
         let identifier = requested_identifier
             .or(requested_email.clone())
-            .ok_or(StatusCode::BAD_REQUEST)?;
+            .ok_or_else(|| velismail_common::AppError::BadRequest("Missing identifier".to_string()))?;
         let row = sqlx::query(
             "SELECT email, recovery_email, display_name
              FROM users
@@ -686,37 +694,34 @@ pub async fn send_otp(
         )
         .bind(&identifier)
         .fetch_optional(&state.db)
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-        .ok_or(StatusCode::NOT_FOUND)?;
+        .await?
+        .ok_or_else(|| velismail_common::AppError::NotFound("User not found".to_string()))?;
 
         let recovery_email: Option<String> = row.try_get("recovery_email").ok();
         let recovery_email = recovery_email
             .map(|value| value.trim().to_lowercase())
             .filter(|value| !value.is_empty())
-            .ok_or(StatusCode::BAD_REQUEST)?;
+            .ok_or_else(|| velismail_common::AppError::BadRequest("No recovery email set".to_string()))?;
         let display_name: String = row
             .try_get("display_name")
-            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+            .map_err(|_| velismail_common::AppError::Internal)?;
         (recovery_email, display_name)
     } else {
-        let normalized_email = requested_email.ok_or(StatusCode::BAD_REQUEST)?;
+        let normalized_email = requested_email.ok_or_else(|| velismail_common::AppError::BadRequest("Email is required".to_string()))?;
         let display_name = request
             .display_name
             .clone()
             .unwrap_or_else(|| "VelisMail user".to_string());
         if display_name.trim().len() < 2 || display_name.trim().len() > 100 {
-            return Err(StatusCode::BAD_REQUEST);
+            return Err(velismail_common::AppError::BadRequest("Invalid display name".to_string()));
         }
         (normalized_email, display_name)
     };
 
     reserve_daily_otp_send(&state, &normalized_email, &purpose).await?;
 
-    let otp = format!(
-        "{:06}",
-        (uuid::Uuid::new_v4().as_u128() % 900_000) + 100_000
-    );
+    let otp = velismail_crypto::random::generate_otp(6)
+        .map_err(|_| velismail_common::AppError::Internal)?;
     let salt = Uuid::new_v4().to_string();
     let now = chrono::Utc::now().timestamp();
     let exp = now + state.config.otp_ttl_seconds;
@@ -742,7 +747,7 @@ pub async fn send_otp(
         },
         &EncodingKey::from_secret(state.config.otp_signing_secret.as_bytes()),
     )
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    .map_err(|_| velismail_common::AppError::Internal)?;
 
     Ok(Json(json!({
         "success": true,
@@ -1034,8 +1039,49 @@ pub async fn refresh_token(
 }
 
 pub async fn logout(
-    State(_state): State<AuthState>,
-) -> Result<Json<serde_json::Value>, StatusCode> {
+    State(state): State<AuthState>,
+    Extension(claims): Extension<velismail_common::Claims>,
+) -> Result<Json<serde_json::Value>, velismail_common::AppError> {
+    let user_id = claims.sub.0;
+    let device_id = claims.device_id;
+
+    // 1. Fetch active session IDs
+    let sessions: Vec<Uuid> = sqlx::query_scalar(
+        "SELECT id FROM sessions WHERE user_id = $1 AND device_fingerprint = $2 AND is_active = true"
+    )
+    .bind(user_id)
+    .bind(&device_id)
+    .fetch_all(&state.db)
+    .await?;
+
+    // 2. Revoke sessions in DB
+    sqlx::query(
+        "UPDATE sessions SET is_active = false WHERE user_id = $1 AND device_fingerprint = $2 AND is_active = true"
+    )
+    .bind(user_id)
+    .bind(&device_id)
+    .execute(&state.db)
+    .await?;
+
+    // 3. Revoke refresh tokens in DB
+    sqlx::query(
+        "UPDATE refresh_tokens SET revoked = true WHERE user_id = $1 AND device_id = $2 AND revoked = false"
+    )
+    .bind(user_id)
+    .bind(&device_id)
+    .execute(&state.db)
+    .await?;
+
+    // 4. Clear Redis cache
+    if let Some(redis_client) = &state.redis {
+        if let Ok(mut conn) = redis_client.get_multiplexed_async_connection().await {
+            for sid in sessions {
+                let key = velismail_database::keys::session(&sid.to_string());
+                let _: Result<(), _> = redis::cmd("DEL").arg(key).query_async(&mut conn).await;
+            }
+        }
+    }
+
     Ok(Json(json!({
         "success": true,
         "message": "Logged out successfully"
@@ -1241,23 +1287,34 @@ pub struct DeviceRegisterRequest {
     pub os: String,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct TrustDeviceRequest {
+    pub device_id: Uuid,
+}
+
 pub async fn register_device(
     State(state): State<AuthState>,
+    Extension(claims): Extension<velismail_common::Claims>,
     Json(req): Json<DeviceRegisterRequest>,
-) -> Result<Json<serde_json::Value>, StatusCode> {
+) -> Result<Json<serde_json::Value>, velismail_common::AppError> {
     let device_id = Uuid::new_v4();
-    // Device row insertion requires a user_id from the JWT; until auth
-    // middleware is wired, just acknowledge the request.
-    tracing::debug!(
-        "register_device {} ({} on {}/{} via {})",
-        device_id,
-        req.device_name,
-        req.os,
-        req.platform,
-        req.browser
-    );
-    // Touch state so the unused-var warning stays clean.
-    let _ = &state.db;
+    let user_id = claims.sub.0;
+
+    sqlx::query(
+        r#"INSERT INTO devices
+           (id, user_id, device_name, platform, browser, os, fingerprint, is_trusted)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, false)"#,
+    )
+    .bind(device_id)
+    .bind(user_id)
+    .bind(&req.device_name)
+    .bind(&req.platform)
+    .bind(&req.browser)
+    .bind(&req.os)
+    .bind(&device_id.to_string())
+    .execute(&state.db)
+    .await?;
+
     Ok(Json(json!({
         "success": true,
         "device_id": device_id.to_string()
@@ -1265,8 +1322,37 @@ pub async fn register_device(
 }
 
 pub async fn trust_device(
-    State(_state): State<AuthState>,
-) -> Result<Json<serde_json::Value>, StatusCode> {
+    State(state): State<AuthState>,
+    Extension(claims): Extension<velismail_common::Claims>,
+    Json(req): Json<TrustDeviceRequest>,
+) -> Result<Json<serde_json::Value>, velismail_common::AppError> {
+    let user_id = claims.sub.0;
+
+    // Verify device belongs to authenticated user
+    let row = sqlx::query("SELECT id FROM devices WHERE id = $1 AND user_id = $2")
+        .bind(req.device_id)
+        .bind(user_id)
+        .fetch_optional(&state.db)
+        .await?;
+
+    let Some(_) = row else {
+        return Err(velismail_common::AppError::Forbidden("Device not registered to user".to_string()));
+    };
+
+    // Update is_trusted = true
+    sqlx::query("UPDATE devices SET is_trusted = true, last_seen = NOW() WHERE id = $1")
+        .bind(req.device_id)
+        .execute(&state.db)
+        .await?;
+
+    // Log trust event in audit trail
+    tracing::info!(
+        target: "audit_trail",
+        user_id = %user_id,
+        device_id = %req.device_id,
+        "Device marked as trusted by user"
+    );
+
     Ok(Json(json!({
         "success": true,
         "message": "Device trusted"

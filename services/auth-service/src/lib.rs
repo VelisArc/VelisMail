@@ -14,6 +14,8 @@ const MIGRATIONS: &[(&str, &str)] = &[
         include_str!("../migrations/004_recovery_email_and_password_reset.sql"),
     ),
     ("005", include_str!("../migrations/005_user_settings.sql")),
+    ("006", include_str!("../migrations/006_devices_table.sql")),
+    ("007", include_str!("../migrations/007_otp_rate_limits.sql")),
 ];
 
 async fn run_migrations(db: &sqlx::PgPool) -> anyhow::Result<()> {
@@ -96,14 +98,46 @@ pub async fn run_service() -> anyhow::Result<()> {
             state.clone(),
             middleware::rate_limit,
         ))
+        .layer(axum::middleware::from_fn(middleware::request_id))
         .layer(middleware::cors_layer())
         .layer(tower_http::trace::TraceLayer::new_for_http())
         .with_state(state);
 
     let addr = format!("{}:{}", config.host, config.port);
     let listener = tokio::net::TcpListener::bind(&addr).await?;
-    tracing::info!("Auth Service listening on {}", addr);
-    axum::serve(listener, app).await?;
+    tracing::info!(
+        service = "auth-service",
+        version = env!("CARGO_PKG_VERSION"),
+        address = %addr,
+        "Auth Service started"
+    );
+    axum::serve(listener, app)
+        .with_graceful_shutdown(shutdown_signal())
+        .await?;
 
     Ok(())
+}
+
+async fn shutdown_signal() {
+    let ctrl_c = async {
+        tokio::signal::ctrl_c()
+            .await
+            .expect("failed to install Ctrl+C handler");
+    };
+
+    #[cfg(unix)]
+    let terminate = async {
+        tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+            .expect("failed to install signal handler")
+            .recv()
+            .await;
+    };
+
+    #[cfg(not(unix))]
+    let terminate = std::future::pending::<()>();
+
+    tokio::select! {
+        _ = ctrl_c => { tracing::info!("Received Ctrl+C, shutting down auth-service..."); }
+        _ = terminate => { tracing::info!("Received SIGTERM, shutting down auth-service..."); }
+    }
 }
