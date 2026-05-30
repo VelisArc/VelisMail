@@ -101,4 +101,15 @@ impl S3Client {
 
         Ok(resp.content_length.unwrap_or(0))
     }
+
+    /// Check if S3 bucket is accessible
+    pub async fn is_healthy(&self) -> bool {
+        self.client
+            .head_bucket()
+            .bucket(&self.bucket)
+            .send()
+            .await
+            .is_ok()
+    }
 }
+
