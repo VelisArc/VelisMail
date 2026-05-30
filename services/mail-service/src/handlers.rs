@@ -265,6 +265,7 @@ pub async fn health_check(
 // Business email endpoints
 // ────────────────────────────────────────────────────────────
 
+#[axum::debug_handler]
 pub async fn get_business_emails(
     State(_state): State<MailState>,
     Query(query): Query<BusinessEmailsQuery>,
@@ -280,6 +281,7 @@ pub async fn get_business_emails(
     read_business_emails(&db_url).await
 }
 
+#[axum::debug_handler]
 pub async fn query_business_emails(
     State(_state): State<MailState>,
     Json(payload): Json<BusinessEmailsRequest>,
@@ -292,6 +294,7 @@ pub async fn query_business_emails(
     read_business_emails(db_url).await
 }
 
+#[axum::debug_handler]
 pub async fn save_business_email(
     State(_state): State<MailState>,
     Query(query): Query<BusinessEmailsQuery>,
