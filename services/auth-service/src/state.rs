@@ -8,7 +8,7 @@ use std::sync::Arc;
 
 pub type IpRateLimiter = governor::RateLimiter<
     std::net::IpAddr,
-    governor::state::keyed::DefaultKeyedState<std::net::IpAddr>,
+    governor::state::keyed::DefaultKeyedStateStore<std::net::IpAddr>,
     governor::clock::DefaultClock,
 >;
 
