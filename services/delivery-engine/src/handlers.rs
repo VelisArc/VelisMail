@@ -33,10 +33,6 @@ pub async fn health_check(
         redis
             .get_multiplexed_async_connection()
             .await
-            .and_then(|conn| {
-                // Use a simple future wrapper
-                Ok(conn)
-            })
             .is_ok()
     } else {
         false

@@ -122,7 +122,7 @@ pub fn verify_dkim_signature(
 
     // Add DKIM-Signature header without b= value
     let dkim_without_b = dkim_header
-        .splitn(2, "b=")
+        .split("b=")
         .next()
         .unwrap_or(dkim_header);
     sign_input.push_str(&format!(
@@ -186,7 +186,7 @@ fn canonicalize_header_value_relaxed(value: &str) -> String {
     parts.join(" ").trim().to_string()
 }
 
-fn extract_header<'a>(headers: &'a str, name: &str) -> Option<String> {
+fn extract_header(headers: &str, name: &str) -> Option<String> {
     let lower_name = name.to_lowercase();
     for line in headers.lines() {
         if let Some((hname, hvalue)) = line.split_once(':') {
