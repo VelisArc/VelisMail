@@ -1,5 +1,5 @@
 /* ====================================================================
-   VelisMail — Premium Global App Shell Style Sheet
+   VelisMail — Premium Stark Minimalist App Shell Style Sheet
    ==================================================================== */
 
 #root {
@@ -9,10 +9,10 @@
   background: var(--bg-body);
 }
 
-/* ─── Premium Scrollbar ─── */
+/* ─── Premium Crisp Scrollbar ─── */
 ::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
+  width: 8px;
+  height: 8px;
 }
 
 ::-webkit-scrollbar-track {
@@ -20,27 +20,23 @@
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--border-primary);
-  border-radius: var(--radius-full);
-  border: 2.5px solid var(--bg-surface-2);
+  background: var(--neutral-300);
+  border: 1px solid var(--bg-surface-2);
   transition: background var(--transition-fast);
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--neutral-400);
+  background: var(--neutral-500);
 }
 
-/* ─── Smooth Page Transitions ─── */
+/* ─── Crisp Fast Transitions ─── */
 .page-enter {
   opacity: 0;
-  transform: translateY(12px) scale(0.995);
 }
 
 .page-enter-active {
   opacity: 1;
-  transform: translateY(0) scale(1);
-  transition: opacity var(--transition-slow) var(--ease-out),
-              transform var(--transition-slow) var(--ease-out);
+  transition: opacity var(--transition-normal) ease-out;
 }
 
 /* ─── Navigation Progress Indicator ─── */
@@ -49,7 +45,7 @@
   top: 0;
   left: 0;
   right: 0;
-  height: 3px;
+  height: 2px;
   z-index: var(--z-toast);
   background: transparent;
   pointer-events: none;
@@ -57,9 +53,7 @@
 
 .nav-progress-bar {
   height: 100%;
-  background: linear-gradient(90deg, var(--accent), var(--accent-300), var(--primary));
-  box-shadow: 0 0 10px rgba(13, 148, 136, 0.4);
-  border-radius: var(--radius-full);
+  background: var(--primary);
   transition: width var(--transition-fast) ease-out;
 }
 
@@ -68,21 +62,13 @@
   font-weight: var(--font-weight-extrabold);
   font-size: var(--text-base);
   letter-spacing: var(--tracking-tight);
-  background: linear-gradient(135deg, var(--text-primary), var(--accent-600));
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  color: var(--text-primary);
+  text-transform: uppercase;
 }
 
-/* ─── Global Glow Effects & Overlays ─── */
+/* ─── Glow Effects Removed ─── */
 .orb-glow {
-  position: absolute;
-  border-radius: 50%;
-  filter: blur(140px);
-  pointer-events: none;
-  z-index: 0;
-  opacity: 0.25;
-  transition: all var(--transition-slow);
+  display: none !important;
 }
 
 /* ─── Error Boundary System ─── */
@@ -92,7 +78,7 @@
   justify-content: center;
   min-height: 100vh;
   padding: var(--space-8);
-  background: radial-gradient(circle at center, var(--bg-surface-2) 0%, var(--bg-body) 100%);
+  background: var(--bg-surface-2);
   position: relative;
 }
 
@@ -101,22 +87,18 @@
   flex-direction: column;
   align-items: center;
   gap: var(--space-4);
-  max-width: 480px;
+  max-width: 440px;
   text-align: center;
   padding: var(--space-8);
-  background: var(--glass-bg-strong);
-  border: 1px solid var(--glass-border-light);
-  box-shadow: var(--glass-shadow-lg);
-  border-radius: var(--radius-2xl);
-  backdrop-filter: blur(20px);
-  animation: modalSlideUp var(--transition-slow) var(--ease-out);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-accent);
 }
 
 .error-boundary-icon {
-  width: 64px;
-  height: 64px;
-  border-radius: var(--radius-xl);
-  background: var(--danger-glow);
+  width: 48px;
+  height: 48px;
+  background: var(--danger-50);
+  border: 1px solid var(--danger);
   color: var(--danger);
   display: flex;
   align-items: center;
@@ -127,7 +109,7 @@
 .error-boundary-message {
   font-size: var(--text-sm);
   color: var(--text-secondary);
-  line-height: var(--leading-relaxed);
+  line-height: var(--leading-normal);
 }
 
 .error-boundary-actions {
@@ -138,47 +120,44 @@
 
 /* ─── Interactive Elements ─── */
 .hover-scale {
-  transition: transform var(--transition-fast) var(--ease-out);
+  transition: transform var(--transition-fast) ease-out;
 }
 
 .hover-scale:hover {
-  transform: scale(1.02);
+  transform: translateY(-1px);
 }
 
 /* ─── Toast / Notification Cards ─── */
 .toast-container {
   position: fixed;
-  bottom: var(--space-8);
-  right: var(--space-8);
+  bottom: var(--space-6);
+  right: var(--space-6);
   z-index: var(--z-toast);
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
-  max-width: 420px;
+  gap: var(--space-2);
+  max-width: 380px;
   pointer-events: none;
 }
 
 .toast-card {
   display: flex;
   align-items: center;
-  gap: var(--space-4);
-  padding: var(--space-4) var(--space-6);
-  background: var(--glass-bg-strong);
-  border: 1px solid var(--glass-border-light);
-  border-radius: var(--radius-xl);
-  box-shadow: var(--glass-shadow-lg);
-  backdrop-filter: blur(16px);
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-accent);
   pointer-events: auto;
-  animation: slideUp var(--transition-normal) var(--ease-out) both;
+  animation: slideUp var(--transition-normal) ease-out both;
 }
 
 @keyframes slideUp {
   from {
     opacity: 0;
-    transform: translateY(20px) scale(0.95);
+    transform: translateY(10px);
   }
   to {
     opacity: 1;
-    transform: translateY(0) scale(1);
+    transform: translateY(0);
   }
 }

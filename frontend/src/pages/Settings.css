@@ -12,10 +12,9 @@
 .settings-header {
   display: flex;
   align-items: center;
-  height: 56px;
-  background: var(--glass-bg-strong);
-  backdrop-filter: blur(20px);
-  border-bottom: 1px solid var(--glass-border);
+  height: 50px;
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border-primary);
   position: sticky;
   top: 0;
   z-index: 10;
@@ -28,8 +27,9 @@
 }
 
 .settings-header-left h1 {
-  font-size: var(--text-base);
+  font-size: var(--text-sm);
   font-weight: var(--font-weight-bold);
+  text-transform: uppercase;
 }
 
 .settings-header-right {
@@ -44,39 +44,37 @@
 .settings-body {
   display: flex;
   flex: 1;
-  padding: var(--space-5) 0;
-  gap: var(--space-6);
+  padding: var(--space-4) 0;
+  gap: var(--space-5);
 }
 
 /* ─── Sidebar Settings Tabs ─── */
 .settings-tabs {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  width: 230px;
+  gap: 2px;
+  width: 210px;
   flex-shrink: 0;
-  padding: var(--space-3);
+  padding: var(--space-2);
   height: fit-content;
   position: sticky;
-  top: 76px;
-  border-radius: var(--radius-xl);
-  border: 1px solid var(--glass-border);
-  background: var(--glass-bg);
-  box-shadow: var(--shadow-xs);
+  top: 66px;
+  border: 1px solid var(--border-accent);
+  background: var(--bg-surface);
 }
 
 .tab-btn {
   display: flex;
   align-items: center;
-  gap: var(--space-3);
-  padding: 10px 14px;
-  border-radius: var(--radius-lg);
-  font-size: var(--text-sm);
-  font-weight: var(--font-weight-medium);
+  gap: var(--space-2);
+  padding: 8px 12px;
+  font-size: var(--text-xs);
+  font-weight: var(--font-weight-bold);
   color: var(--text-secondary);
   transition: all var(--transition-fast);
   width: 100%;
   text-align: left;
+  text-transform: uppercase;
 }
 
 .tab-btn:hover {
@@ -85,10 +83,9 @@
 }
 
 .tab-btn.active {
-  background: var(--accent-glow);
-  color: var(--accent);
-  font-weight: var(--font-weight-bold);
-  border-left: 3px solid var(--accent);
+  background: var(--primary);
+  color: var(--text-inverted);
+  border-left: none;
 }
 
 /* ─── Settings Contents ─── */
@@ -98,39 +95,41 @@
 }
 
 .settings-section-header {
-  margin-bottom: var(--space-5);
-  border-bottom: 1px solid var(--glass-border);
-  padding-bottom: var(--space-3);
+  margin-bottom: var(--space-4);
+  border-bottom: 1px solid var(--border-primary);
+  padding-bottom: var(--space-2);
 }
 
 .settings-section-header h2 {
-  font-size: var(--text-lg);
+  font-size: var(--text-base);
   font-weight: var(--font-weight-extrabold);
   margin-bottom: 4px;
+  text-transform: uppercase;
 }
 
 .settings-section-header p {
-  color: var(--text-secondary);
+  color: var(--text-muted);
   font-size: var(--text-xs);
 }
 
 /* Domain setup */
 .add-domain-card {
-  margin-bottom: var(--space-5);
+  margin-bottom: var(--space-4);
 }
 
 .add-domain-card h3 {
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  font-size: var(--text-base);
+  font-size: var(--text-sm);
   font-weight: var(--font-weight-bold);
   margin-bottom: var(--space-3);
+  text-transform: uppercase;
 }
 
 .add-domain-form {
   display: flex;
-  gap: var(--space-3);
+  gap: var(--space-2);
 }
 
 .add-domain-form .input {
@@ -140,33 +139,39 @@
 /* Empty domain states */
 .empty-domains {
   text-align: center;
-  padding: var(--space-10) var(--space-6);
+  padding: var(--space-8) var(--space-4);
   color: var(--text-muted);
+  border: 1px solid var(--border-primary);
+  background: var(--bg-surface-2);
 }
 
 .empty-domains h3 {
-  margin: var(--space-4) 0 var(--space-2);
-  font-size: var(--text-lg);
+  margin: var(--space-3) 0 var(--space-1);
+  font-size: var(--text-sm);
   color: var(--text-primary);
+  text-transform: uppercase;
 }
 
 .empty-domains p {
   color: var(--text-secondary);
-  font-size: var(--text-sm);
+  font-size: var(--text-xs);
 }
 
 /* Domain Cards */
 .domain-list {
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
+  gap: var(--space-3);
 }
 
 .domain-card {
-  background: var(--glass-bg);
-  border: 1px solid var(--glass-border);
-  border-radius: var(--radius-xl);
-  padding: var(--space-5);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-primary);
+  padding: var(--space-4);
+}
+
+.domain-card:hover {
+  border-color: var(--border-accent);
 }
 
 .domain-card-top {
@@ -174,18 +179,18 @@
   justify-content: space-between;
   align-items: center;
   flex-wrap: wrap;
-  gap: var(--space-3);
+  gap: var(--space-2);
 }
 
 .domain-info {
   display: flex;
   align-items: center;
-  gap: var(--space-3);
+  gap: var(--space-2);
 }
 
 .domain-name {
   font-weight: var(--font-weight-bold);
-  font-size: var(--text-base);
+  font-size: var(--text-sm);
 }
 
 .domain-actions {
@@ -196,23 +201,26 @@
 
 /* DNS Setup tables */
 .dns-records {
-  margin-top: var(--space-5);
-  padding-top: var(--space-5);
-  border-top: 1px solid var(--glass-border);
+  margin-top: var(--space-4);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--border-primary);
 }
 
 .dns-instructions {
   font-size: var(--text-xs);
   color: var(--text-secondary);
-  margin-bottom: var(--space-3);
+  margin-bottom: var(--space-2);
 }
 
 /* Profiles */
 .profile-card {
-  background: var(--glass-bg);
-  border: 1px solid var(--glass-border);
-  border-radius: var(--radius-xl);
-  padding: var(--space-5);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-primary);
+  padding: var(--space-4);
+}
+
+.profile-card:hover {
+  border-color: var(--border-accent);
 }
 
 .profile-row {
@@ -222,16 +230,16 @@
 }
 
 .profile-avatar-lg {
-  width: 48px;
-  height: 48px;
-  border-radius: var(--radius-xl);
-  background: linear-gradient(135deg, var(--primary), var(--accent-600));
+  width: 40px;
+  height: 40px;
+  background: var(--primary);
+  border: 1px solid var(--border-accent);
   display: flex;
   align-items: center;
   justify-content: center;
   font-weight: var(--font-weight-bold);
-  font-size: var(--text-lg);
-  color: white;
+  font-size: var(--text-sm);
+  color: var(--text-inverted);
 }
 
 .profile-plan {
@@ -241,38 +249,43 @@
 .profile-fields {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: var(--space-4);
-  margin-top: var(--space-4);
+  gap: var(--space-3);
+  margin-top: var(--space-3);
 }
 
 .profile-field {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
 }
 
 .profile-field label {
   font-size: var(--text-xs);
   font-weight: var(--font-weight-bold);
   color: var(--text-secondary);
+  text-transform: uppercase;
 }
 
 /* Security Panels */
 .security-card {
   margin-bottom: var(--space-3);
-  background: var(--glass-bg);
-  border: 1px solid var(--glass-border);
-  border-radius: var(--radius-xl);
-  padding: var(--space-5);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-primary);
+  padding: var(--space-4);
+}
+
+.security-card:hover {
+  border-color: var(--border-accent);
 }
 
 .security-card h3 {
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  font-size: var(--text-base);
+  font-size: var(--text-sm);
   font-weight: var(--font-weight-bold);
-  margin-bottom: var(--space-1);
+  margin-bottom: 2px;
+  text-transform: uppercase;
 }
 
 .security-card p {
@@ -284,8 +297,8 @@
 .security-fields {
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
-  max-width: 480px;
+  gap: var(--space-3);
+  max-width: 440px;
 }
 
 .key-info {
@@ -300,15 +313,15 @@
   justify-content: space-between;
   align-items: center;
   padding: var(--space-2) 0;
-  border-bottom: 1px solid var(--glass-border);
-  font-size: var(--text-sm);
+  border-bottom: 1px solid var(--border-primary);
+  font-size: var(--text-xs);
   color: var(--text-secondary);
 }
 
 /* ─── Red Alert Danger Zone ─── */
 .danger-zone {
-  border-color: rgba(239, 68, 68, 0.25);
-  background: linear-gradient(180deg, rgba(239, 68, 68, 0.02) 0%, transparent 100%);
+  border: 1px solid var(--danger);
+  background: var(--danger-50);
 }
 
 .danger-zone h3 {
@@ -320,33 +333,32 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--space-3);
-  padding: var(--space-3) var(--space-4);
-  border: 1px solid var(--glass-border);
-  border-radius: var(--radius-xl);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border-primary);
   background: var(--bg-surface);
 }
 
 .session-row p {
-  margin: 4px 0 0;
+  margin: 2px 0 0;
   color: var(--text-secondary);
-  font-size: var(--text-sm);
+  font-size: var(--text-xs);
 }
 
-.settings-spacer-xs { margin-top: 8px; }
-.settings-spacer-sm { margin-top: 12px; }
-.settings-spacer-md { margin-top: 16px; }
-.settings-spacer-lg { margin-top: 20px; }
-.settings-ml-xs { margin-left: 8px; }
-.settings-actions-row { display: flex; gap: var(--space-2); flex-wrap: wrap; margin-top: 12px; }
-.settings-sessions-grid { display: grid; gap: var(--space-2); margin-top: 14px; }
+.settings-spacer-xs { margin-top: 6px; }
+.settings-spacer-sm { margin-top: 10px; }
+.settings-spacer-md { margin-top: 14px; }
+.settings-spacer-lg { margin-top: 18px; }
+.settings-ml-xs { margin-left: 6px; }
+.settings-actions-row { display: flex; gap: var(--space-2); flex-wrap: wrap; margin-top: 10px; }
+.settings-sessions-grid { display: grid; gap: var(--space-2); margin-top: 10px; }
 .settings-header-row { display: flex; justify-content: space-between; align-items: center; }
 
 /* ─── Responsive Matrix ─── */
 @media (max-width: 768px) {
   .settings-body {
     flex-direction: column;
-    padding: var(--space-4) 0;
-    gap: var(--space-4);
+    padding: var(--space-3) 0;
+    gap: var(--space-3);
   }
 
   .settings-tabs {

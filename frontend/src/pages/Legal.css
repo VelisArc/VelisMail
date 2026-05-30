@@ -1,5 +1,5 @@
 /* ====================================================================
-   VelisMail — Premium Legal Pages Style Sheet
+   VelisMail — Premium Stark Minimalist Legal Pages Style Sheet
    ==================================================================== */
 
 .legal-page {
@@ -14,10 +14,9 @@
   position: sticky;
   top: 0;
   z-index: var(--z-sticky);
-  background: var(--glass-bg-strong);
-  backdrop-filter: blur(20px);
-  border-bottom: 1px solid var(--glass-border);
-  min-height: 64px;
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border-primary);
+  min-height: 60px;
   display: flex;
   align-items: center;
 }
@@ -31,77 +30,77 @@
 
 .legal-content {
   flex: 1;
-  max-width: 860px;
+  max-width: 800px;
   margin: 0 auto;
-  padding: 60px var(--space-6) 80px;
+  padding: 40px var(--space-4) 60px;
   width: 100%;
   position: relative;
   z-index: 1;
 }
 
 .legal-header {
-  margin-bottom: var(--space-8);
-  border-bottom: 1px solid var(--glass-border);
-  padding-bottom: var(--space-5);
+  margin-bottom: var(--space-6);
+  border-bottom: 1px solid var(--border-primary);
+  padding-bottom: var(--space-4);
 }
 
 .legal-header h1 {
-  font-size: clamp(2.2rem, 5vw, 3.2rem);
+  font-size: clamp(1.8rem, 4vw, 2.5rem);
   font-weight: var(--font-weight-extrabold);
   letter-spacing: var(--tracking-tight);
   margin-bottom: var(--space-2);
   line-height: 1.15;
-  background: linear-gradient(135deg, var(--text-primary) 30%, var(--accent-600) 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  color: var(--text-primary);
+  text-transform: uppercase;
 }
 
 .legal-updated {
   color: var(--text-muted);
-  font-size: var(--text-sm);
-  font-weight: var(--font-weight-semibold);
+  font-size: var(--text-xs);
+  font-weight: var(--font-weight-bold);
   text-transform: uppercase;
   letter-spacing: var(--tracking-wide);
 }
 
 /* ─── Legal Content Sections ─── */
 .legal-body section {
-  margin-bottom: var(--space-8);
+  margin-bottom: var(--space-6);
 }
 
 .legal-body h2 {
-  font-size: var(--text-xl);
+  font-size: var(--text-base);
   font-weight: var(--font-weight-bold);
-  margin-bottom: var(--space-4);
+  margin-bottom: var(--space-3);
   color: var(--text-primary);
-  padding-bottom: var(--space-2);
-  border-bottom: 1px solid var(--glass-border);
+  padding-bottom: var(--space-1);
+  border-bottom: 1px solid var(--border-accent);
   letter-spacing: var(--tracking-tight);
+  text-transform: uppercase;
 }
 
 .legal-body h3 {
-  font-size: var(--text-lg);
-  font-weight: var(--font-weight-semibold);
-  margin: var(--space-5) 0 var(--space-2);
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-bold);
+  margin: var(--space-4) 0 var(--space-1);
   color: var(--text-primary);
+  text-transform: uppercase;
 }
 
 .legal-body p {
   color: var(--text-secondary);
-  font-size: var(--text-base);
-  line-height: var(--leading-relaxed);
-  margin-bottom: var(--space-4);
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+  margin-bottom: var(--space-3);
 }
 
 .legal-body ul {
-  margin: var(--space-2) 0 var(--space-5) 0;
+  margin: var(--space-2) 0 var(--space-4) 0;
   padding-left: 0;
 }
 
 .legal-body li {
   position: relative;
-  padding: 8px 0 8px var(--space-6);
+  padding: 6px 0 6px var(--space-5);
   color: var(--text-secondary);
   font-size: var(--text-sm);
   line-height: var(--leading-normal);
@@ -111,23 +110,20 @@
   content: '';
   position: absolute;
   left: 6px;
-  top: 16px;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--accent);
-  box-shadow: 0 0 0 3px var(--accent-glow);
+  top: 14px;
+  width: 4px;
+  height: 4px;
+  background: var(--primary);
+  border: 1px solid var(--border-accent);
 }
 
 .legal-body a {
-  color: var(--accent-600);
+  color: var(--text-primary);
   text-decoration: underline;
-  text-underline-offset: 3px;
-  transition: color var(--transition-fast);
 }
 
 .legal-body a:hover {
-  color: var(--accent);
+  color: var(--accent-500);
 }
 
 .legal-body strong {
@@ -138,37 +134,33 @@
 /* ─── Privacy Overview Cards ─── */
 .privacy-cards {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: var(--space-4);
-  margin: var(--space-8) 0;
+  margin: var(--space-6) 0;
 }
 
 .privacy-card {
-  padding: var(--space-5);
-  background: var(--glass-bg);
-  border: 1px solid var(--glass-border);
-  border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-xs);
-  transition: all var(--transition-normal);
+  padding: var(--space-4);
+  background: var(--bg-surface-2);
+  border: 1px solid var(--border-primary);
 }
 
 .privacy-card:hover {
-  transform: translateY(-2px);
-  border-color: var(--glass-border-light);
-  box-shadow: var(--shadow-sm);
+  border-color: var(--border-accent);
 }
 
 .privacy-card svg {
-  margin-bottom: var(--space-3);
-  color: var(--accent-600);
+  margin-bottom: var(--space-2);
+  color: var(--text-primary);
 }
 
 .privacy-card h3 {
   margin: 0 0 var(--space-2) 0;
   border-bottom: none;
   padding-bottom: 0;
-  font-size: var(--text-base);
+  font-size: var(--text-sm);
   font-weight: var(--font-weight-bold);
+  text-transform: uppercase;
 }
 
 .privacy-card p {
@@ -180,8 +172,8 @@
 
 /* ─── Footer Style ─── */
 .legal-footer {
-  border-top: 1px solid var(--glass-border);
-  padding: var(--space-5) 0;
+  border-top: 1px solid var(--border-primary);
+  padding: var(--space-4) 0;
   margin-top: auto;
   background: var(--bg-surface-2);
 }
@@ -197,12 +189,11 @@
 .legal-footer-links {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-5);
+  gap: var(--space-4);
 }
 
 .legal-footer-links a {
   color: var(--text-muted);
-  transition: color var(--transition-fast);
 }
 
 .legal-footer-links a:hover {
@@ -212,17 +203,17 @@
 /* ─── Responsive ─── */
 @media (max-width: 768px) {
   .legal-content {
-    padding: var(--space-6) var(--space-4) var(--space-10);
+    padding: var(--space-5) var(--space-4) var(--space-8);
   }
 
   .legal-footer-inner {
     flex-direction: column;
-    gap: var(--space-4);
+    gap: var(--space-3);
     text-align: center;
   }
 
   .legal-footer-links {
     justify-content: center;
-    gap: var(--space-3) var(--space-5);
+    gap: var(--space-2) var(--space-4);
   }
 }
