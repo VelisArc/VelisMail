@@ -58,4 +58,4 @@ jobs:
         working-directory: frontend
         run: npm run build
         env:
-          VITE_API_URL: https://api.example.com
+          VITE_API_URL: https://api.velismail.online
