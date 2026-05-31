@@ -1,0 +1,272 @@
+/* ====================================================================
+   VelisMail — Premium Stark Minimalist Legal Pages Style Sheet
+   ==================================================================== */
+
+.legal-page {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-body);
+  position: relative;
+}
+
+.legal-nav {
+  position: sticky;
+  top: 0;
+  z-index: var(--z-sticky);
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border-primary);
+  min-height: 60px;
+  display: flex;
+  align-items: center;
+}
+
+.legal-nav-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+}
+
+.nav-logo {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  text-decoration: none;
+  color: var(--text-primary);
+}
+
+.legal-nav-logo,
+.nav-logo img {
+  height: 24px;
+  width: auto;
+  display: block;
+}
+
+.logo-text {
+  font-weight: var(--font-weight-bold);
+  font-size: var(--text-base);
+  letter-spacing: var(--tracking-tight);
+}
+
+.legal-content {
+  flex: 1;
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 40px var(--space-4) 60px;
+  width: 100%;
+  position: relative;
+  z-index: 1;
+}
+
+.legal-header {
+  margin-bottom: var(--space-6);
+  border-bottom: 1px solid var(--border-primary);
+  padding-bottom: var(--space-4);
+}
+
+.section-tag {
+  display: inline-block;
+  font-size: var(--text-xs);
+  font-weight: var(--font-weight-bold);
+  color: var(--primary);
+  background: var(--bg-surface-2);
+  border: 1px solid var(--border-accent);
+  padding: 2px 8px;
+  border-radius: 2px;
+  letter-spacing: var(--tracking-wider);
+  text-transform: uppercase;
+  margin-bottom: var(--space-2);
+}
+
+.legal-header h1 {
+  font-size: clamp(1.8rem, 4vw, 2.5rem);
+  font-weight: var(--font-weight-extrabold);
+  letter-spacing: var(--tracking-tight);
+  margin-bottom: var(--space-2);
+  line-height: 1.15;
+  color: var(--text-primary);
+  text-transform: uppercase;
+}
+
+.legal-updated {
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  font-weight: var(--font-weight-bold);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wide);
+}
+
+/* ─── Legal Content Sections ─── */
+.legal-body section {
+  margin-bottom: var(--space-6);
+}
+
+.legal-body h2 {
+  font-size: var(--text-base);
+  font-weight: var(--font-weight-bold);
+  margin-bottom: var(--space-3);
+  color: var(--text-primary);
+  padding-bottom: var(--space-1);
+  border-bottom: 1px solid var(--border-accent);
+  letter-spacing: var(--tracking-tight);
+  text-transform: uppercase;
+}
+
+.legal-body h3 {
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-bold);
+  margin: var(--space-4) 0 var(--space-1);
+  color: var(--text-primary);
+  text-transform: uppercase;
+}
+
+.legal-body p {
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+  margin-bottom: var(--space-3);
+}
+
+.legal-body ul {
+  margin: var(--space-2) 0 var(--space-4) 0;
+  padding-left: 0;
+  list-style: none;
+}
+
+.legal-body ul li {
+  position: relative;
+  padding: 6px 0 6px var(--space-5);
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+}
+
+.legal-body ul li::before {
+  content: '';
+  position: absolute;
+  left: 6px;
+  top: 14px;
+  width: 4px;
+  height: 4px;
+  background: var(--primary);
+  border: 1px solid var(--border-accent);
+}
+
+.legal-body ol {
+  margin: var(--space-2) 0 var(--space-4) 0;
+  padding-left: var(--space-5);
+  list-style-type: decimal;
+}
+
+.legal-body ol li {
+  padding: 6px 0 6px var(--space-1);
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+}
+
+.legal-body ol li::before {
+  content: none !important;
+}
+
+.legal-body a {
+  color: var(--text-primary);
+  text-decoration: underline;
+}
+
+.legal-body a:hover {
+  color: var(--accent-500);
+}
+
+.legal-body strong {
+  color: var(--text-primary);
+  font-weight: var(--font-weight-bold);
+}
+
+/* ─── Privacy Overview Cards ─── */
+.privacy-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--space-4);
+  margin: var(--space-6) 0;
+}
+
+.privacy-card {
+  padding: var(--space-4);
+  background: var(--bg-surface-2);
+  border: 1px solid var(--border-primary);
+}
+
+.privacy-card:hover {
+  border-color: var(--border-accent);
+}
+
+.privacy-card svg {
+  margin-bottom: var(--space-2);
+  color: var(--text-primary);
+}
+
+.privacy-card h3 {
+  margin: 0 0 var(--space-2) 0;
+  border-bottom: none;
+  padding-bottom: 0;
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-bold);
+  text-transform: uppercase;
+}
+
+.privacy-card p {
+  margin: 0;
+  font-size: var(--text-xs);
+  line-height: var(--leading-normal);
+  color: var(--text-secondary);
+}
+
+/* ─── Footer Style ─── */
+.legal-footer {
+  border-top: 1px solid var(--border-primary);
+  padding: var(--space-4) 0;
+  margin-top: auto;
+  background: var(--bg-surface-2);
+}
+
+.legal-footer-inner {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
+.legal-footer-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+}
+
+.legal-footer-links a {
+  color: var(--text-muted);
+}
+
+.legal-footer-links a:hover {
+  color: var(--text-primary);
+}
+
+/* ─── Responsive ─── */
+@media (max-width: 768px) {
+  .legal-content {
+    padding: var(--space-5) var(--space-4) var(--space-8);
+  }
+
+  .legal-footer-inner {
+    flex-direction: column;
+    gap: var(--space-3);
+    text-align: center;
+  }
+
+  .legal-footer-links {
+    justify-content: center;
+    gap: var(--space-2) var(--space-4);
+  }
+}

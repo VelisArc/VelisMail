@@ -1,0 +1,178 @@
+/* ====================================================================
+   VelisMail — Premium Stark Minimalist App Shell Style Sheet
+   ==================================================================== */
+
+#root {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-body);
+}
+
+/* ─── Premium Crisp Scrollbar ─── */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg-surface-2);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--neutral-300);
+  border: 1px solid var(--bg-surface-2);
+  transition: background var(--transition-fast);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--neutral-500);
+}
+
+/* ─── Crisp Fast Transitions ─── */
+.page-enter {
+  opacity: 0;
+}
+
+.page-enter-active {
+  opacity: 1;
+  transition: opacity var(--transition-normal) ease-out;
+}
+
+/* ─── Navigation Progress Indicator ─── */
+.nav-progress {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  z-index: var(--z-toast);
+  background: transparent;
+  pointer-events: none;
+}
+
+.nav-progress-bar {
+  height: 100%;
+  background: var(--primary);
+  transition: width var(--transition-fast) ease-out;
+}
+
+/* ─── Premium Logo Typography ─── */
+.logo-text {
+  font-weight: var(--font-weight-extrabold);
+  font-size: var(--text-base);
+  letter-spacing: var(--tracking-tight);
+  color: var(--text-primary);
+  text-transform: uppercase;
+}
+
+/* ─── Glow Effects Removed ─── */
+.orb-glow {
+  display: none !important;
+}
+
+/* ─── Error Boundary System ─── */
+.error-boundary-fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: var(--space-8);
+  background: var(--bg-surface-2);
+  position: relative;
+}
+
+.error-boundary-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-4);
+  max-width: 440px;
+  text-align: center;
+  padding: var(--space-8);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-accent);
+}
+
+.error-boundary-icon {
+  width: 48px;
+  height: 48px;
+  background: var(--danger-50);
+  border: 1px solid var(--danger);
+  color: var(--danger);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: var(--space-2);
+}
+
+.error-boundary-message {
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  line-height: var(--leading-normal);
+}
+
+.error-boundary-actions {
+  display: flex;
+  gap: var(--space-3);
+  margin-top: var(--space-4);
+}
+
+/* ─── Interactive Elements ─── */
+.hover-scale {
+  transition: transform var(--transition-fast) ease-out;
+}
+
+.hover-scale:hover {
+  transform: translateY(-1px);
+}
+
+/* ─── Toast / Notification Cards ─── */
+.toast-container {
+  position: fixed;
+  bottom: var(--space-6);
+  right: var(--space-6);
+  z-index: 10000;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  max-width: 380px;
+  pointer-events: none;
+}
+
+.toast,
+.toast-card {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-accent);
+  pointer-events: auto;
+  animation: slideUp var(--transition-normal) ease-out both;
+  color: var(--text-primary);
+  font-size: var(--text-xs);
+  font-weight: var(--font-weight-bold);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wide);
+}
+
+.toast-success {
+  border-left: 3px solid var(--success) !important;
+}
+
+.toast-error {
+  border-left: 3px solid var(--danger) !important;
+  color: var(--danger) !important;
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

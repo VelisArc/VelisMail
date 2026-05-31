@@ -1,0 +1,299 @@
+/* ====================================================================
+   VelisMail — Premium Stark Minimalist Business Setup Wizard Style Sheet
+   ==================================================================== */
+
+.bsetup-page {
+  min-height: 100vh;
+  background: var(--bg-body);
+  color: var(--text-primary);
+  position: relative;
+  overflow-x: hidden;
+}
+
+.bsetup-page::before {
+  display: none !important;
+}
+
+.bsetup-nav {
+  min-height: 60px;
+  display: flex;
+  align-items: center;
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border-primary);
+  position: sticky;
+  top: 0;
+  z-index: var(--z-sticky);
+}
+
+.bsetup-nav-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+}
+
+.mobile-brand {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.mobile-brand img {
+  height: 24px;
+  width: auto;
+}
+
+.mobile-brand span {
+  font-weight: var(--font-weight-extrabold);
+  font-size: var(--text-base);
+  letter-spacing: var(--tracking-tight);
+  text-transform: uppercase;
+}
+
+.bsetup-container {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: var(--space-6) var(--space-4);
+  position: relative;
+  z-index: 1;
+}
+
+/* ─── Stark Progress Stepper ─── */
+.bsetup-progress {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: var(--space-6);
+  position: relative;
+}
+
+.bsetup-progress::before {
+  content: '';
+  position: absolute;
+  top: 18px;
+  left: var(--space-10);
+  right: var(--space-10);
+  height: 1px;
+  background: var(--border-primary);
+  z-index: 0;
+}
+
+.bsetup-progress-step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  position: relative;
+  z-index: 1;
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  font-weight: var(--font-weight-bold);
+  flex: 1;
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wide);
+}
+
+.bsetup-step-num {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-primary);
+  font-weight: var(--font-weight-extrabold);
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+}
+
+.bsetup-progress-step.active .bsetup-step-num {
+  background: var(--primary);
+  border-color: var(--border-accent);
+  color: var(--text-inverted);
+}
+
+.bsetup-progress-step.active {
+  color: var(--text-primary);
+}
+
+.bsetup-progress-step.done .bsetup-step-num {
+  background: var(--bg-surface-2);
+  border-color: var(--border-accent);
+  color: var(--text-primary);
+}
+
+.bsetup-progress-step.done {
+  color: var(--text-secondary);
+}
+
+/* ─── Stark Onboarding Wizard Card ─── */
+.bsetup-card {
+  padding: var(--space-6);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-accent);
+}
+
+.bsetup-card h2 {
+  font-size: var(--text-lg);
+  font-weight: var(--font-weight-extrabold);
+  margin-bottom: var(--space-2);
+  letter-spacing: var(--tracking-tight);
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  text-transform: uppercase;
+}
+
+.bsetup-desc {
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+  margin-bottom: var(--space-5);
+}
+
+.bsetup-form {
+  display: grid;
+  gap: var(--space-4);
+}
+
+/* ─── Stark DNS Records Table ─── */
+.bsetup-dns {
+  margin-top: var(--space-5);
+}
+
+.dns-instruction-text {
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  margin-bottom: var(--space-4);
+  line-height: var(--leading-normal);
+}
+
+.bsetup-domain-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-3);
+}
+
+.dns-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-accent);
+}
+
+.dns-table th {
+  background: var(--bg-surface-2);
+  text-align: left;
+  padding: var(--space-3) var(--space-4);
+  font-size: var(--text-xs);
+  font-weight: var(--font-weight-bold);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wide);
+  color: var(--text-primary);
+  border-bottom: 1px solid var(--border-accent);
+}
+
+.dns-table td {
+  padding: var(--space-3) var(--space-4);
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  border-bottom: 1px solid var(--border-primary);
+}
+
+.dns-table tr:last-child td {
+  border-bottom: none;
+}
+
+.dns-type {
+  font-weight: var(--font-weight-bold);
+  color: var(--text-primary);
+  background: var(--bg-surface-2);
+  border: 1px solid var(--border-primary);
+  padding: 2px 6px;
+  font-size: var(--text-xs);
+}
+
+.dns-value {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--text-primary);
+  background: var(--bg-surface-2);
+  padding: 3px 6px;
+  border: 1px solid var(--border-primary);
+  display: inline-block;
+  max-width: 280px;
+  overflow-x: auto;
+}
+
+/* ─── Success and Diagnostics ─── */
+.bsetup-success-icon {
+  width: 64px;
+  height: 64px;
+  background: var(--success-glow);
+  border: 1px solid var(--success);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto var(--space-5);
+  color: var(--success);
+  font-size: 1.8rem;
+}
+
+.diag-steps {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-bottom: var(--space-6);
+}
+
+.diag-step {
+  padding: var(--space-4);
+  background: var(--bg-surface-2);
+  border: 1px solid var(--border-primary);
+  display: flex;
+  gap: var(--space-4);
+  align-items: flex-start;
+}
+
+.diag-step:hover {
+  border-color: var(--border-accent);
+}
+
+.diag-step-icon {
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 2px;
+}
+
+.diag-step-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.diag-step-label {
+  font-weight: var(--font-weight-bold);
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+}
+
+.diag-step-detail {
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  word-break: break-all;
+}
+
+/* ─── Responsive Wizard ─── */
+@media (max-width: 768px) {
+  .bsetup-progress::before {
+    left: var(--space-8);
+    right: var(--space-8);
+  }
+
+  .bsetup-progress-step span {
+    display: none;
+  }
+}

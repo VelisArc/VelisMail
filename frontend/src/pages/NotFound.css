@@ -1,0 +1,58 @@
+/* ====================================================================
+   VelisMail — Premium Stark Minimalist 404 Not Found Page Style Sheet
+   ==================================================================== */
+
+.not-found-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-body);
+  padding: var(--space-6);
+  position: relative;
+  overflow: hidden;
+}
+
+.not-found-page::before {
+  display: none !important;
+}
+
+.not-found-content {
+  text-align: center;
+  max-width: 440px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-accent);
+  padding: var(--space-8) var(--space-6);
+  z-index: 1;
+}
+
+.not-found-code {
+  font-size: clamp(4rem, 12vw, 7rem);
+  font-weight: var(--font-weight-extrabold);
+  color: var(--text-primary);
+  line-height: 1;
+  display: block;
+  margin-bottom: var(--space-4);
+  letter-spacing: -0.04em;
+}
+
+.not-found-content h1 {
+  font-size: var(--text-base);
+  font-weight: var(--font-weight-bold);
+  margin-bottom: var(--space-3);
+  letter-spacing: var(--tracking-tight);
+  text-transform: uppercase;
+}
+
+.not-found-content p {
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+  margin-bottom: var(--space-6);
+}
+
+.not-found-actions {
+  display: flex;
+  gap: var(--space-3);
+  justify-content: center;
+}
