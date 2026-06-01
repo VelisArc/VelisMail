@@ -214,7 +214,6 @@ body {
   text-rendering: optimizeLegibility;
   overflow-x: hidden;
   min-height: 100vh;
-  zoom: 0.9; /* Global 10% zoom out factor */
 }
 
 img, picture, video, canvas, svg {
