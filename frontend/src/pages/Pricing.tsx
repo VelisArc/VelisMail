@@ -2,7 +2,6 @@ import { formatINR } from '../utils/format';
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  ArrowLeft,
   ArrowRight,
   Check,
   X,
@@ -14,7 +13,6 @@ import {
   Server,
   CheckCircle2,
   Menu,
-  Shield,
 } from 'lucide-react';
 import { auth, isBusinessSetupReady } from '../api/client';
 import './Pricing.css';
