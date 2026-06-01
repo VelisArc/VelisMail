@@ -1660,7 +1660,8 @@ export const platformAdmin = {
   isCurrentUserPlatformAdmin(): boolean {
     const session = auth.getSession();
     if (!session) return false;
-    const hostAllowed = typeof window !== 'undefined' && window.location.hostname === 'velismail.online';
+    const hostname = typeof window !== 'undefined' ? window.location.hostname : '';
+    const hostAllowed = hostname === 'velismail.online' || hostname === 'localhost' || hostname === '127.0.0.1';
     return hostAllowed && normalizeMailbox(session.email).endsWith('@velismail.online');
   },
 

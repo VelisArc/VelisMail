@@ -701,7 +701,7 @@ export function normalizeLocalPart(input: string): string {
     .toLowerCase()
     .replace(/^@+/, '')
     .replace(/@.*$/, '')
-    .replace(/[^a-z0-9._-]/g, '');
+    .replace(/[^a-z0-9._\-+]/g, '');
 }
 
 export function normalizeEmail(value: string): string {
