@@ -1,6 +1,6 @@
 # VelisMail
 
-Current release: **v4.0.2**
+Current release: **v4.0.3**
 
 VelisMail now uses a clean split deployment:
 
@@ -48,8 +48,8 @@ curl http://127.0.0.1:3000/health
 curl https://api.velismail.online/health
 ```
 
-The health response includes the running service version. A production v4.0.2
-deploy should report `"version":"4.0.2"` on all Rust services.
+The health response includes the running service version. A production v4.0.3
+deploy should report `"version":"4.0.3"` on all Rust services.
 
 ## Frontend deploy
 

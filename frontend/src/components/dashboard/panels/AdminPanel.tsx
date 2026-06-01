@@ -1,4 +1,5 @@
-import { Activity, Crown, CreditCard, Database, Mail, Menu, RefreshCcw, Shield, ShieldCheck, Trash2, User, Users } from 'lucide-react';
+import { useState } from 'react';
+import { Activity, AlertTriangle, Crown, CreditCard, Database, LockKeyhole, Mail, Menu, RefreshCcw, Shield, ShieldCheck, Trash2, User, Users } from 'lucide-react';
 import { platformAdmin } from '../../../api/client';
 import type { DashboardState } from '../types';
 
@@ -7,6 +8,16 @@ interface AdminPanelProps {
 }
 
 const normalizeEmail = (value = '') => value.trim().toLowerCase();
+
+type PendingAdminAction = {
+  title: string;
+  message: string;
+  confirmLabel: string;
+  success: string;
+  tone: 'primary' | 'danger';
+  step: number;
+  action: () => void;
+};
 
 function formatBytes(bytes: number): string {
   if (!Number.isFinite(bytes) || bytes <= 0) return '0 B';
@@ -21,9 +32,11 @@ function formatBytes(bytes: number): string {
 }
 
 export default function AdminPanel({ state }: AdminPanelProps) {
+  const [pendingAdminAction, setPendingAdminAction] = useState<PendingAdminAction | null>(null);
   const refresh = () => state.setAdminUsers(platformAdmin.getUsers());
   const planOptions = ['Free', 'Starter', 'Business', 'Enterprise'];
   const selfEmail = normalizeEmail(state.user?.email || '');
+  const ownerEmail = platformAdmin.ownerEmail;
 
   const filtered = state.adminUsers.filter(u => {
     const q = state.adminSearch.toLowerCase();
@@ -49,13 +62,24 @@ export default function AdminPanel({ state }: AdminPanelProps) {
   const page = Math.min(state.adminPage, totalPages);
   const paginated = filtered.slice((page - 1) * pageSize, page * pageSize);
 
-  const handleAdminAction = (action: () => void, success: string) => {
+  const queueAdminAction = (action: Omit<PendingAdminAction, 'step'>) => {
+    setPendingAdminAction({ ...action, step: 1 });
+  };
+
+  const confirmPendingAction = () => {
+    if (!pendingAdminAction) return;
+    if (pendingAdminAction.step === 1) {
+      setPendingAdminAction({ ...pendingAdminAction, step: 2 });
+      return;
+    }
     try {
-      action();
+      pendingAdminAction.action();
       refresh();
-      state.showToast(success);
+      state.showToast(pendingAdminAction.success);
     } catch (error) {
       state.showToast(error instanceof Error ? error.message : 'Admin action failed', 'error');
+    } finally {
+      setPendingAdminAction(null);
     }
   };
 
@@ -65,6 +89,14 @@ export default function AdminPanel({ state }: AdminPanelProps) {
         <button className="toolbar-icon sidebar-toggle" onClick={() => state.setSidebarOpen(true)}><Menu size={20} /></button>
         <h3><Crown size={16} /> Platform Admin</h3>
         <button className="btn btn-ghost btn-sm" onClick={() => { refresh(); state.showToast('Refreshed'); }}><RefreshCcw size={12} /> Refresh</button>
+      </div>
+
+      <div className="admin-owner-lock">
+        <LockKeyhole size={16} />
+        <div>
+          <strong>Owner-only console</strong>
+          <span>Only {ownerEmail} can open Platform Admin. All admin changes require two confirmations.</span>
+        </div>
       </div>
 
       <div className="admin-command-grid">
@@ -106,13 +138,14 @@ export default function AdminPanel({ state }: AdminPanelProps) {
 
       {paginated.map(u => {
         const isSelf = normalizeEmail(u.user.email) === selfEmail;
+        const isOwner = platformAdmin.isOwnerEmail(u.user.email);
         const riskBadge = u.risk === 'high' ? 'danger' : u.risk === 'medium' ? 'neutral' : 'success';
         return (
           <div key={u.user.email} className="team-member-row admin-user-row" onClick={() => state.setSelectedAdminUser(u)}>
             <div className="avatar avatar-sm"><User size={14} /></div>
             <div className="team-member-info admin-user-info">
               <strong>{u.user.displayName || u.user.email}</strong>
-              <span className="text-muted">{u.user.email} · {u.domain || 'no domain'}</span>
+              <span className="text-muted">{u.user.email} - {u.domain || 'no domain'}</span>
               <div className="admin-user-metrics">
                 <span><Mail size={12} /> {u.emailCount} mail</span>
                 <span><Database size={12} /> {formatBytes(u.storageEstimateBytes)}</span>
@@ -122,29 +155,69 @@ export default function AdminPanel({ state }: AdminPanelProps) {
 
             <span className={`badge badge-${u.status === 'active' ? 'success' : 'danger'}`}>{u.status}</span>
             <span className={`badge badge-${riskBadge}`}>{u.risk} risk</span>
-            {u.user.isPlatformAdmin && <span className="badge badge-primary">platform</span>}
+            {isOwner && <span className="badge badge-primary">owner</span>}
 
             <div className="admin-row-actions" onClick={e => e.stopPropagation()}>
-              <select className="admin-mini-select" value={u.user.role || 'member'} onChange={e => handleAdminAction(() => { platformAdmin.updateUserRole(u.user.email, e.target.value as 'admin' | 'member' | 'viewer'); }, `Role set to ${e.target.value}`)}>
+              <select className="admin-mini-select" value={u.user.role || 'member'} disabled={isOwner} onChange={e => {
+                const nextRole = e.target.value as 'admin' | 'member' | 'viewer';
+                queueAdminAction({
+                  title: 'Review Role Change',
+                  message: `Change ${u.user.email} from ${u.user.role || 'member'} to ${nextRole}?`,
+                  confirmLabel: 'Apply Role',
+                  success: `Role set to ${nextRole}`,
+                  tone: 'primary',
+                  action: () => { platformAdmin.updateUserRole(u.user.email, nextRole); },
+                });
+              }}>
                 <option value="admin">Admin</option><option value="member">Member</option><option value="viewer">Viewer</option>
               </select>
-              <select className="admin-mini-select" value={u.plan || 'Free'} onChange={e => handleAdminAction(() => { platformAdmin.updateUserPlan(u.user.email, e.target.value, u.billingCycle); }, `Plan set to ${e.target.value}`)}>
+              <select className="admin-mini-select" value={u.plan || 'Free'} onChange={e => {
+                const nextPlan = e.target.value;
+                queueAdminAction({
+                  title: 'Review Plan Change',
+                  message: `Change ${u.user.email} from ${u.plan || 'Free'} to ${nextPlan}? Billing and limits can be affected.`,
+                  confirmLabel: 'Apply Plan',
+                  success: `Plan set to ${nextPlan}`,
+                  tone: 'primary',
+                  action: () => { platformAdmin.updateUserPlan(u.user.email, nextPlan, u.billingCycle); },
+                });
+              }}>
                 {planOptions.map(plan => <option key={plan} value={plan}>{plan}</option>)}
               </select>
-              <select className="admin-mini-select" value={u.billingCycle} onChange={e => handleAdminAction(() => { platformAdmin.updateUserPlan(u.user.email, u.plan || 'Free', e.target.value as 'monthly' | 'annual'); }, `Billing set to ${e.target.value}`)}>
+              <select className="admin-mini-select" value={u.billingCycle} onChange={e => {
+                const nextCycle = e.target.value as 'monthly' | 'annual';
+                queueAdminAction({
+                  title: 'Review Billing Cycle',
+                  message: `Change ${u.user.email} billing cycle from ${u.billingCycle} to ${nextCycle}?`,
+                  confirmLabel: 'Apply Billing',
+                  success: `Billing set to ${nextCycle}`,
+                  tone: 'primary',
+                  action: () => { platformAdmin.updateUserPlan(u.user.email, u.plan || 'Free', nextCycle); },
+                });
+              }}>
                 <option value="monthly">Monthly</option><option value="annual">Annual</option>
               </select>
-              <button className="btn btn-ghost btn-sm" title="Toggle platform admin" onClick={() => handleAdminAction(() => { platformAdmin.setPlatformAdmin(u.user.email, !u.user.isPlatformAdmin); }, u.user.isPlatformAdmin ? 'Platform admin revoked' : 'Platform admin granted')}>
-                <ShieldCheck size={12} />
-              </button>
-              <button className="btn btn-ghost btn-sm" onClick={() => state.setAdminStatusConfirm({ record: u, status: u.status === 'active' ? 'suspended' : 'active', step: 1 })}>
+              <button className="btn btn-ghost btn-sm" disabled={isOwner} onClick={() => {
+                const nextStatus = u.status === 'active' ? 'suspended' : 'active';
+                queueAdminAction({
+                  title: 'Review Status Change',
+                  message: `${nextStatus === 'suspended' ? 'Suspend' : 'Reactivate'} ${u.user.email}? This affects login and workspace access.`,
+                  confirmLabel: nextStatus === 'suspended' ? 'Confirm Suspend' : 'Confirm Reactivate',
+                  success: `User ${nextStatus}`,
+                  tone: nextStatus === 'suspended' ? 'danger' : 'primary',
+                  action: () => { platformAdmin.updateUserStatus(u.user.email, nextStatus); },
+                });
+              }}>
                 <Shield size={12} /> {u.status === 'active' ? 'Suspend' : 'Reactivate'}
               </button>
-              <button className="btn btn-ghost btn-sm btn-danger" title={isSelf ? 'You cannot delete your own active admin session' : 'Delete user'} disabled={isSelf} onClick={() => {
-                state.setConfirmAction({
-                  title: 'Delete User',
+              <button className="btn btn-ghost btn-sm btn-danger" title={isSelf || isOwner ? 'Protected owner/current admin account' : 'Delete user'} disabled={isSelf || isOwner} onClick={() => {
+                queueAdminAction({
+                  title: 'Review User Deletion',
                   message: `Permanently delete ${u.user.email}? This cannot be undone.`,
-                  onConfirm: () => handleAdminAction(() => { platformAdmin.deleteUser(u.user.email); }, 'User deleted'),
+                  confirmLabel: 'Delete User',
+                  success: 'User deleted',
+                  tone: 'danger',
+                  action: () => { platformAdmin.deleteUser(u.user.email); },
                 });
               }}><Trash2 size={12} /></button>
             </div>
@@ -165,6 +238,30 @@ export default function AdminPanel({ state }: AdminPanelProps) {
           <button className="btn btn-ghost btn-sm" disabled={page <= 1} onClick={() => state.setAdminPage(page - 1)}>Prev</button>
           <span className="text-xs text-muted">Page {page} of {totalPages}</span>
           <button className="btn btn-ghost btn-sm" disabled={page >= totalPages} onClick={() => state.setAdminPage(page + 1)}>Next</button>
+        </div>
+      )}
+
+      {pendingAdminAction && (
+        <div className="modal-overlay" onClick={() => setPendingAdminAction(null)} role="dialog" aria-modal="true" aria-label="Confirm admin action">
+          <div className="biz-form-modal glass animate-scale admin-status-modal" onClick={e => e.stopPropagation()}>
+            <div className="modal-body-center">
+              <div className={pendingAdminAction.tone === 'danger' ? 'modal-icon-danger' : 'modal-icon-warning'}>
+                <AlertTriangle size={24} />
+              </div>
+              <h3 className="admin-status-title">
+                {pendingAdminAction.step === 1 ? pendingAdminAction.title : 'Final Confirmation'}
+              </h3>
+              <p className="text-sm text-muted">
+                {pendingAdminAction.step === 1 ? pendingAdminAction.message : 'This is the second confirmation. Apply this Platform Admin change now?'}
+              </p>
+            </div>
+            <div className="modal-actions-border">
+              <button className="btn btn-ghost" onClick={() => setPendingAdminAction(null)}>Cancel</button>
+              <button className={pendingAdminAction.tone === 'danger' ? 'btn btn-danger' : 'btn btn-primary'} onClick={confirmPendingAction}>
+                {pendingAdminAction.step === 1 ? 'Continue' : pendingAdminAction.confirmLabel}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

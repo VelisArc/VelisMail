@@ -1722,25 +1722,61 @@ function platformAdminHostAllowed(): boolean {
   );
 }
 
-function configuredPlatformAdminEmails(): Set<string> {
-  const envEmails = [
-    import.meta.env.VITE_PLATFORM_ADMIN_EMAILS,
-    import.meta.env.VITE_PLATFORM_OWNER_EMAIL,
-  ].filter(Boolean).join(',');
-  const storedEmails = typeof localStorage !== 'undefined' ? localStorage.getItem('velismail_platform_admin_emails') || '' : '';
-  return new Set(
-    `${envEmails},${storedEmails}`
-      .split(',')
-      .map((email) => normalizeMailbox(email))
-      .filter(Boolean),
-  );
+const PLATFORM_OWNER_EMAIL = 'velisarcofficial@gmail.com';
+
+function isPlatformOwnerEmail(email: string): boolean {
+  return normalizeMailbox(email) === PLATFORM_OWNER_EMAIL;
 }
 
-function hasExplicitPlatformAdmin(users: Record<string, User>, exceptEmail = ''): boolean {
-  return Object.values(users).some((user) => {
-    const normalizedUser = normalizeSessionUser(user);
-    return normalizedUser.isPlatformAdmin && normalizeMailbox(normalizedUser.email) !== exceptEmail;
+function normalizePlatformDirectoryUser(entry: Partial<User>): User | null {
+  const email = normalizeMailbox(entry.email || entry.businessMailboxAddress || '');
+  if (!email) return null;
+  const owner = isPlatformOwnerEmail(email);
+  return normalizeSessionUser({
+    ...entry,
+    id: String(entry.id || `usr_${hashString(email)}`),
+    email,
+    displayName: String(entry.displayName || email.split('@')[0] || 'Business User'),
+    plan: entry.plan || 'Free',
+    accountType: 'business',
+    isSetupComplete: Boolean(entry.isSetupComplete),
+    createdAt: entry.createdAt || new Date().toISOString(),
+    role: owner ? 'admin' : entry.role || 'member',
+    status: owner ? 'active' : entry.status || 'active',
+    isPlatformAdmin: owner,
+  } as User);
+}
+
+function loadPlatformUserDirectory(session?: User | null): Record<string, User> {
+  const users = { ...loadPersistentUsers() };
+  const legacyUsers = loadDB<unknown>(STORAGE_KEYS.users, []);
+  if (Array.isArray(legacyUsers)) {
+    legacyUsers.forEach((entry) => {
+      if (!entry || typeof entry !== 'object') return;
+      const user = normalizePlatformDirectoryUser(entry as Partial<User>);
+      if (user && !users[user.email]) {
+        users[user.email] = user;
+      }
+    });
+  }
+  if (session) {
+    users[normalizeMailbox(session.email)] = normalizeSessionUser({
+      ...users[normalizeMailbox(session.email)],
+      ...session,
+    });
+  }
+
+  Object.entries(users).forEach(([email, user]) => {
+    const owner = isPlatformOwnerEmail(email);
+    users[email] = normalizeSessionUser({
+      ...user,
+      role: owner ? 'admin' : user.role || 'member',
+      status: owner ? 'active' : user.status || 'active',
+      isPlatformAdmin: owner,
+    });
   });
+  savePersistentUsers(users);
+  return users;
 }
 
 function persistCurrentSessionUser(user: User) {
@@ -1752,53 +1788,50 @@ function persistCurrentSessionUser(user: User) {
 
 // ---- Platform Admin ----
 export const platformAdmin = {
+  ownerEmail: PLATFORM_OWNER_EMAIL,
+
+  isOwnerEmail(email: string): boolean {
+    return isPlatformOwnerEmail(email);
+  },
+
   isCurrentUserPlatformAdmin(): boolean {
     const session = auth.getSession();
     if (!session) return false;
     if (!platformAdminHostAllowed()) return false;
 
     const normalizedEmail = normalizeMailbox(session.email);
-    const users = loadPersistentUsers();
+    const users = loadPlatformUserDirectory(session);
     const existing = users[normalizedEmail];
-    const normalizedSession = normalizeSessionUser({ ...existing, ...session });
-    const configuredAdmins = configuredPlatformAdminEmails();
-    const explicitlyAllowed = Boolean(normalizedSession.isPlatformAdmin || configuredAdmins.has(normalizedEmail));
-    const canBootstrapFirstAdmin = Boolean(
-      normalizedSession.role === 'admin' &&
-      !normalizedSession.teamAccessRole &&
-      !hasExplicitPlatformAdmin(users),
-    );
-    const allowed = explicitlyAllowed || canBootstrapFirstAdmin;
-
-    if (allowed) {
-      const next = normalizeSessionUser({
-        ...existing,
-        ...normalizedSession,
-        isPlatformAdmin: true,
-      });
-      users[normalizedEmail] = next;
-      savePersistentUsers(users);
-      persistCurrentSessionUser(next);
+    if (!isPlatformOwnerEmail(normalizedEmail)) {
+      if (existing?.isPlatformAdmin || session.isPlatformAdmin) {
+        const next = normalizeSessionUser({
+          ...existing,
+          ...session,
+          isPlatformAdmin: false,
+        });
+        users[normalizedEmail] = next;
+        savePersistentUsers(users);
+        persistCurrentSessionUser(next);
+      }
+      return false;
     }
 
-    return allowed;
+    const next = normalizeSessionUser({
+      ...existing,
+      ...session,
+      role: 'admin',
+      status: 'active',
+      isPlatformAdmin: true,
+    });
+    users[normalizedEmail] = next;
+    savePersistentUsers(users);
+    persistCurrentSessionUser(next);
+    return true;
   },
 
   getUsers(): PlatformAdminUserRecord[] {
     const session = auth.getSession();
-    const usersByEmail = loadPersistentUsers();
-    if (session) {
-      const normalizedEmail = normalizeMailbox(session.email);
-      const existing = usersByEmail[normalizedEmail];
-      const currentHasAccess = this.isCurrentUserPlatformAdmin();
-      usersByEmail[normalizedEmail] = normalizeSessionUser({
-        ...existing,
-        ...session,
-        isPlatformAdmin: Boolean(existing?.isPlatformAdmin || session.isPlatformAdmin || currentHasAccess),
-      });
-      savePersistentUsers(usersByEmail);
-    }
-
+    const usersByEmail = loadPlatformUserDirectory(session);
     const users = Object.values(usersByEmail).map(normalizeSessionUser);
     return users
       .map((user): PlatformAdminUserRecord => {
@@ -1836,6 +1869,9 @@ export const platformAdmin = {
     const normalizedEmail = normalizeMailbox(email);
     const user = users[normalizedEmail];
     if (!user) return null;
+    if (isPlatformOwnerEmail(normalizedEmail) && status !== 'active') {
+      throw new Error('The platform owner account cannot be suspended or deactivated.');
+    }
 
     const next = normalizeSessionUser({
       ...user,
@@ -1897,8 +1933,11 @@ export const platformAdmin = {
     const normalizedEmail = normalizeMailbox(email);
     const user = users[normalizedEmail];
     if (!user) return null;
+    if (isPlatformOwnerEmail(normalizedEmail) && role !== 'admin') {
+      throw new Error('The platform owner role is locked to admin.');
+    }
 
-    const next = normalizeSessionUser({ ...user, role });
+    const next = normalizeSessionUser({ ...user, role, isPlatformAdmin: isPlatformOwnerEmail(normalizedEmail) });
     users[normalizedEmail] = next;
     savePersistentUsers(users);
     persistCurrentSessionUser(next);
@@ -1919,14 +1958,18 @@ export const platformAdmin = {
     const normalizedEmail = normalizeMailbox(email);
     const user = users[normalizedEmail];
     if (!user) return null;
-    if (!enabled && !hasExplicitPlatformAdmin(users, normalizedEmail)) {
-      throw new Error('At least one platform admin must remain active.');
+    if (!isPlatformOwnerEmail(normalizedEmail)) {
+      throw new Error(`Platform Admin access is locked to ${PLATFORM_OWNER_EMAIL}.`);
+    }
+    if (!enabled) {
+      throw new Error('The platform owner cannot be removed from Platform Admin.');
     }
 
     const next = normalizeSessionUser({
       ...user,
-      role: enabled ? 'admin' : user.role,
-      isPlatformAdmin: enabled,
+      role: 'admin',
+      status: 'active',
+      isPlatformAdmin: true,
     });
     users[normalizedEmail] = next;
     savePersistentUsers(users);
@@ -1947,8 +1990,8 @@ export const platformAdmin = {
     const users = loadPersistentUsers();
     const normalizedEmail = normalizeMailbox(email);
     if (!users[normalizedEmail]) return false;
-    if (users[normalizedEmail].isPlatformAdmin && !hasExplicitPlatformAdmin(users, normalizedEmail)) {
-      throw new Error('At least one platform admin must remain active.');
+    if (isPlatformOwnerEmail(normalizedEmail)) {
+      throw new Error('The platform owner account cannot be deleted.');
     }
 
     delete users[normalizedEmail];

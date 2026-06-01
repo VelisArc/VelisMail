@@ -1,5 +1,18 @@
 # Changelog
 
+## v4.0.3 - Owner-Only Platform Admin
+
+### Added
+- **Owner-only Platform Admin**: The admin console is locked to `velisarcofficial@gmail.com`; other users cannot bootstrap or receive platform-admin access.
+- **Two-step admin confirmations**: Role, plan, billing cycle, status, and delete actions now require review plus final confirmation.
+- **Sidebar layout hardening**: Business dashboard sidebar width, main content offset, overlay, footer, and nav scrolling now share one fixed layout contract.
+
+### Fixed
+- **Admin directory completeness**: Platform Admin now merges current persistent users with legacy local user records so existing accounts appear in the user list.
+- **Protected owner account**: The owner cannot be suspended, demoted, removed from Platform Admin, or deleted by admin actions.
+
+---
+
 ## v4.0.2 - Mailbox Routing & Platform Admin Control
 
 ### Added

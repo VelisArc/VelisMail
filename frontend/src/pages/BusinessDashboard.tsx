@@ -172,11 +172,15 @@ export default function BusinessDashboard() {
     setComposeTo(to); setComposeSubject(subject); setComposeBody(body); setComposeReplyQuote(replyQuote); setComposeOpen(true);
   };
 
+  const canAccessPlatformAdmin = platformAdmin.isCurrentUserPlatformAdmin();
   const hasRoleAccess = useCallback(
-    (tab: BizTab) => (ROLE_ALLOWED_TABS[user?.role || 'member'] || ROLE_ALLOWED_TABS.member).includes(tab),
-    [user?.role],
+    (tab: BizTab) => {
+      if (tab === 'admin') return canAccessPlatformAdmin;
+      const effectiveRole = canAccessPlatformAdmin ? 'admin' : user?.role || 'member';
+      return (ROLE_ALLOWED_TABS[effectiveRole] || ROLE_ALLOWED_TABS.member).includes(tab);
+    },
+    [canAccessPlatformAdmin, user?.role],
   );
-  const canAccessPlatformAdmin = user?.role === 'admin' && platformAdmin.isCurrentUserPlatformAdmin();
 
   useEffect(() => {
     if (!hasRoleAccess(activeBizTab) || (activeBizTab === 'admin' && !canAccessPlatformAdmin)) {
