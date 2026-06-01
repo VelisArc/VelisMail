@@ -399,7 +399,6 @@ export default function BusinessDashboard() {
     const dom = domainsList.find(d => d.id === domainId);
     if (!dom) return;
     setVerifyingDomainId(domainId);
-    // Set all steps to 'checking' first to show spinner animation
     setDomainVerifySteps([
       { key: 'mx', label: 'MX Record', status: 'checking', detail: 'Checking MX record...', lastCheck: new Date().toISOString() },
       { key: 'spf', label: 'SPF Record', status: 'checking', detail: 'Checking SPF record...', lastCheck: new Date().toISOString() },
@@ -408,9 +407,9 @@ export default function BusinessDashboard() {
     ]);
     setDomainVerifyOpen(true);
     setDomainVerifyProviderRecords([]);
-    // Async verify
-    setTimeout(() => {
-      const updated = domains.verify(domainId);
+
+    try {
+      const updated = await domains.verify(domainId);
       if (updated) {
         const steps: DomainHealth[] = [
           { key: 'mx', label: 'MX Record', status: (updated.checks.find((c: DomainCheck) => c.key === 'mx')?.status || 'pending') as DomainHealth['status'], detail: 'MX record check', lastCheck: new Date().toISOString() },
@@ -419,10 +418,16 @@ export default function BusinessDashboard() {
           { key: 'dmarc', label: 'DMARC Policy', status: (updated.checks.find((c: DomainCheck) => c.key === 'dmarc')?.status || 'pending') as DomainHealth['status'], detail: 'DMARC policy check', lastCheck: new Date().toISOString() },
         ];
         setDomainVerifySteps(steps);
+        if (Array.isArray(updated.dnsRecords)) {
+          setDomainVerifyProviderRecords(updated.dnsRecords as unknown as Record<string, string>[]);
+        }
       }
+    } catch (err) {
+      console.error(err);
+    } finally {
       refreshDomains();
       setVerifyingDomainId('');
-    }, 800);
+    }
   };
 
   const handleAddDomain = async () => {
@@ -525,6 +530,7 @@ export default function BusinessDashboard() {
         onLogout={() => setShowLogoutConfirm(true)} sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen}
         hasRoleAccess={hasRoleAccess} canAccessPlatformAdmin={canAccessPlatformAdmin}
         onProfileClick={() => navigate('/settings')}
+        state={dashboardState}
       />
 
       <main className="dash-main">

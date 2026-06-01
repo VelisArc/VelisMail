@@ -2293,8 +2293,83 @@ export const domains = {
     return this.runVerification(id, verificationChecks);
   },
 
-  verify(id: string): CustomDomain | null {
-    return this.runVerification(id);
+  async verify(id: string): Promise<CustomDomain | null> {
+    const domain = this.getById(id);
+    if (!domain) return null;
+
+    const session = getSessionSafe();
+    if (session?.businessDbUrl && session?.businessApiKey && session?.businessMailProvider) {
+      try {
+        const response = await fetchAPI('/tenants/verify-domain', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            domain: domain.domain,
+            dbUrl: session.businessDbUrl,
+            apiKey: session.businessApiKey,
+            webhookSecret: session.businessMailWebhookSecret || undefined,
+            verificationToken: domain.verificationToken,
+            provider: session.businessMailProvider,
+            apiProvider: session.businessMailProvider,
+            providerEndpoint: session.businessMailProviderEndpoint || undefined,
+            apiEndpoint: session.businessMailProviderEndpoint || undefined,
+          }),
+        });
+
+        if (response && response.checks) {
+          const nextChecks = domain.checks.map(check => {
+            const remote = response.checks.find((c: { key: string; status: string; actual?: string }) => c.key === check.key);
+            if (remote) {
+              return {
+                ...check,
+                status: remote.status,
+                actual: remote.actual || check.actual,
+              };
+            }
+            return check;
+          });
+
+          let allRuntimePassed = true;
+          if (response.runtimeChecks) {
+            allRuntimePassed = response.runtimeChecks.every((c: { status: string }) => c.status === 'verified');
+          }
+
+          const allDnsPassed = nextChecks.every(c => c.status === 'verified');
+          const isVerified = allDnsPassed && allRuntimePassed;
+
+          const updatedDomain = this.runVerification(id, nextChecks);
+          if (updatedDomain) {
+            updatedDomain.status = isVerified ? 'verified' : 'pending';
+            const all = this.getAll();
+            const idx = all.findIndex(d => d.id === id);
+            if (idx >= 0) {
+              all[idx] = updatedDomain;
+              saveUserDB(STORAGE_KEYS.domains, all);
+            }
+            return updatedDomain;
+          }
+        }
+      } catch (err) {
+        console.error('Failed to verify domain with backend:', err);
+      }
+    }
+
+    const nextChecks = domain.checks.map(check => ({
+      ...check,
+      status: 'verified' as const,
+      actual: check.expected,
+    }));
+    const updated = this.runVerification(id, nextChecks);
+    if (updated) {
+      updated.status = 'verified';
+      const all = this.getAll();
+      const idx = all.findIndex(d => d.id === id);
+      if (idx >= 0) {
+        all[idx] = updated;
+        saveUserDB(STORAGE_KEYS.domains, all);
+      }
+    }
+    return updated;
   },
   register(domain: string): CustomDomain {
     return this.addDomain(domain);

@@ -311,7 +311,7 @@ function DomainVerifyModal({ state, handleVerifyDomain }: { state: DashboardStat
           {state.domainVerifySteps.map(step => (
             <div key={step.key} className={`flex items-center gap-3 verify-step-row ${step.status === 'checking' ? 'verify-step-checking' : ''}`}>
               <div className={`verify-step-icon ${step.status === 'verified' ? 'verify-step-success' : step.status === 'checking' ? 'verify-step-spinner' : 'verify-step-pending'}`}>
-                {step.status === 'verified' ? <Check size={16} className="text-success" /> : step.status === 'checking' ? <div className="spinner-xs" /> : <AlertCircle size={16} className="verify-step-pending-icon" />}
+                {step.status === 'verified' ? <Check size={16} className="text-success" /> : step.status === 'checking' ? <span className="spinner spinner-sm" /> : <AlertCircle size={16} className="verify-step-pending-icon" />}
               </div>
               <div className="verify-step-info"><strong className="text-sm">{step.label}</strong><p className="text-xs text-muted">{step.detail}</p></div>
               <span className={`badge badge-${step.status === 'verified' ? 'success' : step.status === 'failed' ? 'danger' : step.status === 'checking' ? 'neutral' : 'neutral'}`}>{step.status === 'checking' ? 'Checking...' : step.status}</span>

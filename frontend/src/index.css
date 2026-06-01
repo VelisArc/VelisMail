@@ -780,7 +780,7 @@ textarea.input {
   height: var(--spinner-size);
   border: 2px solid var(--border-primary);
   border-top-color: var(--accent);
-  border-radius: 0;
+  border-radius: 50%;
   animation: spin 0.7s linear infinite;
 }
 
