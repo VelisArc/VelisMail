@@ -45,7 +45,7 @@ impl TenantService {
         });
 
         // Default limits based on plan tier
-        let plan_tier = request.plan_tier.unwrap_or_else(|| "starter".to_string());
+        let plan_tier = request.plan_tier.unwrap_or_else(|| "free".to_string());
         let limits = match plan_tier.as_str() {
             "free" => json!({
                 "max_users": 3,

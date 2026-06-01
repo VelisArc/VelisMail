@@ -1264,7 +1264,7 @@ export function buildSessionUser(params: {
     tenantId: String(profile.tenantId || tokenTenantId || params.existing?.tenantId || ''),
     email,
     displayName: String(profile.displayName || params.displayName || params.existing?.displayName || email.split('@')[0] || 'Business User'),
-    plan: params.existing?.plan || 'Starter',
+    plan: params.existing?.plan || 'Free',
     status: params.existing?.status || 'active',
     suspendedAt: params.existing?.suspendedAt,
     suspensionReason: params.existing?.suspensionReason,
