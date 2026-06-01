@@ -1,11 +1,13 @@
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Lock, Zap, Globe, Users, ArrowRight, Shield } from 'lucide-react';
+import { Lock, Zap, Globe, Users, ArrowRight, Shield, Menu, X, Award } from 'lucide-react';
+import { auth, isBusinessSetupReady } from '../api/client';
 import './About.css';
 
 const operatingPrinciples = [
-  { title: 'Verified information only', desc: 'We keep public company details clean and remove placeholder profiles until they can be verified.' },
-  { title: 'Security-first engineering', desc: 'Every product decision is reviewed through authentication, data handling, and operational safety.' },
-  { title: 'User-led roadmap', desc: 'Dashboard polish, mailbox workflows, and reliability fixes are prioritized from real workspace feedback.' },
+  { icon: Shield, title: 'Verified information only', desc: 'We keep public company details clean and remove placeholder profiles until they can be verified.' },
+  { icon: Lock, title: 'Security-first engineering', desc: 'Every product decision is reviewed through authentication, data handling, and operational safety.' },
+  { icon: Award, title: 'User-led roadmap', desc: 'Dashboard polish, mailbox workflows, and reliability fixes are prioritized from real workspace feedback.' },
 ];
 
 const milestones = [
@@ -24,18 +26,70 @@ const values = [
 ];
 
 export default function About() {
+  const [user] = useState(auth.getSession());
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
+
+  useEffect(() => {
+    const handleScroll = () => setScrolled(window.scrollY > 24);
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  const closeMobileMenu = () => setMobileMenuOpen(false);
+
+  const getDashboardLink = () => {
+    if (!user) return '/login';
+    return isBusinessSetupReady(user) ? '/business' : '/business-setup';
+  };
+
+  const getDashboardText = () => {
+    if (!user) return 'Get Started Free';
+    return isBusinessSetupReady(user) ? 'Open Dashboard' : 'Continue Setup';
+  };
+
   return (
     <div className="about-page">
       {/* Nav */}
-      <nav className="about-nav">
-        <div className="container about-nav-inner">
-          <Link to="/" className="nav-logo">
-            <img src="/ZeeResizer.png" alt="VelisMail" style={{ height: '24px', width: 'auto' }} />
-            <span className="logo-text">VelisMail</span>
+      <nav className={`home-nav ${scrolled ? 'nav-scrolled' : ''}`} role="navigation" aria-label="Main navigation">
+        <div className="nav-inner">
+          <Link to="/" className="nav-logo" onClick={closeMobileMenu} aria-label="VelisMail home">
+            <img src="/ZeeResizer.png" alt="" className="home-logo-img" />
+            <span>VelisMail</span>
           </Link>
-          <div className="about-nav-links">
-            <Link to="/">Home</Link>
-            <Link to="/login" className="btn btn-primary btn-sm">Get Started</Link>
+
+          <button
+            type="button"
+            className="nav-toggle"
+            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            aria-label={mobileMenuOpen ? 'Close menu' : 'Open menu'}
+            aria-expanded={mobileMenuOpen}
+          >
+            {mobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
+          </button>
+
+          <div className={`nav-overlay ${mobileMenuOpen ? 'open' : ''}`} onClick={closeMobileMenu} aria-hidden="true" />
+
+          <div className={`nav-links ${mobileMenuOpen ? 'open' : ''}`}>
+            <a href="/#features" className="nav-link" onClick={closeMobileMenu}>Features</a>
+            <a href="/#solutions" className="nav-link" onClick={closeMobileMenu}>Solutions</a>
+            <Link to="/pricing" className="nav-link" onClick={closeMobileMenu}>Pricing</Link>
+            <Link to="/about" className="nav-link" onClick={closeMobileMenu}>About</Link>
+            <div className="nav-divider" role="separator" />
+            {!user ? (
+              <div className="nav-actions">
+                <Link to="/login" className="nav-link" onClick={closeMobileMenu}>Log In</Link>
+                <Link to="/login" className="btn btn-primary nav-cta" onClick={closeMobileMenu}>
+                  Get Started Free
+                </Link>
+              </div>
+            ) : (
+              <div className="nav-actions">
+                <Link to={getDashboardLink()} className="btn btn-primary nav-cta" onClick={closeMobileMenu}>
+                  {getDashboardText()}
+                </Link>
+              </div>
+            )}
           </div>
         </div>
       </nav>
@@ -119,14 +173,14 @@ export default function About() {
           <div className="section-header">
             <span className="section-tag">HOW WE WORK</span>
             <h2>Built with verified trust</h2>
-            <p>We keep this page clean and only publish real, confirmed people or company details.</p>
+            <p>Our core operating pillars ensure your business mail operations are always secure, fast, and completely private.</p>
           </div>
           <div className="team-grid">
             {operatingPrinciples.map((item, i) => (
               <div key={i} className="glass-card team-card">
-                <div className="team-avatar"><Shield size={20} /></div>
+                <div className="team-avatar"><item.icon size={24} /></div>
                 <h3>{item.title}</h3>
-                <span className="team-role">VelisMail standard</span>
+                <span className="team-role">VelisMail Standard</span>
                 <p>{item.desc}</p>
               </div>
             ))}
@@ -161,35 +215,60 @@ export default function About() {
           <div className="glass about-cta-box">
             <h2>Ready to experience truly private email?</h2>
             <p>Join VelisMail today — it takes less than 30 seconds.</p>
-            <Link to="/login" className="btn btn-primary btn-lg">
-              Get Started Free <ArrowRight size={20} />
+            <Link to={getDashboardLink()} className="btn btn-primary btn-lg">
+              {user ? 'Go to Dashboard' : 'Get Started Free'} <ArrowRight size={20} />
             </Link>
           </div>
         </div>
       </section>
 
       {/* Footer */}
-      <footer className="about-footer">
-        <div className="container about-footer-inner">
-          <div className="about-footer-brand">
-            <div className="nav-logo">
-              <div className="logo-mark"><Shield size={16} /></div>
-              <span className="logo-text">VelisMail</span>
+      <footer className="home-footer">
+        <div className="container">
+          <div className="footer-grid">
+            <div className="footer-brand">
+              <div className="nav-logo">
+                <img src="/ZeeResizer.png" alt="" className="home-logo-img" />
+                <span>VelisMail</span>
+              </div>
+              <p>Secure, encrypted email for modern teams.</p>
             </div>
-            <p>Secure email for the modern world.</p>
+
+            <div className="footer-column">
+              <h4>Product</h4>
+              <div className="footer-link-list">
+                <a href="/#features" className="footer-link">Features</a>
+                <Link to="/pricing" className="footer-link">Pricing</Link>
+                <Link to="/status" className="footer-link">Status</Link>
+                <Link to="/docs" className="footer-link">Docs</Link>
+              </div>
+            </div>
+            <div className="footer-column">
+              <h4>Company</h4>
+              <div className="footer-link-list">
+                <Link to="/about" className="footer-link">About</Link>
+                <Link to="/privacy" className="footer-link">Privacy</Link>
+                <Link to="/terms" className="footer-link">Terms</Link>
+                <Link to="/security" className="footer-link">Security</Link>
+              </div>
+            </div>
+            <div className="footer-column">
+              <h4>Connect</h4>
+              <div className="footer-link-list">
+                <a href="/#feedback" className="footer-link">Feedback</a>
+                <a href="mailto:support@velismail.online" className="footer-link">Support</a>
+              </div>
+            </div>
           </div>
-          <div className="about-footer-links">
-            <Link to="/privacy">Privacy Policy</Link>
-            <Link to="/terms">Terms of Service</Link>
-            <Link to="/cookies">Cookie Policy</Link>
-            <Link to="/aup">Acceptable Use</Link>
-            <Link to="/security">Security</Link>
-            <Link to="/refund">Refund Policy</Link>
-            <Link to="/">Home</Link>
+
+          <div className="footer-bottom">
+            <p>&copy; 2026 VelisMail. All rights reserved.</p>
+            <div className="footer-bottom-links">
+              <Link to="/security" className="footer-link">Security</Link>
+              <Link to="/aup" className="footer-link">AUP</Link>
+              <Link to="/refund" className="footer-link">Refund</Link>
+            </div>
           </div>
-        </div>
-        <div className="container about-footer-bottom">
-          <span>© 2026 VelisMail. All rights reserved.</span>
         </div>
       </footer>
     </div>
