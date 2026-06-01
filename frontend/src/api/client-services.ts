@@ -48,7 +48,7 @@ import type {
   BusinessMailQueueItem, BusinessAuditEntry, ConnectionUsage,
   PlatformAdminUserRecord, Email, OtpSendResponse, OtpVerifyResponse,
   ActiveSession, Contact, Signature, AutoReply, Label, EmailRule,
-  EmailRuleCondition, EmailRuleAction,
+  EmailRuleCondition, EmailRuleAction, PlatformTransaction,
 } from './types';
 import type { CreateTeamAccessInviteParams } from './client-core';
 
@@ -2102,11 +2102,11 @@ export const platformAdmin = {
     return true;
   },
 
-  getTransactions(): any[] {
-    const list = loadDB<any[]>('velismail_platform_transactions', []);
+  getTransactions(): PlatformTransaction[] {
+    const list = loadDB<PlatformTransaction[]>('velismail_platform_transactions', []);
     if (list.length === 0) {
       const now = Date.now();
-      const mockList = [
+      const mockList: PlatformTransaction[] = [
         {
           id: 'tx_pay_8239ac98',
           email: 'ceo@velismail.online',
@@ -2147,9 +2147,9 @@ export const platformAdmin = {
     return list;
   },
 
-  addManualTransaction(email: string, plan: string, billingCycle: 'monthly' | 'annual', amount: number): any {
+  addManualTransaction(email: string, plan: string, billingCycle: 'monthly' | 'annual', amount: number): PlatformTransaction {
     const list = this.getTransactions();
-    const tx = {
+    const tx: PlatformTransaction = {
       id: 'tx_pay_' + safeRandomUUID().split('-')[0],
       email: normalizeMailbox(email),
       plan,
@@ -2172,9 +2172,9 @@ export const platformAdmin = {
     amount: number;
     gateway: string;
     paymentId: string;
-  }) {
+  }): PlatformTransaction {
     const list = this.getTransactions();
-    const tx = {
+    const tx: PlatformTransaction = {
       id: 'tx_pay_' + safeRandomUUID().split('-')[0],
       email: normalizeMailbox(data.email),
       plan: data.plan,

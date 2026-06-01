@@ -267,6 +267,18 @@ export type PlatformAdminUserRecord = {
   risk: 'low' | 'medium' | 'high';
 };
 
+export type PlatformTransaction = {
+  id: string;
+  email: string;
+  plan: string;
+  billingCycle: 'monthly' | 'annual';
+  amount: number;
+  status: 'paid' | 'unpaid' | string;
+  gateway: string;
+  paymentId: string;
+  timestamp: string;
+};
+
 export type Email = {
   id: string;
   from: string;
