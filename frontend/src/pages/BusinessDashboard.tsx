@@ -64,6 +64,7 @@ export default function BusinessDashboard() {
   const [composeReplyQuote, setComposeReplyQuote] = useState('');
   const [sending, setSending] = useState(false);
   const [selectedFromAddress, setSelectedFromAddress] = useState('');
+  const [activeMailboxAddress, setActiveMailboxAddress] = useState('');
   const [annual, setAnnual] = useState(false);
   const [loadingPayment, setLoadingPayment] = useState<string | null>(null);
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
@@ -238,14 +239,24 @@ export default function BusinessDashboard() {
   }, [activeDomainName, refreshTeam, refreshQueue, refreshAudit, refreshTemplates, refreshConnectionUsage, refreshMailboxes, refreshGroups]);
 
   useEffect(() => {
+    if (canAccessPlatformAdmin) {
+      refreshAdminUsers();
+    }
+  }, [canAccessPlatformAdmin, refreshAdminUsers]);
+
+  useEffect(() => {
     if (domainMailboxes.length === 0) {
       setSelectedFromAddress('');
+      setActiveMailboxAddress('');
       return;
     }
     if (!domainMailboxes.some((mailbox) => mailbox.address === selectedFromAddress)) {
       setSelectedFromAddress(domainMailboxes.find((mailbox) => mailbox.active)?.address || domainMailboxes[0].address);
     }
-  }, [domainMailboxes, selectedFromAddress]);
+    if (activeMailboxAddress && !domainMailboxes.some((mailbox) => mailbox.address === activeMailboxAddress || mailbox.aliases.includes(activeMailboxAddress))) {
+      setActiveMailboxAddress('');
+    }
+  }, [activeMailboxAddress, domainMailboxes, selectedFromAddress]);
 
   const handleSendEmail = useCallback(async (to?: string, subject?: string, body?: string) => {
     const finalTo = to !== undefined ? to : composeTo;
@@ -432,7 +443,8 @@ export default function BusinessDashboard() {
     activeBizTab, setActiveBizTab, activeFolder, setActiveFolder,
     searchQuery, setSearchQuery,
     composeOpen, setComposeOpen, composeTo, setComposeTo, composeSubject, setComposeSubject,
-    composeBody, setComposeBody, composeReplyQuote, setComposeReplyQuote, sending, setSending, selectedFromAddress, setSelectedFromAddress,
+    composeBody, setComposeBody, composeReplyQuote, setComposeReplyQuote, sending, setSending,
+    selectedFromAddress, setSelectedFromAddress, activeMailboxAddress, setActiveMailboxAddress,
     annual, setAnnual, loadingPayment, setLoadingPayment, toast, showToast,
     showLogoutConfirm, setShowLogoutConfirm, confirmRevokeId, setConfirmRevokeId,
     pendingRoleChange, setPendingRoleChange, confirmAction, setConfirmAction,
@@ -487,7 +499,7 @@ export default function BusinessDashboard() {
     contactEditorPhone, setContactEditorPhone,
     contactEditorCompany, setContactEditorCompany,
     editingContactId, setEditingContactId,
-  }), [activeBizTab, activeFolder, searchQuery, composeOpen, composeTo, composeSubject, composeBody, composeReplyQuote, sending, selectedFromAddress, annual, loadingPayment, toast, showLogoutConfirm, confirmRevokeId, pendingRoleChange, confirmAction, domainsList, activeDomain, domainMailboxes, domainGroups, teamMembers, mailQueue, auditLog, templates, connectionUsage, adminUsers, sortOrder, selectedEmails, mailStatusFilter, notificationEnabled, soundEnabled, showQueueFilters, queueStatusFilter, templateSearch, showAddDomain, newDomainInput, teamFilter, auditFilter, adminSearch, adminPlanFilter, adminStatusFilter, adminRiskFilter, adminPage, sidebarOpen, user, inviteOpen, inviteName, inviteEmail, inviteRole, inviteExpiresHours, issuedInvite, templateEditorOpen, templateName, templateSubject, templateBody, previewTemplate, selectedAdminUser, adminStatusConfirm, domainDetails, mailboxDetails, groupDetails, mailboxLocalPart, mailboxDisplayName, mailboxKind, groupName, groupLocalPart, groupMembers, verifyingDomainId, domainVerifyOpen, domainVerifySteps, domainVerifyProviderRecords, copiedField, signaturesList, contactsList, contactsSearch, activeSessions, signatureEditorOpen, signatureEditorName, signatureEditorContent, editingSignatureId, contactEditorOpen, contactEditorName, contactEditorEmail, contactEditorPhone, contactEditorCompany, editingContactId, showToast, activeDomainName, canAccessPlatformAdmin, handleLogout, handleSendEmail, hasRoleAccess, refreshAdminUsers, refreshAudit, refreshConnectionUsage, refreshContacts, refreshGroups, refreshMailboxes, refreshQueue, refreshSessions, refreshSignatures, refreshTeam, refreshTemplates]);
+  }), [activeBizTab, activeFolder, searchQuery, composeOpen, composeTo, composeSubject, composeBody, composeReplyQuote, sending, selectedFromAddress, activeMailboxAddress, annual, loadingPayment, toast, showLogoutConfirm, confirmRevokeId, pendingRoleChange, confirmAction, domainsList, activeDomain, domainMailboxes, domainGroups, teamMembers, mailQueue, auditLog, templates, connectionUsage, adminUsers, sortOrder, selectedEmails, mailStatusFilter, notificationEnabled, soundEnabled, showQueueFilters, queueStatusFilter, templateSearch, showAddDomain, newDomainInput, teamFilter, auditFilter, adminSearch, adminPlanFilter, adminStatusFilter, adminRiskFilter, adminPage, sidebarOpen, user, inviteOpen, inviteName, inviteEmail, inviteRole, inviteExpiresHours, issuedInvite, templateEditorOpen, templateName, templateSubject, templateBody, previewTemplate, selectedAdminUser, adminStatusConfirm, domainDetails, mailboxDetails, groupDetails, mailboxLocalPart, mailboxDisplayName, mailboxKind, groupName, groupLocalPart, groupMembers, verifyingDomainId, domainVerifyOpen, domainVerifySteps, domainVerifyProviderRecords, copiedField, signaturesList, contactsList, contactsSearch, activeSessions, signatureEditorOpen, signatureEditorName, signatureEditorContent, editingSignatureId, contactEditorOpen, contactEditorName, contactEditorEmail, contactEditorPhone, contactEditorCompany, editingContactId, showToast, activeDomainName, canAccessPlatformAdmin, handleLogout, handleSendEmail, hasRoleAccess, refreshAdminUsers, refreshAudit, refreshConnectionUsage, refreshContacts, refreshGroups, refreshMailboxes, refreshQueue, refreshSessions, refreshSignatures, refreshTeam, refreshTemplates]);
 
   if (!user) return <Navigate to="/login" replace />;
   if (!isBusinessSetupReady(user)) return <Navigate to="/business-setup" replace />;

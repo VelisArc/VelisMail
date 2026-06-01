@@ -1317,6 +1317,15 @@ export const mail = {
     if (invalidRecipient) {
       throw new Error(`Invalid recipient address: ${invalidRecipient}`);
     }
+    const mailboxAcceptsAddress = (address: string) => availableMailboxes.some(
+      (mailbox) => mailbox.address === address || mailbox.aliases.includes(address),
+    );
+    const disconnectedLocalRecipient = expandedRecipients.find(
+      (recipient) => recipient.endsWith(`@${normalizedDomain}`) && !mailboxAcceptsAddress(recipient),
+    );
+    if (disconnectedLocalRecipient) {
+      throw new Error(`${disconnectedLocalRecipient} is not a connected mailbox for ${normalizedDomain}. Create it before sending internal mail.`);
+    }
     if (!isMailboxAddress(fromAddr) || !fromAddr.endsWith(`@${normalizedDomain}`)) {
       throw new Error(`Sender mailbox must be a saved @${normalizedDomain} address.`);
     }
@@ -1438,6 +1447,52 @@ export const mail = {
         });
         throw new Error(`Mail was accepted for delivery, but VelisMail could not save the sent copy to the business database: ${message}`);
       }
+    }
+    const internalRecipients = expandedRecipients.filter(
+      (recipient) => recipient.endsWith(`@${normalizedDomain}`) && mailboxAcceptsAddress(recipient),
+    );
+    if (internalRecipients.length > 0) {
+      const internalCopies = internalRecipients.map((recipient): Email => ({
+        id: `bem_in_${safeRandomUUID().split('-')[0]}_${hashString(recipient).slice(0, 6)}`,
+        from: fromAddr,
+        fromName: selectedMailbox.displayName || session?.displayName || 'Business',
+        to: [recipient],
+        subject,
+        body: plainBody,
+        htmlBody,
+        date: new Date().toISOString(),
+        folder: 'inbox',
+        unread: true,
+        starred: false,
+        labels: ['internal'],
+        hasAttachment: attachments && attachments.length > 0 ? true : false,
+        messageId: email.messageId || email.id,
+        threadId: email.threadId || email.messageId || email.id,
+      }));
+      if (session?.businessDbUrl) {
+        try {
+          await Promise.all(internalCopies.map((copy) => syncBusinessEmailToDb(copy)));
+        } catch (error) {
+          const message = error instanceof Error ? error.message : 'Internal delivery sync failed.';
+          businessQueue.mark(queueEntry.id, { error: `Delivered, but internal inbox sync failed: ${message}` });
+          businessAudit.add({
+            action: 'Internal delivery database sync failed',
+            actor: fromAddr,
+            target: internalRecipients.join(', '),
+            severity: 'warn',
+          });
+          throw new Error(`Mail was accepted for delivery, but VelisMail could not save the internal inbox copy to the business database: ${message}`);
+        }
+      }
+      const internalCache = reloadEmailsCacheFromStorage();
+      internalCache.unshift(...internalCopies);
+      saveEmailsSyncAndAsync(STORAGE_KEYS.emails, internalCache);
+      businessAudit.add({
+        action: 'Stored internal delivery',
+        actor: fromAddr,
+        target: internalRecipients.join(', '),
+        severity: 'info',
+      });
     }
     businessMailboxes.touch(normalizedDomain, fromAddr);
     businessAudit.add({
@@ -1655,18 +1710,96 @@ export const mail = {
   },
 };
 
+function platformAdminHostAllowed(): boolean {
+  if (typeof window === 'undefined') return true;
+  const hostname = window.location.hostname.toLowerCase();
+  return (
+    hostname === 'velismail.online' ||
+    hostname === 'www.velismail.online' ||
+    hostname.endsWith('.velismail.online') ||
+    hostname === 'localhost' ||
+    hostname === '127.0.0.1'
+  );
+}
+
+function configuredPlatformAdminEmails(): Set<string> {
+  const envEmails = [
+    import.meta.env.VITE_PLATFORM_ADMIN_EMAILS,
+    import.meta.env.VITE_PLATFORM_OWNER_EMAIL,
+  ].filter(Boolean).join(',');
+  const storedEmails = typeof localStorage !== 'undefined' ? localStorage.getItem('velismail_platform_admin_emails') || '' : '';
+  return new Set(
+    `${envEmails},${storedEmails}`
+      .split(',')
+      .map((email) => normalizeMailbox(email))
+      .filter(Boolean),
+  );
+}
+
+function hasExplicitPlatformAdmin(users: Record<string, User>, exceptEmail = ''): boolean {
+  return Object.values(users).some((user) => {
+    const normalizedUser = normalizeSessionUser(user);
+    return normalizedUser.isPlatformAdmin && normalizeMailbox(normalizedUser.email) !== exceptEmail;
+  });
+}
+
+function persistCurrentSessionUser(user: User) {
+  const session = getSessionSafe();
+  if (session && normalizeMailbox(session.email) === normalizeMailbox(user.email)) {
+    saveDB(STORAGE_KEYS.session, normalizeSessionUser(user));
+  }
+}
+
 // ---- Platform Admin ----
 export const platformAdmin = {
   isCurrentUserPlatformAdmin(): boolean {
     const session = auth.getSession();
     if (!session) return false;
-    const hostname = typeof window !== 'undefined' ? window.location.hostname : '';
-    const hostAllowed = hostname === 'velismail.online' || hostname === 'localhost' || hostname === '127.0.0.1';
-    return hostAllowed && normalizeMailbox(session.email).endsWith('@velismail.online');
+    if (!platformAdminHostAllowed()) return false;
+
+    const normalizedEmail = normalizeMailbox(session.email);
+    const users = loadPersistentUsers();
+    const existing = users[normalizedEmail];
+    const normalizedSession = normalizeSessionUser({ ...existing, ...session });
+    const configuredAdmins = configuredPlatformAdminEmails();
+    const explicitlyAllowed = Boolean(normalizedSession.isPlatformAdmin || configuredAdmins.has(normalizedEmail));
+    const canBootstrapFirstAdmin = Boolean(
+      normalizedSession.role === 'admin' &&
+      !normalizedSession.teamAccessRole &&
+      !hasExplicitPlatformAdmin(users),
+    );
+    const allowed = explicitlyAllowed || canBootstrapFirstAdmin;
+
+    if (allowed) {
+      const next = normalizeSessionUser({
+        ...existing,
+        ...normalizedSession,
+        isPlatformAdmin: true,
+      });
+      users[normalizedEmail] = next;
+      savePersistentUsers(users);
+      persistCurrentSessionUser(next);
+    }
+
+    return allowed;
   },
 
   getUsers(): PlatformAdminUserRecord[] {
-    const users = Object.values(loadPersistentUsers()).map(normalizeSessionUser);
+    const session = auth.getSession();
+    const usersByEmail = loadPersistentUsers();
+    if (session) {
+      const normalizedEmail = normalizeMailbox(session.email);
+      const existing = usersByEmail[normalizedEmail];
+      const currentHasAccess = this.isCurrentUserPlatformAdmin();
+      usersByEmail[normalizedEmail] = normalizeSessionUser({
+        ...existing,
+        ...session,
+        isPlatformAdmin: Boolean(existing?.isPlatformAdmin || session.isPlatformAdmin || currentHasAccess),
+      });
+      savePersistentUsers(usersByEmail);
+    }
+
+    const users = Object.values(usersByEmail).map(normalizeSessionUser);
     return users
       .map((user): PlatformAdminUserRecord => {
         const base = {
@@ -1712,6 +1845,7 @@ export const platformAdmin = {
     });
     users[normalizedEmail] = next;
     savePersistentUsers(users);
+    persistCurrentSessionUser(next);
 
     const session = auth.getSession();
     businessAudit.add({
@@ -1745,6 +1879,7 @@ export const platformAdmin = {
     });
     users[normalizedEmail] = next;
     savePersistentUsers(users);
+    persistCurrentSessionUser(next);
 
     const session = auth.getSession();
     businessAudit.add({
@@ -1766,6 +1901,7 @@ export const platformAdmin = {
     const next = normalizeSessionUser({ ...user, role });
     users[normalizedEmail] = next;
     savePersistentUsers(users);
+    persistCurrentSessionUser(next);
 
     const session = auth.getSession();
     businessAudit.add({
@@ -1778,10 +1914,42 @@ export const platformAdmin = {
     return next;
   },
 
+  setPlatformAdmin(email: string, enabled: boolean): User | null {
+    const users = loadPersistentUsers();
+    const normalizedEmail = normalizeMailbox(email);
+    const user = users[normalizedEmail];
+    if (!user) return null;
+    if (!enabled && !hasExplicitPlatformAdmin(users, normalizedEmail)) {
+      throw new Error('At least one platform admin must remain active.');
+    }
+
+    const next = normalizeSessionUser({
+      ...user,
+      role: enabled ? 'admin' : user.role,
+      isPlatformAdmin: enabled,
+    });
+    users[normalizedEmail] = next;
+    savePersistentUsers(users);
+    persistCurrentSessionUser(next);
+
+    const session = auth.getSession();
+    businessAudit.add({
+      action: enabled ? 'Granted platform admin' : 'Revoked platform admin',
+      actor: session?.email || 'platform-admin',
+      target: normalizedEmail,
+      severity: 'critical',
+    });
+
+    return next;
+  },
+
   deleteUser(email: string): boolean {
     const users = loadPersistentUsers();
     const normalizedEmail = normalizeMailbox(email);
     if (!users[normalizedEmail]) return false;
+    if (users[normalizedEmail].isPlatformAdmin && !hasExplicitPlatformAdmin(users, normalizedEmail)) {
+      throw new Error('At least one platform admin must remain active.');
+    }
 
     delete users[normalizedEmail];
     savePersistentUsers(users);

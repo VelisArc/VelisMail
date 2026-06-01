@@ -27,6 +27,8 @@ interface EmailInboxProps {
 }
 
 const AVATAR_COLORS = ['#0d9488','#0891b2','#2563eb','#7c3aed','#db2777','#dc2626','#ea580c','#ca8a04','#16a34a','#059669'];
+const normalizeMailboxAddress = (value: string | undefined) => (value || '').trim().toLowerCase();
+
 function avatarColor(name: string): string {
   let hash = 0;
   for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
@@ -201,6 +203,13 @@ const EmailInbox: FC<EmailInboxProps> = ({
 
   const filtered = useMemo(() => {
     const q = deferredQuery.toLowerCase();
+    const activeMailbox = normalizeMailboxAddress(state.activeMailboxAddress);
+    const activeMailboxRecord = state.domainMailboxes.find((mailbox) => mailbox.address === activeMailbox);
+    const mailboxAddresses = new Set(
+      [activeMailbox, ...(activeMailboxRecord?.aliases || [])]
+        .map(normalizeMailboxAddress)
+        .filter(Boolean),
+    );
     const withTimestamps = emails.map(e => ({
       email: e,
       time: new Date(e.date).getTime(),
@@ -210,12 +219,17 @@ const EmailInbox: FC<EmailInboxProps> = ({
       if (state.mailStatusFilter === 'read' && email.unread) return false;
       if (state.mailStatusFilter === 'starred' && !email.starred) return false;
       if (state.mailStatusFilter === 'attachments' && !email.hasAttachment) return false;
+      if (mailboxAddresses.size > 0) {
+        const fromMatches = mailboxAddresses.has(normalizeMailboxAddress(email.from));
+        const toMatches = (email.to || []).some((recipient) => mailboxAddresses.has(normalizeMailboxAddress(recipient)));
+        if (!fromMatches && !toMatches) return false;
+      }
       if (!q) return true;
       return email.subject?.toLowerCase().includes(q) || email.from?.toLowerCase().includes(q) || email.body?.toLowerCase().includes(q) || email.fromName?.toLowerCase().includes(q);
     });
     matched.sort((a, b) => state.sortOrder === 'desc' ? b.time - a.time : a.time - b.time);
     return matched;
-  }, [emails, deferredQuery, state.mailStatusFilter, state.sortOrder]);
+  }, [emails, deferredQuery, state.activeMailboxAddress, state.domainMailboxes, state.mailStatusFilter, state.sortOrder]);
 
   const openEmail = useCallback((email: Email) => {
     setFocusedEmail(email.unread ? { ...email, unread: false } : email);
@@ -259,6 +273,18 @@ const EmailInbox: FC<EmailInboxProps> = ({
           <Mail size={15} /> {folderTitle}
           <span className="inbox-count">{filtered.length}</span>
         </h3>
+        {state.activeMailboxAddress && (
+          <button
+            type="button"
+            className="mailbox-filter-chip"
+            onClick={() => state.setActiveMailboxAddress('')}
+            title="Clear mailbox filter"
+          >
+            <Mail size={12} />
+            <span>{state.activeMailboxAddress}</span>
+            <X size={12} />
+          </button>
+        )}
 
         <div className="toolbar-spacer" />
 
@@ -482,7 +508,11 @@ const EmailInbox: FC<EmailInboxProps> = ({
               <div className="empty-state">
                 <Mail size={48} className="text-muted" />
                 <h3>No messages</h3>
-                <p className="text-muted">Your {state.activeFolder} folder is empty.</p>
+                <p className="text-muted">
+                  {state.activeMailboxAddress
+                    ? `No mail found for ${state.activeMailboxAddress} in ${state.activeFolder}.`
+                    : `Your ${state.activeFolder} folder is empty.`}
+                </p>
               </div>
             ) : (
               <div className="dash-list-scroll">

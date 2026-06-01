@@ -4,8 +4,8 @@
 
 .biz-dash {
   display: flex;
-  height: 111.11vh;
-  height: 111.11dvh;
+  height: 100vh;
+  height: 100dvh;
   background: var(--bg-body);
   overflow: hidden;
   position: relative;
@@ -461,6 +461,28 @@
   border-color: var(--border-accent);
 }
 
+.mailbox-filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: min(280px, 36vw);
+  min-height: 28px;
+  padding: 4px 8px;
+  border: 1px solid var(--border-accent);
+  background: var(--primary-50);
+  color: var(--primary-700);
+  font-size: var(--text-xs);
+  font-weight: var(--font-weight-bold);
+  white-space: nowrap;
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.mailbox-filter-chip span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 /* ─── Stark Email Listing Rows ─── */
 .dash-list {
   flex: 1;
@@ -891,6 +913,36 @@
 }
 
 /* ─── Stark Platform Admin Panels ─── */
+.admin-command-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(120px, 1fr));
+  gap: var(--space-3);
+  margin-bottom: var(--space-5);
+}
+
+.admin-command-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: var(--space-4);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-primary);
+}
+
+.admin-command-card svg {
+  color: var(--text-secondary);
+}
+
+.admin-command-card strong {
+  font-size: var(--text-lg);
+  color: var(--text-primary);
+}
+
+.admin-command-card span {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
 .admin-grid-4 {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
@@ -973,6 +1025,55 @@
   color: var(--text-muted);
 }
 
+.admin-user-row {
+  align-items: flex-start;
+  gap: var(--space-3);
+}
+
+.admin-user-info {
+  min-width: 220px;
+}
+
+.admin-user-metrics {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+
+.admin-user-metrics span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+
+.admin-row-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-1);
+  flex-wrap: wrap;
+  max-width: 560px;
+}
+
+.admin-mini-select {
+  min-height: 30px;
+  max-width: 112px;
+  padding: 4px 8px;
+  border: 1px solid var(--border-primary);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  font-size: var(--text-xs);
+}
+
+.admin-empty-state {
+  border: 1px solid var(--border-primary);
+  background: var(--bg-surface);
+}
+
 .admin-pagination {
   display: flex;
   align-items: center;
@@ -982,12 +1083,34 @@
 }
 
 @media (max-width: 768px) {
+  .admin-command-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .admin-grid-4 {
     grid-template-columns: repeat(2, 1fr);
+  }
+
+  .admin-user-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .admin-row-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .mailbox-filter-chip {
+    max-width: 44vw;
   }
 }
 
 @media (max-width: 480px) {
+  .admin-command-grid {
+    grid-template-columns: 1fr;
+  }
+
   .admin-grid-4 {
     grid-template-columns: 1fr;
   }
@@ -1010,6 +1133,50 @@
   font-size: var(--text-xs);
   font-weight: var(--font-weight-medium);
   white-space: nowrap;
+}
+
+.mailbox-panel-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.mailbox-db-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+
+.mailbox-row.active {
+  border-color: var(--border-accent);
+  background: var(--primary-50);
+}
+
+.mailbox-row-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+@media (max-width: 768px) {
+  .mailbox-panel-summary {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .mailbox-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .mailbox-row-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
 }
 
 /* Width limits */
@@ -1565,5 +1732,3 @@
 .skeleton-avatar {
   border-radius: 0;
 }
-
-

@@ -104,7 +104,19 @@ function AdminUserModal({ state }: { state: DashboardState }) {
       <div className="biz-form-modal glass animate-scale" onClick={e => e.stopPropagation()}>
         <div className="compose-header"><h3><UserCheck size={16} /> {state.selectedAdminUser.user.displayName || state.selectedAdminUser.user.email}</h3><button className="btn btn-ghost btn-icon" onClick={() => state.setSelectedAdminUser(null)}><X size={16} /></button></div>
         <div className="detail-grid-2">
-          {Object.entries({ Email: state.selectedAdminUser.user.email, Role: state.selectedAdminUser.user.role || 'member', Plan: state.selectedAdminUser.plan, Status: state.selectedAdminUser.status, Domain: state.selectedAdminUser.domain, Created: formatRelative(state.selectedAdminUser.createdAt) }).map(([k, v]) => (
+          {Object.entries({
+            Email: state.selectedAdminUser.user.email,
+            Role: state.selectedAdminUser.user.role || 'member',
+            Platform: state.selectedAdminUser.user.isPlatformAdmin ? 'Yes' : 'No',
+            Plan: `${state.selectedAdminUser.plan} (${state.selectedAdminUser.billingCycle})`,
+            Status: state.selectedAdminUser.status,
+            Risk: state.selectedAdminUser.risk,
+            Domain: state.selectedAdminUser.domain || 'Not configured',
+            Mailboxes: state.selectedAdminUser.mailboxCount,
+            Emails: state.selectedAdminUser.emailCount,
+            Queue: state.selectedAdminUser.queueCount,
+            Created: formatRelative(state.selectedAdminUser.createdAt),
+          }).map(([k, v]) => (
             <div key={k}><span className="text-xs text-muted">{k}</span><strong className="text-sm text-block">{v}</strong></div>
           ))}
         </div>
@@ -157,6 +169,7 @@ function MailboxDetailsModal({ state }: { state: DashboardState }) {
         </div>
         <div className="flex gap-2 px-20 py-20">
           <button className="btn btn-ghost btn-sm" onClick={() => { copyToClipboard(state.mailboxDetails!.address); state.showToast('Copied'); }}><Copy size={14} /> Copy</button>
+          <button className="btn btn-ghost btn-sm" onClick={() => { state.setActiveMailboxAddress(state.mailboxDetails!.address); state.setSelectedFromAddress(state.mailboxDetails!.address); state.setActiveFolder('inbox'); state.setActiveBizTab('mail'); state.setMailboxDetails(null); }}><Mail size={14} /> Open Inbox</button>
           <button className="btn btn-primary btn-sm" onClick={() => { state.setSelectedFromAddress(state.mailboxDetails!.address); state.setMailboxDetails(null); state.showToast('Sender set'); }}><CheckCircle2 size={14} /> Set Sender</button>
         </div>
       </div>

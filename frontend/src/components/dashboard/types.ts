@@ -35,6 +35,8 @@ export interface DashboardState {
   setSending: (s: boolean) => void;
   selectedFromAddress: string;
   setSelectedFromAddress: (a: string) => void;
+  activeMailboxAddress: string;
+  setActiveMailboxAddress: (a: string) => void;
   annual: boolean;
   setAnnual: (a: boolean) => void;
   loadingPayment: string | null;

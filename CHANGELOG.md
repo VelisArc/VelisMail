@@ -1,5 +1,19 @@
 # Changelog
 
+## v4.0.2 - Mailbox Routing & Platform Admin Control
+
+### Added
+- **Mailbox-specific inbox routing**: Business mailbox rows now open a filtered inbox for that exact address instead of only opening details.
+- **Platform Admin bootstrap**: First admin or explicitly configured platform admins can access the admin console without being hardcoded to one mailbox domain.
+- **Admin command center**: Added user, plan, role, status, risk, mailbox, and storage controls in a single scannable admin panel.
+
+### Fixed
+- **Internal business mail delivery**: Same-domain mailbox recipients now get persisted inbox copies, with DB sync failures surfaced instead of silently falling back to local-only storage.
+- **Mailbox sender validation**: Internal mail to uncreated local addresses is rejected before delivery so messages do not disappear into an unmanaged address.
+- **Dashboard viewport sizing**: Business dashboard height now uses the actual viewport to avoid extra mobile whitespace.
+
+---
+
 ## v4.0.1 - Design System Harmony & Session UX Hardening
 
 ### Added
