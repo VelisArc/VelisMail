@@ -25,8 +25,8 @@ export const PLANS = [
 ];
 
 export const ROLE_ALLOWED_TABS: Record<string, BizTab[]> = {
-  admin: ['mail', 'templates', 'queue', 'domains', 'mailboxes', 'groups', 'analytics', 'audit', 'settings', 'billing', 'admin', 'contacts', 'deliverability'],
-  member: ['mail', 'templates', 'queue', 'analytics', 'domains', 'mailboxes', 'groups', 'audit', 'settings', 'billing', 'contacts', 'deliverability'],
-  viewer: ['mail', 'analytics', 'domains', 'mailboxes', 'groups', 'audit', 'settings', 'billing', 'contacts', 'deliverability'],
+  admin: ['mail', 'templates', 'queue', 'domains', 'mailboxes', 'groups', 'team', 'analytics', 'audit', 'settings', 'billing', 'admin', 'contacts', 'deliverability'],
+  member: ['mail', 'templates', 'queue', 'analytics', 'domains', 'mailboxes', 'groups', 'team', 'audit', 'settings', 'billing', 'contacts', 'deliverability'],
+  viewer: ['mail', 'analytics', 'domains', 'mailboxes', 'groups', 'team', 'audit', 'settings', 'billing', 'contacts', 'deliverability'],
   user: ['mail', 'contacts', 'settings'],
 };

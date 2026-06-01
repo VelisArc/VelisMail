@@ -233,21 +233,9 @@ export default function AdminPanel({ state }: AdminPanelProps) {
                 <span className={`badge badge-${u.status === 'active' ? 'success' : 'danger'}`}>{u.status}</span>
                 <span className={`badge badge-${riskBadge}`}>{u.risk} risk</span>
                 {isPlatformDomain && <span className="badge badge-primary">platform</span>}
+                <span className="badge badge-neutral" style={{ textTransform: 'capitalize' }}>{u.user.role || 'user'}</span>
 
                  <div className="admin-row-actions" onClick={e => e.stopPropagation()}>
-                  <select className="admin-mini-select" value={u.user.role || 'user'} disabled={isPlatformDomain || adminRole === 'viewer' || adminRole === 'member'} onChange={e => {
-                    const nextRole = e.target.value as 'admin' | 'member' | 'viewer' | 'user';
-                    queueAdminAction({
-                      title: 'Review Role Change',
-                      message: `Change ${u.user.email} from ${u.user.role || 'user'} to ${nextRole}?`,
-                      confirmLabel: 'Apply Role',
-                      success: `Role set to ${nextRole}`,
-                      tone: 'primary',
-                      action: () => platformAdmin.updateUserRole(u.user.email, nextRole).then(() => {}),
-                    });
-                  }}>
-                    <option value="admin">Admin</option><option value="member">Member</option><option value="viewer">Viewer</option><option value="user">User</option>
-                  </select>
                   <select className="admin-mini-select" value={u.plan || 'Free'} disabled={adminRole === 'viewer'} onChange={e => {
                     const nextPlan = e.target.value;
                     queueAdminAction({
