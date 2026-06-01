@@ -119,7 +119,7 @@ export interface DashboardState {
   refreshMailboxes: () => void | Promise<void>;
   refreshGroups: () => void;
   refreshConnectionUsage: () => void;
-  refreshAdminUsers: () => void;
+  refreshAdminUsers: () => void | Promise<void>;
   handleLogout: () => void;
   handleSendEmail: (to?: string, subject?: string, body?: string) => void;
   openComposeWith: (to?: string, subject?: string, body?: string) => void;

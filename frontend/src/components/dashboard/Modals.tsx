@@ -282,13 +282,17 @@ function AdminStatusConfirmModal({ state }: { state: DashboardState }) {
         </div>
         <div className="modal-actions-border">
           <button className="btn btn-ghost" onClick={() => state.setAdminStatusConfirm(null)}>Cancel</button>
-          <button className={state.adminStatusConfirm.status === 'suspended' ? 'btn btn-danger' : 'btn btn-primary'} onClick={() => {
+          <button className={state.adminStatusConfirm.status === 'suspended' ? 'btn btn-danger' : 'btn btn-primary'} onClick={async () => {
             if (state.adminStatusConfirm!.step === 1) { state.setAdminStatusConfirm({ ...state.adminStatusConfirm!, step: 2 }); return; }
             const email = state.adminStatusConfirm!.record.user.email;
             const newStatus = state.adminStatusConfirm!.status;
-            platformAdmin.updateUserStatus(email, newStatus as 'active' | 'suspended' | 'deactivated');
-            state.setAdminStatusConfirm(null); state.showToast(`User ${newStatus}`);
-            if (state.refreshAdminUsers) state.refreshAdminUsers(); else state.refreshTeam();
+            try {
+              await platformAdmin.updateUserStatus(email, newStatus as 'active' | 'suspended' | 'deactivated');
+              state.setAdminStatusConfirm(null); state.showToast(`User ${newStatus}`);
+              if (state.refreshAdminUsers) await state.refreshAdminUsers(); else state.refreshTeam();
+            } catch (error) {
+              state.showToast(error instanceof Error ? error.message : 'Admin action failed', 'error');
+            }
           }}>
             {state.adminStatusConfirm.step === 1 ? 'Continue' : state.adminStatusConfirm.status === 'suspended' ? 'Confirm Suspend' : 'Confirm Reactivate'}
           </button>

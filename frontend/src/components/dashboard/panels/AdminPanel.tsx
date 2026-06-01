@@ -16,7 +16,7 @@ type PendingAdminAction = {
   success: string;
   tone: 'primary' | 'danger';
   step: number;
-  action: () => void;
+  action: () => void | Promise<void>;
 };
 
 function formatBytes(bytes: number): string {
@@ -33,7 +33,9 @@ function formatBytes(bytes: number): string {
 
 export default function AdminPanel({ state }: AdminPanelProps) {
   const [pendingAdminAction, setPendingAdminAction] = useState<PendingAdminAction | null>(null);
-  const refresh = () => state.setAdminUsers(platformAdmin.getUsers());
+  const refresh = async () => {
+    await state.refreshAdminUsers();
+  };
   const planOptions = ['Free', 'Starter', 'Business', 'Enterprise'];
   const selfEmail = normalizeEmail(state.user?.email || '');
   const ownerDomain = platformAdmin.ownerDomain;
@@ -66,15 +68,15 @@ export default function AdminPanel({ state }: AdminPanelProps) {
     setPendingAdminAction({ ...action, step: 1 });
   };
 
-  const confirmPendingAction = () => {
+  const confirmPendingAction = async () => {
     if (!pendingAdminAction) return;
     if (pendingAdminAction.step === 1) {
       setPendingAdminAction({ ...pendingAdminAction, step: 2 });
       return;
     }
     try {
-      pendingAdminAction.action();
-      refresh();
+      await pendingAdminAction.action();
+      await refresh();
       state.showToast(pendingAdminAction.success);
     } catch (error) {
       state.showToast(error instanceof Error ? error.message : 'Admin action failed', 'error');
@@ -88,7 +90,7 @@ export default function AdminPanel({ state }: AdminPanelProps) {
       <div className="panel-header">
         <button className="toolbar-icon sidebar-toggle" onClick={() => state.setSidebarOpen(true)}><Menu size={20} /></button>
         <h3><Crown size={16} /> Platform Admin</h3>
-        <button className="btn btn-ghost btn-sm" onClick={() => { refresh(); state.showToast('Refreshed'); }}><RefreshCcw size={12} /> Refresh</button>
+        <button className="btn btn-ghost btn-sm" onClick={() => { void refresh().then(() => state.showToast('Refreshed')); }}><RefreshCcw size={12} /> Refresh</button>
       </div>
 
       <div className="admin-owner-lock">
@@ -166,7 +168,7 @@ export default function AdminPanel({ state }: AdminPanelProps) {
                   confirmLabel: 'Apply Role',
                   success: `Role set to ${nextRole}`,
                   tone: 'primary',
-                  action: () => { platformAdmin.updateUserRole(u.user.email, nextRole); },
+                  action: () => platformAdmin.updateUserRole(u.user.email, nextRole).then(() => {}),
                 });
               }}>
                 <option value="admin">Admin</option><option value="member">Member</option><option value="viewer">Viewer</option>
@@ -179,7 +181,7 @@ export default function AdminPanel({ state }: AdminPanelProps) {
                   confirmLabel: 'Apply Plan',
                   success: `Plan set to ${nextPlan}`,
                   tone: 'primary',
-                  action: () => { platformAdmin.updateUserPlan(u.user.email, nextPlan, u.billingCycle); },
+                  action: () => platformAdmin.updateUserPlan(u.user.email, nextPlan, u.billingCycle).then(() => {}),
                 });
               }}>
                 {planOptions.map(plan => <option key={plan} value={plan}>{plan}</option>)}
@@ -192,7 +194,7 @@ export default function AdminPanel({ state }: AdminPanelProps) {
                   confirmLabel: 'Apply Billing',
                   success: `Billing set to ${nextCycle}`,
                   tone: 'primary',
-                  action: () => { platformAdmin.updateUserPlan(u.user.email, u.plan || 'Free', nextCycle); },
+                  action: () => platformAdmin.updateUserPlan(u.user.email, u.plan || 'Free', nextCycle).then(() => {}),
                 });
               }}>
                 <option value="monthly">Monthly</option><option value="annual">Annual</option>
@@ -205,7 +207,7 @@ export default function AdminPanel({ state }: AdminPanelProps) {
                   confirmLabel: nextStatus === 'suspended' ? 'Confirm Suspend' : 'Confirm Reactivate',
                   success: `User ${nextStatus}`,
                   tone: nextStatus === 'suspended' ? 'danger' : 'primary',
-                  action: () => { platformAdmin.updateUserStatus(u.user.email, nextStatus); },
+                  action: () => platformAdmin.updateUserStatus(u.user.email, nextStatus).then(() => {}),
                 });
               }}>
                 <Shield size={12} /> {u.status === 'active' ? 'Suspend' : 'Reactivate'}
@@ -217,7 +219,7 @@ export default function AdminPanel({ state }: AdminPanelProps) {
                   confirmLabel: 'Delete User',
                   success: 'User deleted',
                   tone: 'danger',
-                  action: () => { platformAdmin.deleteUser(u.user.email); },
+                  action: () => platformAdmin.deleteUser(u.user.email).then(() => {}),
                 });
               }}><Trash2 size={12} /></button>
             </div>

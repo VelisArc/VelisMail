@@ -583,7 +583,6 @@ async function fetchBusinessMailboxesFromDb(domain: string): Promise<BusinessMai
   if (!response.ok || !response.data?.success || !Array.isArray(response.data.mailboxes)) {
     const message = businessMailboxApiError(response.data, 'Unable to load mailboxes from the business database.');
     if (isTransientBusinessDbError(response.status, message)) {
-      businessMailboxDbRouteUnavailable = true;
       warnBackendSyncFailure(new Error(message));
       return null;
     }
@@ -1278,8 +1277,10 @@ export const mail = {
       if (response.ok && response.data?.success && Array.isArray(response.data.emails)) {
         sourceEmails = response.data.emails.map((entry) => normalizeBusinessEmailFromDb(entry));
         saveEmailsSyncAndAsync(STORAGE_KEYS.emails, sourceEmails);
-      } else if (response.status === 404 || isTransientBusinessDbError(response.status, String(response.data?.error || response.data?.message || 'Business email database query failed.'))) {
+      } else if (response.status === 404) {
         setBusinessEmailDbRouteUnavailable(true);
+      } else if (isTransientBusinessDbError(response.status, String(response.data?.error || response.data?.message || 'Business email database query failed.'))) {
+        warnBackendSyncFailure(new Error(String(response.data?.error || response.data?.message || 'Business email database query failed.')));
       }
     }
 
@@ -1734,6 +1735,14 @@ function platformAdminHostAllowed(): boolean {
 
 const PLATFORM_ADMIN_DOMAIN = 'velismail.online';
 
+type PlatformUsersApiResponse = {
+  success?: boolean;
+  users?: Partial<User>[];
+  user?: Partial<User>;
+  error?: string;
+  message?: string;
+};
+
 function isPlatformOwnerEmail(email: string): boolean {
   return normalizeMailbox(email).endsWith(`@${PLATFORM_ADMIN_DOMAIN}`);
 }
@@ -1787,6 +1796,75 @@ function loadPlatformUserDirectory(session?: User | null): Record<string, User> 
   });
   savePersistentUsers(users);
   return users;
+}
+
+function mergePlatformUsers(users: Record<string, User>, entries: Partial<User>[]): Record<string, User> {
+  entries.forEach((entry) => {
+    const user = normalizePlatformDirectoryUser(entry);
+    if (!user) return;
+    users[user.email] = normalizeSessionUser({
+      ...users[user.email],
+      ...user,
+    });
+  });
+  savePersistentUsers(users);
+  return users;
+}
+
+async function fetchPlatformUsersFromBackend(): Promise<Record<string, User> | null> {
+  const response = await fetchApiJsonDetailed<PlatformUsersApiResponse>('/platform/users');
+  if (response.status === 404) {
+    warnBackendSyncFailure(new Error(response.data?.error || response.data?.message || 'Platform user API is not available.'));
+    return null;
+  }
+  if (!response.ok || !response.data?.success || !Array.isArray(response.data.users)) {
+    throw new Error(response.data?.error || response.data?.message || 'Unable to load platform users.');
+  }
+
+  return mergePlatformUsers(loadPlatformUserDirectory(auth.getSession()), response.data.users);
+}
+
+async function patchPlatformUserOnBackend(payload: {
+  email: string;
+  role?: 'admin' | 'member' | 'viewer';
+  status?: 'active' | 'suspended' | 'deactivated';
+  plan?: string;
+  billingCycle?: 'monthly' | 'annual';
+}): Promise<User | null> {
+  const response = await fetchApiJsonDetailed<PlatformUsersApiResponse>('/platform/users', {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+  if (response.status === 404) {
+    warnBackendSyncFailure(new Error(response.data?.error || response.data?.message || 'Platform user API is not available.'));
+    return null;
+  }
+  if (!response.ok || !response.data?.success) {
+    throw new Error(response.data?.error || response.data?.message || 'Unable to update platform user.');
+  }
+  const normalized = response.data.user ? normalizePlatformDirectoryUser(response.data.user) : null;
+  if (normalized) {
+    const users = loadPlatformUserDirectory(auth.getSession());
+    users[normalized.email] = normalized;
+    savePersistentUsers(users);
+    persistCurrentSessionUser(normalized);
+  }
+  return normalized;
+}
+
+async function deletePlatformUserOnBackend(email: string): Promise<boolean> {
+  const response = await fetchApiJsonDetailed<PlatformUsersApiResponse>('/platform/users', {
+    method: 'DELETE',
+    body: JSON.stringify({ email }),
+  });
+  if (response.status === 404) {
+    warnBackendSyncFailure(new Error(response.data?.error || response.data?.message || 'Platform user API is not available.'));
+    return false;
+  }
+  if (!response.ok || !response.data?.success) {
+    throw new Error(response.data?.error || response.data?.message || 'Unable to delete platform user.');
+  }
+  return true;
 }
 
 function persistCurrentSessionUser(user: User) {
@@ -1874,7 +1952,12 @@ export const platformAdmin = {
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   },
 
-  updateUserStatus(email: string, status: 'active' | 'suspended' | 'deactivated', reason?: string): User | null {
+  async syncUsers(): Promise<PlatformAdminUserRecord[]> {
+    await fetchPlatformUsersFromBackend();
+    return this.getUsers();
+  },
+
+  async updateUserStatus(email: string, status: 'active' | 'suspended' | 'deactivated', reason?: string): Promise<User | null> {
     const users = loadPersistentUsers();
     const normalizedEmail = normalizeMailbox(email);
     const user = users[normalizedEmail];
@@ -1901,10 +1984,10 @@ export const platformAdmin = {
       severity: status === 'suspended' ? 'critical' : 'warn',
     });
 
-    return next;
+    return await patchPlatformUserOnBackend({ email: normalizedEmail, status }) || next;
   },
 
-  updateUserPlan(email: string, plan: string, billingCycle: 'monthly' | 'annual'): User | null {
+  async updateUserPlan(email: string, plan: string, billingCycle: 'monthly' | 'annual'): Promise<User | null> {
     const users = loadPersistentUsers();
     const normalizedEmail = normalizeMailbox(email);
     const user = users[normalizedEmail];
@@ -1935,10 +2018,10 @@ export const platformAdmin = {
       severity: 'warn',
     });
 
-    return next;
+    return await patchPlatformUserOnBackend({ email: normalizedEmail, plan, billingCycle }) || next;
   },
 
-  updateUserRole(email: string, role: 'admin' | 'member' | 'viewer'): User | null {
+  async updateUserRole(email: string, role: 'admin' | 'member' | 'viewer'): Promise<User | null> {
     const users = loadPersistentUsers();
     const normalizedEmail = normalizeMailbox(email);
     const user = users[normalizedEmail];
@@ -1960,10 +2043,10 @@ export const platformAdmin = {
       severity: 'info',
     });
 
-    return next;
+    return await patchPlatformUserOnBackend({ email: normalizedEmail, role }) || next;
   },
 
-  setPlatformAdmin(email: string, enabled: boolean): User | null {
+  async setPlatformAdmin(email: string, enabled: boolean): Promise<User | null> {
     const users = loadPersistentUsers();
     const normalizedEmail = normalizeMailbox(email);
     const user = users[normalizedEmail];
@@ -1993,10 +2076,10 @@ export const platformAdmin = {
       severity: 'critical',
     });
 
-    return next;
+    return await patchPlatformUserOnBackend({ email: normalizedEmail, role: 'admin', status: 'active' }) || next;
   },
 
-  deleteUser(email: string): boolean {
+  async deleteUser(email: string): Promise<boolean> {
     const users = loadPersistentUsers();
     const normalizedEmail = normalizeMailbox(email);
     if (!users[normalizedEmail]) return false;
@@ -2004,6 +2087,7 @@ export const platformAdmin = {
       throw new Error('Platform-domain admin accounts cannot be deleted.');
     }
 
+    await deletePlatformUserOnBackend(normalizedEmail);
     delete users[normalizedEmail];
     savePersistentUsers(users);
 

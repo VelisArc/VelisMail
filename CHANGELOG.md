@@ -1,5 +1,17 @@
 # Changelog
 
+## v4.0.5 - Platform Directory & Mailbox Stability
+
+### Added
+- **Platform-wide user directory**: Platform Admin now loads the full backend `users` table through a protected `@velismail.online` admin API instead of only showing locally cached users.
+- **Backend user management actions**: Role, plan, billing cycle, status, and delete actions now persist through the platform API.
+
+### Fixed
+- **Sidebar footer spacing**: The dashboard sidebar is now pinned to the viewport bottom and the footer spacing is tightened to remove the empty block below the account row.
+- **Business mailbox DB stability**: Tenant DB pools are reused without a health-check query on every request, have a larger connection budget, and transient timeouts no longer mark mailbox/email DB sync dead for the whole session.
+
+---
+
 ## v4.0.4 - Platform Domain Admin & Sidebar Fix
 
 ### Added

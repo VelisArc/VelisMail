@@ -226,7 +226,15 @@ export default function BusinessDashboard() {
   }, [activeDomainName, showToast]);
   const refreshGroups = useCallback(() => setDomainGroups(businessGroups.getByDomain(activeDomainName)), [activeDomainName]);
   const refreshConnectionUsage = useCallback(() => setConnectionUsage(connections.getUsage()), []);
-  const refreshAdminUsers = useCallback(() => setAdminUsers(platformAdmin.getUsers()), []);
+  const refreshAdminUsers = useCallback(async () => {
+    try {
+      setAdminUsers(await platformAdmin.syncUsers());
+    } catch (error) {
+      console.error('refresh platform users failed', error);
+      setAdminUsers(platformAdmin.getUsers());
+      showToast(error instanceof Error ? error.message : 'Unable to load platform users.', 'error');
+    }
+  }, [showToast]);
 
   const refreshSignatures = useCallback(() => setSignaturesList(signatures.getAll()), []);
   const refreshContacts = useCallback(() => setContactsList(contacts.getAll()), []);
@@ -244,7 +252,7 @@ export default function BusinessDashboard() {
 
   useEffect(() => {
     if (canAccessPlatformAdmin) {
-      refreshAdminUsers();
+      void refreshAdminUsers();
     }
   }, [canAccessPlatformAdmin, refreshAdminUsers]);
 

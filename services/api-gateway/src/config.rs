@@ -22,6 +22,8 @@ pub struct GatewayConfig {
     pub razorpay_key_secret: String,
     // Optional DB for gateway persistence (team invites, inbound routes)
     pub db_url: Option<String>,
+    // Optional JWT validation for gateway-owned protected routes.
+    pub jwt_secret: Option<String>,
 }
 
 impl GatewayConfig {
@@ -59,6 +61,10 @@ impl GatewayConfig {
             razorpay_key_id: std::env::var("RAZORPAY_KEY_ID").unwrap_or_default(),
             razorpay_key_secret: std::env::var("RAZORPAY_KEY_SECRET").unwrap_or_default(),
             db_url: std::env::var("DATABASE_URL").ok().filter(|v| !v.trim().is_empty()),
+            jwt_secret: std::env::var("JWT_SECRET")
+                .ok()
+                .map(|value| value.trim().to_string())
+                .filter(|value| !value.is_empty()),
         })
     }
 }

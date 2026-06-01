@@ -19,13 +19,17 @@ use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sha2::Sha256;
-use sqlx::{postgres::PgPoolOptions, PgPool, Row};
+use sqlx::{
+    postgres::{PgPoolOptions, PgRow},
+    PgPool, Row,
+};
 use std::collections::HashMap;
 use std::sync::Mutex;
 use tokio::{
     net::{lookup_host, TcpStream},
     time::{sleep, timeout, Duration},
 };
+use velismail_common::Claims;
 
 const RESEND_WEBHOOK_TOLERANCE_SECONDS: u64 = 300;
 
@@ -54,6 +58,12 @@ pub fn api_v1_routes(_state: &AppState) -> Router<AppState> {
         .route("/team/invites/validate", post(validate_team_invite))
         .route("/team/invites/complete", post(complete_team_invite))
         .route("/team/invites/revoke", post(revoke_team_invite))
+        .route(
+            "/platform/users",
+            get(list_platform_users)
+                .patch(update_platform_user)
+                .delete(delete_platform_user),
+        )
         .route("/tenants/verify-domain", post(verify_domain))
         .route("/payments/create-order", post(create_payment_order))
         .route("/payments/verify", post(verify_payment))
@@ -2797,6 +2807,420 @@ pub async fn revoke_team_invite(
     )
 }
 
+const PLATFORM_ADMIN_DOMAIN: &str = "velismail.online";
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlatformUserUpdateRequest {
+    pub email: String,
+    pub role: Option<String>,
+    pub status: Option<String>,
+    pub plan: Option<String>,
+    pub billing_cycle: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlatformUserDeleteRequest {
+    pub email: String,
+}
+
+fn platform_api_error(status: StatusCode, message: &str) -> (StatusCode, Json<Value>) {
+    (
+        status,
+        Json(json!({
+            "success": false,
+            "error": message,
+        })),
+    )
+}
+
+fn normalize_platform_email(value: &str) -> String {
+    value.trim().to_lowercase()
+}
+
+fn is_platform_admin_email(value: &str) -> bool {
+    normalize_platform_email(value).ends_with(&format!("@{PLATFORM_ADMIN_DOMAIN}"))
+}
+
+fn bearer_token(headers: &HeaderMap) -> Option<String> {
+    headers
+        .get(axum::http::header::AUTHORIZATION)
+        .and_then(|value| value.to_str().ok())
+        .map(str::trim)
+        .and_then(|value| value.strip_prefix("Bearer ").or_else(|| value.strip_prefix("bearer ")))
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
+}
+
+fn authorize_platform_admin(
+    state: &AppState,
+    headers: &HeaderMap,
+) -> Result<String, (StatusCode, Json<Value>)> {
+    let secret = state.config.jwt_secret.as_deref().ok_or_else(|| {
+        platform_api_error(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "Platform Admin API is not configured with JWT_SECRET.",
+        )
+    })?;
+    let token = bearer_token(headers).ok_or_else(|| {
+        platform_api_error(StatusCode::UNAUTHORIZED, "Missing bearer token.")
+    })?;
+
+    let mut validation = Validation::default();
+    validation.validate_aud = false;
+    validation.leeway = 120;
+    let decoded = decode::<Claims>(
+        &token,
+        &DecodingKey::from_secret(secret.as_bytes()),
+        &validation,
+    )
+    .map_err(|_| platform_api_error(StatusCode::UNAUTHORIZED, "Invalid bearer token."))?;
+
+    let email = normalize_platform_email(&decoded.claims.email);
+    if !is_platform_admin_email(&email) {
+        return Err(platform_api_error(
+            StatusCode::FORBIDDEN,
+            "Platform Admin access is limited to @velismail.online accounts.",
+        ));
+    }
+    Ok(email)
+}
+
+fn gateway_db_pool(state: &AppState) -> Result<&PgPool, (StatusCode, Json<Value>)> {
+    state.db.as_ref().ok_or_else(|| {
+        platform_api_error(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "Platform user database is not connected.",
+        )
+    })
+}
+
+fn db_status_to_app_status(value: &str) -> String {
+    match value.trim().to_lowercase().as_str() {
+        "deleted" | "deactivated" => "deactivated".to_string(),
+        "suspended" => "suspended".to_string(),
+        _ => "active".to_string(),
+    }
+}
+
+fn app_status_to_db_status(value: &str) -> Option<String> {
+    match value.trim().to_lowercase().as_str() {
+        "active" => Some("active".to_string()),
+        "suspended" => Some("suspended".to_string()),
+        "deactivated" | "deleted" => Some("deleted".to_string()),
+        _ => None,
+    }
+}
+
+fn platform_user_json(row: PgRow) -> Value {
+    let id: uuid::Uuid = row.get("id");
+    let tenant_id: uuid::Uuid = row.get("tenant_id");
+    let email: String = row.get("email");
+    let recovery_email: Option<String> = row.try_get("recovery_email").ok();
+    let display_name: String = row.get("display_name");
+    let db_status: String = row.get("status");
+    let settings: Value = row.try_get("settings").unwrap_or_else(|_| json!({}));
+    let created_at: chrono::DateTime<chrono::Utc> = row.get("created_at");
+    let updated_at: chrono::DateTime<chrono::Utc> = row.get("updated_at");
+    let last_login: Option<chrono::DateTime<chrono::Utc>> = row.try_get("last_login").ok();
+
+    let mut user = settings.as_object().cloned().unwrap_or_default();
+    let app_status = user
+        .get("status")
+        .and_then(Value::as_str)
+        .map(db_status_to_app_status)
+        .unwrap_or_else(|| db_status_to_app_status(&db_status));
+    let platform_admin = is_platform_admin_email(&email);
+
+    user.insert("id".to_string(), json!(id.to_string()));
+    user.insert("tenantId".to_string(), json!(tenant_id.to_string()));
+    user.insert("email".to_string(), json!(email));
+    user.insert("recoveryEmail".to_string(), json!(recovery_email));
+    user.insert("displayName".to_string(), json!(display_name));
+    user.insert("status".to_string(), json!(app_status));
+    user.insert("createdAt".to_string(), json!(created_at.to_rfc3339()));
+    user.insert("updatedAt".to_string(), json!(updated_at.to_rfc3339()));
+    user.insert(
+        "lastActiveAt".to_string(),
+        last_login.map(|value| json!(value.to_rfc3339())).unwrap_or(Value::Null),
+    );
+    if !user.contains_key("plan") {
+        user.insert("plan".to_string(), json!("Free"));
+    }
+    if !user.contains_key("billingCycle") {
+        user.insert("billingCycle".to_string(), json!("monthly"));
+    }
+    if !user.contains_key("accountType") {
+        user.insert("accountType".to_string(), json!("business"));
+    }
+    if !user.contains_key("isSetupComplete") {
+        user.insert("isSetupComplete".to_string(), json!(false));
+    }
+    let role_value = if platform_admin {
+        "admin".to_string()
+    } else {
+        user.get("role")
+            .and_then(Value::as_str)
+            .unwrap_or("member")
+            .to_string()
+    };
+    user.insert(
+        "role".to_string(),
+        json!(role_value),
+    );
+    user.insert("isPlatformAdmin".to_string(), json!(platform_admin));
+
+    Value::Object(user)
+}
+
+async fn fetch_platform_user(pool: &PgPool, email: &str) -> Option<Value> {
+    let row = sqlx::query(
+        "SELECT id, tenant_id, email, recovery_email, display_name, status, settings, created_at, updated_at, last_login
+         FROM users
+         WHERE email = $1",
+    )
+    .bind(email)
+    .fetch_optional(pool)
+    .await
+    .ok()??;
+    Some(platform_user_json(row))
+}
+
+pub async fn list_platform_users(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> (StatusCode, Json<Value>) {
+    if let Err(response) = authorize_platform_admin(&state, &headers) {
+        return response;
+    }
+    let pool = match gateway_db_pool(&state) {
+        Ok(pool) => pool,
+        Err(response) => return response,
+    };
+
+    let rows = match sqlx::query(
+        "SELECT id, tenant_id, email, recovery_email, display_name, status, settings, created_at, updated_at, last_login
+         FROM users
+         ORDER BY created_at DESC
+         LIMIT 5000",
+    )
+    .fetch_all(pool)
+    .await
+    {
+        Ok(rows) => rows,
+        Err(err) => {
+            tracing::error!("platform user list failed: {}", err);
+            return platform_api_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Unable to load platform users.",
+            );
+        }
+    };
+
+    let users: Vec<Value> = rows.into_iter().map(platform_user_json).collect();
+    (
+        StatusCode::OK,
+        Json(json!({
+            "success": true,
+            "users": users,
+        })),
+    )
+}
+
+pub async fn update_platform_user(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(payload): Json<PlatformUserUpdateRequest>,
+) -> (StatusCode, Json<Value>) {
+    let actor_email = match authorize_platform_admin(&state, &headers) {
+        Ok(email) => email,
+        Err(response) => return response,
+    };
+    let pool = match gateway_db_pool(&state) {
+        Ok(pool) => pool,
+        Err(response) => return response,
+    };
+
+    let target_email = normalize_platform_email(&payload.email);
+    if !target_email.contains('@') {
+        return platform_api_error(StatusCode::BAD_REQUEST, "A valid user email is required.");
+    }
+
+    let mut settings_patch = serde_json::Map::new();
+    let mut db_status: Option<String> = None;
+
+    if let Some(status) = payload.status.as_deref() {
+        let Some(next_db_status) = app_status_to_db_status(status) else {
+            return platform_api_error(StatusCode::BAD_REQUEST, "Invalid user status.");
+        };
+        if is_platform_admin_email(&target_email) && next_db_status != "active" {
+            return platform_api_error(
+                StatusCode::BAD_REQUEST,
+                "Platform-domain admin accounts cannot be suspended or deactivated.",
+            );
+        }
+        let app_status = db_status_to_app_status(&next_db_status);
+        db_status = Some(next_db_status);
+        settings_patch.insert("status".to_string(), json!(app_status));
+        if status.eq_ignore_ascii_case("suspended") {
+            settings_patch.insert("suspendedAt".to_string(), json!(chrono::Utc::now().to_rfc3339()));
+            settings_patch.insert(
+                "suspensionReason".to_string(),
+                json!(format!("Updated by {actor_email}")),
+            );
+        } else {
+            settings_patch.insert("suspendedAt".to_string(), Value::Null);
+            settings_patch.insert("suspensionReason".to_string(), Value::Null);
+        }
+    }
+
+    if let Some(role) = payload.role.as_deref() {
+        let role = role.trim().to_lowercase();
+        if !valid_team_role(&role) {
+            return platform_api_error(StatusCode::BAD_REQUEST, "Invalid user role.");
+        }
+        if is_platform_admin_email(&target_email) && role != "admin" {
+            return platform_api_error(
+                StatusCode::BAD_REQUEST,
+                "Platform-domain accounts are locked to admin access.",
+            );
+        }
+        settings_patch.insert("role".to_string(), json!(role));
+        settings_patch.insert(
+            "isPlatformAdmin".to_string(),
+            json!(is_platform_admin_email(&target_email)),
+        );
+    }
+
+    if let Some(plan) = payload.plan.as_deref() {
+        let plan = plan.trim();
+        if plan.is_empty() {
+            return platform_api_error(StatusCode::BAD_REQUEST, "Invalid plan.");
+        }
+        let now = chrono::Utc::now();
+        let billing = payload
+            .billing_cycle
+            .as_deref()
+            .unwrap_or("monthly")
+            .trim()
+            .to_lowercase();
+        let billing = if billing == "annual" { "annual" } else { "monthly" };
+        settings_patch.insert("plan".to_string(), json!(plan));
+        settings_patch.insert("billingCycle".to_string(), json!(billing));
+        settings_patch.insert("lastPlanChangeAt".to_string(), json!(now.to_rfc3339()));
+        if !plan.eq_ignore_ascii_case("free") {
+            let expires_at = if billing == "annual" {
+                now + chrono::Duration::days(365)
+            } else {
+                now + chrono::Duration::days(31)
+            };
+            settings_patch.insert("paidPlanPurchasedAt".to_string(), json!(now.to_rfc3339()));
+            settings_patch.insert("paidPlanExpiresAt".to_string(), json!(expires_at.to_rfc3339()));
+            settings_patch.insert("subscriptionStatus".to_string(), json!("active"));
+        } else {
+            settings_patch.insert("paidPlanPurchasedAt".to_string(), Value::Null);
+            settings_patch.insert("paidPlanExpiresAt".to_string(), Value::Null);
+            settings_patch.insert("subscriptionStatus".to_string(), json!("active"));
+        }
+    } else if let Some(billing_cycle) = payload.billing_cycle.as_deref() {
+        let billing = billing_cycle.trim().to_lowercase();
+        if billing != "monthly" && billing != "annual" {
+            return platform_api_error(StatusCode::BAD_REQUEST, "Invalid billing cycle.");
+        }
+        settings_patch.insert("billingCycle".to_string(), json!(billing));
+        settings_patch.insert(
+            "lastPlanChangeAt".to_string(),
+            json!(chrono::Utc::now().to_rfc3339()),
+        );
+    }
+
+    if settings_patch.is_empty() && db_status.is_none() {
+        return platform_api_error(StatusCode::BAD_REQUEST, "No user change was provided.");
+    }
+
+    let settings_json = Value::Object(settings_patch).to_string();
+    let result = sqlx::query(
+        "UPDATE users
+         SET status = COALESCE($1::text, status),
+             settings = COALESCE(settings, '{}'::jsonb) || $2::jsonb,
+             updated_at = NOW()
+         WHERE email = $3",
+    )
+    .bind(db_status.as_deref())
+    .bind(&settings_json)
+    .bind(&target_email)
+    .execute(pool)
+    .await;
+
+    match result {
+        Ok(done) if done.rows_affected() > 0 => {
+            let user = fetch_platform_user(pool, &target_email)
+                .await
+                .unwrap_or_else(|| json!({ "email": target_email }));
+            (
+                StatusCode::OK,
+                Json(json!({
+                    "success": true,
+                    "user": user,
+                })),
+            )
+        }
+        Ok(_) => platform_api_error(StatusCode::NOT_FOUND, "User was not found."),
+        Err(err) => {
+            tracing::error!("platform user update failed: {}", err);
+            platform_api_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Unable to update platform user.",
+            )
+        }
+    }
+}
+
+pub async fn delete_platform_user(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(payload): Json<PlatformUserDeleteRequest>,
+) -> (StatusCode, Json<Value>) {
+    if let Err(response) = authorize_platform_admin(&state, &headers) {
+        return response;
+    }
+    let pool = match gateway_db_pool(&state) {
+        Ok(pool) => pool,
+        Err(response) => return response,
+    };
+
+    let target_email = normalize_platform_email(&payload.email);
+    if is_platform_admin_email(&target_email) {
+        return platform_api_error(
+            StatusCode::BAD_REQUEST,
+            "Platform-domain admin accounts cannot be deleted.",
+        );
+    }
+
+    let result = sqlx::query("DELETE FROM users WHERE email = $1")
+        .bind(&target_email)
+        .execute(pool)
+        .await;
+    match result {
+        Ok(done) if done.rows_affected() > 0 => (
+            StatusCode::OK,
+            Json(json!({
+                "success": true,
+            })),
+        ),
+        Ok(_) => platform_api_error(StatusCode::NOT_FOUND, "User was not found."),
+        Err(err) => {
+            tracing::error!("platform user delete failed: {}", err);
+            platform_api_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Unable to delete platform user.",
+            )
+        }
+    }
+}
+
 static POOLS: Lazy<Mutex<HashMap<String, PgPool>>> = Lazy::new(|| Mutex::new(HashMap::new()));
 
 fn normalize_business_db_url(db_url: &str) -> String {
@@ -2817,23 +3241,20 @@ async fn get_tenant_pool(db_url: &str) -> Result<PgPool, String> {
             .map_err(|_| "Tenant pool cache lock poisoned".to_string())?;
         pools.get(&normalized_url).cloned()
     } {
-        // Verify pool health before returning it
-        if sqlx::query("SELECT 1").execute(&pool).await.is_ok() {
+        if !pool.is_closed() {
             return Ok(pool);
-        } else {
-            // Evict the dead pool from cache
-            if let Ok(mut pools) = POOLS.lock() {
-                pools.remove(&normalized_url);
-            }
+        }
+        if let Ok(mut pools) = POOLS.lock() {
+            pools.remove(&normalized_url);
         }
     }
 
     let pool = PgPoolOptions::new()
-        .max_connections(3)
+        .max_connections(8)
         .min_connections(0)
-        .idle_timeout(Some(Duration::from_secs(15)))
+        .idle_timeout(Some(Duration::from_secs(60)))
         .max_lifetime(Some(Duration::from_secs(300)))
-        .acquire_timeout(Duration::from_secs(3))
+        .acquire_timeout(Duration::from_secs(10))
         .connect(&normalized_url)
         .await
         .map_err(|e| e.to_string())?;
