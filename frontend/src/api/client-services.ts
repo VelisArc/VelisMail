@@ -654,24 +654,11 @@ export const businessMailboxes = {
     if (!remoteEntries) return localEntries;
 
     const remoteByAddress = new Map(remoteEntries.map((entry) => [entry.address.toLowerCase(), entry]));
-    const remoteHasPrimary = remoteEntries.some((entry) => entry.active);
-    const systemMailbox = {
-      ...getSystemBusinessMailbox(normalizedDomain),
-      active: !remoteHasPrimary,
-      kind: remoteHasPrimary ? 'mailbox' as const : 'primary' as const,
-    };
 
     // Any local entry (including custom mailboxes) that is not in the remote database should be seeded
     const unsyncedLocal = localEntries.filter((entry) => !remoteByAddress.has(entry.address.toLowerCase()));
 
-    // Make sure system mailbox is seeded if not present
-    const hasSystemMailbox = remoteByAddress.has(systemMailbox.address.toLowerCase()) || 
-                             unsyncedLocal.some((e) => e.address.toLowerCase() === systemMailbox.address.toLowerCase());
-
     const entriesToSeed = [...unsyncedLocal];
-    if (!hasSystemMailbox) {
-      entriesToSeed.push(systemMailbox);
-    }
 
     if (entriesToSeed.length > 0) {
       await Promise.all(entriesToSeed.map((entry) => upsertBusinessMailboxToDb(entry)));
@@ -734,6 +721,13 @@ export const businessMailboxes = {
     }
     saveBusinessMailboxes(normalizedDomain, nextEntries);
 
+    if (shouldBePrimary) {
+      auth.updateSettings({
+        businessMailboxAddress: normalizedAddress,
+        email: normalizedAddress,
+      });
+    }
+
     const session = auth.getSession();
     businessAudit.add({
       action: 'Created mailbox',
@@ -790,9 +784,6 @@ export const businessMailboxes = {
     const target = current.find((entry) => entry.address === normalizedAddress);
     if (!target) {
       throw new Error('Mailbox was not found for the selected domain.');
-    }
-    if (target.source === 'system') {
-      throw new Error('The system primary mailbox is tied to this business account and cannot be deleted.');
     }
     const next = current.filter((entry) => entry.address !== normalizedAddress);
     if (next.length === 0) {

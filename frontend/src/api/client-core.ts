@@ -803,23 +803,12 @@ export function loadBusinessMailboxes(domain?: string): BusinessMailbox[] {
   if (!normalizedDomain) {
     return deduped;
   }
-  const systemMailbox = getSystemBusinessMailbox(normalizedDomain);
-  const existingPrimaryIndex = byDomain.findIndex((entry) => entry.kind === 'primary' || entry.address === systemMailbox.address);
-  const domainEntries = byDomain.length > 0 ? [...byDomain] : [systemMailbox];
-  if (existingPrimaryIndex === -1 && !domainEntries.some(e => e.address === systemMailbox.address)) {
-    domainEntries.unshift(systemMailbox);
-  } else if (existingPrimaryIndex >= 0) {
-    domainEntries[existingPrimaryIndex] = {
-      ...domainEntries[existingPrimaryIndex],
-      ...systemMailbox,
-      source: domainEntries[existingPrimaryIndex].source,
-      aliases: domainEntries[existingPrimaryIndex].aliases,
-      lastUsedAt: domainEntries[existingPrimaryIndex].lastUsedAt,
-    };
+  if (byDomain.length === 0) {
+    return [];
   }
-  const activeExists = domainEntries.some((entry) => entry.active);
+  const activeExists = byDomain.some((entry) => entry.active);
   let activeAssigned = false;
-  const normalizedActiveEntries = domainEntries.map((entry, index) => {
+  const normalizedActiveEntries = byDomain.map((entry, index) => {
     const shouldBeActive = activeExists ? entry.active && !activeAssigned : index === 0;
     if (shouldBeActive) activeAssigned = true;
     return {

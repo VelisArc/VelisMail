@@ -459,11 +459,8 @@ export default function BusinessSetup() {
           }
         }
 
-        const businessMailboxAddress = `admin@${domain}`;
         const updateResult = auth.updateSettings({
-          email: user.accountType === 'business' ? businessMailboxAddress : user.email,
           recoveryEmail: user.recoveryEmail || user.email,
-          businessMailboxAddress,
           isBusinessSetupComplete: true,
           businessDomainVerified: true,
           businessDomain: domain,
@@ -527,11 +524,8 @@ export default function BusinessSetup() {
         throw new Error('Domain verification state could not be saved.');
       }
 
-      const businessMailboxAddress = `admin@${verifiedDomain.domain}`;
       const updateResult = auth.updateSettings({
-        email: user.accountType === 'business' ? businessMailboxAddress : user.email,
         recoveryEmail: user.recoveryEmail || user.email,
-        businessMailboxAddress,
         isBusinessSetupComplete: true,
         businessDomainVerified: true,
         businessDomain: verifiedDomain.domain,
@@ -590,11 +584,8 @@ export default function BusinessSetup() {
         }
       }
 
-      const businessMailboxAddress = `admin@${domain}`;
       const updateResult = auth.updateSettings({
-        email: user.accountType === 'business' ? businessMailboxAddress : user.email,
         recoveryEmail: user.recoveryEmail || user.email,
-        businessMailboxAddress,
         isBusinessSetupComplete: true,
         businessDomainVerified: true,
         businessDomain: domain,
@@ -938,7 +929,7 @@ export default function BusinessSetup() {
           <div className="bsetup-card glass animate-scale bsetup-complete-card">
             <div className="bsetup-success-icon"><CheckCircle2 size={56} color="var(--accent)" /></div>
             <h2>Business Mail Activated!</h2>
-            <p className="bsetup-desc">Your domain <strong>{domainInput}</strong> is now verified and connected. Your first business mailbox is <strong>{user.businessMailboxAddress || `admin@${domainInput}`}</strong>.</p>
+            <p className="bsetup-desc">Your business domain <strong>{domainInput}</strong> is verified and connected. Head to the dashboard to set up your business mailboxes.</p>
             <div className="bsetup-complete-actions">
               <button className="btn btn-primary" onClick={() => navigate('/business')}>
                 <Mail size={16} /> Open Business Dashboard
