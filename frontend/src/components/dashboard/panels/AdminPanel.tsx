@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Activity, AlertTriangle, Crown, CreditCard, Database, LockKeyhole, Mail, Menu, RefreshCcw, Shield, ShieldCheck, Trash2, User, Users } from 'lucide-react';
+import { Activity, AlertTriangle, Coins, Crown, CreditCard, Database, LockKeyhole, Mail, Menu, Plus, RefreshCcw, Shield, ShieldCheck, Trash2, TrendingUp, User, Users } from 'lucide-react';
 import { platformAdmin } from '../../../api/client';
 import type { DashboardState } from '../types';
 
@@ -33,8 +33,34 @@ function formatBytes(bytes: number): string {
 
 export default function AdminPanel({ state }: AdminPanelProps) {
   const [pendingAdminAction, setPendingAdminAction] = useState<PendingAdminAction | null>(null);
-  const [activeTab, setActiveTab] = useState<'users' | 'subscriptions'>('users');
+  const [activeTab, setActiveTab] = useState<'users' | 'subscriptions' | 'ledger'>('users');
   const [subSearch, setSubSearch] = useState('');
+  const [ledgerSearch, setLedgerSearch] = useState('');
+
+  // States for manual credit tool
+  const [creditEmail, setCreditEmail] = useState('');
+  const [creditPlan, setCreditPlan] = useState('Starter');
+  const [creditCycle, setCreditCycle] = useState<'monthly' | 'annual'>('monthly');
+  const [creditAmount, setCreditAmount] = useState('299');
+  const [showCreditForm, setShowCreditForm] = useState(false);
+
+  const handleCreditPlanChange = (plan: string) => {
+    setCreditPlan(plan);
+    updateDefaultCreditAmount(plan, creditCycle);
+  };
+
+  const handleCreditCycleChange = (cycle: 'monthly' | 'annual') => {
+    setCreditCycle(cycle);
+    updateDefaultCreditAmount(creditPlan, cycle);
+  };
+
+  const updateDefaultCreditAmount = (plan: string, cycle: 'monthly' | 'annual') => {
+    let amt = 299;
+    if (plan === 'Starter') amt = cycle === 'annual' ? 2999 : 299;
+    else if (plan === 'Business') amt = cycle === 'annual' ? 9999 : 999;
+    else if (plan === 'Enterprise') amt = cycle === 'annual' ? 24999 : 2499;
+    setCreditAmount(amt.toString());
+  };
   const refresh = async () => {
     await state.refreshAdminUsers();
   };
@@ -157,6 +183,13 @@ export default function AdminPanel({ state }: AdminPanelProps) {
           style={{ padding: '8px 16px', borderBottom: activeTab === 'subscriptions' ? '2px solid var(--primary)' : 'none', cursor: 'pointer' }}
         >
           Live Premiums & Purchases ({filteredSubs.length})
+        </button>
+        <button
+          className={`filter-pill ${activeTab === 'ledger' ? 'active' : ''}`}
+          onClick={() => setActiveTab('ledger')}
+          style={{ padding: '8px 16px', borderBottom: activeTab === 'ledger' ? '2px solid var(--primary)' : 'none', cursor: 'pointer' }}
+        >
+          Payments & Ledger History ({platformAdmin.getTransactions().length})
         </button>
       </div>
 
@@ -400,6 +433,193 @@ export default function AdminPanel({ state }: AdminPanelProps) {
                 <CreditCard size={42} className="text-muted" />
                 <h3>No active premium plans found</h3>
                 <p className="text-muted">There are currently no active paid subscriptions matching your search.</p>
+              </div>
+            )}
+          </div>
+        </>
+      )}
+
+      {activeTab === 'ledger' && (
+        <>
+          {/* Financial Cards Grid */}
+          <div className="admin-command-grid" style={{ marginBottom: '20px' }}>
+            <div className="admin-command-card" style={{ borderColor: 'var(--success-500)' }}>
+              <Activity size={16} style={{ color: 'var(--success)' }} />
+              <strong>₹{monthlyRevenue.toLocaleString()}</strong>
+              <span>MRR (Monthly Recurring)</span>
+            </div>
+            <div className="admin-command-card" style={{ borderColor: 'var(--info-500)' }}>
+              <TrendingUp size={16} style={{ color: 'var(--info)' }} />
+              <strong>₹{(monthlyRevenue * 12).toLocaleString()}</strong>
+              <span>ARR (Annualized Run Rate)</span>
+            </div>
+            <div className="admin-command-card">
+              <Users size={16} />
+              <strong>{premiumUsers.length}</strong>
+              <span>Active Premium Subs</span>
+            </div>
+            <div className="admin-command-card">
+              <CreditCard size={16} />
+              <strong>₹{Math.round(monthlyRevenue / (premiumUsers.length || 1)).toLocaleString()}</strong>
+              <span>ARPU (Avg Rev Per Sub)</span>
+            </div>
+          </div>
+
+          {/* Manual Premium Credit Tool */}
+          <div className="card-elevated" style={{ marginBottom: '24px', padding: '16px', background: 'var(--bg-surface-2)', border: '1px solid var(--border-primary)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Coins size={16} className="text-muted" />
+                <h4 style={{ fontSize: 'var(--text-sm)', fontWeight: 'var(--font-weight-bold)' }}>Manual Premium Credit Console</h4>
+              </div>
+              <button
+                className="btn btn-secondary btn-sm"
+                onClick={() => setShowCreditForm(!showCreditForm)}
+              >
+                {showCreditForm ? 'Hide Console' : 'Grant Premium Credit'}
+              </button>
+            </div>
+
+            {showCreditForm && (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px', marginTop: '16px', paddingTop: '16px', borderTop: '1px solid var(--border-primary)' }}>
+                <div className="form-group">
+                  <label className="form-label" style={{ fontSize: '10px' }}>Target User Email</label>
+                  <select
+                    className="input"
+                    value={creditEmail}
+                    onChange={e => setCreditEmail(e.target.value)}
+                  >
+                    <option value="">-- Select Platform User --</option>
+                    {state.adminUsers.map(u => (
+                      <option key={u.user.email} value={u.user.email}>
+                        {u.user.email} ({u.plan || 'Free'})
+                      </option>
+                    ))}
+                  </select>
+                  <span className="form-hint" style={{ fontSize: '10px' }}>Or enter custom below if not listed:</span>
+                  <input
+                    className="input"
+                    placeholder="custom@email.com"
+                    value={creditEmail}
+                    onChange={e => setCreditEmail(e.target.value)}
+                    style={{ marginTop: '4px' }}
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label" style={{ fontSize: '10px' }}>Select Premium Plan</label>
+                  <select
+                    className="input"
+                    value={creditPlan}
+                    onChange={e => handleCreditPlanChange(e.target.value)}
+                  >
+                    <option value="Starter">Starter Plan</option>
+                    <option value="Business">Business Plan</option>
+                    <option value="Enterprise">Enterprise Plan</option>
+                  </select>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label" style={{ fontSize: '10px' }}>Billing Cycle</label>
+                  <select
+                    className="input"
+                    value={creditCycle}
+                    onChange={e => handleCreditCycleChange(e.target.value as 'monthly' | 'annual')}
+                  >
+                    <option value="monthly">Monthly Cycle</option>
+                    <option value="annual">Annual Cycle</option>
+                  </select>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label" style={{ fontSize: '10px' }}>Paid Amount (₹)</label>
+                  <input
+                    className="input"
+                    type="number"
+                    value={creditAmount}
+                    onChange={e => setCreditAmount(e.target.value)}
+                  />
+                </div>
+
+                <div style={{ gridColumn: '1 / -1', display: 'flex', justifyContent: 'flex-end', marginTop: '12px' }}>
+                  <button
+                    className="btn btn-primary"
+                    disabled={!creditEmail.trim()}
+                    onClick={() => {
+                      if (!creditEmail.trim() || !creditEmail.includes('@')) {
+                        state.showToast('Please enter a valid target email address.', 'error');
+                        return;
+                      }
+                      queueAdminAction({
+                        title: 'Grant Manual Premium Credit',
+                        message: `Upgrade/Grant ${creditPlan} (${creditCycle}) to ${creditEmail} and record manual offline payment of ₹${creditAmount}?`,
+                        confirmLabel: 'Confirm Upgrade',
+                        tone: 'primary',
+                        success: `Premium plan manually credited to ${creditEmail}`,
+                        action: async () => {
+                          await platformAdmin.updateUserPlan(creditEmail, creditPlan, creditCycle);
+                          platformAdmin.addManualTransaction(creditEmail, creditPlan, creditCycle, Number(creditAmount));
+                          setShowCreditForm(false);
+                          setCreditEmail('');
+                        }
+                      });
+                    }}
+                  >
+                    <Plus size={14} /> Apply Manual Plan & Credit
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Payments Ledger list / history table */}
+          <div className="admin-controls-bar" style={{ display: 'flex', gap: '16px', alignItems: 'center', marginBottom: '16px' }}>
+            <input
+              className="input input-max-250"
+              placeholder="Search transactions by email..."
+              value={ledgerSearch}
+              onChange={e => setLedgerSearch(e.target.value)}
+            />
+            <div style={{ marginLeft: 'auto', display: 'flex', gap: '16px', fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
+              <span>Total Transactions: <strong>{platformAdmin.getTransactions().length}</strong></span>
+              <span>Total Vol: <strong>₹{platformAdmin.getTransactions().reduce((sum, tx) => sum + (tx.amount || 0), 0).toLocaleString()}</strong></span>
+            </div>
+          </div>
+
+          <div className="team-list" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            {platformAdmin.getTransactions()
+              .filter(tx => !ledgerSearch || tx.email.toLowerCase().includes(ledgerSearch.toLowerCase()))
+              .map(tx => (
+                <div key={tx.id} className="team-member-row admin-user-row" style={{ padding: '12px 16px' }}>
+                  <div className="avatar avatar-sm"><CreditCard size={14} /></div>
+                  <div className="team-member-info" style={{ flex: '1.5' }}>
+                    <strong>{tx.email}</strong>
+                    <span className="text-xs text-muted" style={{ display: 'block', marginTop: '2px' }}>TxID: <code>{tx.id}</code></span>
+                  </div>
+
+                  <div style={{ flex: '1', fontSize: 'var(--text-xs)', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                    <span>Plan: <strong>{tx.plan} ({tx.billingCycle})</strong></span>
+                    <span>Gateway: <strong style={{ color: tx.gateway.includes('Manual') ? 'var(--warning-500)' : 'var(--info-500)' }}>{tx.gateway}</strong></span>
+                  </div>
+
+                  <div style={{ flex: '1', fontSize: 'var(--text-xs)', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                    <span>Ref: <code>{tx.paymentId}</code></span>
+                    <span>Date: <strong>{new Date(tx.timestamp).toLocaleString()}</strong></span>
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <span className="badge badge-success" style={{ fontSize: 'var(--text-sm)', padding: '4px 12px' }}>
+                      ₹{(tx.amount || 0).toLocaleString()}
+                    </span>
+                  </div>
+                </div>
+              ))}
+
+            {platformAdmin.getTransactions().filter(tx => !ledgerSearch || tx.email.toLowerCase().includes(ledgerSearch.toLowerCase())).length === 0 && (
+              <div className="empty-state admin-empty-state">
+                <CreditCard size={42} className="text-muted" />
+                <h3>No transactions match your search</h3>
+                <p className="text-muted">Try looking for another email address or clear your search input.</p>
               </div>
             )}
           </div>

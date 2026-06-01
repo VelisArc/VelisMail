@@ -348,6 +348,18 @@ export default function BusinessDashboard() {
               }),
             });
             if (verifyResult.success) {
+              try {
+                platformAdmin.recordTransaction({
+                  email: user?.email || 'user@velismail.online',
+                  plan: plan.name,
+                  billingCycle: billingCycle,
+                  amount: amountRupees,
+                  gateway: 'Razorpay',
+                  paymentId: response.razorpay_payment_id || 'pay_unknown',
+                });
+              } catch (txErr) {
+                console.error('Failed to log payment transaction:', txErr);
+              }
 
               // The backend API has processed the secure upgrade logic (timers, db update).
               // Reload to fetch fresh session and reflect true subscription timer from server state.

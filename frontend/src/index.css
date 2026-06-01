@@ -775,18 +775,38 @@ textarea.input {
 
 /* ─── Loading ─── */
 .spinner {
-  --spinner-size: 20px;
+  --spinner-size: 24px;
   width: var(--spinner-size);
   height: var(--spinner-size);
-  border: 2px solid var(--border-primary);
-  border-top-color: var(--accent);
+  border: 2.5px solid rgba(0, 0, 0, 0.06);
+  border-top-color: #f59e0b;
+  border-right-color: #ef4444;
   border-radius: 50%;
-  animation: spin 0.7s linear infinite;
+  animation: spin 0.65s cubic-bezier(0.4, 0.15, 0.3, 0.85) infinite;
+  display: inline-block;
+  vertical-align: middle;
 }
 
-.spinner-sm { --spinner-size: 14px; }
-.spinner-md { --spinner-size: 20px; }
-.spinner-lg { --spinner-size: 32px; border-width: 3px; }
+[data-theme='dark'] .spinner {
+  border-color: rgba(255, 255, 255, 0.06);
+  border-top-color: #fbbf24;
+  border-right-color: #f87171;
+}
+
+.spinner-sm {
+  --spinner-size: 14px;
+  border-width: 1.8px;
+}
+
+.spinner-md {
+  --spinner-size: 24px;
+  border-width: 2.5px;
+}
+
+.spinner-lg {
+  --spinner-size: 40px;
+  border-width: 3.5px;
+}
 
 @keyframes spin {
   to { transform: rotate(360deg); }
