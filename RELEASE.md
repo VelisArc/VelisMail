@@ -1,4 +1,4 @@
-# VelisMail v3.5.1 Release Checklist
+# VelisMail v4.0.1 Release Checklist
 
 ## Required before push
 
@@ -24,15 +24,15 @@ docker compose --env-file .env.example -f docker-compose.prod.yml config
 ```bash
 git status --short
 git add .
-git commit -m "release: v3.5.1 production hardening"
-git tag -a v3.5.1 -m "VelisMail v3.5.1"
+git commit -m "release: v4.0.1 policy and package hardening"
+git tag -a v4.0.1 -m "VelisMail v4.0.1"
 git push origin main
-git push origin v3.5.1
+git push origin v4.0.1
 ```
 
 ## Post-deploy smoke test
 
-- `curl https://api.velismail.online/health` reports version `3.5.1`.
+- `curl https://api.velismail.online/health` reports version `4.0.1`.
 - Register, login, refresh token, and logout work.
 - Failed login lockout returns `429` after configured threshold.
 - `/auth/sessions` lists active sessions for the authenticated user.
