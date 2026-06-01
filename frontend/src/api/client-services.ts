@@ -2109,34 +2109,7 @@ export const platformAdmin = {
   },
 
   getTransactions(): PlatformTransaction[] {
-    const list = loadDB<PlatformTransaction[]>('velismail_platform_transactions', []);
-    if (list.length === 0) {
-      const now = Date.now();
-      const users = Object.values(loadPlatformUserDirectory(auth.getSession()));
-      const premiumUsers = users.filter(u => (u.plan || 'Free').toLowerCase() !== 'free');
-      const generatedList: PlatformTransaction[] = premiumUsers.map((u, index) => {
-        let val = 299;
-        if (u.plan.toLowerCase() === 'starter') val = u.billingCycle === 'annual' ? 2999 : 299;
-        else if (u.plan.toLowerCase() === 'business') val = u.billingCycle === 'annual' ? 9999 : 999;
-        else if (u.plan.toLowerCase() === 'enterprise') val = u.billingCycle === 'annual' ? 24999 : 2499;
-
-        return {
-          id: 'tx_pay_' + hashString(u.email).slice(0, 8),
-          email: u.email,
-          plan: u.plan,
-          billingCycle: u.billingCycle || 'monthly',
-          amount: val,
-          status: 'paid',
-          gateway: index % 2 === 0 ? 'Razorpay' : 'Manual Admin Credit',
-          paymentId: (index % 2 === 0 ? 'pay_' : 'cred_adm_') + hashString(u.email + '_pay').slice(0, 8),
-          timestamp: u.paidPlanPurchasedAt || u.createdAt || new Date(now - index * 2 * 24 * 60 * 60 * 1000).toISOString(),
-        };
-      });
-
-      saveDB('velismail_platform_transactions', generatedList);
-      return generatedList;
-    }
-    return list;
+    return loadDB<PlatformTransaction[]>('velismail_platform_transactions', []);
   },
 
   addManualTransaction(email: string, plan: string, billingCycle: 'monthly' | 'annual', amount: number): PlatformTransaction {

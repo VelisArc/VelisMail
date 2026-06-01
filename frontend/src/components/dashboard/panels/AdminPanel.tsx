@@ -134,6 +134,9 @@ export default function AdminPanel({ state }: AdminPanelProps) {
     }
   };
 
+  const transactions = platformAdmin.getTransactions();
+  const filteredTransactions = transactions.filter(tx => !ledgerSearch || tx.email.toLowerCase().includes(ledgerSearch.toLowerCase()));
+
   return (
     <div className="dash-panel">
       <div className="panel-header">
@@ -170,27 +173,24 @@ export default function AdminPanel({ state }: AdminPanelProps) {
         })}
       </div>
 
-      <div className="admin-tabs" style={{ display: 'flex', gap: '8px', borderBottom: '1px solid var(--border-primary)', margin: '16px 0 20px 0', paddingBottom: '0' }}>
+      <div className="admin-tabs">
         <button
-          className={`filter-pill ${activeTab === 'users' ? 'active' : ''}`}
+          className={`admin-tab-btn ${activeTab === 'users' ? 'active' : ''}`}
           onClick={() => setActiveTab('users')}
-          style={{ padding: '8px 16px', borderBottom: activeTab === 'users' ? '2px solid var(--primary)' : 'none', cursor: 'pointer' }}
         >
           Users & Accounts ({filtered.length})
         </button>
         <button
-          className={`filter-pill ${activeTab === 'subscriptions' ? 'active' : ''}`}
+          className={`admin-tab-btn ${activeTab === 'subscriptions' ? 'active' : ''}`}
           onClick={() => setActiveTab('subscriptions')}
-          style={{ padding: '8px 16px', borderBottom: activeTab === 'subscriptions' ? '2px solid var(--primary)' : 'none', cursor: 'pointer' }}
         >
-          Live Premiums & Purchases ({filteredSubs.length})
+          Live Premiums ({filteredSubs.length})
         </button>
         <button
-          className={`filter-pill ${activeTab === 'ledger' ? 'active' : ''}`}
+          className={`admin-tab-btn ${activeTab === 'ledger' ? 'active' : ''}`}
           onClick={() => setActiveTab('ledger')}
-          style={{ padding: '8px 16px', borderBottom: activeTab === 'ledger' ? '2px solid var(--primary)' : 'none', cursor: 'pointer' }}
         >
-          Payments & Ledger History ({platformAdmin.getTransactions().length})
+          Payments & Ledger ({transactions.length})
         </button>
       </div>
 
@@ -310,14 +310,14 @@ export default function AdminPanel({ state }: AdminPanelProps) {
 
       {activeTab === 'subscriptions' && (
         <>
-          <div className="admin-controls-bar" style={{ display: 'flex', gap: '16px', alignItems: 'center', marginBottom: '16px' }}>
+          <div className="admin-controls-bar">
             <input
               className="input input-max-250"
               placeholder="Search premium user or domain..."
               value={subSearch}
               onChange={e => setSubSearch(e.target.value)}
             />
-            <div style={{ marginLeft: 'auto', display: 'flex', gap: '16px', fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
+            <div className="admin-revenue-stats">
               <span>Total Premium Accounts: <strong>{premiumUsers.length}</strong></span>
               <span>Est. Premium Revenue (MRR): <strong>₹{monthlyRevenue.toLocaleString()}</strong></span>
             </div>
@@ -352,25 +352,25 @@ export default function AdminPanel({ state }: AdminPanelProps) {
               }
 
               return (
-                <div key={u.user.email} className="team-member-row admin-user-row" style={{ padding: '12px 16px' }}>
+                <div key={u.user.email} className="admin-sub-card">
                   <div className="avatar avatar-sm"><CreditCard size={14} /></div>
-                  <div className="team-member-info" style={{ flex: '1.5' }}>
+                  <div className="admin-sub-info">
                     <strong>{u.user.displayName || u.user.email}</strong>
-                    <span className="text-muted">{u.user.email}</span>
-                    <span className="text-xs text-muted" style={{ display: 'block', marginTop: '2px' }}>Workspace: <strong>{u.domain}</strong></span>
+                    <span>{u.user.email}</span>
+                    <span className="admin-sub-workspace">Workspace: <strong>{u.domain}</strong></span>
                   </div>
 
-                  <div style={{ flex: '1', fontSize: 'var(--text-xs)', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                  <div className="admin-sub-plan">
                     <span>Plan: <strong>{u.plan} ({u.billingCycle})</strong></span>
-                    <span style={{ color: 'var(--success)' }}>Value: <strong>{planPrice}</strong></span>
+                    <span className="plan-value">Value: <strong>{planPrice}</strong></span>
                   </div>
 
-                  <div style={{ flex: '1.2', fontSize: 'var(--text-xs)', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                  <div className="admin-sub-dates">
                     <span>Purchased: {purchaseDate}</span>
                     <span>Expires: {expireDate}</span>
                   </div>
 
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <div className="admin-sub-actions">
                     <span className={`badge badge-${isExpired ? 'danger' : daysLeft > 15 ? 'success' : 'neutral'}`}>
                       {isExpired ? 'Expired' : `${daysLeft} days remaining`}
                     </span>
@@ -432,24 +432,24 @@ export default function AdminPanel({ state }: AdminPanelProps) {
 
       {activeTab === 'ledger' && (
         <>
-          {/* Financial Cards Grid */}
-          <div className="admin-command-grid" style={{ marginBottom: '20px' }}>
-            <div className="admin-command-card" style={{ borderColor: 'var(--success-500)' }}>
-              <Activity size={16} style={{ color: 'var(--success)' }} />
+          {/* Financial KPI Cards */}
+          <div className="admin-command-grid">
+            <div className="admin-kpi-card kpi-success">
+              <Activity size={16} />
               <strong>₹{monthlyRevenue.toLocaleString()}</strong>
               <span>MRR (Monthly Recurring)</span>
             </div>
-            <div className="admin-command-card" style={{ borderColor: 'var(--info-500)' }}>
-              <TrendingUp size={16} style={{ color: 'var(--info)' }} />
+            <div className="admin-kpi-card kpi-info">
+              <TrendingUp size={16} />
               <strong>₹{(monthlyRevenue * 12).toLocaleString()}</strong>
               <span>ARR (Annualized Run Rate)</span>
             </div>
-            <div className="admin-command-card">
+            <div className="admin-kpi-card">
               <Users size={16} />
               <strong>{premiumUsers.length}</strong>
               <span>Active Premium Subs</span>
             </div>
-            <div className="admin-command-card">
+            <div className="admin-kpi-card">
               <CreditCard size={16} />
               <strong>₹{Math.round(monthlyRevenue / (premiumUsers.length || 1)).toLocaleString()}</strong>
               <span>ARPU (Avg Rev Per Sub)</span>
@@ -458,11 +458,11 @@ export default function AdminPanel({ state }: AdminPanelProps) {
 
           {/* Manual Premium Credit Tool */}
           {adminRole === 'admin' && (
-            <div className="card-elevated" style={{ marginBottom: '24px', padding: '16px', background: 'var(--bg-surface-2)', border: '1px solid var(--border-primary)' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <div className="admin-credit-console">
+              <div className="admin-credit-header">
+                <div className="admin-credit-header-left">
                   <Coins size={16} className="text-muted" />
-                  <h4 style={{ fontSize: 'var(--text-sm)', fontWeight: 'var(--font-weight-bold)' }}>Manual Premium Credit Console</h4>
+                  <h4>Manual Premium Credit Console</h4>
                 </div>
                 <button
                   className="btn btn-secondary btn-sm"
@@ -473,9 +473,9 @@ export default function AdminPanel({ state }: AdminPanelProps) {
               </div>
 
               {showCreditForm && (
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px', marginTop: '16px', paddingTop: '16px', borderTop: '1px solid var(--border-primary)' }}>
+                <div className="admin-credit-grid">
                   <div className="form-group">
-                    <label className="form-label" style={{ fontSize: '10px' }}>Target User Email</label>
+                    <label className="form-label">Target User Email</label>
                     <select
                       className="input"
                       value={creditEmail}
@@ -488,18 +488,17 @@ export default function AdminPanel({ state }: AdminPanelProps) {
                         </option>
                       ))}
                     </select>
-                    <span className="form-hint" style={{ fontSize: '10px' }}>Or enter custom below if not listed:</span>
+                    <span className="form-hint">Or enter custom below if not listed:</span>
                     <input
                       className="input"
                       placeholder="custom@email.com"
                       value={creditEmail}
                       onChange={e => setCreditEmail(e.target.value)}
-                      style={{ marginTop: '4px' }}
                     />
                   </div>
 
                   <div className="form-group">
-                    <label className="form-label" style={{ fontSize: '10px' }}>Select Premium Plan</label>
+                    <label className="form-label">Select Premium Plan</label>
                     <select
                       className="input"
                       value={creditPlan}
@@ -512,7 +511,7 @@ export default function AdminPanel({ state }: AdminPanelProps) {
                   </div>
 
                   <div className="form-group">
-                    <label className="form-label" style={{ fontSize: '10px' }}>Billing Cycle</label>
+                    <label className="form-label">Billing Cycle</label>
                     <select
                       className="input"
                       value={creditCycle}
@@ -524,7 +523,7 @@ export default function AdminPanel({ state }: AdminPanelProps) {
                   </div>
 
                   <div className="form-group">
-                    <label className="form-label" style={{ fontSize: '10px' }}>Paid Amount (₹)</label>
+                    <label className="form-label">Paid Amount (₹)</label>
                     <input
                       className="input"
                       type="number"
@@ -533,7 +532,7 @@ export default function AdminPanel({ state }: AdminPanelProps) {
                     />
                   </div>
 
-                  <div style={{ gridColumn: '1 / -1', display: 'flex', justifyContent: 'flex-end', marginTop: '12px' }}>
+                  <div className="admin-credit-submit">
                     <button
                       className="btn btn-primary"
                       disabled={!creditEmail.trim()}
@@ -565,50 +564,48 @@ export default function AdminPanel({ state }: AdminPanelProps) {
             </div>
           )}
 
-          {/* Payments Ledger list / history table */}
-          <div className="admin-controls-bar" style={{ display: 'flex', gap: '16px', alignItems: 'center', marginBottom: '16px' }}>
+          {/* Payments Ledger */}
+          <div className="admin-controls-bar">
             <input
               className="input input-max-250"
               placeholder="Search transactions by email..."
               value={ledgerSearch}
               onChange={e => setLedgerSearch(e.target.value)}
             />
-            <div style={{ marginLeft: 'auto', display: 'flex', gap: '16px', fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
-              <span>Total Transactions: <strong>{platformAdmin.getTransactions().length}</strong></span>
-              <span>Total Vol: <strong>₹{platformAdmin.getTransactions().reduce((sum, tx) => sum + (tx.amount || 0), 0).toLocaleString()}</strong></span>
+            <div className="admin-revenue-stats">
+              <span>Total Transactions: <strong>{transactions.length}</strong></span>
+              <span>Total Vol: <strong>₹{transactions.reduce((sum, tx) => sum + (tx.amount || 0), 0).toLocaleString()}</strong></span>
             </div>
           </div>
 
           <div className="team-list" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-            {platformAdmin.getTransactions()
-              .filter(tx => !ledgerSearch || tx.email.toLowerCase().includes(ledgerSearch.toLowerCase()))
-              .map(tx => (
-                <div key={tx.id} className="team-member-row admin-user-row" style={{ padding: '12px 16px' }}>
+            {filteredTransactions.map(tx => (
+                <div key={tx.id} className="admin-tx-row">
                   <div className="avatar avatar-sm"><CreditCard size={14} /></div>
-                  <div className="team-member-info" style={{ flex: '1.5' }}>
+                  <div className="admin-tx-info">
                     <strong>{tx.email}</strong>
-                    <span className="text-xs text-muted" style={{ display: 'block', marginTop: '2px' }}>TxID: <code>{tx.id}</code></span>
+                    <span className="admin-tx-id">TxID: <code>{tx.id}</code></span>
                   </div>
 
-                  <div style={{ flex: '1', fontSize: 'var(--text-xs)', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                  <div className="admin-tx-plan">
                     <span>Plan: <strong>{tx.plan} ({tx.billingCycle})</strong></span>
-                    <span>Gateway: <strong style={{ color: tx.gateway.includes('Manual') ? 'var(--warning-500)' : 'var(--info-500)' }}>{tx.gateway}</strong></span>
+                    <span>Gateway: <strong className={tx.gateway.includes('Manual') ? 'gateway-manual' : 'gateway-auto'}>{tx.gateway}</strong></span>
                   </div>
 
-                  <div style={{ flex: '1', fontSize: 'var(--text-xs)', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                  <div className="admin-tx-ref">
                     <span>Ref: <code>{tx.paymentId}</code></span>
                     <span>Date: <strong>{new Date(tx.timestamp).toLocaleString()}</strong></span>
                   </div>
 
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                    <span className="badge badge-success" style={{ fontSize: 'var(--text-sm)', padding: '4px 12px' }}>
+                  <div className="admin-tx-amount">
+                    <span className="badge badge-success">
                       ₹{(tx.amount || 0).toLocaleString()}
                     </span>
                   </div>
                 </div>
               ))}
 
-            {platformAdmin.getTransactions().filter(tx => !ledgerSearch || tx.email.toLowerCase().includes(ledgerSearch.toLowerCase())).length === 0 && (
+            {filteredTransactions.length === 0 && (
               <div className="empty-state admin-empty-state">
                 <CreditCard size={42} className="text-muted" />
                 <h3>No transactions match your search</h3>
