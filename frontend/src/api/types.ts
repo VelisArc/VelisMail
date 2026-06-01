@@ -27,7 +27,7 @@ export type User = {
   businessMailboxAddress?: string;
   profileImageUrl?: string;
   emailLogoUrl?: string;
-  role?: 'admin' | 'member' | 'viewer';
+  role?: 'admin' | 'member' | 'viewer' | 'user';
   isPlatformAdmin?: boolean;
   isBusinessSetupComplete?: boolean;
   businessDomain?: string;
@@ -37,7 +37,7 @@ export type User = {
   businessMailProviderEndpoint?: string;
   businessMailWebhookSecret?: string;
   businessDomainVerified?: boolean;
-  teamAccessRole?: 'admin' | 'member' | 'viewer';
+  teamAccessRole?: 'admin' | 'member' | 'viewer' | 'user';
   teamAccessInviteId?: string;
   teamAccessOwnerEmail?: string;
   dkimStatus?: 'pending' | 'verified' | 'failed';
@@ -146,7 +146,7 @@ export type BusinessTeamMember = {
   id: string;
   name: string;
   email: string;
-  role: 'admin' | 'member' | 'viewer';
+  role: 'admin' | 'member' | 'viewer' | 'user';
   status?: 'pending' | 'active' | 'expired' | 'revoked';
   inviteToken?: string;
   inviteExpiresAt?: string | null;
@@ -160,7 +160,7 @@ export type TeamAccessInvite = {
   token: string;
   email: string;
   name: string;
-  role: 'admin' | 'member' | 'viewer';
+  role: 'admin' | 'member' | 'viewer' | 'user';
   status: 'pending' | 'accepted' | 'expired' | 'revoked';
   createdAt: string;
   expiresAt: string | null;

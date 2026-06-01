@@ -28,4 +28,5 @@ export const ROLE_ALLOWED_TABS: Record<string, BizTab[]> = {
   admin: ['mail', 'templates', 'queue', 'domains', 'mailboxes', 'groups', 'team', 'analytics', 'audit', 'settings', 'billing', 'admin', 'contacts', 'deliverability'],
   member: ['mail', 'templates', 'queue', 'analytics', 'team', 'domains', 'mailboxes', 'groups', 'audit', 'settings', 'billing', 'contacts', 'deliverability'],
   viewer: ['mail', 'analytics', 'team', 'domains', 'mailboxes', 'groups', 'audit', 'settings', 'billing', 'contacts', 'deliverability'],
+  user: ['mail', 'contacts', 'settings'],
 };

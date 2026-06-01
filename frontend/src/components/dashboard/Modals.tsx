@@ -52,8 +52,8 @@ function InviteModal({ state }: { state: DashboardState }) {
           <div className="invite-form">
             <input className="input" placeholder="Full name" value={state.inviteName} onChange={e => state.setInviteName(e.target.value)} />
             <input className="input" placeholder="Email address" type="email" value={state.inviteEmail} onChange={e => state.setInviteEmail(e.target.value)} />
-            <select className="input" value={state.inviteRole} onChange={e => state.setInviteRole(e.target.value as 'admin' | 'member' | 'viewer')}>
-              <option value="admin">Admin</option><option value="member">Member</option><option value="viewer">Viewer</option>
+            <select className="input" value={state.inviteRole} onChange={e => state.setInviteRole(e.target.value as 'admin' | 'member' | 'viewer' | 'user')}>
+              <option value="admin">Admin</option><option value="member">Member</option><option value="viewer">Viewer</option><option value="user">User</option>
             </select>
             <select className="input" value={state.inviteExpiresHours} onChange={e => state.setInviteExpiresHours(Number(e.target.value))}>
               <option value={24}>24 hours</option><option value={48}>48 hours</option><option value={72}>72 hours</option><option value={168}>7 days</option>

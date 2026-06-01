@@ -1154,7 +1154,8 @@ export function sessionHasMismatch(session: User | null): boolean {
 export function normalizeSessionUser(session: User): User {
   const normalized = { ...session };
   if (!normalized.role) {
-    normalized.role = 'admin';
+    const email = (normalized.email || '').toLowerCase().trim();
+    normalized.role = email.endsWith('@velismail.online') ? 'admin' : 'user';
   }
   if (!normalized.accountType) {
     normalized.accountType = 'business';

@@ -36,7 +36,7 @@ export interface User {
   businessMailProviderEndpoint?: string;
   businessMailWebhookSecret?: string;
   businessDomainVerified?: boolean;
-  teamAccessRole?: 'admin' | 'member' | 'viewer';
+  teamAccessRole?: 'admin' | 'member' | 'viewer' | 'user';
   teamAccessInviteId?: string;
   teamAccessOwnerEmail?: string;
   dkimStatus?: 'pending' | 'verified' | 'failed';

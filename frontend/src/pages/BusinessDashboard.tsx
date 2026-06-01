@@ -119,7 +119,7 @@ export default function BusinessDashboard() {
   const [inviteOpen, setInviteOpen] = useState(false);
   const [inviteName, setInviteName] = useState('');
   const [inviteEmail, setInviteEmail] = useState('');
-  const [inviteRole, setInviteRole] = useState<'admin' | 'member' | 'viewer'>('member');
+  const [inviteRole, setInviteRole] = useState<'admin' | 'member' | 'viewer' | 'user'>('user');
   const [inviteExpiresHours, setInviteExpiresHours] = useState(48);
   const [issuedInvite, setIssuedInvite] = useState<TeamAccessInvite | null>(null);
   const [templateEditorOpen, setTemplateEditorOpen] = useState(false);
@@ -172,12 +172,12 @@ export default function BusinessDashboard() {
     setComposeTo(to); setComposeSubject(subject); setComposeBody(body); setComposeReplyQuote(replyQuote); setComposeOpen(true);
   };
 
-  const canAccessPlatformAdmin = platformAdmin.isCurrentUserPlatformAdmin();
+  const canAccessPlatformAdmin = platformAdmin.isCurrentUserPlatformAdmin() && user?.role !== 'user';
   const hasRoleAccess = useCallback(
     (tab: BizTab) => {
       if (tab === 'admin') return canAccessPlatformAdmin;
-      const effectiveRole = canAccessPlatformAdmin ? 'admin' : user?.role || 'member';
-      return (ROLE_ALLOWED_TABS[effectiveRole] || ROLE_ALLOWED_TABS.member).includes(tab);
+      const effectiveRole = canAccessPlatformAdmin ? 'admin' : user?.role || 'user';
+      return (ROLE_ALLOWED_TABS[effectiveRole] || ROLE_ALLOWED_TABS.user).includes(tab);
     },
     [canAccessPlatformAdmin, user?.role],
   );

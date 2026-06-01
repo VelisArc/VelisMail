@@ -130,8 +130,8 @@ export interface DashboardState {
   setInviteName: (n: string) => void;
   inviteEmail: string;
   setInviteEmail: (e: string) => void;
-  inviteRole: 'admin' | 'member' | 'viewer';
-  setInviteRole: (r: 'admin' | 'member' | 'viewer') => void;
+  inviteRole: 'admin' | 'member' | 'viewer' | 'user';
+  setInviteRole: (r: 'admin' | 'member' | 'viewer' | 'user') => void;
   inviteExpiresHours: number;
   setInviteExpiresHours: (h: number) => void;
   issuedInvite: TeamAccessInvite | null;

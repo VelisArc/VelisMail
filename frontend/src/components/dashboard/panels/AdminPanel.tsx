@@ -32,6 +32,7 @@ function formatBytes(bytes: number): string {
 }
 
 export default function AdminPanel({ state }: AdminPanelProps) {
+  const adminRole = state.user?.role || 'user';
   const [pendingAdminAction, setPendingAdminAction] = useState<PendingAdminAction | null>(null);
   const [activeTab, setActiveTab] = useState<'users' | 'subscriptions' | 'ledger'>('users');
   const [subSearch, setSubSearch] = useState('');
@@ -233,21 +234,21 @@ export default function AdminPanel({ state }: AdminPanelProps) {
                 <span className={`badge badge-${riskBadge}`}>{u.risk} risk</span>
                 {isPlatformDomain && <span className="badge badge-primary">platform</span>}
 
-                <div className="admin-row-actions" onClick={e => e.stopPropagation()}>
-                  <select className="admin-mini-select" value={u.user.role || 'member'} disabled={isPlatformDomain} onChange={e => {
-                    const nextRole = e.target.value as 'admin' | 'member' | 'viewer';
+                 <div className="admin-row-actions" onClick={e => e.stopPropagation()}>
+                  <select className="admin-mini-select" value={u.user.role || 'user'} disabled={isPlatformDomain || adminRole === 'viewer' || adminRole === 'member'} onChange={e => {
+                    const nextRole = e.target.value as 'admin' | 'member' | 'viewer' | 'user';
                     queueAdminAction({
                       title: 'Review Role Change',
-                      message: `Change ${u.user.email} from ${u.user.role || 'member'} to ${nextRole}?`,
+                      message: `Change ${u.user.email} from ${u.user.role || 'user'} to ${nextRole}?`,
                       confirmLabel: 'Apply Role',
                       success: `Role set to ${nextRole}`,
                       tone: 'primary',
                       action: () => platformAdmin.updateUserRole(u.user.email, nextRole).then(() => {}),
                     });
                   }}>
-                    <option value="admin">Admin</option><option value="member">Member</option><option value="viewer">Viewer</option>
+                    <option value="admin">Admin</option><option value="member">Member</option><option value="viewer">Viewer</option><option value="user">User</option>
                   </select>
-                  <select className="admin-mini-select" value={u.plan || 'Free'} onChange={e => {
+                  <select className="admin-mini-select" value={u.plan || 'Free'} disabled={adminRole === 'viewer'} onChange={e => {
                     const nextPlan = e.target.value;
                     queueAdminAction({
                       title: 'Review Plan Change',
@@ -260,7 +261,7 @@ export default function AdminPanel({ state }: AdminPanelProps) {
                   }}>
                     {planOptions.map(plan => <option key={plan} value={plan}>{plan}</option>)}
                   </select>
-                  <select className="admin-mini-select" value={u.billingCycle} onChange={e => {
+                  <select className="admin-mini-select" value={u.billingCycle} disabled={adminRole === 'viewer'} onChange={e => {
                     const nextCycle = e.target.value as 'monthly' | 'annual';
                     queueAdminAction({
                       title: 'Review Billing Cycle',
@@ -273,7 +274,7 @@ export default function AdminPanel({ state }: AdminPanelProps) {
                   }}>
                     <option value="monthly">Monthly</option><option value="annual">Annual</option>
                   </select>
-                  <button className="btn btn-ghost btn-sm" disabled={isPlatformDomain} onClick={() => {
+                  <button className="btn btn-ghost btn-sm" disabled={isPlatformDomain || adminRole === 'viewer' || adminRole === 'member'} onClick={() => {
                     const nextStatus = u.status === 'active' ? 'suspended' : 'active';
                     queueAdminAction({
                       title: 'Review Status Change',
@@ -286,7 +287,7 @@ export default function AdminPanel({ state }: AdminPanelProps) {
                   }}>
                     <Shield size={12} /> {u.status === 'active' ? 'Suspend' : 'Reactivate'}
                   </button>
-                  <button className="btn btn-ghost btn-sm btn-danger" title={isSelf || isPlatformDomain ? 'Protected platform/current admin account' : 'Delete user'} disabled={isSelf || isPlatformDomain} onClick={() => {
+                  <button className="btn btn-ghost btn-sm btn-danger" title={isSelf || isPlatformDomain ? 'Protected platform/current admin account' : 'Delete user'} disabled={isSelf || isPlatformDomain || adminRole === 'viewer' || adminRole === 'member'} onClick={() => {
                     queueAdminAction({
                       title: 'Review User Deletion',
                       message: `Permanently delete ${u.user.email}? This cannot be undone.`,
@@ -389,6 +390,7 @@ export default function AdminPanel({ state }: AdminPanelProps) {
                     <div className="admin-row-actions" onClick={e => e.stopPropagation()}>
                       <button
                         className="btn btn-secondary btn-sm"
+                        disabled={adminRole === 'viewer'}
                         onClick={() => {
                           const nextExpires = u.paidPlanExpiresAt 
                             ? new Date(new Date(u.paidPlanExpiresAt).getTime() + (u.billingCycle === 'annual' ? 365 : 30) * 24 * 60 * 60 * 1000).toISOString()
@@ -409,6 +411,7 @@ export default function AdminPanel({ state }: AdminPanelProps) {
                       </button>
                       <button
                         className="btn btn-ghost btn-sm btn-danger"
+                        disabled={adminRole === 'viewer'}
                         onClick={() => {
                           queueAdminAction({
                             title: 'Revoke Premium Subscription',
@@ -466,111 +469,113 @@ export default function AdminPanel({ state }: AdminPanelProps) {
           </div>
 
           {/* Manual Premium Credit Tool */}
-          <div className="card-elevated" style={{ marginBottom: '24px', padding: '16px', background: 'var(--bg-surface-2)', border: '1px solid var(--border-primary)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Coins size={16} className="text-muted" />
-                <h4 style={{ fontSize: 'var(--text-sm)', fontWeight: 'var(--font-weight-bold)' }}>Manual Premium Credit Console</h4>
+          {adminRole === 'admin' && (
+            <div className="card-elevated" style={{ marginBottom: '24px', padding: '16px', background: 'var(--bg-surface-2)', border: '1px solid var(--border-primary)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Coins size={16} className="text-muted" />
+                  <h4 style={{ fontSize: 'var(--text-sm)', fontWeight: 'var(--font-weight-bold)' }}>Manual Premium Credit Console</h4>
+                </div>
+                <button
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => setShowCreditForm(!showCreditForm)}
+                >
+                  {showCreditForm ? 'Hide Console' : 'Grant Premium Credit'}
+                </button>
               </div>
-              <button
-                className="btn btn-secondary btn-sm"
-                onClick={() => setShowCreditForm(!showCreditForm)}
-              >
-                {showCreditForm ? 'Hide Console' : 'Grant Premium Credit'}
-              </button>
-            </div>
 
-            {showCreditForm && (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px', marginTop: '16px', paddingTop: '16px', borderTop: '1px solid var(--border-primary)' }}>
-                <div className="form-group">
-                  <label className="form-label" style={{ fontSize: '10px' }}>Target User Email</label>
-                  <select
-                    className="input"
-                    value={creditEmail}
-                    onChange={e => setCreditEmail(e.target.value)}
-                  >
-                    <option value="">-- Select Platform User --</option>
-                    {state.adminUsers.map(u => (
-                      <option key={u.user.email} value={u.user.email}>
-                        {u.user.email} ({u.plan || 'Free'})
-                      </option>
-                    ))}
-                  </select>
-                  <span className="form-hint" style={{ fontSize: '10px' }}>Or enter custom below if not listed:</span>
-                  <input
-                    className="input"
-                    placeholder="custom@email.com"
-                    value={creditEmail}
-                    onChange={e => setCreditEmail(e.target.value)}
-                    style={{ marginTop: '4px' }}
-                  />
-                </div>
+              {showCreditForm && (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px', marginTop: '16px', paddingTop: '16px', borderTop: '1px solid var(--border-primary)' }}>
+                  <div className="form-group">
+                    <label className="form-label" style={{ fontSize: '10px' }}>Target User Email</label>
+                    <select
+                      className="input"
+                      value={creditEmail}
+                      onChange={e => setCreditEmail(e.target.value)}
+                    >
+                      <option value="">-- Select Platform User --</option>
+                      {state.adminUsers.map(u => (
+                        <option key={u.user.email} value={u.user.email}>
+                          {u.user.email} ({u.plan || 'Free'})
+                        </option>
+                      ))}
+                    </select>
+                    <span className="form-hint" style={{ fontSize: '10px' }}>Or enter custom below if not listed:</span>
+                    <input
+                      className="input"
+                      placeholder="custom@email.com"
+                      value={creditEmail}
+                      onChange={e => setCreditEmail(e.target.value)}
+                      style={{ marginTop: '4px' }}
+                    />
+                  </div>
 
-                <div className="form-group">
-                  <label className="form-label" style={{ fontSize: '10px' }}>Select Premium Plan</label>
-                  <select
-                    className="input"
-                    value={creditPlan}
-                    onChange={e => handleCreditPlanChange(e.target.value)}
-                  >
-                    <option value="Starter">Starter Plan</option>
-                    <option value="Business">Business Plan</option>
-                    <option value="Enterprise">Enterprise Plan</option>
-                  </select>
-                </div>
+                  <div className="form-group">
+                    <label className="form-label" style={{ fontSize: '10px' }}>Select Premium Plan</label>
+                    <select
+                      className="input"
+                      value={creditPlan}
+                      onChange={e => handleCreditPlanChange(e.target.value)}
+                    >
+                      <option value="Starter">Starter Plan</option>
+                      <option value="Business">Business Plan</option>
+                      <option value="Enterprise">Enterprise Plan</option>
+                    </select>
+                  </div>
 
-                <div className="form-group">
-                  <label className="form-label" style={{ fontSize: '10px' }}>Billing Cycle</label>
-                  <select
-                    className="input"
-                    value={creditCycle}
-                    onChange={e => handleCreditCycleChange(e.target.value as 'monthly' | 'annual')}
-                  >
-                    <option value="monthly">Monthly Cycle</option>
-                    <option value="annual">Annual Cycle</option>
-                  </select>
-                </div>
+                  <div className="form-group">
+                    <label className="form-label" style={{ fontSize: '10px' }}>Billing Cycle</label>
+                    <select
+                      className="input"
+                      value={creditCycle}
+                      onChange={e => handleCreditCycleChange(e.target.value as 'monthly' | 'annual')}
+                    >
+                      <option value="monthly">Monthly Cycle</option>
+                      <option value="annual">Annual Cycle</option>
+                    </select>
+                  </div>
 
-                <div className="form-group">
-                  <label className="form-label" style={{ fontSize: '10px' }}>Paid Amount (₹)</label>
-                  <input
-                    className="input"
-                    type="number"
-                    value={creditAmount}
-                    onChange={e => setCreditAmount(e.target.value)}
-                  />
-                </div>
+                  <div className="form-group">
+                    <label className="form-label" style={{ fontSize: '10px' }}>Paid Amount (₹)</label>
+                    <input
+                      className="input"
+                      type="number"
+                      value={creditAmount}
+                      onChange={e => setCreditAmount(e.target.value)}
+                    />
+                  </div>
 
-                <div style={{ gridColumn: '1 / -1', display: 'flex', justifyContent: 'flex-end', marginTop: '12px' }}>
-                  <button
-                    className="btn btn-primary"
-                    disabled={!creditEmail.trim()}
-                    onClick={() => {
-                      if (!creditEmail.trim() || !creditEmail.includes('@')) {
-                        state.showToast('Please enter a valid target email address.', 'error');
-                        return;
-                      }
-                      queueAdminAction({
-                        title: 'Grant Manual Premium Credit',
-                        message: `Upgrade/Grant ${creditPlan} (${creditCycle}) to ${creditEmail} and record manual offline payment of ₹${creditAmount}?`,
-                        confirmLabel: 'Confirm Upgrade',
-                        tone: 'primary',
-                        success: `Premium plan manually credited to ${creditEmail}`,
-                        action: async () => {
-                          await platformAdmin.updateUserPlan(creditEmail, creditPlan, creditCycle);
-                          platformAdmin.addManualTransaction(creditEmail, creditPlan, creditCycle, Number(creditAmount));
-                          setShowCreditForm(false);
-                          setCreditEmail('');
+                  <div style={{ gridColumn: '1 / -1', display: 'flex', justifyContent: 'flex-end', marginTop: '12px' }}>
+                    <button
+                      className="btn btn-primary"
+                      disabled={!creditEmail.trim()}
+                      onClick={() => {
+                        if (!creditEmail.trim() || !creditEmail.includes('@')) {
+                          state.showToast('Please enter a valid target email address.', 'error');
+                          return;
                         }
-                      });
-                    }}
-                  >
-                    <Plus size={14} /> Apply Manual Plan & Credit
-                  </button>
+                        queueAdminAction({
+                          title: 'Grant Manual Premium Credit',
+                          message: `Upgrade/Grant ${creditPlan} (${creditCycle}) to ${creditEmail} and record manual offline payment of ₹${creditAmount}?`,
+                          confirmLabel: 'Confirm Upgrade',
+                          tone: 'primary',
+                          success: `Premium plan manually credited to ${creditEmail}`,
+                          action: async () => {
+                            await platformAdmin.updateUserPlan(creditEmail, creditPlan, creditCycle);
+                            platformAdmin.addManualTransaction(creditEmail, creditPlan, creditCycle, Number(creditAmount));
+                            setShowCreditForm(false);
+                            setCreditEmail('');
+                          }
+                        });
+                      }}
+                    >
+                      <Plus size={14} /> Apply Manual Plan & Credit
+                    </button>
+                  </div>
                 </div>
-              </div>
-            )}
-          </div>
+              )}
+            </div>
+          )}
 
           {/* Payments Ledger list / history table */}
           <div className="admin-controls-bar" style={{ display: 'flex', gap: '16px', alignItems: 'center', marginBottom: '16px' }}>

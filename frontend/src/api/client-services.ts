@@ -1760,7 +1760,7 @@ function normalizePlatformDirectoryUser(entry: Partial<User>): User | null {
     accountType: 'business',
     isSetupComplete: Boolean(entry.isSetupComplete),
     createdAt: entry.createdAt || new Date().toISOString(),
-    role: owner ? 'admin' : entry.role || 'member',
+    role: owner ? 'admin' : entry.role || 'user',
     status: owner ? 'active' : entry.status || 'active',
     isPlatformAdmin: owner,
   } as User);
@@ -1789,7 +1789,7 @@ function loadPlatformUserDirectory(session?: User | null): Record<string, User> 
     const owner = isPlatformOwnerEmail(email);
     users[email] = normalizeSessionUser({
       ...user,
-      role: owner ? 'admin' : user.role || 'member',
+      role: owner ? 'admin' : user.role || 'user',
       status: owner ? 'active' : user.status || 'active',
       isPlatformAdmin: owner,
     });
@@ -1826,7 +1826,7 @@ async function fetchPlatformUsersFromBackend(): Promise<Record<string, User> | n
 
 async function patchPlatformUserOnBackend(payload: {
   email: string;
-  role?: 'admin' | 'member' | 'viewer';
+  role?: 'admin' | 'member' | 'viewer' | 'user';
   status?: 'active' | 'suspended' | 'deactivated';
   plan?: string;
   billingCycle?: 'monthly' | 'annual';
@@ -1885,6 +1885,7 @@ export const platformAdmin = {
   isCurrentUserPlatformAdmin(): boolean {
     const session = auth.getSession();
     if (!session) return false;
+    if (session.role === 'user') return false;
     if (!platformAdminHostAllowed()) return false;
 
     const normalizedEmail = normalizeMailbox(session.email);
@@ -2021,7 +2022,7 @@ export const platformAdmin = {
     return await patchPlatformUserOnBackend({ email: normalizedEmail, plan, billingCycle }) || next;
   },
 
-  async updateUserRole(email: string, role: 'admin' | 'member' | 'viewer'): Promise<User | null> {
+  async updateUserRole(email: string, role: 'admin' | 'member' | 'viewer' | 'user'): Promise<User | null> {
     const users = loadPersistentUsers();
     const normalizedEmail = normalizeMailbox(email);
     const user = users[normalizedEmail];
