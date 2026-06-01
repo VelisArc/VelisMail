@@ -1,5 +1,19 @@
 # Changelog
 
+## v4.0.1 - Design System Harmony & Session UX Hardening
+
+### Added
+- **Landing Page Ecosystem**: Dynamic active session checking inside the main header/navbar, routing authenticated users straight to the correct setup or main business workspace dashboard.
+- **Pricing Card Action Links**: Dynamic routing for paid tier CTA plan buttons. Fully session-aware redirection directly into workspace dashboards, bypassing redundant login links.
+- **About Page Redesign**: Premium "Core Operating Pillars" section featuring high-fidelity responsive cards and specific Lucide styling icons (`Shield`, `Lock`, `Award`).
+
+### Fixed
+- **Visual styling mismatches**: Promoted primary navigation (`.home-nav`) and footer (`.home-footer`) styling globally into `index.css` to enable 100% layout and interactive transition consistency.
+- **Unused imports compilation errors**: Removed unused `ArrowLeft` and `Shield` icons in `Pricing.tsx` to fix TypeScript compiler and ESLint CI errors.
+- **Missing Gradient Text Styling**: Defined the missing `.gradient-text` styling token globally in the CSS design system.
+
+---
+
 ## v4.0.0 - Industry-Standard Production Upgrade
 
 ### Added
