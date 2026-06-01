@@ -205,7 +205,20 @@ export default function BusinessDashboard() {
   const refreshQueue = useCallback(() => setMailQueue(businessQueue.getByDomain(activeDomainName).map(i => ({ id: i.id, to: i.to, subject: i.subject, status: i.status, queuedAt: i.queuedAt, scheduledAt: i.scheduledAt, retries: i.retryCount, error: i.error, from: i.fromAddress }))), [activeDomainName]);
   const refreshAudit = useCallback(() => setAuditLog(businessAudit.getByDomain(activeDomainName)), [activeDomainName]);
   const refreshTemplates = useCallback(() => setTemplates(businessTemplates.getByDomain(activeDomainName)), [activeDomainName]);
-  const refreshMailboxes = useCallback(() => setDomainMailboxes(businessMailboxes.getByDomain(activeDomainName)), [activeDomainName]);
+  const refreshMailboxes = useCallback(async () => {
+    if (!activeDomainName) {
+      setDomainMailboxes([]);
+      return;
+    }
+    try {
+      const entries = await businessMailboxes.syncFromDb(activeDomainName);
+      setDomainMailboxes(entries);
+    } catch (error) {
+      console.error('refresh mailboxes failed', error);
+      setDomainMailboxes(businessMailboxes.getByDomain(activeDomainName));
+      showToast(error instanceof Error ? error.message : 'Unable to refresh mailboxes from database.', 'error');
+    }
+  }, [activeDomainName, showToast]);
   const refreshGroups = useCallback(() => setDomainGroups(businessGroups.getByDomain(activeDomainName)), [activeDomainName]);
   const refreshConnectionUsage = useCallback(() => setConnectionUsage(connections.getUsage()), []);
   const refreshAdminUsers = useCallback(() => setAdminUsers(platformAdmin.getUsers()), []);
@@ -214,7 +227,25 @@ export default function BusinessDashboard() {
   const refreshContacts = useCallback(() => setContactsList(contacts.getAll()), []);
   const refreshSessions = useCallback(async () => { try { const res = await auth.listSessions(); if (res.success) setActiveSessions(res.sessions); } catch (e) { console.error('refresh sessions failed', e); } }, []);
 
-  useEffect(() => { refreshTeam(); refreshQueue(); refreshAudit(); refreshTemplates(); refreshConnectionUsage(); refreshMailboxes(); refreshGroups(); }, [activeDomainName, refreshTeam, refreshQueue, refreshAudit, refreshTemplates, refreshConnectionUsage, refreshMailboxes, refreshGroups]);
+  useEffect(() => {
+    refreshTeam();
+    refreshQueue();
+    refreshAudit();
+    refreshTemplates();
+    refreshConnectionUsage();
+    void refreshMailboxes();
+    refreshGroups();
+  }, [activeDomainName, refreshTeam, refreshQueue, refreshAudit, refreshTemplates, refreshConnectionUsage, refreshMailboxes, refreshGroups]);
+
+  useEffect(() => {
+    if (domainMailboxes.length === 0) {
+      setSelectedFromAddress('');
+      return;
+    }
+    if (!domainMailboxes.some((mailbox) => mailbox.address === selectedFromAddress)) {
+      setSelectedFromAddress(domainMailboxes.find((mailbox) => mailbox.active)?.address || domainMailboxes[0].address);
+    }
+  }, [domainMailboxes, selectedFromAddress]);
 
   const handleSendEmail = useCallback(async (to?: string, subject?: string, body?: string) => {
     const finalTo = to !== undefined ? to : composeTo;
@@ -227,7 +258,7 @@ export default function BusinessDashboard() {
       queryClient.invalidateQueries({ queryKey: ['emails', activeDomainName] });
       showToast('Email sent'); setComposeOpen(false);
     }
-    catch (e) { console.error('send failed', e); showToast('Failed to send', 'error'); }
+    catch (e) { console.error('send failed', e); showToast(e instanceof Error ? e.message : 'Failed to send', 'error'); }
     finally { setSending(false); }
   }, [activeDomainName, composeTo, composeSubject, composeBody, selectedFromAddress, queryClient, showToast]);
 

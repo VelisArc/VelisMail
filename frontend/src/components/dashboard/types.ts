@@ -114,7 +114,7 @@ export interface DashboardState {
   refreshQueue: () => void;
   refreshAudit: () => void;
   refreshTemplates: () => void;
-  refreshMailboxes: () => void;
+  refreshMailboxes: () => void | Promise<void>;
   refreshGroups: () => void;
   refreshConnectionUsage: () => void;
   refreshAdminUsers: () => void;

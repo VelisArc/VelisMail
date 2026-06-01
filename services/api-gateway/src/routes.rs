@@ -40,6 +40,16 @@ pub fn api_v1_routes(_state: &AppState) -> Router<AppState> {
             get(get_business_emails).post(save_business_email).delete(delete_business_email),
         )
         .route("/mail/business-emails/query", post(query_business_emails))
+        .route(
+            "/mail/business-mailboxes",
+            get(get_business_mailboxes)
+                .post(save_business_mailbox)
+                .delete(delete_business_mailbox),
+        )
+        .route(
+            "/mail/business-mailboxes/query",
+            post(query_business_mailboxes),
+        )
         .route("/team/invites", post(create_team_invite))
         .route("/team/invites/validate", post(validate_team_invite))
         .route("/team/invites/complete", post(complete_team_invite))
@@ -242,6 +252,7 @@ pub struct SendMailPayload {
     from_name: Option<String>,
     provider: Option<String>,
     api_key: Option<String>,
+    db_url: Option<String>,
     provider_endpoint: Option<String>,
     pub attachments: Option<Vec<AttachmentPayload>>,
 }
@@ -1156,6 +1167,25 @@ fn is_valid_domain(value: &str) -> bool {
             && label
                 .chars()
                 .all(|ch| ch.is_ascii_alphanumeric() || ch == '-')
+    })
+}
+
+fn is_valid_email_address(value: &str) -> bool {
+    let address = value.trim().to_lowercase();
+    if address.len() > 254 || address.contains("..") {
+        return false;
+    }
+    let parts: Vec<&str> = address.split('@').collect();
+    if parts.len() != 2 {
+        return false;
+    }
+    let local = parts[0];
+    let domain = parts[1];
+    if local.is_empty() || local.len() > 64 || !is_valid_domain(domain) {
+        return false;
+    }
+    local.chars().all(|ch| {
+        ch.is_ascii_alphanumeric() || ".!#$%&'*+/=?^_`{|}~-".contains(ch)
     })
 }
 
@@ -2161,6 +2191,57 @@ pub async fn send_mail(
         );
     }
 
+    if let Some(invalid) = payload.to.iter().find(|email| !is_valid_email_address(email)) {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({
+                "success": false,
+                "message": format!("Invalid recipient address: {invalid}")
+            })),
+        );
+    }
+
+    if let Some(from) = payload.from.as_deref() {
+        if !is_valid_email_address(from) {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(json!({
+                    "success": false,
+                    "message": "Invalid sender mailbox address."
+                })),
+            );
+        }
+
+        let db_url = payload
+            .db_url
+            .as_deref()
+            .or_else(|| headers.get("x-business-db-url").and_then(|value| value.to_str().ok()));
+        if let Some(db_url) = db_url {
+            let sender_domain = email_address_domain(from).unwrap_or_default();
+            match business_mailbox_exists(db_url, &sender_domain, from).await {
+                Ok(true) => {}
+                Ok(false) => {
+                    return (
+                        StatusCode::FORBIDDEN,
+                        Json(json!({
+                            "success": false,
+                            "message": "Sender mailbox is not registered in the business database."
+                        })),
+                    )
+                }
+                Err(err) => {
+                    return (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        Json(json!({
+                            "success": false,
+                            "message": format!("Unable to verify sender mailbox: {err}")
+                        })),
+                    )
+                }
+            }
+        }
+    }
+
     if let (Some(provider), Some(api_key)) =
         (payload.provider.as_deref(), payload.api_key.as_deref())
     {
@@ -2871,6 +2952,52 @@ pub struct BusinessEmailsRequest {
     pub db_url: String,
 }
 
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BusinessMailbox {
+    pub id: String,
+    pub domain: String,
+    pub address: String,
+    pub display_name: String,
+    pub kind: String,
+    #[serde(default)]
+    pub aliases: Vec<String>,
+    pub active: bool,
+    pub source: String,
+    pub created_at: String,
+    #[serde(default)]
+    pub last_used_at: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SaveBusinessMailboxRequest {
+    pub db_url: Option<String>,
+    pub mailbox: BusinessMailbox,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DeleteBusinessMailboxRequest {
+    pub db_url: Option<String>,
+    pub domain: String,
+    pub address: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BusinessMailboxesQuery {
+    pub db_url: Option<String>,
+    pub domain: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BusinessMailboxesRequest {
+    pub db_url: String,
+    pub domain: String,
+}
+
 fn business_db_url_from_parts(
     headers: &HeaderMap,
     query_url: Option<&str>,
@@ -2886,6 +3013,190 @@ fn business_db_url_from_parts(
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .map(str::to_string)
+}
+
+async fn ensure_business_mailboxes_table(pool: &PgPool) -> Result<(), String> {
+    sqlx::query(
+        "CREATE TABLE IF NOT EXISTS business_mailboxes (
+            id VARCHAR(255) NOT NULL,
+            domain VARCHAR(255) NOT NULL,
+            address VARCHAR(255) NOT NULL,
+            display_name VARCHAR(255) NOT NULL,
+            kind VARCHAR(50) NOT NULL,
+            aliases TEXT NOT NULL DEFAULT '[]',
+            active BOOLEAN NOT NULL DEFAULT TRUE,
+            source VARCHAR(50) NOT NULL DEFAULT 'custom',
+            created_at VARCHAR(100) NOT NULL,
+            last_used_at VARCHAR(100),
+            PRIMARY KEY (domain, address)
+        );",
+    )
+    .execute(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    for column in [
+        "last_used_at VARCHAR(100)",
+        "aliases TEXT NOT NULL DEFAULT '[]'",
+        "source VARCHAR(50) NOT NULL DEFAULT 'custom'",
+    ] {
+        sqlx::query(&format!(
+            "ALTER TABLE business_mailboxes ADD COLUMN IF NOT EXISTS {column};"
+        ))
+        .execute(pool)
+        .await
+        .map_err(|e| e.to_string())?;
+    }
+
+    for index in [
+        "CREATE INDEX IF NOT EXISTS idx_business_mailboxes_domain ON business_mailboxes(domain);",
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_business_mailboxes_domain_address ON business_mailboxes(domain, address);",
+    ] {
+        sqlx::query(index)
+            .execute(pool)
+            .await
+            .map_err(|e| e.to_string())?;
+    }
+
+    Ok(())
+}
+
+fn normalize_business_mailbox(mailbox: BusinessMailbox) -> Result<BusinessMailbox, String> {
+    let domain = mailbox.domain.trim().to_lowercase();
+    let address = mailbox.address.trim().to_lowercase();
+    if !is_valid_domain(&domain) {
+        return Err("Invalid mailbox domain.".to_string());
+    }
+    if !is_valid_email_address(&address) || !address.ends_with(&format!("@{domain}")) {
+        return Err(format!("Mailbox address must be a valid @{domain} address."));
+    }
+
+    let kind = match mailbox.kind.trim().to_lowercase().as_str() {
+        "primary" => "primary",
+        "mailbox" => "mailbox",
+        "alias" => "alias",
+        "shared" => "shared",
+        _ => return Err("Invalid mailbox kind.".to_string()),
+    }
+    .to_string();
+    let source = match mailbox.source.trim().to_lowercase().as_str() {
+        "system" => "system",
+        "custom" => "custom",
+        _ => "custom",
+    }
+    .to_string();
+
+    let aliases = mailbox
+        .aliases
+        .into_iter()
+        .map(|alias| alias.trim().to_lowercase())
+        .filter(|alias| is_valid_email_address(alias))
+        .collect::<Vec<_>>();
+
+    Ok(BusinessMailbox {
+        id: mailbox.id.trim().to_string(),
+        domain,
+        address,
+        display_name: mailbox.display_name.trim().to_string(),
+        kind,
+        aliases,
+        active: mailbox.active,
+        source,
+        created_at: mailbox.created_at.trim().to_string(),
+        last_used_at: mailbox
+            .last_used_at
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty()),
+    })
+}
+
+async fn read_business_mailboxes(db_url: &str, domain: &str) -> (StatusCode, Json<Value>) {
+    let domain = domain.trim().to_lowercase();
+    if !is_valid_domain(&domain) {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({"success": false, "error": "Invalid mailbox domain."})),
+        );
+    }
+
+    let pool = match get_tenant_pool(db_url).await {
+        Ok(p) => p,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"success": false, "error": format!("DB Error: {}", e)})),
+            )
+        }
+    };
+
+    if let Err(e) = ensure_business_mailboxes_table(&pool).await {
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"success": false, "error": format!("Schema Error: {}", e)})),
+        );
+    }
+
+    let rows = match sqlx::query(
+        "SELECT id, domain, address, display_name, kind, aliases, active, source, created_at, last_used_at
+         FROM business_mailboxes
+         WHERE domain = $1
+         ORDER BY active DESC, created_at ASC",
+    )
+    .bind(&domain)
+    .fetch_all(&pool)
+    .await
+    {
+        Ok(rows) => rows,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"success": false, "error": format!("Query Error: {}", e)})),
+            )
+        }
+    };
+
+    let mailboxes: Vec<Value> = rows
+        .into_iter()
+        .map(|row| {
+            let aliases: String = row.try_get("aliases").unwrap_or_else(|_| "[]".to_string());
+            let aliases: Vec<String> = serde_json::from_str(&aliases).unwrap_or_default();
+            json!({
+                "id": row.try_get::<String, _>("id").unwrap_or_default(),
+                "domain": row.try_get::<String, _>("domain").unwrap_or_default(),
+                "address": row.try_get::<String, _>("address").unwrap_or_default(),
+                "displayName": row.try_get::<String, _>("display_name").unwrap_or_default(),
+                "kind": row.try_get::<String, _>("kind").unwrap_or_else(|_| "mailbox".to_string()),
+                "aliases": aliases,
+                "active": row.try_get::<bool, _>("active").unwrap_or(true),
+                "source": row.try_get::<String, _>("source").unwrap_or_else(|_| "custom".to_string()),
+                "createdAt": row.try_get::<String, _>("created_at").unwrap_or_default(),
+                "lastUsedAt": row.try_get::<Option<String>, _>("last_used_at").unwrap_or_default(),
+            })
+        })
+        .collect();
+
+    (
+        StatusCode::OK,
+        Json(json!({"success": true, "mailboxes": mailboxes})),
+    )
+}
+
+async fn business_mailbox_exists(
+    db_url: &str,
+    domain: &str,
+    address: &str,
+) -> Result<bool, String> {
+    let pool = get_tenant_pool(db_url).await?;
+    ensure_business_mailboxes_table(&pool).await?;
+    sqlx::query_scalar::<_, i64>(
+        "SELECT COUNT(*) FROM business_mailboxes WHERE domain = $1 AND address = $2",
+    )
+    .bind(domain.trim().to_lowercase())
+    .bind(address.trim().to_lowercase())
+    .fetch_one(&pool)
+    .await
+    .map(|count| count > 0)
+    .map_err(|e| e.to_string())
 }
 
 fn first_header<'a>(headers: &'a HeaderMap, names: &[&str]) -> Option<&'a str> {
@@ -3501,6 +3812,189 @@ async fn read_business_emails(db_url: &str) -> (StatusCode, Json<Value>) {
         StatusCode::OK,
         Json(json!({"success": true, "emails": emails})),
     )
+}
+
+pub async fn get_business_mailboxes(
+    State(_state): State<AppState>,
+    Query(query): Query<BusinessMailboxesQuery>,
+    headers: HeaderMap,
+) -> (StatusCode, Json<Value>) {
+    let db_url = match business_db_url_from_parts(&headers, query.db_url.as_deref(), None) {
+        Some(url) => url,
+        None => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(json!({"success": false, "error": "Missing business database URL"})),
+            )
+        }
+    };
+    let Some(domain) = query.domain.as_deref() else {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({"success": false, "error": "Missing mailbox domain"})),
+        );
+    };
+
+    read_business_mailboxes(&db_url, domain).await
+}
+
+pub async fn query_business_mailboxes(
+    State(_state): State<AppState>,
+    Json(payload): Json<BusinessMailboxesRequest>,
+) -> (StatusCode, Json<Value>) {
+    if payload.db_url.trim().is_empty() {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({"success": false, "error": "Missing business database URL"})),
+        );
+    }
+
+    read_business_mailboxes(payload.db_url.trim(), payload.domain.trim()).await
+}
+
+pub async fn save_business_mailbox(
+    State(_state): State<AppState>,
+    Query(query): Query<BusinessMailboxesQuery>,
+    headers: HeaderMap,
+    Json(payload): Json<SaveBusinessMailboxRequest>,
+) -> (StatusCode, Json<Value>) {
+    let db_url = match business_db_url_from_parts(
+        &headers,
+        query.db_url.as_deref(),
+        payload.db_url.as_deref(),
+    ) {
+        Some(url) => url,
+        None => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(json!({"success": false, "error": "Missing business database URL"})),
+            )
+        }
+    };
+
+    let mailbox = match normalize_business_mailbox(payload.mailbox) {
+        Ok(mailbox) => mailbox,
+        Err(message) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(json!({"success": false, "error": message})),
+            )
+        }
+    };
+
+    let pool = match get_tenant_pool(&db_url).await {
+        Ok(p) => p,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"success": false, "error": format!("DB Error: {}", e)})),
+            )
+        }
+    };
+
+    if let Err(e) = ensure_business_mailboxes_table(&pool).await {
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"success": false, "error": format!("Schema Error: {}", e)})),
+        );
+    }
+
+    let aliases = serde_json::to_string(&mailbox.aliases).unwrap_or_else(|_| "[]".to_string());
+    match sqlx::query(
+        "INSERT INTO business_mailboxes (id, domain, address, display_name, kind, aliases, active, source, created_at, last_used_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+         ON CONFLICT (domain, address) DO UPDATE SET
+            id = $1,
+            display_name = $4,
+            kind = $5,
+            aliases = $6,
+            active = $7,
+            source = $8,
+            created_at = $9,
+            last_used_at = $10",
+    )
+    .bind(&mailbox.id)
+    .bind(&mailbox.domain)
+    .bind(&mailbox.address)
+    .bind(&mailbox.display_name)
+    .bind(&mailbox.kind)
+    .bind(&aliases)
+    .bind(mailbox.active)
+    .bind(&mailbox.source)
+    .bind(&mailbox.created_at)
+    .bind(&mailbox.last_used_at)
+    .execute(&pool)
+    .await
+    {
+        Ok(_) => (
+            StatusCode::OK,
+            Json(json!({"success": true, "mailbox": mailbox})),
+        ),
+        Err(err) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"success": false, "error": format!("Insert Error: {}", err)})),
+        ),
+    }
+}
+
+pub async fn delete_business_mailbox(
+    State(_state): State<AppState>,
+    Query(query): Query<BusinessMailboxesQuery>,
+    headers: HeaderMap,
+    Json(payload): Json<DeleteBusinessMailboxRequest>,
+) -> (StatusCode, Json<Value>) {
+    let db_url = match business_db_url_from_parts(
+        &headers,
+        query.db_url.as_deref(),
+        payload.db_url.as_deref(),
+    ) {
+        Some(url) => url,
+        None => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(json!({"success": false, "error": "Missing business database URL"})),
+            )
+        }
+    };
+
+    let domain = payload.domain.trim().to_lowercase();
+    let address = payload.address.trim().to_lowercase();
+    if !is_valid_domain(&domain) || !is_valid_email_address(&address) {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({"success": false, "error": "Invalid mailbox domain or address."})),
+        );
+    }
+
+    let pool = match get_tenant_pool(&db_url).await {
+        Ok(p) => p,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"success": false, "error": format!("DB Error: {}", e)})),
+            )
+        }
+    };
+
+    if let Err(e) = ensure_business_mailboxes_table(&pool).await {
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"success": false, "error": format!("Schema Error: {}", e)})),
+        );
+    }
+
+    match sqlx::query("DELETE FROM business_mailboxes WHERE domain = $1 AND address = $2")
+        .bind(&domain)
+        .bind(&address)
+        .execute(&pool)
+        .await
+    {
+        Ok(_) => (StatusCode::OK, Json(json!({"success": true}))),
+        Err(err) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"success": false, "error": format!("Delete Error: {}", err)})),
+        ),
+    }
 }
 
 pub async fn get_business_emails(

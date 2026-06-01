@@ -818,11 +818,16 @@ export function loadBusinessMailboxes(domain?: string): BusinessMailbox[] {
     };
   }
   const activeExists = domainEntries.some((entry) => entry.active);
-  const normalizedActiveEntries = domainEntries.map((entry, index) => ({
-    ...entry,
-    kind: index === 0 ? 'primary' as const : entry.kind,
-    active: activeExists ? entry.active : index === 0,
-  }));
+  let activeAssigned = false;
+  const normalizedActiveEntries = domainEntries.map((entry, index) => {
+    const shouldBeActive = activeExists ? entry.active && !activeAssigned : index === 0;
+    if (shouldBeActive) activeAssigned = true;
+    return {
+      ...entry,
+      kind: shouldBeActive ? 'primary' as const : entry.kind === 'primary' ? 'mailbox' as const : entry.kind,
+      active: shouldBeActive,
+    };
+  });
   const finalEntries = Array.from(new Map(normalizedActiveEntries.map(m => [m.address, m])).values());
   const untouched = deduped.filter((entry) => entry.domain !== normalizedDomain);
   saveUserDB(STORAGE_KEYS.businessMailboxes, [...untouched, ...finalEntries]);
@@ -833,11 +838,18 @@ export function saveBusinessMailboxes(domain: string, entries: BusinessMailbox[]
   const normalizedDomain = normalizeDomainInput(domain);
   const untouched = loadUserDB<BusinessMailbox[]>(STORAGE_KEYS.businessMailboxes, [])
     .filter((entry) => normalizeDomainInput(entry.domain) !== normalizedDomain);
-  const normalizedEntries = entries.map((entry, index) => ({
-    ...normalizeBusinessMailboxEntry(entry, normalizedDomain),
-    kind: index === 0 ? 'primary' as const : entry.kind,
-    active: entries.some((candidate) => candidate.active) ? entry.active : index === 0,
-  }));
+  const activeExists = entries.some((candidate) => candidate.active);
+  let activeAssigned = false;
+  const normalizedEntries = entries.map((entry, index) => {
+    const normalizedEntry = normalizeBusinessMailboxEntry(entry, normalizedDomain);
+    const shouldBeActive = activeExists ? normalizedEntry.active && !activeAssigned : index === 0;
+    if (shouldBeActive) activeAssigned = true;
+    return {
+      ...normalizedEntry,
+      kind: shouldBeActive ? 'primary' as const : normalizedEntry.kind === 'primary' ? 'mailbox' as const : normalizedEntry.kind,
+      active: shouldBeActive,
+    };
+  });
   saveUserDB(STORAGE_KEYS.businessMailboxes, [...untouched, ...normalizedEntries]);
 }
 

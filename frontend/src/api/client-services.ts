@@ -31,7 +31,7 @@ import {
   loadTeamAccessInvites, saveTeamAccessInvites,
   cacheTeamAccessInvite, hasTeamAccessWorkspace,
   validateCachedTeamAccessToken, postTeamAccess, teamAccessApiError,
-  syncBridge,
+  syncBridge, warnBackendSyncFailure,
   EMPTY_EMAILS,
   normalizeBusinessEmailFromDb, syncBusinessEmailToDb,
   businessEmailDbRouteUnavailable, setBusinessEmailDbRouteUnavailable,
@@ -509,28 +509,184 @@ export const businessQueue = {
   },
 };
 
+let businessMailboxDbRouteUnavailable = false;
+
+type BusinessMailboxApiEntry = Partial<BusinessMailbox> & {
+  display_name?: string;
+  created_at?: string;
+  last_used_at?: string | null;
+};
+
+type BusinessMailboxApiResponse = {
+  success?: boolean;
+  mailbox?: BusinessMailboxApiEntry;
+  mailboxes?: BusinessMailboxApiEntry[];
+  message?: string;
+  error?: string;
+};
+
+function isMailboxAddress(value: string): boolean {
+  const normalized = normalizeMailbox(value);
+  if (!normalized || normalized.length > 254 || normalized.includes('..')) return false;
+  const [local, domain, ...extra] = normalized.split('@');
+  if (!local || !domain || extra.length > 0) return false;
+  if (local.length > 64 || domain.length > 253 || !domain.includes('.')) return false;
+  return /^[a-z0-9.!#$%&'*+/=?^_`{|}~-]+$/.test(local)
+    && domain.split('.').every((label) => (
+      label.length > 0
+      && label.length <= 63
+      && !label.startsWith('-')
+      && !label.endsWith('-')
+      && /^[a-z0-9-]+$/.test(label)
+    ));
+}
+
+function normalizeBusinessMailboxFromApi(entry: BusinessMailboxApiEntry, fallbackDomain: string): BusinessMailbox {
+  return normalizeBusinessMailboxEntry({
+    ...entry,
+    displayName: entry.displayName || entry.display_name,
+    createdAt: entry.createdAt || entry.created_at,
+    lastUsedAt: entry.lastUsedAt || entry.last_used_at || undefined,
+  }, entry.domain || fallbackDomain);
+}
+
+function businessMailboxApiError(response: BusinessMailboxApiResponse | null, fallback: string): string {
+  return response?.message || response?.error || fallback;
+}
+
+function businessMailboxDbHeaders(dbUrl: string): Record<string, string> {
+  return { 'x-business-db-url': dbUrl };
+}
+
+async function fetchBusinessMailboxesFromDb(domain: string): Promise<BusinessMailbox[] | null> {
+  const session = getSessionSafe();
+  if (!session?.businessDbUrl || businessMailboxDbRouteUnavailable) return null;
+
+  const response = await fetchApiJsonDetailed<BusinessMailboxApiResponse>('/mail/business-mailboxes/query', {
+    method: 'POST',
+    headers: businessMailboxDbHeaders(session.businessDbUrl),
+    body: JSON.stringify({
+      dbUrl: session.businessDbUrl,
+      domain: normalizeDomainInput(domain),
+    }),
+  });
+
+  if (response.status === 404) {
+    businessMailboxDbRouteUnavailable = true;
+    return null;
+  }
+
+  if (!response.ok || !response.data?.success || !Array.isArray(response.data.mailboxes)) {
+    throw new Error(businessMailboxApiError(response.data, 'Unable to load mailboxes from the business database.'));
+  }
+
+  return response.data.mailboxes.map((entry) => normalizeBusinessMailboxFromApi(entry, domain));
+}
+
+async function upsertBusinessMailboxToDb(mailbox: BusinessMailbox): Promise<void> {
+  const session = getSessionSafe();
+  if (!session?.businessDbUrl) return;
+  if (businessMailboxDbRouteUnavailable) {
+    throw new Error('Business mailbox database route is unavailable. Try again after the backend deploy finishes.');
+  }
+
+  const response = await fetchApiJsonDetailed<BusinessMailboxApiResponse>('/mail/business-mailboxes', {
+    method: 'POST',
+    headers: businessMailboxDbHeaders(session.businessDbUrl),
+    body: JSON.stringify({
+      dbUrl: session.businessDbUrl,
+      mailbox,
+    }),
+  });
+
+  if (response.status === 404) {
+    businessMailboxDbRouteUnavailable = true;
+  }
+  if (!response.ok || !response.data?.success) {
+    throw new Error(businessMailboxApiError(response.data, 'Unable to save mailbox to the business database.'));
+  }
+}
+
+async function deleteBusinessMailboxFromDb(domain: string, address: string): Promise<void> {
+  const session = getSessionSafe();
+  if (!session?.businessDbUrl) return;
+  if (businessMailboxDbRouteUnavailable) {
+    throw new Error('Business mailbox database route is unavailable. Try again after the backend deploy finishes.');
+  }
+
+  const response = await fetchApiJsonDetailed<BusinessMailboxApiResponse>('/mail/business-mailboxes', {
+    method: 'DELETE',
+    headers: businessMailboxDbHeaders(session.businessDbUrl),
+    body: JSON.stringify({
+      dbUrl: session.businessDbUrl,
+      domain: normalizeDomainInput(domain),
+      address: normalizeMailbox(address),
+    }),
+  });
+
+  if (response.status === 404) {
+    businessMailboxDbRouteUnavailable = true;
+  }
+  if (!response.ok || !response.data?.success) {
+    throw new Error(businessMailboxApiError(response.data, 'Unable to delete mailbox from the business database.'));
+  }
+}
+
 // ---- Mailbox Functions ----
 export const businessMailboxes = {
   getByDomain(domain: string): BusinessMailbox[] {
     return loadBusinessMailboxes(domain);
   },
 
+  async syncFromDb(domain: string): Promise<BusinessMailbox[]> {
+    const normalizedDomain = normalizeDomainInput(domain);
+    const localEntries = loadBusinessMailboxes(normalizedDomain);
+    const remoteEntries = await fetchBusinessMailboxesFromDb(normalizedDomain);
+    if (!remoteEntries) return localEntries;
+
+    const remoteByAddress = new Map(remoteEntries.map((entry) => [entry.address, entry]));
+    const remoteHasPrimary = remoteEntries.some((entry) => entry.active);
+    const systemMailbox = {
+      ...getSystemBusinessMailbox(normalizedDomain),
+      active: !remoteHasPrimary,
+      kind: remoteHasPrimary ? 'mailbox' as const : 'primary' as const,
+    };
+    const entriesToSeed = remoteEntries.length === 0
+      ? localEntries
+      : remoteByAddress.has(systemMailbox.address)
+        ? []
+        : [systemMailbox];
+
+    if (entriesToSeed.length > 0) {
+      await Promise.all(entriesToSeed.map((entry) => upsertBusinessMailboxToDb(entry)));
+    }
+
+    const mergedEntries = Array.from(
+      new Map([...remoteEntries, ...entriesToSeed].map((entry) => [entry.address, entry])).values(),
+    );
+    saveBusinessMailboxes(normalizedDomain, mergedEntries);
+    return loadBusinessMailboxes(normalizedDomain);
+  },
+
   getPrimary(domain: string): BusinessMailbox {
     return this.getByDomain(domain).find((entry) => entry.active) || this.getByDomain(domain)[0] || getSystemBusinessMailbox(domain);
   },
 
-  create(domain: string, data: {
+  async create(domain: string, data: {
     localPart?: string;
     address?: string;
     displayName?: string;
     kind?: BusinessMailbox['kind'];
     aliases?: string[];
-  }): BusinessMailbox {
+  }): Promise<BusinessMailbox> {
     const normalizedDomain = normalizeDomainInput(domain);
-    const entries = this.getByDomain(normalizedDomain);
+    const entries = await this.syncFromDb(normalizedDomain);
     const normalizedAddress = normalizeMailbox(
       data.address || `${normalizeLocalPart(data.localPart || data.displayName || 'mailbox')}@${normalizedDomain}`,
     );
+    if (!isMailboxAddress(normalizedAddress)) {
+      throw new Error('Enter a valid mailbox address.');
+    }
     if (!normalizedAddress.endsWith(`@${normalizedDomain}`)) {
       throw new Error(`Mailbox must use @${normalizedDomain}.`);
     }
@@ -538,24 +694,29 @@ export const businessMailboxes = {
       throw new Error('This mailbox already exists for the selected domain.');
     }
 
+    const shouldBePrimary = data.kind === 'primary' || !entries.some((entry) => entry.active);
+    const existingEntries = shouldBePrimary
+      ? entries.map((entry) => ({
+        ...entry,
+        active: false,
+        kind: entry.kind === 'primary' ? 'mailbox' as const : entry.kind,
+      }))
+      : entries;
     const mailbox = normalizeBusinessMailboxEntry({
       address: normalizedAddress,
       displayName: data.displayName || normalizedAddress.split('@')[0],
-      kind: data.kind || 'mailbox',
+      kind: shouldBePrimary ? 'primary' : data.kind || 'mailbox',
       aliases: data.aliases || [],
-      active: entries.length === 0,
+      active: shouldBePrimary,
       source: 'custom',
     }, normalizedDomain);
-    saveBusinessMailboxes(normalizedDomain, [...entries, mailbox]);
+    const nextEntries = [...existingEntries, mailbox];
+    if (getSessionSafe()?.businessDbUrl) {
+      await Promise.all(nextEntries.map((entry) => upsertBusinessMailboxToDb(entry)));
+    }
+    saveBusinessMailboxes(normalizedDomain, nextEntries);
 
     const session = auth.getSession();
-    if (session?.tenantId) {
-      syncBridge(`/tenants/${session.tenantId}/mailboxes`, {
-        method: 'POST',
-        body: JSON.stringify(mailbox),
-      });
-    }
-
     businessAudit.add({
       action: 'Created mailbox',
       actor: session?.email || mailbox.address,
@@ -565,14 +726,21 @@ export const businessMailboxes = {
     return mailbox;
   },
 
-  setPrimary(domain: string, address: string): BusinessMailbox[] {
+  async setPrimary(domain: string, address: string): Promise<BusinessMailbox[]> {
     const normalizedDomain = normalizeDomainInput(domain);
     const normalizedAddress = normalizeMailbox(address);
-    const updated = this.getByDomain(normalizedDomain).map((entry) => ({
+    const current = await this.syncFromDb(normalizedDomain);
+    const updated = current.map((entry) => ({
       ...entry,
       active: entry.address === normalizedAddress,
       kind: entry.address === normalizedAddress ? 'primary' as const : entry.kind === 'primary' ? 'mailbox' as const : entry.kind,
     }));
+    if (!updated.some((entry) => entry.active)) {
+      throw new Error('Selected mailbox was not found for this domain.');
+    }
+    if (getSessionSafe()?.businessDbUrl) {
+      await Promise.all(updated.map((entry) => upsertBusinessMailboxToDb(entry)));
+    }
     saveBusinessMailboxes(normalizedDomain, updated);
 
     const session = auth.getSession();
@@ -585,24 +753,39 @@ export const businessMailboxes = {
   touch(domain: string, address: string) {
     const normalizedDomain = normalizeDomainInput(domain);
     const normalizedAddress = normalizeMailbox(address);
+    let touchedMailbox: BusinessMailbox | undefined;
     const updated = this.getByDomain(normalizedDomain).map((entry) => (
       entry.address === normalizedAddress
-        ? { ...entry, lastUsedAt: new Date().toISOString() }
+        ? (touchedMailbox = { ...entry, lastUsedAt: new Date().toISOString() })
         : entry
     ));
     saveBusinessMailboxes(normalizedDomain, updated);
+    if (touchedMailbox && getSessionSafe()?.businessDbUrl) {
+      void upsertBusinessMailboxToDb(touchedMailbox).catch(warnBackendSyncFailure);
+    }
   },
 
-  remove(domain: string, address: string): BusinessMailbox[] {
+  async remove(domain: string, address: string): Promise<BusinessMailbox[]> {
     const normalizedDomain = normalizeDomainInput(domain);
     const normalizedAddress = normalizeMailbox(address);
-    const current = this.getByDomain(normalizedDomain);
+    const current = await this.syncFromDb(normalizedDomain);
+    const target = current.find((entry) => entry.address === normalizedAddress);
+    if (!target) {
+      throw new Error('Mailbox was not found for the selected domain.');
+    }
+    if (target.source === 'system') {
+      throw new Error('The system primary mailbox is tied to this business account and cannot be deleted.');
+    }
     const next = current.filter((entry) => entry.address !== normalizedAddress);
     if (next.length === 0) {
       throw new Error('At least one business mailbox must remain on the domain.');
     }
     if (!next.some((entry) => entry.active)) {
       next[0] = { ...next[0], active: true, kind: 'primary' };
+    }
+    if (getSessionSafe()?.businessDbUrl) {
+      await deleteBusinessMailboxFromDb(normalizedDomain, normalizedAddress);
+      await Promise.all(next.map((entry) => upsertBusinessMailboxToDb(entry)));
     }
     saveBusinessMailboxes(normalizedDomain, next);
     const session = auth.getSession();
@@ -1105,12 +1288,17 @@ export const mail = {
   async sendBusiness(domain: string, to: string[], subject: string, body: string, fromAddress?: string, attachments?: { filename: string, content: string, contentType: string }[], scheduledAt?: string): Promise<Email> {
     const session = auth.getSession();
     const normalizedDomain = normalizeDomainInput(domain);
-    const availableMailboxes = loadBusinessMailboxes(normalizedDomain);
-    const selectedMailbox =
-      availableMailboxes.find((mailbox) => mailbox.address === normalizeMailbox(fromAddress || '')) ||
-      availableMailboxes.find((mailbox) => mailbox.active) ||
-      availableMailboxes[0] ||
-      getSystemBusinessMailbox(normalizedDomain);
+    const availableMailboxes = await businessMailboxes.syncFromDb(normalizedDomain);
+    const requestedFromAddress = normalizeMailbox(fromAddress || '');
+    const selectedMailbox = requestedFromAddress
+      ? availableMailboxes.find((mailbox) => mailbox.address === requestedFromAddress)
+      : availableMailboxes.find((mailbox) => mailbox.active) || availableMailboxes[0] || getSystemBusinessMailbox(normalizedDomain);
+    if (requestedFromAddress && !selectedMailbox) {
+      throw new Error(`${requestedFromAddress} is not connected to ${normalizedDomain}. Create or refresh the mailbox before sending.`);
+    }
+    if (!selectedMailbox) {
+      throw new Error(`No sender mailbox is available for ${normalizedDomain}.`);
+    }
     const groupEntries = loadBusinessGroups(normalizedDomain);
     const expandedRecipients = Array.from(new Set(
       to
@@ -1124,6 +1312,13 @@ export const mail = {
     const fromAddr = selectedMailbox.address;
     if (expandedRecipients.length === 0) {
       throw new Error('Add at least one valid recipient.');
+    }
+    const invalidRecipient = expandedRecipients.find((recipient) => !isMailboxAddress(recipient));
+    if (invalidRecipient) {
+      throw new Error(`Invalid recipient address: ${invalidRecipient}`);
+    }
+    if (!isMailboxAddress(fromAddr) || !fromAddr.endsWith(`@${normalizedDomain}`)) {
+      throw new Error(`Sender mailbox must be a saved @${normalizedDomain} address.`);
     }
     if (!subject.trim() || !body.trim()) {
       throw new Error('Subject and message body are required.');
@@ -1164,6 +1359,9 @@ export const mail = {
       const scheduledCache = reloadEmailsCacheFromStorage();
       scheduledCache.unshift(email);
       saveEmailsSyncAndAsync(STORAGE_KEYS.emails, scheduledCache);
+      if (session?.businessDbUrl) {
+        await syncBusinessEmailToDb(email);
+      }
       businessAudit.add({
         action: 'Scheduled business email',
         actor: fromAddr,
@@ -1185,6 +1383,7 @@ export const mail = {
           fromName: selectedMailbox.displayName || session?.displayName || 'Business',
           provider: session?.businessMailProvider,
           apiKey: session?.businessApiKey,
+          dbUrl: session?.businessDbUrl,
           providerEndpoint: providerEndpointForRequest(session?.businessMailProvider, session?.businessMailProviderEndpoint),
           attachments: attachments?.map(a => ({
             filename: a.filename,
@@ -1226,7 +1425,19 @@ export const mail = {
     saveEmailsSyncAndAsync(STORAGE_KEYS.emails, filteredCache);
 
     if (session?.businessDbUrl) {
-      void syncBusinessEmailToDb(email).catch(() => {});
+      try {
+        await syncBusinessEmailToDb(email);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Sent copy database sync failed.';
+        businessQueue.mark(queueEntry.id, { error: `Delivered, but sent-copy sync failed: ${message}` });
+        businessAudit.add({
+          action: 'Sent copy database sync failed',
+          actor: fromAddr,
+          target: expandedRecipients.join(', '),
+          severity: 'warn',
+        });
+        throw new Error(`Mail was accepted for delivery, but VelisMail could not save the sent copy to the business database: ${message}`);
+      }
     }
     businessMailboxes.touch(normalizedDomain, fromAddr);
     businessAudit.add({

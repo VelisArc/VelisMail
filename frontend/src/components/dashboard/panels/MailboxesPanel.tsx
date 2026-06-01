@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Mail, Plus, Menu, CheckCircle2, Inbox, Trash2 } from 'lucide-react';
 import { businessMailboxes } from '../../../api/client';
 import type { DashboardState } from '../types';
@@ -8,6 +9,42 @@ interface MailboxesPanelProps {
 }
 
 export default function MailboxesPanel({ state }: MailboxesPanelProps) {
+  const [savingMailbox, setSavingMailbox] = useState(false);
+  const [deletingAddress, setDeletingAddress] = useState('');
+
+  const handleCreateMailbox = async () => {
+    setSavingMailbox(true);
+    try {
+      await businessMailboxes.create(state.activeDomainName, {
+        localPart: state.mailboxLocalPart,
+        displayName: state.mailboxDisplayName,
+        kind: state.mailboxKind,
+      });
+      await state.refreshMailboxes();
+      state.setMailboxLocalPart('');
+      state.setMailboxDisplayName('');
+      state.showToast('Mailbox created');
+    } catch (e) {
+      state.showToast(e instanceof Error ? e.message : 'Failed to create mailbox', 'error');
+    } finally {
+      setSavingMailbox(false);
+    }
+  };
+
+  const handleDeleteMailbox = async (address: string) => {
+    setDeletingAddress(address);
+    try {
+      await businessMailboxes.remove(state.activeDomainName, address);
+      await state.refreshMailboxes();
+      state.showToast('Deleted');
+    } catch (err) {
+      console.error('delete mailbox failed', err);
+      state.showToast(err instanceof Error ? err.message : 'Delete failed', 'error');
+    } finally {
+      setDeletingAddress('');
+    }
+  };
+
   return (
     <div className="dash-panel">
       <div className="panel-header"><button className="toolbar-icon sidebar-toggle" onClick={() => state.setSidebarOpen(true)}><Menu size={16} /></button><h3><Inbox size={16} /> Business Mailboxes</h3></div>
@@ -19,17 +56,7 @@ export default function MailboxesPanel({ state }: MailboxesPanelProps) {
         <select className="input input-max-140" value={state.mailboxKind} onChange={e => state.setMailboxKind(e.target.value as BusinessMailbox['kind'])}>
           <option value="primary">Primary</option><option value="mailbox">Mailbox</option><option value="alias">Alias</option><option value="shared">Shared</option>
         </select>
-        <button className="btn btn-primary btn-sm" onClick={() => {
-          try {
-            businessMailboxes.create(state.activeDomainName, { localPart: state.mailboxLocalPart, displayName: state.mailboxDisplayName, kind: state.mailboxKind });
-            state.refreshMailboxes();
-            state.setMailboxLocalPart('');
-            state.setMailboxDisplayName('');
-            state.showToast('Mailbox created');
-          } catch (e) {
-            state.showToast(e instanceof Error ? e.message : 'Failed to create mailbox', 'error');
-          }
-        }}><Plus size={12} /> Add</button>
+        <button className="btn btn-primary btn-sm" disabled={savingMailbox} onClick={handleCreateMailbox}><Plus size={12} /> {savingMailbox ? 'Saving' : 'Add'}</button>
       </div>
       <div className="team-list">
         {state.domainMailboxes.map(mbx => (
@@ -38,7 +65,7 @@ export default function MailboxesPanel({ state }: MailboxesPanelProps) {
             <div className="team-member-info"><strong>{mbx.displayName || mbx.address}</strong><span className="text-muted">{mbx.address}</span></div>
             <span className="badge badge-neutral">{mbx.kind}</span>
             <button className="btn btn-ghost btn-sm" onClick={e => { e.stopPropagation(); state.setSelectedFromAddress(mbx.address); state.showToast('Sender set'); }}><CheckCircle2 size={14} /> Set Sender</button>
-            <button className="btn btn-ghost btn-sm btn-danger" onClick={e => { e.stopPropagation(); try { businessMailboxes.remove(state.activeDomainName, mbx.address); state.refreshMailboxes(); state.showToast('Deleted'); } catch (err) { console.error('delete mailbox failed', err); state.showToast('Delete failed', 'error'); } }}><Trash2 size={14} /></button>
+            <button className="btn btn-ghost btn-sm btn-danger" disabled={deletingAddress === mbx.address} onClick={e => { e.stopPropagation(); void handleDeleteMailbox(mbx.address); }}><Trash2 size={14} /></button>
           </div>
         ))}
       </div>
