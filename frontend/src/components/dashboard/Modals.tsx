@@ -1,7 +1,7 @@
 import { X, UserCheck, CheckCircle2, Copy, Shield, AlertTriangle, LogOut, Mail, Send, Globe, Users, Layers, Check, AlertCircle, RefreshCcw } from 'lucide-react';
 import Composer from '../Composer';
 import type { DashboardState } from './types';
-import { formatRelative, copyToClipboard, providerRecordType } from './utils';
+import { copyToClipboard, providerRecordType } from './utils';
 import { businessTemplates, platformAdmin, teamAccess, connections } from '../../api/client';
 import { safeRandomUUID } from '../../api/client-core';
 
@@ -115,7 +115,6 @@ function AdminUserModal({ state }: { state: DashboardState }) {
             Mailboxes: state.selectedAdminUser.mailboxCount,
             Emails: state.selectedAdminUser.emailCount,
             Queue: state.selectedAdminUser.queueCount,
-            Created: formatRelative(state.selectedAdminUser.createdAt),
           }).map(([k, v]) => (
             <div key={k}><span className="text-xs text-muted">{k}</span><strong className="text-sm text-block">{v}</strong></div>
           ))}
@@ -135,7 +134,6 @@ function DomainDetailsModal({ state, handleVerifyDomain }: { state: DashboardSta
           <div><span className="text-xs text-muted">Status</span><strong className="text-sm text-block">{state.domainDetails.status}</strong></div>
           <div><span className="text-xs text-muted">Reputation</span><strong className="text-sm text-block">{state.domainDetails.reputation}/100</strong></div>
           <div><span className="text-xs text-muted">Sent</span><strong className="text-sm text-block">{state.domainDetails.mailCount}</strong></div>
-          <div><span className="text-xs text-muted">Added</span><strong className="text-sm text-block">{formatRelative(state.domainDetails.addedAt)}</strong></div>
         </div>
         <div className="px-20 py-20">
           {state.domainDetails.health.map(h => (
@@ -165,7 +163,6 @@ function MailboxDetailsModal({ state }: { state: DashboardState }) {
           <div><span className="text-xs text-muted">Address</span><strong className="text-sm text-block">{state.mailboxDetails.address}</strong></div>
           <div><span className="text-xs text-muted">Type</span><strong className="text-sm text-block">{state.mailboxDetails.kind}</strong></div>
           <div><span className="text-xs text-muted">Active</span><strong className="text-sm text-block">{state.mailboxDetails.active ? 'Yes' : 'No'}</strong></div>
-          <div><span className="text-xs text-muted">Created</span><strong className="text-sm text-block">{formatRelative(state.mailboxDetails.createdAt)}</strong></div>
         </div>
         <div className="flex gap-2 px-20 py-20">
           <button className="btn btn-ghost btn-sm" onClick={() => { copyToClipboard(state.mailboxDetails!.address); state.showToast('Copied'); }}><Copy size={14} /> Copy</button>
