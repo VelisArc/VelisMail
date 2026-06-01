@@ -198,6 +198,7 @@
 }
 
 html {
+  font-size: 90%;
   scroll-behavior: smooth;
   -webkit-text-size-adjust: 100%;
   -webkit-font-smoothing: antialiased;

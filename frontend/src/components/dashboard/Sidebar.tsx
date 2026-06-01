@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { LogOut, Mail, Layers, Server, Globe, Inbox, Users, Shield, BarChart3, Activity, Settings, CreditCard, Crown, Plus, User, Contact as ContactIcon } from 'lucide-react';
+import { LogOut, Mail, Layers, Server, Globe, Inbox, Users, BarChart3, Activity, Settings, CreditCard, Crown, Plus, User, Contact as ContactIcon } from 'lucide-react';
 import type { User as UserType } from '../../api/client';
 import { domains } from '../../api/client';
 import { BIZ_FOLDERS } from './constants';
@@ -96,6 +96,11 @@ export default function Sidebar({
         <button type="button" className="btn btn-primary side-compose" onClick={onCompose}>
           <Plus size={16} /> New Message
         </button>
+        {state && (
+          <button type="button" className="btn btn-secondary side-compose" onClick={() => state.setInviteOpen(true)} style={{ marginTop: '8px' }}>
+            <Plus size={16} /> Invite Team Member
+          </button>
+        )}
 
         <nav className="side-nav">
           <Section label="Mail">
@@ -178,11 +183,6 @@ export default function Sidebar({
             {hasRoleAccess('groups') && (
               <button type="button" className={`side-nav-btn ${activeBizTab === 'groups' ? 'active' : ''}`} onClick={() => handleNav('groups')}>
                 <Users size={16} /> <span>Groups</span>
-              </button>
-            )}
-            {hasRoleAccess('team') && (
-              <button type="button" className={`side-nav-btn ${activeBizTab === 'team' ? 'active' : ''}`} onClick={() => handleNav('team')}>
-                <Shield size={16} /> <span>Team</span>
               </button>
             )}
           </Section>

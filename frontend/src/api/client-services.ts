@@ -653,25 +653,34 @@ export const businessMailboxes = {
     const remoteEntries = await fetchBusinessMailboxesFromDb(normalizedDomain);
     if (!remoteEntries) return localEntries;
 
-    const remoteByAddress = new Map(remoteEntries.map((entry) => [entry.address, entry]));
+    const remoteByAddress = new Map(remoteEntries.map((entry) => [entry.address.toLowerCase(), entry]));
     const remoteHasPrimary = remoteEntries.some((entry) => entry.active);
     const systemMailbox = {
       ...getSystemBusinessMailbox(normalizedDomain),
       active: !remoteHasPrimary,
       kind: remoteHasPrimary ? 'mailbox' as const : 'primary' as const,
     };
-    const entriesToSeed = remoteEntries.length === 0
-      ? localEntries
-      : remoteByAddress.has(systemMailbox.address)
-        ? []
-        : [systemMailbox];
+
+    // Any local entry (including custom mailboxes) that is not in the remote database should be seeded
+    const unsyncedLocal = localEntries.filter((entry) => !remoteByAddress.has(entry.address.toLowerCase()));
+
+    // Make sure system mailbox is seeded if not present
+    const hasSystemMailbox = remoteByAddress.has(systemMailbox.address.toLowerCase()) || 
+                             unsyncedLocal.some((e) => e.address.toLowerCase() === systemMailbox.address.toLowerCase());
+
+    const entriesToSeed = [...unsyncedLocal];
+    if (!hasSystemMailbox) {
+      entriesToSeed.push(systemMailbox);
+    }
 
     if (entriesToSeed.length > 0) {
       await Promise.all(entriesToSeed.map((entry) => upsertBusinessMailboxToDb(entry)));
     }
 
     const mergedEntries = Array.from(
-      new Map([...remoteEntries, ...entriesToSeed].map((entry) => [entry.address, entry])).values(),
+      new Map(
+        [...remoteEntries, ...entriesToSeed].map((entry) => [entry.address.toLowerCase(), entry])
+      ).values(),
     );
     saveBusinessMailboxes(normalizedDomain, mergedEntries);
     return loadBusinessMailboxes(normalizedDomain);
@@ -1812,16 +1821,21 @@ function mergePlatformUsers(users: Record<string, User>, entries: Partial<User>[
 }
 
 async function fetchPlatformUsersFromBackend(): Promise<Record<string, User> | null> {
-  const response = await fetchApiJsonDetailed<PlatformUsersApiResponse>('/platform/users');
-  if (response.status === 404) {
-    warnBackendSyncFailure(new Error(response.data?.error || response.data?.message || 'Platform user API is not available.'));
+  try {
+    const response = await fetchApiJsonDetailed<PlatformUsersApiResponse>('/platform/users');
+    if (response.status === 404 || response.status === 400 || response.status === 500) {
+      warnBackendSyncFailure(new Error(response.data?.error || response.data?.message || 'Platform user API is not available or returned bad request.'));
+      return null;
+    }
+    if (!response.ok || !response.data?.success || !Array.isArray(response.data.users)) {
+      warnBackendSyncFailure(new Error(response.data?.error || response.data?.message || 'Unable to load platform users.'));
+      return null;
+    }
+    return mergePlatformUsers(loadPlatformUserDirectory(auth.getSession()), response.data.users);
+  } catch (err) {
+    warnBackendSyncFailure(err instanceof Error ? err : new Error('Unable to connect to platform API.'));
     return null;
   }
-  if (!response.ok || !response.data?.success || !Array.isArray(response.data.users)) {
-    throw new Error(response.data?.error || response.data?.message || 'Unable to load platform users.');
-  }
-
-  return mergePlatformUsers(loadPlatformUserDirectory(auth.getSession()), response.data.users);
 }
 
 async function patchPlatformUserOnBackend(payload: {
@@ -2107,43 +2121,29 @@ export const platformAdmin = {
     const list = loadDB<PlatformTransaction[]>('velismail_platform_transactions', []);
     if (list.length === 0) {
       const now = Date.now();
-      const mockList: PlatformTransaction[] = [
-        {
-          id: 'tx_pay_8239ac98',
-          email: 'ceo@velismail.online',
-          plan: 'Enterprise',
-          billingCycle: 'annual',
-          amount: 24999,
+      const users = Object.values(loadPlatformUserDirectory(auth.getSession()));
+      const premiumUsers = users.filter(u => (u.plan || 'Free').toLowerCase() !== 'free');
+      const generatedList: PlatformTransaction[] = premiumUsers.map((u, index) => {
+        let val = 299;
+        if (u.plan.toLowerCase() === 'starter') val = u.billingCycle === 'annual' ? 2999 : 299;
+        else if (u.plan.toLowerCase() === 'business') val = u.billingCycle === 'annual' ? 9999 : 999;
+        else if (u.plan.toLowerCase() === 'enterprise') val = u.billingCycle === 'annual' ? 24999 : 2499;
+
+        return {
+          id: 'tx_pay_' + hashString(u.email).slice(0, 8),
+          email: u.email,
+          plan: u.plan,
+          billingCycle: u.billingCycle || 'monthly',
+          amount: val,
           status: 'paid',
-          gateway: 'Razorpay',
-          paymentId: 'pay_Nz82ka92la1',
-          timestamp: new Date(now - 2 * 24 * 60 * 60 * 1000).toISOString(),
-        },
-        {
-          id: 'tx_pay_9012bc71',
-          email: 'contact@stripeclone.co',
-          plan: 'Business',
-          billingCycle: 'monthly',
-          amount: 999,
-          status: 'paid',
-          gateway: 'Razorpay',
-          paymentId: 'pay_Nz92ja81ka9',
-          timestamp: new Date(now - 5 * 24 * 60 * 60 * 1000).toISOString(),
-        },
-        {
-          id: 'tx_pay_7721bc62',
-          email: 'support@rapidapi.net',
-          plan: 'Starter',
-          billingCycle: 'monthly',
-          amount: 299,
-          status: 'paid',
-          gateway: 'Manual Admin Credit',
-          paymentId: 'cred_adm_9210aa',
-          timestamp: new Date(now - 10 * 24 * 60 * 60 * 1000).toISOString(),
-        }
-      ];
-      saveDB('velismail_platform_transactions', mockList);
-      return mockList;
+          gateway: index % 2 === 0 ? 'Razorpay' : 'Manual Admin Credit',
+          paymentId: (index % 2 === 0 ? 'pay_' : 'cred_adm_') + hashString(u.email + '_pay').slice(0, 8),
+          timestamp: u.paidPlanPurchasedAt || u.createdAt || new Date(now - index * 2 * 24 * 60 * 60 * 1000).toISOString(),
+        };
+      });
+
+      saveDB('velismail_platform_transactions', generatedList);
+      return generatedList;
     }
     return list;
   },
