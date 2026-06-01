@@ -273,7 +273,10 @@ export default function BusinessDashboard() {
         paidPlanExpiresAt: undefined,
         subscriptionStatus: undefined
       });
-      if (updated.user) setUser(updated.user);
+      if (updated.user) {
+        setUser(updated.user);
+        if (typeof window !== 'undefined') window.location.reload();
+      }
       showToast('Free plan activated');
       return;
     }
@@ -322,22 +325,11 @@ export default function BusinessDashboard() {
               }),
             });
             if (verifyResult.success) {
-              const now = new Date().toISOString();
-              const expires = new Date();
-              if (billingCycle === 'annual') {
-                expires.setFullYear(expires.getFullYear() + 1);
-              } else {
-                expires.setMonth(expires.getMonth() + 1);
-              }
-              const updated = auth.updateSettings({ 
-                plan: plan.name, 
-                billingCycle,
-                paidPlanPurchasedAt: now,
-                paidPlanExpiresAt: expires.toISOString(),
-                subscriptionStatus: 'active'
-              });
-              if (updated.user) setUser(updated.user);
+
+              // The backend API has processed the secure upgrade logic (timers, db update).
+              // Reload to fetch fresh session and reflect true subscription timer from server state.
               showToast(`${plan.name} plan activated`);
+              setTimeout(() => { if (typeof window !== 'undefined') window.location.reload(); }, 500);
             } else {
               showToast(verifyResult.message || 'Payment verification failed', 'error');
             }

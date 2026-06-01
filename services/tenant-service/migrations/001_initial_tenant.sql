@@ -9,7 +9,7 @@ CREATE TABLE IF NOT EXISTS tenants (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     organization_name VARCHAR(255) NOT NULL,
     organization_email VARCHAR(255) NOT NULL UNIQUE,
-    plan_tier VARCHAR(50) NOT NULL DEFAULT 'starter',
+    plan_tier VARCHAR(50) NOT NULL DEFAULT 'free',
     status VARCHAR(50) NOT NULL DEFAULT 'pending_verification',
     settings JSONB NOT NULL DEFAULT '{}',
     limits JSONB NOT NULL DEFAULT '{}',

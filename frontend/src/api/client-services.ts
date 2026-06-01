@@ -1672,7 +1672,7 @@ export const platformAdmin = {
           user,
           status: user.status || 'active',
           domain: user.businessDomain || user.customDomain || user.email.split('@')[1] || '',
-          plan: user.plan || 'Starter',
+          plan: user.plan || 'Free',
           billingCycle: user.billingCycle || 'monthly',
           paidPlanPurchasedAt: user.paidPlanPurchasedAt,
           paidPlanExpiresAt: user.paidPlanExpiresAt,

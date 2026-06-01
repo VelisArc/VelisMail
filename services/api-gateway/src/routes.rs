@@ -4416,22 +4416,112 @@ pub async fn verify_payment(
         signature.to_ascii_lowercase().as_bytes(),
     );
 
-    if verified {
-        (
-            StatusCode::OK,
-            Json(json!({
-                "success": true,
-                "paymentId": payment_id,
-                "orderId": order_id
-            })),
-        )
-    } else {
-        (
+    if !verified {
+        return (
             StatusCode::UNAUTHORIZED,
             Json(json!({
                 "success": false,
                 "message": "Payment signature verification failed."
             })),
-        )
+        );
     }
+
+    // 1. Fetch order details from Razorpay to get notes (plan, billing, email)
+    let client = reqwest::Client::new();
+    let order_url = format!("https://api.razorpay.com/v1/orders/{}", order_id);
+    let order_res = client
+        .get(&order_url)
+        .basic_auth(
+            &state.config.razorpay_key_id,
+            Some(&state.config.razorpay_key_secret),
+        )
+        .send()
+        .await;
+
+    let mut plan = String::new();
+    let mut billing = String::new();
+    let mut email = String::new();
+
+    match order_res {
+        Ok(res) if res.status().is_success() => {
+            if let Ok(order_data) = res.json::<serde_json::Value>().await {
+                if let Some(notes) = order_data.get("notes") {
+                    plan = notes.get("plan").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                    billing = notes.get("billing").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                    email = notes.get("email").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                }
+            }
+        }
+        _ => {
+            tracing::error!("Failed to fetch Razorpay order details for verification");
+        }
+    }
+
+    if plan.is_empty() || email.is_empty() {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({
+                "success": false,
+                "message": "Missing order details (plan or email) from Razorpay."
+            })),
+        );
+    }
+
+    // 2. Calculate subscription timers
+    let now = chrono::Utc::now();
+    let expires_at = if billing.eq_ignore_ascii_case("annual") {
+        now + chrono::Months::new(12)
+    } else {
+        now + chrono::Months::new(1)
+    };
+
+    let settings_update = json!({
+        "plan": plan,
+        "billingCycle": billing,
+        "paidPlanPurchasedAt": now.to_rfc3339(),
+        "paidPlanExpiresAt": expires_at.to_rfc3339(),
+        "subscriptionStatus": "active"
+    });
+
+    let settings_json = serde_json::to_string(&settings_update).unwrap_or_else(|_| "{}".to_string());
+
+    // 3. Update user settings in the database based on the email from the order
+    let Some(db_pool) = state.db.as_ref() else {
+        tracing::error!("Database connection pool not available in api-gateway state");
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({
+                "success": false,
+                "message": "Internal server error: Database not connected."
+            })),
+        );
+    };
+
+    let update_result = sqlx::query(
+        "UPDATE users SET settings = COALESCE(settings, '{}'::jsonb) || $1::jsonb, updated_at = NOW() WHERE email = $2"
+    )
+    .bind(&settings_json)
+    .bind(&email)
+    .execute(db_pool)
+    .await;
+
+    if let Err(e) = update_result {
+        tracing::error!("Failed to update user subscription settings: {}", e);
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({
+                "success": false,
+                "message": "Failed to update subscription in database."
+            })),
+        );
+    }
+
+    (
+        StatusCode::OK,
+        Json(json!({
+            "success": true,
+            "paymentId": payment_id,
+            "orderId": order_id
+        })),
+    )
 }
