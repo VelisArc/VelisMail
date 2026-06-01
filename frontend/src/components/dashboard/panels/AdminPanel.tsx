@@ -36,7 +36,7 @@ export default function AdminPanel({ state }: AdminPanelProps) {
   const refresh = () => state.setAdminUsers(platformAdmin.getUsers());
   const planOptions = ['Free', 'Starter', 'Business', 'Enterprise'];
   const selfEmail = normalizeEmail(state.user?.email || '');
-  const ownerEmail = platformAdmin.ownerEmail;
+  const ownerDomain = platformAdmin.ownerDomain;
 
   const filtered = state.adminUsers.filter(u => {
     const q = state.adminSearch.toLowerCase();
@@ -94,8 +94,8 @@ export default function AdminPanel({ state }: AdminPanelProps) {
       <div className="admin-owner-lock">
         <LockKeyhole size={16} />
         <div>
-          <strong>Owner-only console</strong>
-          <span>Only {ownerEmail} can open Platform Admin. All admin changes require two confirmations.</span>
+          <strong>Platform-domain console</strong>
+          <span>Only @{ownerDomain} accounts can open Platform Admin. All admin changes require two confirmations.</span>
         </div>
       </div>
 
@@ -138,7 +138,7 @@ export default function AdminPanel({ state }: AdminPanelProps) {
 
       {paginated.map(u => {
         const isSelf = normalizeEmail(u.user.email) === selfEmail;
-        const isOwner = platformAdmin.isOwnerEmail(u.user.email);
+        const isPlatformDomain = platformAdmin.isOwnerEmail(u.user.email);
         const riskBadge = u.risk === 'high' ? 'danger' : u.risk === 'medium' ? 'neutral' : 'success';
         return (
           <div key={u.user.email} className="team-member-row admin-user-row" onClick={() => state.setSelectedAdminUser(u)}>
@@ -155,10 +155,10 @@ export default function AdminPanel({ state }: AdminPanelProps) {
 
             <span className={`badge badge-${u.status === 'active' ? 'success' : 'danger'}`}>{u.status}</span>
             <span className={`badge badge-${riskBadge}`}>{u.risk} risk</span>
-            {isOwner && <span className="badge badge-primary">owner</span>}
+            {isPlatformDomain && <span className="badge badge-primary">platform</span>}
 
             <div className="admin-row-actions" onClick={e => e.stopPropagation()}>
-              <select className="admin-mini-select" value={u.user.role || 'member'} disabled={isOwner} onChange={e => {
+              <select className="admin-mini-select" value={u.user.role || 'member'} disabled={isPlatformDomain} onChange={e => {
                 const nextRole = e.target.value as 'admin' | 'member' | 'viewer';
                 queueAdminAction({
                   title: 'Review Role Change',
@@ -197,7 +197,7 @@ export default function AdminPanel({ state }: AdminPanelProps) {
               }}>
                 <option value="monthly">Monthly</option><option value="annual">Annual</option>
               </select>
-              <button className="btn btn-ghost btn-sm" disabled={isOwner} onClick={() => {
+              <button className="btn btn-ghost btn-sm" disabled={isPlatformDomain} onClick={() => {
                 const nextStatus = u.status === 'active' ? 'suspended' : 'active';
                 queueAdminAction({
                   title: 'Review Status Change',
@@ -210,7 +210,7 @@ export default function AdminPanel({ state }: AdminPanelProps) {
               }}>
                 <Shield size={12} /> {u.status === 'active' ? 'Suspend' : 'Reactivate'}
               </button>
-              <button className="btn btn-ghost btn-sm btn-danger" title={isSelf || isOwner ? 'Protected owner/current admin account' : 'Delete user'} disabled={isSelf || isOwner} onClick={() => {
+              <button className="btn btn-ghost btn-sm btn-danger" title={isSelf || isPlatformDomain ? 'Protected platform/current admin account' : 'Delete user'} disabled={isSelf || isPlatformDomain} onClick={() => {
                 queueAdminAction({
                   title: 'Review User Deletion',
                   message: `Permanently delete ${u.user.email}? This cannot be undone.`,

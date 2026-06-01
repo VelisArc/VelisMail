@@ -76,7 +76,7 @@ export default function Sidebar({
               aria-current={activeBizTab === 'mail' ? 'page' : undefined}
               onClick={() => handleNav('mail')}
             >
-              <Mail size={16} /> Inbox
+              <Mail size={16} /> <span>Inbox</span>
             </button>
             {activeBizTab === 'mail' && (
               <div className="side-sub-nav">
@@ -104,7 +104,7 @@ export default function Sidebar({
                 className={`side-nav-btn ${activeBizTab === 'templates' ? 'active' : ''}`}
                 onClick={() => handleNav('templates')}
               >
-                <Layers size={16} /> Templates
+                <Layers size={16} /> <span>Templates</span>
               </button>
             )}
           </Section>
@@ -116,7 +116,7 @@ export default function Sidebar({
                 className={`side-nav-btn ${activeBizTab === 'queue' ? 'active' : ''}`}
                 onClick={() => handleNav('queue')}
               >
-                <Server size={16} /> Mail Queue
+                <Server size={16} /> <span>Mail Queue</span>
               </button>
             )}
             {hasRoleAccess('deliverability') && (
@@ -125,7 +125,7 @@ export default function Sidebar({
                 className={`side-nav-btn ${activeBizTab === 'deliverability' ? 'active' : ''}`}
                 onClick={() => handleNav('deliverability')}
               >
-                <Activity size={16} /> Deliverability
+                <Activity size={16} /> <span>Deliverability</span>
               </button>
             )}
           </Section>
@@ -133,27 +133,27 @@ export default function Sidebar({
           <Section label="Organization">
             {hasRoleAccess('contacts') && (
               <button type="button" className={`side-nav-btn ${activeBizTab === 'contacts' ? 'active' : ''}`} onClick={() => handleNav('contacts')}>
-                <ContactIcon size={16} /> Contacts
+                <ContactIcon size={16} /> <span>Contacts</span>
               </button>
             )}
             {hasRoleAccess('domains') && (
               <button type="button" className={`side-nav-btn ${activeBizTab === 'domains' ? 'active' : ''}`} onClick={() => handleNav('domains')}>
-                <Globe size={16} /> Domains
+                <Globe size={16} /> <span>Domains</span>
               </button>
             )}
             {hasRoleAccess('mailboxes') && (
               <button type="button" className={`side-nav-btn ${activeBizTab === 'mailboxes' ? 'active' : ''}`} onClick={() => handleNav('mailboxes')}>
-                <Inbox size={16} /> Mailboxes
+                <Inbox size={16} /> <span>Mailboxes</span>
               </button>
             )}
             {hasRoleAccess('groups') && (
               <button type="button" className={`side-nav-btn ${activeBizTab === 'groups' ? 'active' : ''}`} onClick={() => handleNav('groups')}>
-                <Users size={16} /> Groups
+                <Users size={16} /> <span>Groups</span>
               </button>
             )}
             {hasRoleAccess('team') && (
               <button type="button" className={`side-nav-btn ${activeBizTab === 'team' ? 'active' : ''}`} onClick={() => handleNav('team')}>
-                <Shield size={16} /> Team
+                <Shield size={16} /> <span>Team</span>
               </button>
             )}
           </Section>
@@ -161,27 +161,27 @@ export default function Sidebar({
           <Section label="Administration">
             {hasRoleAccess('analytics') && (
               <button type="button" className={`side-nav-btn ${activeBizTab === 'analytics' ? 'active' : ''}`} onClick={() => handleNav('analytics')}>
-                <BarChart3 size={16} /> Analytics
+                <BarChart3 size={16} /> <span>Analytics</span>
               </button>
             )}
             {hasRoleAccess('audit') && (
               <button type="button" className={`side-nav-btn ${activeBizTab === 'audit' ? 'active' : ''}`} onClick={() => handleNav('audit')}>
-                <Activity size={16} /> Audit Log
+                <Activity size={16} /> <span>Audit Log</span>
               </button>
             )}
             {hasRoleAccess('settings') && (
               <button type="button" className={`side-nav-btn ${activeBizTab === 'settings' ? 'active' : ''}`} onClick={() => handleNav('settings')}>
-                <Settings size={16} /> Settings
+                <Settings size={16} /> <span>Settings</span>
               </button>
             )}
             {hasRoleAccess('billing') && (
               <button type="button" className={`side-nav-btn ${activeBizTab === 'billing' ? 'active' : ''}`} onClick={() => handleNav('billing')}>
-                <CreditCard size={16} /> Billing
+                <CreditCard size={16} /> <span>Billing</span>
               </button>
             )}
             {hasRoleAccess('admin') && canAccessPlatformAdmin && (
               <button type="button" className={`side-nav-btn ${activeBizTab === 'admin' ? 'active' : ''}`} onClick={() => handleNav('admin')}>
-                <Crown size={16} /> Platform Admin
+                <Crown size={16} /> <span>Platform Admin</span>
               </button>
             )}
           </Section>

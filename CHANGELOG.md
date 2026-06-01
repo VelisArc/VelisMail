@@ -1,9 +1,21 @@
 # Changelog
 
+## v4.0.4 - Platform Domain Admin & Sidebar Fix
+
+### Added
+- **Platform-domain admin access**: Platform Admin access now belongs to accounts signed in with the `@velismail.online` domain.
+
+### Fixed
+- **Removed single-account owner lock**: Removed the accidental Gmail-based Platform Admin ownership rule.
+- **Split-screen sidebar**: Lowered the dashboard mobile-sidebar breakpoint and aligned the sidebar width to the visible left slot so the left panel stays present with browser devtools or split-screen layouts.
+- **Database timeout fallback**: Business mailbox and email queries now stop retrying noisy DB timeout reads during the session and fall back to local cached data instead of repeatedly surfacing pool timeout errors.
+
+---
+
 ## v4.0.3 - Owner-Only Platform Admin
 
 ### Added
-- **Owner-only Platform Admin**: The admin console is locked to `velisarcofficial@gmail.com`; other users cannot bootstrap or receive platform-admin access.
+- **Owner-only Platform Admin**: The admin console was locked to a single configured owner account; other users could not bootstrap or receive platform-admin access.
 - **Two-step admin confirmations**: Role, plan, billing cycle, status, and delete actions now require review plus final confirmation.
 - **Sidebar layout hardening**: Business dashboard sidebar width, main content offset, overlay, footer, and nav scrolling now share one fixed layout contract.
 

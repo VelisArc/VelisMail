@@ -554,6 +554,10 @@ function businessMailboxApiError(response: BusinessMailboxApiResponse | null, fa
   return response?.message || response?.error || fallback;
 }
 
+function isTransientBusinessDbError(status: number, message: string): boolean {
+  return status >= 500 || /pool timed out|open connection|timeout|connection/i.test(message);
+}
+
 function businessMailboxDbHeaders(dbUrl: string): Record<string, string> {
   return { 'x-business-db-url': dbUrl };
 }
@@ -577,7 +581,13 @@ async function fetchBusinessMailboxesFromDb(domain: string): Promise<BusinessMai
   }
 
   if (!response.ok || !response.data?.success || !Array.isArray(response.data.mailboxes)) {
-    throw new Error(businessMailboxApiError(response.data, 'Unable to load mailboxes from the business database.'));
+    const message = businessMailboxApiError(response.data, 'Unable to load mailboxes from the business database.');
+    if (isTransientBusinessDbError(response.status, message)) {
+      businessMailboxDbRouteUnavailable = true;
+      warnBackendSyncFailure(new Error(message));
+      return null;
+    }
+    throw new Error(message);
   }
 
   return response.data.mailboxes.map((entry) => normalizeBusinessMailboxFromApi(entry, domain));
@@ -1259,7 +1269,7 @@ export const mail = {
       const headers: Record<string, string> = {
         'x-business-db-url': session.businessDbUrl
       };
-      const response = await fetchApiJsonDetailed<{ success?: boolean; emails?: Array<Partial<Email> & { read?: boolean }> }>('/mail/business-emails/query', {
+      const response = await fetchApiJsonDetailed<{ success?: boolean; emails?: Array<Partial<Email> & { read?: boolean }>; error?: string; message?: string }>('/mail/business-emails/query', {
         method: 'POST',
         headers,
         body: JSON.stringify({ dbUrl: session.businessDbUrl }),
@@ -1268,7 +1278,7 @@ export const mail = {
       if (response.ok && response.data?.success && Array.isArray(response.data.emails)) {
         sourceEmails = response.data.emails.map((entry) => normalizeBusinessEmailFromDb(entry));
         saveEmailsSyncAndAsync(STORAGE_KEYS.emails, sourceEmails);
-      } else if (response.status === 404) {
+      } else if (response.status === 404 || isTransientBusinessDbError(response.status, String(response.data?.error || response.data?.message || 'Business email database query failed.'))) {
         setBusinessEmailDbRouteUnavailable(true);
       }
     }
@@ -1722,10 +1732,10 @@ function platformAdminHostAllowed(): boolean {
   );
 }
 
-const PLATFORM_OWNER_EMAIL = 'velisarcofficial@gmail.com';
+const PLATFORM_ADMIN_DOMAIN = 'velismail.online';
 
 function isPlatformOwnerEmail(email: string): boolean {
-  return normalizeMailbox(email) === PLATFORM_OWNER_EMAIL;
+  return normalizeMailbox(email).endsWith(`@${PLATFORM_ADMIN_DOMAIN}`);
 }
 
 function normalizePlatformDirectoryUser(entry: Partial<User>): User | null {
@@ -1788,7 +1798,7 @@ function persistCurrentSessionUser(user: User) {
 
 // ---- Platform Admin ----
 export const platformAdmin = {
-  ownerEmail: PLATFORM_OWNER_EMAIL,
+  ownerDomain: PLATFORM_ADMIN_DOMAIN,
 
   isOwnerEmail(email: string): boolean {
     return isPlatformOwnerEmail(email);
@@ -1870,7 +1880,7 @@ export const platformAdmin = {
     const user = users[normalizedEmail];
     if (!user) return null;
     if (isPlatformOwnerEmail(normalizedEmail) && status !== 'active') {
-      throw new Error('The platform owner account cannot be suspended or deactivated.');
+      throw new Error('Platform-domain admin accounts cannot be suspended or deactivated.');
     }
 
     const next = normalizeSessionUser({
@@ -1934,7 +1944,7 @@ export const platformAdmin = {
     const user = users[normalizedEmail];
     if (!user) return null;
     if (isPlatformOwnerEmail(normalizedEmail) && role !== 'admin') {
-      throw new Error('The platform owner role is locked to admin.');
+      throw new Error('Platform-domain accounts are locked to admin access.');
     }
 
     const next = normalizeSessionUser({ ...user, role, isPlatformAdmin: isPlatformOwnerEmail(normalizedEmail) });
@@ -1959,10 +1969,10 @@ export const platformAdmin = {
     const user = users[normalizedEmail];
     if (!user) return null;
     if (!isPlatformOwnerEmail(normalizedEmail)) {
-      throw new Error(`Platform Admin access is locked to ${PLATFORM_OWNER_EMAIL}.`);
+      throw new Error(`Platform Admin access is locked to @${PLATFORM_ADMIN_DOMAIN} accounts.`);
     }
     if (!enabled) {
-      throw new Error('The platform owner cannot be removed from Platform Admin.');
+      throw new Error('Platform-domain accounts cannot be removed from Platform Admin.');
     }
 
     const next = normalizeSessionUser({
@@ -1991,7 +2001,7 @@ export const platformAdmin = {
     const normalizedEmail = normalizeMailbox(email);
     if (!users[normalizedEmail]) return false;
     if (isPlatformOwnerEmail(normalizedEmail)) {
-      throw new Error('The platform owner account cannot be deleted.');
+      throw new Error('Platform-domain admin accounts cannot be deleted.');
     }
 
     delete users[normalizedEmail];

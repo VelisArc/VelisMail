@@ -3,7 +3,7 @@
    ==================================================================== */
 
 .biz-dash {
-  --dash-sidebar-width: 216px;
+  --dash-sidebar-width: 196px;
   display: flex;
   height: 100vh;
   height: 100dvh;
@@ -807,7 +807,7 @@
 }
 
 /* ─── Responsive Styles ─── */
-@media (max-width: 1024px) {
+@media (max-width: 760px) {
   .dash-sidebar {
     transform: translateX(calc(-1 * var(--dash-sidebar-width)));
   }
@@ -830,7 +830,7 @@
   display: none !important;
 }
 
-@media (max-width: 1024px) {
+@media (max-width: 760px) {
   .sidebar-toggle {
     display: inline-flex !important;
   }
