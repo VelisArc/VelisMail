@@ -41,6 +41,20 @@ function PolicyLinks({ compact = false }: { compact?: boolean }) {
   );
 }
 
+function MobilePolicyMenu() {
+  return (
+    <div className="container legal-mobile-menu-wrap" id="policy-menu">
+      <details className="legal-mobile-menu">
+        <summary>
+          <span>Policy pages</span>
+          <strong>Open menu</strong>
+        </summary>
+        <PolicyLinks />
+      </details>
+    </div>
+  );
+}
+
 export default function LegalLayout({
   slug,
   title,
@@ -63,7 +77,9 @@ export default function LegalLayout({
             <span className="logo-text">VelisMail</span>
           </Link>
           <div className="legal-nav-actions">
-            <PolicyLinks compact />
+            <a href="#policy-menu" className="btn btn-ghost btn-sm legal-policy-jump">
+              Policies
+            </a>
             <Link to="/" className="btn btn-ghost btn-sm" id={`${slug}-nav-back`}>
               <ArrowLeft size={16} />
               Back
@@ -95,6 +111,8 @@ export default function LegalLayout({
             </div>
           </div>
         </header>
+
+        <MobilePolicyMenu />
 
         <div className="container legal-shell">
           <aside className="legal-aside" aria-label="Policy center navigation">
