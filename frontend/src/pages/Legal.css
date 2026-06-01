@@ -73,7 +73,7 @@
   background: var(--bg-surface-2);
   border: 1px solid var(--border-accent);
   padding: 2px 8px;
-  border-radius: 2px;
+  border-radius: 0;
   letter-spacing: var(--tracking-wider);
   text-transform: uppercase;
   margin-bottom: var(--space-2);

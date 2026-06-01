@@ -25,7 +25,7 @@ function ComposeModal({ state }: { state: DashboardState }) {
               {state.domainMailboxes && state.domainMailboxes.length > 0 ? (
                 state.domainMailboxes.map(m => <option key={m.address} value={m.address}>{m.address}</option>)
               ) : (
-                <option value="">no-reply@{state.activeDomainName || 'System Default'}</option>
+                <option value="">no-reply@{state.activeDomainName}</option>
               )}
             </select>
           }

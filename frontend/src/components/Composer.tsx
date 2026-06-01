@@ -76,7 +76,7 @@ const getRecipientAvatar = (name: string, avatarUrl: string | null) => {
         style={{
           width: '18px',
           height: '18px',
-          borderRadius: '50%',
+          borderRadius: '0',
           objectFit: 'cover',
         }}
       />
@@ -94,7 +94,7 @@ const getRecipientAvatar = (name: string, avatarUrl: string | null) => {
         color: bg,
         width: '18px',
         height: '18px',
-        borderRadius: '50%',
+        borderRadius: '0',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
