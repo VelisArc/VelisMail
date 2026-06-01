@@ -122,18 +122,18 @@
   background: var(--primary);
   color: var(--text-inverted);
   border: 1px solid transparent;
-  border-radius: var(--radius-md) !important;
+  border-radius: 0;
   transition: all var(--transition-normal);
   text-transform: uppercase;
   font-weight: var(--font-weight-bold);
   letter-spacing: var(--tracking-wide);
-  box-shadow: var(--shadow-primary);
+  box-shadow: none;
 }
 
 .side-compose:hover {
   background: var(--primary-600);
   transform: translateY(-1px);
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
+  box-shadow: none;
 }
 
 .side-compose:active {
@@ -174,7 +174,7 @@
   color: var(--text-secondary);
   background: transparent;
   border: 1px solid transparent;
-  border-radius: var(--radius-sm) !important;
+  border-radius: 0;
   cursor: pointer;
   text-align: left;
   transition: all var(--transition-fast);
@@ -190,7 +190,7 @@
   color: var(--text-inverted);
   font-weight: var(--font-weight-semibold);
   border: 1px solid transparent;
-  box-shadow: var(--shadow-sm);
+  box-shadow: none;
 }
 
 .side-sub-nav {
@@ -213,7 +213,7 @@
   color: var(--text-secondary);
   background: transparent;
   border: 1px solid transparent;
-  border-radius: var(--radius-sm) !important;
+  border-radius: 0;
   cursor: pointer;
   text-align: left;
   transition: all var(--transition-fast);
@@ -271,7 +271,7 @@
 .side-avatar {
   width: 24px;
   height: 24px;
-  border-radius: 50% !important;
+  border-radius: 0;
   background: var(--primary);
   border: 1px solid var(--border-accent);
   display: flex;
@@ -489,7 +489,7 @@
   transition: all var(--transition-fast);
   min-height: 40px;
   background: var(--bg-surface);
-  border-radius: 0px !important;
+  border-radius: 0;
 }
 
 .mail-row:last-child {
@@ -1039,7 +1039,7 @@
 
 .domain-card:hover {
   border-color: var(--border-accent);
-  box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+  box-shadow: none;
 }
 
 .domain-card-header {
@@ -1125,7 +1125,7 @@
 
 .groups-grid .glass-card:hover {
   border-color: var(--border-accent);
-  box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+  box-shadow: none;
 }
 
 .groups-grid .glass-card strong {
@@ -1241,18 +1241,18 @@
 .status-dot {
   width: 8px;
   height: 8px;
-  border-radius: 50% !important;
+  border-radius: 0;
   display: inline-block;
 }
 
 .status-dot-success {
   background-color: var(--success);
-  box-shadow: 0 0 8px var(--success);
+  box-shadow: none;
 }
 
 .status-dot-danger {
   background-color: var(--danger);
-  box-shadow: 0 0 8px var(--danger);
+  box-shadow: none;
 }
 
 .items-center {
@@ -1348,7 +1348,7 @@
 
 .templates-grid .glass-card:hover {
   border-color: var(--border-accent);
-  box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+  box-shadow: none;
 }
 
 .templates-grid strong {
@@ -1522,7 +1522,7 @@
   text-transform: uppercase !important;
   cursor: pointer !important;
   width: auto !important;
-  border-radius: var(--radius-sm) !important;
+  border-radius: 0;
   line-height: 1 !important;
 }
 
@@ -1546,24 +1546,24 @@
 
 /* ─── Inbox Sender Avatars and Logos ─── */
 .avatar-logo-img {
-  border-radius: 50% !important;
+  border-radius: 0;
   object-fit: cover !important;
 }
 
 .avatar-sm, .avatar-logo-img.avatar-sm {
   width: 32px !important;
   height: 32px !important;
-  border-radius: 50% !important;
+  border-radius: 0;
 }
 
 .avatar-md, .avatar-logo-img.avatar-md {
   width: 48px !important;
   height: 48px !important;
-  border-radius: 50% !important;
+  border-radius: 0;
 }
 
 .skeleton-avatar {
-  border-radius: 50% !important;
+  border-radius: 0;
 }
 
 

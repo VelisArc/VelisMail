@@ -2,12 +2,12 @@ import { useState, useEffect, useMemo, useDeferredValue, memo, useCallback, type
 import {
   Mail, Star, Archive, Trash2, Search, Paperclip, ArrowLeft,
   Reply, Forward, RefreshCcw,
-  ArrowUpDown, Menu, CheckSquare, Square, Trash,
+  ArrowUpDown, Menu, CheckSquare, Square,
   Eye, EyeOff, Shield, AlertTriangle, X,
   ChevronDown, ChevronUp, Lock, Info,
 } from 'lucide-react';
 import type { Email } from '../../api/client';
-import { mail, getUserFromPersistentStore } from '../../api/client';
+import { getUserFromPersistentStore } from '../../api/client';
 import { parseEmailConversation, getEmailPreview } from './utils';
 import type { DashboardState } from './types';
 
@@ -246,26 +246,7 @@ const EmailInbox: FC<EmailInboxProps> = ({
     { id: 'attachments', label: 'Attach' },
   ];
 
-  const handleDeletePermanently = async (id: string) => {
-    try {
-      await mail.deletePermanently(id);
-      closeReader();
-      onRefresh();
-    } catch (e) {
-      console.error('permanent delete failed', e);
-    }
-  };
 
-  const handleBulkDeletePermanently = async () => {
-    try {
-      const ids = [...state.selectedEmails];
-      await Promise.all(ids.map(id => mail.deletePermanently(id)));
-      state.setSelectedEmails(new Set());
-      onRefresh();
-    } catch (e) {
-      console.error('bulk permanent delete failed', e);
-    }
-  };
 
   return (
     <div className="dash-panel">
@@ -336,9 +317,7 @@ const EmailInbox: FC<EmailInboxProps> = ({
           <button className="toolbar-icon" onClick={() => state.setSelectedEmails(new Set())} aria-label="Clear selection" title="Clear"><Square size={13} /></button>
           <button className="toolbar-icon" onClick={() => { onArchive([...state.selectedEmails]); state.setSelectedEmails(new Set()); }} aria-label="Archive selected" title="Archive"><Archive size={13} /></button>
           <button className="toolbar-icon" onClick={() => { onTrash([...state.selectedEmails]); state.setSelectedEmails(new Set()); }} aria-label="Trash selected" title="Trash"><Trash2 size={13} /></button>
-          {isTrash && (
-            <button className="toolbar-icon toolbar-icon-danger" onClick={handleBulkDeletePermanently} aria-label="Delete forever" title="Delete Forever"><Trash size={13} /></button>
-          )}
+
         </div>
       )}
 
@@ -377,8 +356,8 @@ const EmailInbox: FC<EmailInboxProps> = ({
                   <Trash2 size={14} />
                 </button>
               ) : (
-                <button type="button" className="toolbar-icon toolbar-icon-danger" onClick={() => handleDeletePermanently(focusedEmail.id)} aria-label="Delete forever" title="Delete Forever">
-                  <Trash size={14} />
+                <button type="button" className="toolbar-icon" onClick={() => { onArchive([focusedEmail.id]); closeReader(); }} aria-label="Restore" title="Restore">
+                  <Archive size={14} />
                 </button>
               )}
             </div>

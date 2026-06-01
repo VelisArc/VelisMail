@@ -156,7 +156,7 @@
 .contact-avatar {
   width: 32px;
   height: 32px;
-  border-radius: 50% !important;
+  border-radius: 0;
   color: var(--text-inverted);
   background: var(--primary);
   border: 1px solid var(--border-accent);
@@ -214,7 +214,7 @@
 .contact-detail-avatar {
   width: 56px;
   height: 56px;
-  border-radius: 50% !important;
+  border-radius: 0;
   color: var(--text-inverted);
   background: var(--primary);
   border: 1px solid var(--border-accent);

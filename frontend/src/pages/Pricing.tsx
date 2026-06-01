@@ -1,3 +1,4 @@
+import { formatINR } from '../utils/format';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
@@ -167,10 +168,7 @@ const pricingFaqs = [
   },
 ];
 
-function formatINR(amount: number): string {
-  if (amount === 0) return '0';
-  return amount.toLocaleString('en-IN');
-}
+
 
 function getAnnualSavings(plan: typeof plans[number]): number {
   return Math.max(0, plan.monthlyPrice * 12 - plan.annualPrice);

@@ -314,7 +314,7 @@ export default function SettingsPage() {
           <div className="settings-header-right">
             <div className="user-avatar">
               {user.profileImageUrl ? (
-                <img src={user.profileImageUrl} alt="avatar" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }} />
+                <img src={user.profileImageUrl} alt="avatar" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '0' }} />
               ) : (
                 user.displayName?.charAt(0) || 'U'
               )}
@@ -413,7 +413,7 @@ export default function SettingsPage() {
                   <div className="system-info-rows">
                     <div>
                       <span className="info-row-label">Workspace Domain</span>
-                      <strong className="info-row-value">{user.businessDomain || 'System Default'}</strong>
+                      <strong className="info-row-value">{user.businessDomain || 'No Domain Set'}</strong>
                     </div>
                     <div>
                       <span className="info-row-label">Subscription Plan</span>
