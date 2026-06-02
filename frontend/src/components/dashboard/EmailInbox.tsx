@@ -404,7 +404,7 @@ const EmailInbox: FC<EmailInboxProps> = ({
                   <span className="reader-date">{new Date(focusedEmail.date).toLocaleString(undefined, { dateStyle: 'long', timeStyle: 'short' })}</span>
                 </div>
                 <div className="reader-meta-to-row">
-                  <span className="text-muted text-xs">to {Array.isArray(focusedEmail.to) ? focusedEmail.to.join(', ') : focusedEmail.to}</span>
+                  <span className="text-muted text-xs" title={`to ${Array.isArray(focusedEmail.to) ? focusedEmail.to.join(', ') : focusedEmail.to}`}>to {Array.isArray(focusedEmail.to) ? focusedEmail.to.join(', ') : focusedEmail.to}</span>
                   <button type="button" className="reader-meta-toggle" onClick={() => setShowMetaDetails(!showMetaDetails)} aria-label="Toggle email details" title="Show details">
                     {showMetaDetails ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
                   </button>
