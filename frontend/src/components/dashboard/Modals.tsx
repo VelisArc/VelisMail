@@ -2,7 +2,7 @@ import { X, UserCheck, CheckCircle2, Copy, Shield, AlertTriangle, LogOut, Mail, 
 import Composer from '../Composer';
 import type { DashboardState } from './types';
 import { copyToClipboard, providerRecordType } from './utils';
-import { businessTemplates, platformAdmin, teamAccess, connections } from '../../api/client';
+import { businessTemplates, platformAdmin, teamAccess, connections, businessTeam } from '../../api/client';
 import { safeRandomUUID } from '../../api/client-core';
 
 interface ModalsProps {
@@ -58,7 +58,29 @@ function InviteModal({ state }: { state: DashboardState }) {
             <select className="input" value={state.inviteExpiresHours} onChange={e => state.setInviteExpiresHours(Number(e.target.value))}>
               <option value={24}>24 hours</option><option value={48}>48 hours</option><option value={72}>72 hours</option><option value={168}>7 days</option>
             </select>
-            <button className="btn btn-primary" onClick={async () => { try { const invite = await teamAccess.createInvite({ issuer: state.user!, name: state.inviteName, email: state.inviteEmail, role: state.inviteRole, expiresInHours: state.inviteExpiresHours }); state.setIssuedInvite(invite); state.showToast('Invite created'); } catch { state.showToast('Failed to create invite', 'error'); } }}>Generate Invite</button>
+            <button className="btn btn-primary" onClick={async () => {
+              try {
+                const invite = await teamAccess.createInvite({ issuer: state.user!, name: state.inviteName, email: state.inviteEmail, role: state.inviteRole, expiresInHours: state.inviteExpiresHours });
+                state.setIssuedInvite(invite);
+                state.showToast('Invite created');
+
+                // Automatically list the invited user in the team access panel
+                const currentTeam = businessTeam.getAll();
+                const newMember = {
+                  id: safeRandomUUID(),
+                  email: state.inviteEmail,
+                  name: state.inviteName,
+                  role: state.inviteRole as "admin" | "member" | "viewer" | "user",
+                  addedAt: new Date().toISOString(),
+                  lastActive: new Date().toISOString(),
+                  apiKey: invite.token
+                };
+                businessTeam.save([...currentTeam, newMember]);
+                state.refreshTeam();
+              } catch {
+                state.showToast('Failed to create invite', 'error');
+              }
+            }}>Generate Invite</button>
           </div>
         ) : (
           <div className="invite-success">
@@ -69,7 +91,13 @@ function InviteModal({ state }: { state: DashboardState }) {
               <button className="btn btn-primary btn-sm" onClick={() => { copyToClipboard(state.issuedInvite!.token); state.showToast('Copied'); }}><Copy size={14} /></button>
             </div>
             <p className="text-xs text-muted invite-expiry">Expires in {state.inviteExpiresHours} hours</p>
-            <button className="btn btn-ghost btn-sm invite-done-btn" onClick={() => { state.setIssuedInvite(null); state.setInviteOpen(false); }}>Done</button>
+            <button className="btn btn-ghost btn-sm invite-done-btn" onClick={() => {
+              state.setIssuedInvite(null);
+              // Reset the invite form for the next user
+              state.setInviteName('');
+              state.setInviteEmail('');
+              // We keep it open to allow inviting another member easily, or we can close it. Request says "so next user can be invited".
+            }}>Invite Another</button>
           </div>
         )}
       </div>

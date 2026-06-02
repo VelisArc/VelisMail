@@ -619,6 +619,10 @@ export function isBusinessSetupReady(user?: Pick<User,
   'businessDomainVerified'
 > | null): boolean {
   if (!user) return false;
+  // If this user is an invited team member logging in via API key,
+  // they bypass the business setup flow.
+  if (('teamAccessRole' in user) && (user as unknown as Record<string, unknown>).teamAccessRole) return true;
+
   const hasCoreInfrastructure = Boolean(
     user.businessDbUrl?.trim()
     && user.businessApiKey?.trim()
