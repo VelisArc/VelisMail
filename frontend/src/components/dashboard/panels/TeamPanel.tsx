@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { Shield, Plus, Menu, User, KeyRound, X } from 'lucide-react';
-import { businessTeam } from '../../../api/client';
+import { businessTeam, teamAccess } from '../../../api/client';
 import type { DashboardState } from '../types';
 
 interface TeamPanelProps {
@@ -34,8 +34,14 @@ export default function TeamPanel({ state }: TeamPanelProps) {
           </select>
           {m.apiKey && <button className="btn btn-ghost btn-sm" onClick={() => { state.copyToClipboard(m.apiKey!); state.showToast('API key copied'); }}><KeyRound size={12} /></button>}
           <button className="btn btn-ghost btn-sm btn-danger" onClick={() => {
-            if (confirm(`Remove ${m.email}?`)) { businessTeam.remove(m.email); state.refreshTeam(); state.showToast('Member removed'); }
-          }}><X size={12} /></button>
+            if (confirm(`Remove ${m.email} and revoke access?`)) {
+              businessTeam.remove(m.email);
+              if (m.apiKey) {
+                teamAccess.revoke(m.apiKey).catch(() => {});
+              }
+              state.refreshTeam(); state.showToast('Member removed and access revoked');
+            }
+          }}><X size={12} /> Revoke</button>
         </div>
       ))}
       <div className="roles-info-detailed">
