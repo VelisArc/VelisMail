@@ -225,13 +225,13 @@
   background: var(--bg-surface);
   border: 1px solid var(--border-primary);
   padding: var(--space-5);
-  border-radius: 0;
+  border-radius: var(--radius-md);
   transition: all var(--transition-normal);
 }
 
 .profile-card:hover {
   border-color: var(--border-accent);
-  box-shadow: none;
+  box-shadow: var(--shadow-sm);
 }
 
 .profile-row {
@@ -243,7 +243,7 @@
 .profile-avatar-lg {
   width: 80px !important;
   height: 80px !important;
-  border-radius: 0;
+  border-radius: var(--radius-md);
   background: var(--primary);
   border: 2px solid var(--border-accent);
   display: flex;
@@ -253,13 +253,13 @@
   font-size: var(--text-2xl);
   color: var(--text-inverted);
   overflow: hidden !important;
-  box-shadow: none;
+  box-shadow: var(--shadow-sm);
   transition: all var(--transition-normal);
 }
 
 .profile-avatar-lg:hover {
   transform: scale(1.05);
-  box-shadow: none;
+  box-shadow: var(--shadow-sm);
   border-color: var(--primary);
 }
 
@@ -279,7 +279,7 @@
   background: var(--bg-surface-2);
   padding: 6px;
   flex-shrink: 0;
-  border-radius: 0;
+  border-radius: var(--radius-md);
   transition: border-color var(--transition-fast);
 }
 
@@ -294,13 +294,13 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
-  border-radius: 0;
+  border-radius: var(--radius-md);
   transition: all var(--transition-normal);
 }
 
 .profile-sidebar-card:hover {
   border-color: var(--border-accent);
-  box-shadow: none;
+  box-shadow: var(--shadow-sm);
 }
 
 .profile-sidebar-card h3 {
@@ -337,7 +337,7 @@
 .user-avatar {
   width: 28px;
   height: 28px;
-  border-radius: 0;
+  border-radius: var(--radius-md);
   background: var(--primary);
   color: var(--text-inverted);
   display: flex;
@@ -474,7 +474,7 @@
     overflow-x: auto;
     scrollbar-width: none;
     position: static;
-    border-radius: 0;
+    border-radius: var(--radius-md);
     border: 1px solid var(--border-primary);
     padding: 6px;
     background: var(--bg-surface-2);
@@ -489,13 +489,13 @@
     white-space: nowrap;
     flex: 1 0 auto;
     justify-content: center;
-    border-radius: 0;
+    border-radius: var(--radius-md);
     padding: 8px 14px;
     font-size: 11px;
   }
 
   .tab-btn.active {
-    box-shadow: none;
+    box-shadow: var(--shadow-sm);
   }
 
   .profile-tab-grid {

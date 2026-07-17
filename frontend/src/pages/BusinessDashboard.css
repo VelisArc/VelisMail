@@ -127,18 +127,18 @@
   background: var(--primary);
   color: var(--text-inverted);
   border: 1px solid transparent;
-  border-radius: 0;
+  border-radius: var(--radius-md);
   transition: all var(--transition-normal);
   text-transform: uppercase;
   font-weight: var(--font-weight-bold);
   letter-spacing: var(--tracking-wide);
-  box-shadow: none;
+  box-shadow: var(--shadow-sm);
 }
 
 .side-compose:hover {
   background: var(--primary-600);
   transform: translateY(-1px);
-  box-shadow: none;
+  box-shadow: var(--shadow-sm);
 }
 
 .side-compose:active {
@@ -183,7 +183,7 @@
   color: var(--text-secondary);
   background: transparent;
   border: 1px solid transparent;
-  border-radius: 0;
+  border-radius: var(--radius-md);
   cursor: pointer;
   text-align: left;
   transition: all var(--transition-fast);
@@ -207,7 +207,7 @@
   color: var(--text-inverted);
   font-weight: var(--font-weight-semibold);
   border: 1px solid transparent;
-  box-shadow: none;
+  box-shadow: var(--shadow-sm);
 }
 
 .side-sub-nav {
@@ -231,7 +231,7 @@
   color: var(--text-secondary);
   background: transparent;
   border: 1px solid transparent;
-  border-radius: 0;
+  border-radius: var(--radius-md);
   cursor: pointer;
   text-align: left;
   transition: all var(--transition-fast);
@@ -290,7 +290,7 @@
 .side-avatar {
   width: 24px;
   height: 24px;
-  border-radius: 0;
+  border-radius: var(--radius-md);
   background: var(--primary);
   border: 1px solid var(--border-accent);
   display: flex;
@@ -531,7 +531,7 @@
   transition: all var(--transition-fast);
   min-height: 40px;
   background: var(--bg-surface);
-  border-radius: 0;
+  border-radius: var(--radius-md);
 }
 
 .mail-row:last-child {
@@ -1283,7 +1283,7 @@
 
 .domain-card:hover {
   border-color: var(--border-accent);
-  box-shadow: none;
+  box-shadow: var(--shadow-sm);
 }
 
 .domain-card-header {
@@ -1369,7 +1369,7 @@
 
 .groups-grid .glass-card:hover {
   border-color: var(--border-accent);
-  box-shadow: none;
+  box-shadow: var(--shadow-sm);
 }
 
 .groups-grid .glass-card strong {
@@ -1592,7 +1592,7 @@
 
 .templates-grid .glass-card:hover {
   border-color: var(--border-accent);
-  box-shadow: none;
+  box-shadow: var(--shadow-sm);
 }
 
 .templates-grid strong {
@@ -1766,7 +1766,7 @@
   text-transform: uppercase !important;
   cursor: pointer !important;
   width: auto !important;
-  border-radius: 0;
+  border-radius: var(--radius-md);
   line-height: 1 !important;
 }
 

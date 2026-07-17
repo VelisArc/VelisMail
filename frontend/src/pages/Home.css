@@ -36,7 +36,7 @@
   align-items: center;
   gap: 8px;
   padding: 6px 16px;
-  border-radius: 0;
+  border-radius: var(--radius-md);
   background: var(--accent-glow);
   border: 1px solid rgba(13, 148, 136, 0.15);
   color: var(--accent-600);
@@ -95,20 +95,20 @@
   padding: var(--space-4) var(--space-5);
   background: var(--bg-surface);
   border: 1px solid var(--glass-border);
-  border-radius: 0;
-  box-shadow: none;
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
   transition: all var(--transition-fast);
 }
 
 .hero-stat:hover {
-  box-shadow: none;
+  box-shadow: var(--shadow-sm);
   transform: translateY(-2px);
 }
 
 .hero-stat .stat-icon {
   width: 36px;
   height: 36px;
-  border-radius: 0;
+  border-radius: var(--radius-md);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -154,9 +154,9 @@
   position: absolute;
   background: var(--bg-surface);
   border: 1px solid var(--glass-border);
-  border-radius: 0;
+  border-radius: var(--radius-md);
   padding: 16px 20px;
-  box-shadow: none;
+  box-shadow: var(--shadow-sm);
   display: flex;
   align-items: center;
   gap: 14px;
@@ -165,7 +165,7 @@
 }
 
 .hero-float-card:hover {
-  box-shadow: none;
+  box-shadow: var(--shadow-sm);
   transform: scale(1.05);
 }
 
@@ -183,7 +183,7 @@
 .hero-float-lines span {
   display: block;
   height: 6px;
-  border-radius: 0;
+  border-radius: var(--radius-md);
   background: var(--bg-inset);
 }
 
@@ -221,7 +221,7 @@
   width: 300px;
   height: 300px;
   border: 1.5px dashed rgba(13, 148, 136, 0.2);
-  border-radius: 0;
+  border-radius: var(--radius-md);
   transform: translate(-50%, -50%);
   animation: spin 30s linear infinite;
 }
@@ -247,8 +247,8 @@
   padding: 24px 28px;
   background: var(--bg-surface);
   border: 1px solid var(--glass-border);
-  border-radius: 0;
-  box-shadow: none;
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
   color: var(--accent);
   z-index: 3;
   animation: glow 3s ease-in-out infinite;
@@ -267,7 +267,7 @@
   position: absolute;
   width: 8px;
   height: 8px;
-  border-radius: 0;
+  border-radius: var(--radius-md);
   background: var(--accent-400);
   opacity: 0.5;
   animation: pulse 3s ease-in-out infinite;
@@ -306,7 +306,7 @@
   letter-spacing: 0.12em;
   margin-bottom: var(--space-3);
   padding: 4px 14px;
-  border-radius: 0;
+  border-radius: var(--radius-md);
   background: var(--accent-glow);
   border: 1px solid rgba(13, 148, 136, 0.12);
 }
@@ -335,26 +335,26 @@
 
 .feature-card {
   padding: var(--space-8);
-  border-radius: 0;
+  border-radius: var(--radius-md);
   background: var(--bg-surface);
   border: 1px solid var(--glass-border);
   transition: all var(--transition-normal);
   height: 100%;
   display: flex;
   flex-direction: column;
-  box-shadow: none;
+  box-shadow: var(--shadow-sm);
 }
 
 .feature-card:hover {
   transform: translateY(-6px);
   border-color: rgba(13, 148, 136, 0.25);
-  box-shadow: none;
+  box-shadow: var(--shadow-sm);
 }
 
 .feature-icon-wrap {
   width: 48px;
   height: 48px;
-  border-radius: 0;
+  border-radius: var(--radius-md);
   background: var(--accent-glow);
   display: flex;
   align-items: center;
@@ -369,7 +369,7 @@
   background: var(--accent);
   color: white;
   transform: scale(1.05);
-  box-shadow: none;
+  box-shadow: var(--shadow-sm);
 }
 
 .feature-card h3 {
@@ -396,22 +396,22 @@
 .step-card {
   text-align: center;
   padding: var(--space-8) var(--space-6);
-  border-radius: 0;
+  border-radius: var(--radius-md);
   background: var(--bg-surface);
   border: 1px solid var(--glass-border);
   transition: all var(--transition-normal);
-  box-shadow: none;
+  box-shadow: var(--shadow-sm);
 }
 
 .step-card:hover {
   transform: translateY(-4px);
-  box-shadow: none;
+  box-shadow: var(--shadow-sm);
 }
 
 .step-number {
   width: 56px;
   height: 56px;
-  border-radius: 0;
+  border-radius: var(--radius-md);
   background: linear-gradient(135deg, var(--accent-glow), rgba(13, 148, 136, 0.18));
   border: 2px solid rgba(13, 148, 136, 0.3);
   display: flex;
@@ -443,11 +443,11 @@
 
 .solution-card {
   padding: var(--space-8);
-  border-radius: 0;
+  border-radius: var(--radius-md);
   background: var(--bg-surface);
   border: 1px solid var(--glass-border);
   transition: all var(--transition-normal);
-  box-shadow: none;
+  box-shadow: var(--shadow-sm);
   position: relative;
   overflow: hidden;
 }
@@ -460,13 +460,13 @@
   bottom: 0;
   width: 3px;
   background: transparent;
-  border-radius: 0;
+  border-radius: var(--radius-md);
   transition: background var(--transition-normal);
 }
 
 .solution-card:hover {
   border-color: rgba(13, 148, 136, 0.2);
-  box-shadow: none;
+  box-shadow: var(--shadow-sm);
   transform: translateY(-3px);
 }
 
@@ -495,17 +495,17 @@
 }
 
 .faq-item {
-  border-radius: 0;
+  border-radius: var(--radius-md);
   background: var(--bg-surface);
   border: 1px solid var(--glass-border);
   overflow: hidden;
   transition: all var(--transition-fast);
-  box-shadow: none;
+  box-shadow: var(--shadow-sm);
 }
 
 .faq-item:hover {
   border-color: var(--glass-border-light);
-  box-shadow: none;
+  box-shadow: var(--shadow-sm);
 }
 
 .faq-trigger {
@@ -607,10 +607,10 @@
 
 .feedback-form-card {
   padding: var(--space-8);
-  border-radius: 0;
+  border-radius: var(--radius-md);
   background: var(--bg-surface);
   border: 1px solid var(--glass-border);
-  box-shadow: none;
+  box-shadow: var(--shadow-sm);
 }
 
 .feedback-form-card h3 {
@@ -646,13 +646,13 @@
   z-index: var(--z-fixed);
   width: 44px;
   height: 44px;
-  border-radius: 0;
+  border-radius: var(--radius-md);
   background: var(--accent);
   color: white;
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: none;
+  box-shadow: var(--shadow-sm);
   cursor: pointer;
   border: none;
   opacity: 0;
@@ -670,13 +670,13 @@
 .scroll-to-top:hover {
   background: var(--accent-600);
   transform: translateY(-3px);
-  box-shadow: none;
+  box-shadow: var(--shadow-sm);
 }
 
 /* ─── Inline Alert ─── */
 .inline-alert {
   padding: 12px 16px;
-  border-radius: 0;
+  border-radius: var(--radius-md);
   font-size: var(--text-sm);
   line-height: 1.5;
 }

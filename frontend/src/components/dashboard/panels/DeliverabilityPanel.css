@@ -32,7 +32,7 @@
   background: var(--bg-surface);
   border: 1px solid var(--border-primary);
   padding: var(--space-6);
-  border-radius: 0; /* Strict square design */
+  border-radius: var(--radius-md); /* Strict square design */
 }
 
 @media (max-width: 768px) {
