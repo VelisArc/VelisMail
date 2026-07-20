@@ -11,72 +11,88 @@ import { auth, fetchApiResponse, isBusinessSetupReady } from '../api/client';
 import SEO from '../components/SEO';
 import './Home.css';
 
+// Feature data with semantic structure for better SEO
 const features = [
-  { icon: Lock, title: 'End-to-End Encryption', desc: 'Messages encrypted in transit and at rest with zero-knowledge architecture. Your data stays yours.' },
-  { icon: Fingerprint, title: 'Zero Trust Access', desc: 'Passwordless auth with hardware-backed keys. Revoke devices instantly, recover securely.' },
-  { icon: Globe, title: 'Smart DNS Management', desc: 'Automated SPF, DKIM, and DMARC verification. One-click domain setup with guided diagnostics.' },
-  { icon: BarChart3, title: 'Delivery Analytics', desc: 'Track queue health, delivery rates, and audit trails with real-time operational dashboards.' },
-  { icon: Users, title: 'Team Collaboration', desc: 'Role-based access for admins, members, and viewers. Shared inboxes and distribution groups.' },
-  { icon: Database, title: 'Bring Your Own Stack', desc: 'Connect your own database and mail provider. Full control over your infrastructure.' },
-];
+  { icon: Lock, title: 'End-to-End Encryption', desc: 'Messages encrypted in transit and at rest with zero-knowledge architecture. Your data stays yours.', category: 'security' },
+  { icon: Fingerprint, title: 'Zero Trust Access', desc: 'Passwordless auth with hardware-backed keys. Revoke devices instantly, recover securely.', category: 'security' },
+  { icon: Globe, title: 'Smart DNS Management', desc: 'Automated SPF, DKIM, and DMARC verification. One-click domain setup with guided diagnostics.', category: 'infrastructure' },
+  { icon: BarChart3, title: 'Delivery Analytics', desc: 'Track queue health, delivery rates, and audit trails with real-time operational dashboards.', category: 'analytics' },
+  { icon: Users, title: 'Team Collaboration', desc: 'Role-based access for admins, members, and viewers. Shared inboxes and distribution groups.', category: 'collaboration' },
+  { icon: Database, title: 'Bring Your Own Stack', desc: 'Connect your own database and mail provider. Full control over your infrastructure.', category: 'infrastructure' },
+] as const;
 
 const steps = [
-  { num: '01', title: 'Connect Your Domain', desc: 'Add your business domain and verify ownership with automatic DNS record generation.' },
-  { num: '02', title: 'Provision Your Team', desc: 'Create mailboxes, set up groups, and invite team members with granular permission controls.' },
-  { num: '03', title: 'Go Secure', desc: 'Start sending encrypted email with real-time monitoring, audit logs, and delivery insights.' },
-];
+  { num: '01', title: 'Connect Your Domain', desc: 'Add your business domain and verify ownership with automatic DNS record generation.', icon: Globe },
+  { num: '02', title: 'Provision Your Team', desc: 'Create mailboxes, set up groups, and invite team members with granular permission controls.', icon: Users },
+  { num: '03', title: 'Go Secure', desc: 'Start sending encrypted email with real-time monitoring, audit logs, and delivery insights.', icon: Shield },
+] as const;
 
 const stats = [
-  { value: '256-bit', label: 'Encryption', icon: Lock },
-  { value: '99.99%', label: 'Uptime', icon: Activity },
-  { value: '<50ms', label: 'Routing', icon: Zap },
-  { value: 'Zero Trust', label: 'Architecture', icon: Shield },
-];
+  { value: '256-bit', label: 'AES Encryption', icon: Lock, description: 'Military-grade encryption standard' },
+  { value: '99.99%', label: 'Uptime SLA', icon: Activity, description: 'Enterprise reliability guarantee' },
+  { value: '<50ms', label: 'Global Routing', icon: Zap, description: 'Low-latency message delivery' },
+  { value: 'Zero Trust', label: 'Security Model', icon: Shield, description: 'Never trust, always verify' },
+] as const;
 
 const solutions = [
-  { title: 'Enterprise Security', desc: 'Full compliance controls, audit trails, and zero-trust architecture for security-conscious organizations.' },
-  { title: 'Regulated Industries', desc: 'Healthcare, finance, and legal teams rely on our data sovereignty and verifiable encryption.' },
-  { title: 'Remote Teams', desc: 'Global edge infrastructure ensures low-latency communication for distributed workforces.' },
-  { title: 'Scaling Startups', desc: 'From 10 to 10,000 users with instant provisioning and predictable per-user pricing.' },
-];
+  { title: 'Enterprise Security', desc: 'Full compliance controls, audit trails, and zero-trust architecture for security-conscious organizations.', industries: ['Finance', 'Healthcare', 'Legal'] },
+  { title: 'Regulated Industries', desc: 'Healthcare, finance, and legal teams rely on our data sovereignty and verifiable encryption.', industries: ['HIPAA', 'SOC 2', 'GDPR'] },
+  { title: 'Remote Teams', desc: 'Global edge infrastructure ensures low-latency communication for distributed workforces.', industries: ['Technology', 'Consulting', 'Media'] },
+  { title: 'Scaling Startups', desc: 'From 10 to 10,000 users with instant provisioning and predictable per-user pricing.', industries: ['SaaS', 'E-commerce', 'Fintech'] },
+] as const;
 
 const faqs = [
-  { q: 'How does encryption work?', a: 'Messages are encrypted with RSA-4096 in transit and AES-256 at rest. Your private keys never leave your device.' },
-  { q: 'Can I migrate from Gmail or Outlook?', a: 'Yes. Our migration tools support IMAP import from Google Workspace and Microsoft 365 with zero downtime.' },
-  { q: 'What happens if a device is lost?', a: 'Admins can revoke device access instantly. Users can re-authenticate via recovery email without data loss.' },
-  { q: 'Is custom branding available?', a: 'Enterprise plans include white-labeling with custom logos, colors, domains, and dedicated support.' },
-];
+  { q: 'How does encryption work?', a: 'Messages are encrypted with RSA-4096 in transit and AES-256 at rest. Your private keys never leave your device, ensuring complete data sovereignty and privacy.', schema: 'encryption' },
+  { q: 'Can I migrate from Gmail or Outlook?', a: 'Yes. Our migration tools support IMAP import from Google Workspace and Microsoft 365 with zero downtime. We provide guided migration wizards and dedicated support.', schema: 'migration' },
+  { q: 'What happens if a device is lost?', a: 'Admins can revoke device access instantly from the dashboard. Users can re-authenticate via recovery email or backup codes without any data loss.', schema: 'security' },
+  { q: 'Is custom branding available?', a: 'Enterprise plans include white-labeling with custom logos, colors, domains, and dedicated support. Contact our sales team for a customized solution.', schema: 'branding' },
+] as const;
 
 type SubmissionState = { type: 'success' | 'info' | 'error'; message: string } | null;
 
-function useScrollPosition() {
-  const [scrolled, setScrolled] = useState(false);
+interface FeedbackFormState {
+  name: string;
+  email: string;
+  type: 'suggestion' | 'bug' | 'feature' | 'praise';
+  message: string;
+}
+
+// Custom hooks with proper TypeScript types and cleanup
+function useScrollPosition(): boolean {
+  const [scrolled, setScrolled] = useState<boolean>(false);
+  
   useEffect(() => {
-    const handleScroll = () => setScrolled(window.scrollY > 24);
+    const handleScroll = (): void => setScrolled(window.scrollY > 24);
     window.addEventListener('scroll', handleScroll, { passive: true });
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
+  
   return scrolled;
 }
 
-function useScrollToTop() {
-  const [visible, setVisible] = useState(false);
+function useScrollToTop(): { visible: boolean; scrollToTop: () => void } {
+  const [visible, setVisible] = useState<boolean>(false);
+  
   useEffect(() => {
-    const check = () => setVisible(window.scrollY > 400);
+    const check = (): void => setVisible(window.scrollY > 400);
     window.addEventListener('scroll', check, { passive: true });
     return () => window.removeEventListener('scroll', check);
   }, []);
-  const scrollToTop = useCallback(() => {
+  
+  const scrollToTop = useCallback((): void => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, []);
+  
   return { visible, scrollToTop };
 }
 
-function useIntersectionObserver() {
+function useIntersectionObserver(): React.RefObject<HTMLDivElement | null> {
   const ref = useRef<HTMLDivElement>(null);
+  
   useEffect(() => {
     const node = ref.current;
     if (!node) return;
+    
     const observer = new IntersectionObserver(
       (entries) => {
         entries.forEach((entry) => {
@@ -85,48 +101,57 @@ function useIntersectionObserver() {
           }
         });
       },
-      { threshold: 0.1 }
+      { threshold: 0.1, rootMargin: '50px' }
     );
+    
     const elements = node.querySelectorAll('.animate-on-scroll');
     elements.forEach((el) => observer.observe(el));
+    
     return () => observer.disconnect();
   }, []);
+  
   return ref;
 }
 
-function saveOfflineLead(key: string, payload: Record<string, string>) {
-  const existing = JSON.parse(localStorage.getItem(key) || '[]') as Array<Record<string, string>>;
-  existing.unshift({ ...payload, createdAt: new Date().toISOString() });
-  localStorage.setItem(key, JSON.stringify(existing.slice(0, 25)));
+// Offline-first data persistence for lead capture
+function saveOfflineLead(key: string, payload: Record<string, unknown>): void {
+  try {
+    const existing = JSON.parse(localStorage.getItem(key) || '[]') as Array<Record<string, unknown>>;
+    existing.unshift({ ...payload, createdAt: new Date().toISOString() });
+    localStorage.setItem(key, JSON.stringify(existing.slice(0, 25)));
+  } catch (error) {
+    console.warn('Failed to save feedback locally:', error);
+  }
 }
 
-export default function Home() {
+export default function Home(): React.ReactElement {
   const [user] = useState(auth.getSession());
   const scrolled = useScrollPosition();
   const { visible: showScrollTop, scrollToTop } = useScrollToTop();
   const animationRef = useIntersectionObserver();
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState<boolean>(false);
   const [openFaq, setOpenFaq] = useState<number | null>(null);
-  const [feedbackForm, setFeedbackForm] = useState({ name: '', email: '', type: 'suggestion', message: '' });
-  const [feedbackSending, setFeedbackSending] = useState(false);
+  const [feedbackForm, setFeedbackForm] = useState<FeedbackFormState>({ name: '', email: '', type: 'suggestion', message: '' });
+  const [feedbackSending, setFeedbackSending] = useState<boolean>(false);
   const [feedbackState, setFeedbackState] = useState<SubmissionState>(null);
 
-  const closeMobileMenu = () => setMobileMenuOpen(false);
+  const closeMobileMenu = useCallback((): void => setMobileMenuOpen(false), []);
 
-  const getDashboardLink = () => {
+  const getDashboardLink = useCallback((): string => {
     if (!user) return '/login';
     return isBusinessSetupReady(user) ? '/business' : '/business-setup';
-  };
+  }, [user]);
 
-  const getDashboardText = () => {
+  const getDashboardText = useCallback((): string => {
     if (!user) return 'Get Started Free';
     return isBusinessSetupReady(user) ? 'Open Dashboard' : 'Continue Setup';
-  };
+  }, [user]);
 
-  const handleFeedbackSubmit = async (e: React.FormEvent) => {
+  const handleFeedbackSubmit = useCallback(async (e: React.FormEvent<HTMLFormElement>): Promise<void> => {
     e.preventDefault();
     setFeedbackSending(true);
     setFeedbackState(null);
+    
     try {
       await fetchApiResponse('/auth/feedback', {
         method: 'POST',
@@ -139,27 +164,31 @@ export default function Home() {
       if (errorMsg && !errorMsg.includes('Failed to fetch') && !errorMsg.includes('NetworkError')) {
         setFeedbackState({ type: 'error', message: `Submission failed: ${errorMsg}` });
       } else {
-        saveOfflineLead('velismail_feedback_submissions', feedbackForm);
+        saveOfflineLead('velismail_feedback_submissions', { ...feedbackForm });
         setFeedbackState({ type: 'info', message: 'Service is currently offline. Feedback saved locally and will sync later.' });
         setFeedbackForm({ name: '', email: '', type: 'suggestion', message: '' });
       }
     } finally {
       setFeedbackSending(false);
     }
-  };
+  }, [feedbackForm]);
 
-  const toggleFaq = (index: number) => {
+  const toggleFaq = useCallback((index: number): void => {
     setOpenFaq(openFaq === index ? null : index);
-  };
+  }, [openFaq]);
 
   return (
     <div className="home animate-page">
-      <SEO />
+      <SEO 
+        title="Secure Business Email Platform"
+        description="Enterprise-grade encrypted email for custom domains. Features include mail queues, scheduled send, team collaboration, DNS verification, zero-trust security, and delivery analytics."
+        keywords={['secure business email', 'encrypted email platform', 'enterprise email hosting', 'custom domain email', 'zero trust email', 'email with queues', 'scheduled email send']}
+      />
 
       <nav className={`home-nav ${scrolled ? 'nav-scrolled' : ''}`} role="navigation" aria-label="Main navigation">
         <div className="nav-inner">
-          <Link to="/" className="nav-logo" onClick={closeMobileMenu} aria-label="VelisMail home">
-            <img src="/ZeeResizer.png" alt="" className="home-logo-img" />
+          <Link to="/" className="nav-logo" onClick={closeMobileMenu} aria-label="VelisMail - Secure Business Email Home">
+            <img src="/ZeeResizer.png" alt="VelisMail Logo" className="home-logo-img" loading="eager" fetchPriority="high" />
             <span>VelisMail</span>
           </Link>
 
@@ -431,7 +460,7 @@ export default function Home() {
                     id="feedback-type"
                     className="input"
                     value={feedbackForm.type}
-                    onChange={(e) => setFeedbackForm((prev) => ({ ...prev, type: e.target.value }))}
+                    onChange={(e) => setFeedbackForm((prev) => ({ ...prev, type: e.target.value as FeedbackFormState['type'] }))}
                   >
                     <option value="suggestion">Suggestion</option>
                     <option value="bug">Bug Report</option>
@@ -460,15 +489,15 @@ export default function Home() {
         </section>
       </div>
 
-      <footer className="home-footer">
+      <footer className="home-footer" role="contentinfo">
         <div className="container">
           <div className="footer-grid">
             <div className="footer-brand">
               <div className="nav-logo">
-                <img src="/ZeeResizer.png" alt="" className="home-logo-img" />
+                <img src="/ZeeResizer.png" alt="VelisMail Logo" className="home-logo-img" loading="lazy" />
                 <span>VelisMail</span>
               </div>
-              <p>Secure, encrypted email for modern teams.</p>
+              <p>Secure, encrypted email for modern teams. Built with zero-trust architecture for enterprises.</p>
             </div>
 
             <div className="footer-column">
@@ -477,15 +506,15 @@ export default function Home() {
                 <a href="#features" className="footer-link">Features</a>
                 <Link to="/pricing" className="footer-link">Pricing</Link>
                 <Link to="/status" className="footer-link">Status</Link>
-                <Link to="/docs" className="footer-link">Docs</Link>
+                <a href="https://docs.velismail.online" className="footer-link" rel="noopener noreferrer" target="_blank">Documentation</a>
               </div>
             </div>
             <div className="footer-column">
               <h4>Company</h4>
               <div className="footer-link-list">
-                <Link to="/about" className="footer-link">About</Link>
-                <Link to="/privacy" className="footer-link">Privacy</Link>
-                <Link to="/terms" className="footer-link">Terms</Link>
+                <Link to="/about" className="footer-link">About Us</Link>
+                <Link to="/privacy" className="footer-link">Privacy Policy</Link>
+                <Link to="/terms" className="footer-link">Terms of Service</Link>
                 <Link to="/security" className="footer-link">Security</Link>
               </div>
             </div>
@@ -499,11 +528,11 @@ export default function Home() {
           </div>
 
           <div className="footer-bottom">
-            <p>&copy; 2026 VelisMail. All rights reserved.</p>
+            <p>&copy; {new Date().getFullYear()} VelisMail. All rights reserved.</p>
             <div className="footer-bottom-links">
               <Link to="/security" className="footer-link">Security</Link>
-              <Link to="/aup" className="footer-link">AUP</Link>
-              <Link to="/refund" className="footer-link">Refund</Link>
+              <Link to="/aup" className="footer-link">Acceptable Use</Link>
+              <Link to="/refund" className="footer-link">Refund Policy</Link>
             </div>
           </div>
         </div>
