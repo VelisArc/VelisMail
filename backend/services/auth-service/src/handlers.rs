@@ -1243,6 +1243,7 @@ pub async fn get_current_user(
         .and_then(|value| value.as_str())
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty());
+    let email_lower = email.to_lowercase();
     let is_platform_admin = firebase_uid
         .as_ref()
         .map(|uid| {
@@ -1253,7 +1254,7 @@ pub async fn get_current_user(
                 .any(|allowed| allowed == uid)
         })
         .unwrap_or(false)
-        || email.to_lowercase().ends_with("@velismail.online")
+        || state.config.platform_owner_emails.contains(&email_lower)
         || sqlx::query_scalar::<_, bool>(
             "SELECT EXISTS (SELECT 1 FROM platform_admins WHERE email = $1 AND status = 'active')",
         )

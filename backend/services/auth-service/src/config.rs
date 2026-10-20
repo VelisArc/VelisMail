@@ -30,6 +30,11 @@ pub struct AuthConfig {
     pub firebase_project_id: Option<String>,
     /// Firebase UIDs that are allowed into the platform control plane.
     pub platform_owner_uids: Vec<String>,
+    /// Email addresses that are allowed into the platform control plane.
+    ///
+    /// Owners are commonly configured by email because a Firebase UID is only
+    /// known after the very first verified sign-in. Both lists are honoured.
+    pub platform_owner_emails: Vec<String>,
 }
 
 fn required_env(name: &str) -> Result<String> {
@@ -128,6 +133,12 @@ impl AuthConfig {
                 .unwrap_or_default()
                 .split(',')
                 .map(|value| value.trim().to_string())
+                .filter(|value| !value.is_empty())
+                .collect(),
+            platform_owner_emails: std::env::var("PLATFORM_OWNER_EMAILS")
+                .unwrap_or_default()
+                .split(',')
+                .map(|value| value.trim().to_lowercase())
                 .filter(|value| !value.is_empty())
                 .collect(),
         })

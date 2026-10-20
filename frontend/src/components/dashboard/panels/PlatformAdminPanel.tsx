@@ -287,8 +287,10 @@ export default function PlatformAdminPanel({ section, onSectionChange, state }: 
             <div>
               <strong>Control plane access is restricted</strong>
               <span>
-                {denied} Add your Firebase UID to <code>PLATFORM_OWNER_UIDS</code> on the API server
-                {state.user?.firebaseUid ? <> (your UID is <code>{state.user.firebaseUid}</code>)</> : null} and reload the console.
+                {denied} Ask the platform owner to add you to
+                {' '}<code>PLATFORM_OWNER_EMAILS</code> (your email is <code>{state.user?.email || 'unknown'}</code>)
+                or <code>PLATFORM_OWNER_UIDS</code> (your UID is <code>{state.user?.firebaseUid || 'unknown'}</code>)
+                {' '}on the API server, or to invite you with a platform role.
               </span>
             </div>
           </div>

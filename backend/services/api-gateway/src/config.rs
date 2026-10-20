@@ -33,6 +33,12 @@ pub struct GatewayConfig {
     /// platform owner. Comma-separated; matched against the verified
     /// `firebase_uid` claim.
     pub platform_owner_uids: Vec<String>,
+    /// Email addresses that are allowed to enter the /admin control plane as
+    /// platform owner. Comma-separated.
+    ///
+    /// A Firebase UID is only known after the very first verified sign-in, so
+    /// owners are usually configured by email. Either list grants ownership.
+    pub platform_owner_emails: Vec<String>,
     /// Public Firebase web configuration served to the browser so Google
     /// sign-in works without baking the values into the frontend bundle.
     pub firebase_web_api_key: Option<String>,
@@ -114,6 +120,12 @@ impl GatewayConfig {
                 .unwrap_or_default()
                 .split(',')
                 .map(|value| value.trim().to_string())
+                .filter(|value| !value.is_empty())
+                .collect(),
+            platform_owner_emails: std::env::var("PLATFORM_OWNER_EMAILS")
+                .unwrap_or_default()
+                .split(',')
+                .map(|value| value.trim().to_lowercase())
                 .filter(|value| !value.is_empty())
                 .collect(),
             firebase_web_api_key: std::env::var("FIREBASE_WEB_API_KEY")

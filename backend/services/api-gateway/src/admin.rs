@@ -44,11 +44,6 @@ fn normalize_email(value: &str) -> String {
     value.trim().to_lowercase()
 }
 
-fn is_platform_domain(email: &str) -> bool {
-    let domain = email.split('@').nth(1).unwrap_or_default();
-    domain == "velismail.online" || domain.ends_with(".velismail.online")
-}
-
 fn bearer_token(headers: &HeaderMap) -> Option<String> {
     headers
         .get(axum::http::header::AUTHORIZATION)
@@ -110,6 +105,21 @@ fn uid_allowed(state: &AppState, claims: &Claims) -> bool {
         .unwrap_or(false)
 }
 
+/// True when the account email is listed in `PLATFORM_OWNER_EMAILS`.
+///
+/// Owners are normally configured by email: a Firebase UID only exists after
+/// the very first verified sign-in, so it cannot be known while preparing the
+/// deployment. Either list grants ownership.
+fn email_allowed(state: &AppState, email: &str) -> bool {
+    let email = normalize_email(email);
+    state.config.platform_owner_emails.contains(&email)
+}
+
+/// Ownership is granted by a listed Firebase UID **or** a listed email.
+fn owner_allowed(state: &AppState, claims: &Claims, email: &str) -> bool {
+    uid_allowed(state, claims) || email_allowed(state, email)
+}
+
 #[derive(Debug, Clone)]
 struct PlatformActor {
     email: String,
@@ -132,7 +142,8 @@ async fn authorize_platform(
     let claims = decode_claims(state, headers)?;
     let email = normalize_email(&claims.email);
     let db = pool(state)?;
-    let owner_uid = uid_allowed(state, &claims);
+    // Ownership is configured by Firebase UID and/or email address.
+    let is_configured_owner = owner_allowed(state, &claims, &email);
 
     let existing =
         sqlx::query("SELECT role, status, permissions FROM platform_admins WHERE email = $1")
@@ -147,7 +158,7 @@ async fn authorize_platform(
                 )
             })?;
 
-    let (role, status, permissions) = match existing {
+    let (mut role, mut status, mut permissions) = match existing {
         Some(row) => {
             let role: String = row.try_get("role").unwrap_or_else(|_| "viewer".to_string());
             let status: String = row
@@ -166,39 +177,17 @@ async fn authorize_platform(
             (role, status, permissions)
         }
         None => {
-            if !owner_uid && !is_platform_domain(&email) {
+            // Only accounts that are explicitly configured as owners get
+            // provisioned. There is no first-user bootstrap and no implicit
+            // domain grant: everybody else needs an explicit invitation.
+            if !is_configured_owner {
                 return Err(platform_api_error(
                     StatusCode::FORBIDDEN,
                     "This account is not authorized for the VelisMail control plane.",
                 ));
             }
-            let has_rows: bool =
-                sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM platform_admins)")
-                    .fetch_one(db)
-                    .await
-                    .unwrap_or(false);
-            let role = if owner_uid || !has_rows {
-                "owner"
-            } else {
-                "admin"
-            };
-            let permissions = if role == "owner" {
-                json!(["*"])
-            } else {
-                json!([
-                    "companies.read",
-                    "companies.write",
-                    "users.read",
-                    "users.write",
-                    "billing.read",
-                    "investigations.read",
-                    "investigations.write",
-                    "audit.read",
-                    "team.read",
-                    "config.read",
-                    "system.read"
-                ])
-            };
+            let role = "owner";
+            let permissions = json!(["*"]);
             sqlx::query(
                 "INSERT INTO platform_admins (email, display_name, role, status, permissions, last_seen_at)
                  VALUES ($1, $1, $2, 'active', $3, NOW())
@@ -225,6 +214,33 @@ async fn authorize_platform(
             (role.to_string(), "active".to_string(), permissions)
         }
     };
+
+    // The configured owner list is authoritative: a listed account always acts
+    // as owner, whatever the stored row says.
+    if is_configured_owner {
+        if role != "owner" {
+            role = "owner".to_string();
+            permissions = vec!["*".to_string()];
+            status = "active".to_string();
+            let owner_permissions = json!(["*"]);
+            let _ = sqlx::query(
+                "UPDATE platform_admins SET role = 'owner', permissions = $2, status = 'active', updated_at = NOW()
+                 WHERE email = $1",
+            )
+            .bind(&email)
+            .bind(&owner_permissions)
+            .execute(db)
+            .await;
+        }
+    } else if role == "owner" {
+        // The owner role is reserved for the configured owner accounts. A row
+        // that claims ownership without being configured is stale and is not
+        // allowed to act as owner.
+        return Err(platform_api_error(
+            StatusCode::FORBIDDEN,
+            "The platform owner role is reserved for accounts listed in PLATFORM_OWNER_UIDS or PLATFORM_OWNER_EMAILS.",
+        ));
+    }
 
     if status != "active" {
         return Err(platform_api_error(
@@ -256,13 +272,13 @@ struct CompanyActor {
 }
 
 async fn is_platform_staff(state: &AppState, claims: &Claims) -> bool {
-    if uid_allowed(state, claims) {
+    let email = normalize_email(&claims.email);
+    if uid_allowed(state, claims) || email_allowed(state, &email) {
         return true;
     }
     let Some(db) = state.db.as_ref() else {
         return false;
     };
-    let email = normalize_email(&claims.email);
     sqlx::query_scalar::<_, bool>(
         "SELECT EXISTS (SELECT 1 FROM platform_admins WHERE email = $1 AND status = 'active')",
     )

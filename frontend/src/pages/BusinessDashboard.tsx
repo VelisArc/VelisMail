@@ -17,7 +17,7 @@ import AnalyticsPanel from '../components/dashboard/panels/AnalyticsPanel';
 import AuditPanel from '../components/dashboard/panels/AuditPanel';
 import CompanyAdminPanel from '../components/dashboard/panels/CompanyAdminPanel';
 import PlatformAdminPanel, { type PlatformSection } from '../components/dashboard/panels/PlatformAdminPanel';
-import { platformOwnerUids } from '../lib/firebase';
+import { platformOwnerUids, platformOwnerEmails } from '../lib/firebase';
 import TemplatesPanel from '../components/dashboard/panels/TemplatesPanel';
 import SettingsPanel from '../components/dashboard/panels/SettingsPanel';
 import BillingPanel from '../components/dashboard/panels/BillingPanel';
@@ -179,10 +179,13 @@ export default function BusinessDashboard() {
     setComposeTo(to); setComposeSubject(subject); setComposeBody(body); setComposeReplyQuote(replyQuote); setComposeOpen(true);
   };
 
+  // Platform staff are the accounts configured as owners (Firebase UID or
+  // email) plus the accounts that were explicitly invited into the control
+  // plane. The gateway stays authoritative; this only decides what to render.
   const canAccessPlatformAdmin = Boolean(
     user?.isPlatformAdmin
-    || user?.email?.toLowerCase().endsWith('@velismail.online')
-    || (user?.firebaseUid && platformOwnerUids().includes(user.firebaseUid)),
+    || (user?.firebaseUid && platformOwnerUids().includes(user.firebaseUid))
+    || (user?.email && platformOwnerEmails().includes(user.email.toLowerCase())),
   );
   const hasRoleAccess = useCallback(
     (tab: BizTab) => {

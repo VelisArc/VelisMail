@@ -149,3 +149,16 @@ export function platformOwnerUids(): string[] {
     .map((value: string) => value.trim())
     .filter(Boolean);
 }
+
+/**
+ * Email addresses configured as platform owners.
+ *
+ * A Firebase UID only exists after the very first verified sign-in, so owners
+ * are usually configured by email instead. Both lists grant ownership.
+ */
+export function platformOwnerEmails(): string[] {
+  return (import.meta.env.VITE_PLATFORM_OWNER_EMAILS || '')
+    .split(',')
+    .map((value: string) => value.trim().toLowerCase())
+    .filter(Boolean);
+}
