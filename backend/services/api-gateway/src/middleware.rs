@@ -239,6 +239,7 @@ pub async fn require_auth(
         .unwrap_or(raw_path);
     let is_public = path.starts_with("/auth")
         || path == "/verify/providers"
+        || path == "/config/public"
         || path == "/mail/inbound"
         || path == "/team/invites/validate"
         || path == "/team/invites/complete"

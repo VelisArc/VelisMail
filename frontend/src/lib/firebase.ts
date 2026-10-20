@@ -5,9 +5,24 @@
  * bundle cost until a user actually chooses Google authentication. Client-side
  * config is public by design; server-side verification is performed by the
  * auth service against Google Identity Toolkit.
+ *
+ * The configuration is read from the build environment when it is available
+ * and otherwise from the API (`/config/public`), so the Firebase project can
+ * change without rebuilding the frontend. No secret is ever shipped to the
+ * browser: only the public web configuration is used.
  */
 
-const firebaseConfig = {
+type FirebaseWebConfig = {
+  apiKey?: string;
+  authDomain?: string;
+  projectId?: string;
+  storageBucket?: string;
+  messagingSenderId?: string;
+  appId?: string;
+  measurementId?: string;
+};
+
+const buildTimeConfig: FirebaseWebConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
   authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
   projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
@@ -17,15 +32,66 @@ const firebaseConfig = {
   measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID,
 };
 
-function requireFirebaseConfig() {
-  const required = ['apiKey', 'authDomain', 'projectId', 'appId'] as const;
-  const missing = required.filter((key) => !firebaseConfig[key]);
-  if (missing.length > 0) {
-    throw new Error(
-      'Google sign-in is not configured. Set the VITE_FIREBASE_* variables for this build.',
-    );
+function apiBase(): string {
+  const configured = String(import.meta.env.VITE_API_URL || '').replace(/\/+$/, '');
+  if (configured) {
+    if (configured.endsWith('/api/v1')) return configured;
+    if (configured.endsWith('/api')) return `${configured}/v1`;
+    if (configured.endsWith('/v1')) return configured.replace(/\/v1$/, '/api/v1');
+    return `${configured}/api/v1`;
   }
-  return firebaseConfig;
+  if (typeof window !== 'undefined') {
+    const { hostname } = window.location;
+    if (hostname === 'localhost' || hostname === '127.0.0.1') {
+      return 'http://127.0.0.1:3000/api/v1';
+    }
+    if (
+      hostname === 'velismail.online' ||
+      hostname.endsWith('.velismail.online') ||
+      hostname.endsWith('.pages.dev')
+    ) {
+      return 'https://api.velismail.online/api/v1';
+    }
+  }
+  return 'https://api.velismail.online/api/v1';
+}
+
+function isUsable(config: FirebaseWebConfig): boolean {
+  return Boolean(config.apiKey && config.projectId);
+}
+
+let configPromise: Promise<FirebaseWebConfig> | null = null;
+
+async function resolveFirebaseConfig(): Promise<FirebaseWebConfig> {
+  if (isUsable(buildTimeConfig)) return buildTimeConfig;
+  if (!configPromise) {
+    configPromise = (async () => {
+      try {
+        const response = await fetch(`${apiBase()}/config/public`, {
+          headers: { Accept: 'application/json' },
+        });
+        if (response.ok) {
+          const payload = await response.json();
+          const remote = (payload?.firebase || payload) as FirebaseWebConfig;
+          if (isUsable(remote)) {
+            return {
+              ...remote,
+              authDomain: remote.authDomain || `${remote.projectId}.firebaseapp.com`,
+              storageBucket: remote.storageBucket || `${remote.projectId}.firebasestorage.app`,
+            } as FirebaseWebConfig;
+          }
+        }
+      } catch {
+        // Fall through to the configuration error below.
+      }
+      throw new Error(
+        'Google sign-in is not configured. Set the VITE_FIREBASE_* variables for this build.',
+      );
+    })().finally(() => {
+      configPromise = null;
+    });
+  }
+  return configPromise;
 }
 
 export type GoogleIdentity = {
@@ -42,7 +108,8 @@ async function getFirebaseAuth(): Promise<import('firebase/auth').Auth> {
   if (cachedAuth) return cachedAuth;
   const [{ getApps, initializeApp }, { getAuth, setPersistence, browserLocalPersistence }] =
     await Promise.all([import('firebase/app'), import('firebase/auth')]);
-  const app = getApps().length ? getApps()[0] : initializeApp(requireFirebaseConfig());
+  const config = await resolveFirebaseConfig();
+  const app = getApps().length ? getApps()[0] : initializeApp(config);
   const auth = getAuth(app);
   await setPersistence(auth, browserLocalPersistence).catch(() => undefined);
   cachedAuth = auth;

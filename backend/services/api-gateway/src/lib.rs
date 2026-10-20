@@ -46,6 +46,7 @@ pub async fn run_service() -> anyhow::Result<()> {
         .route("/health/live", axum::routing::get(routes::health_check))
         .route("/health/ready", axum::routing::get(routes::readiness))
         .route("/ready", axum::routing::get(routes::readiness))
+        .route("/config/public", axum::routing::get(routes::public_config))
         .route("/metrics", axum::routing::get(routes::metrics))
         .nest("/api/v1", api_routes.clone())
         .nest("/v1", api_routes)

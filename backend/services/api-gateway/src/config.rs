@@ -33,6 +33,11 @@ pub struct GatewayConfig {
     /// platform owner. Comma-separated; matched against the verified
     /// `firebase_uid` claim.
     pub platform_owner_uids: Vec<String>,
+    /// Public Firebase web configuration served to the browser so Google
+    /// sign-in works without baking the values into the frontend bundle.
+    pub firebase_web_api_key: Option<String>,
+    pub firebase_project_id: Option<String>,
+    pub firebase_app_id: Option<String>,
 }
 
 impl GatewayConfig {
@@ -111,6 +116,19 @@ impl GatewayConfig {
                 .map(|value| value.trim().to_string())
                 .filter(|value| !value.is_empty())
                 .collect(),
+            firebase_web_api_key: std::env::var("FIREBASE_WEB_API_KEY")
+                .ok()
+                .or_else(|| std::env::var("FIREBASE_API_KEY").ok())
+                .map(|value| value.trim().to_string())
+                .filter(|value| !value.is_empty()),
+            firebase_project_id: std::env::var("FIREBASE_PROJECT_ID")
+                .ok()
+                .map(|value| value.trim().to_string())
+                .filter(|value| !value.is_empty()),
+            firebase_app_id: std::env::var("FIREBASE_APP_ID")
+                .ok()
+                .map(|value| value.trim().to_string())
+                .filter(|value| !value.is_empty()),
         })
     }
 }

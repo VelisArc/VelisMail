@@ -75,6 +75,9 @@ pub fn api_v1_routes(_state: &AppState) -> Router<AppState> {
         .route("/tenants/verify-domain", post(verify_domain))
         .route("/payments/create-order", post(create_payment_order))
         .route("/payments/verify", post(verify_payment))
+        // Public client configuration. It only exposes non-secret values so
+        // the browser can initialise Google sign-in without a rebuild.
+        .route("/config/public", get(public_config))
         // Platform control plane (/admin). Authorization is enforced in the
         // handlers using the verified JWT and Firebase owner UID gate.
         .route("/admin/platform/me", get(admin::platform_me))
@@ -174,6 +177,36 @@ pub async fn root() -> Json<serde_json::Value> {
         "message": "VelisMail API Gateway is running.",
         "health": "/health",
         "apiBase": "/api/v1"
+    }))
+}
+
+/// Public client configuration.
+///
+/// The Firebase web configuration is public by design (it ships in every
+/// browser bundle), but keeping it on the server means the frontend never
+/// needs a rebuild when the Firebase project changes. Only non-secret values
+/// are returned.
+pub async fn public_config(State(state): State<AppState>) -> Json<serde_json::Value> {
+    let project_id = state.config.firebase_project_id.clone();
+    let auth_domain = project_id
+        .as_ref()
+        .map(|value| format!("{}.firebaseapp.com", value));
+    let storage_bucket = project_id
+        .as_ref()
+        .map(|value| format!("{}.firebasestorage.app", value));
+    Json(json!({
+        "success": true,
+        "apiBase": "/api/v1",
+        "firebase": {
+            "apiKey": state.config.firebase_web_api_key,
+            "authDomain": auth_domain,
+            "projectId": project_id,
+            "appId": state.config.firebase_app_id,
+            "storageBucket": storage_bucket,
+        },
+        "features": {
+            "googleSignIn": state.config.firebase_web_api_key.is_some(),
+        }
     }))
 }
 
