@@ -1,4 +1,0 @@
--- Migration 005: User settings
--- Adds settings JSONB column to the users table.
-
-ALTER TABLE users ADD COLUMN IF NOT EXISTS settings JSONB NOT NULL DEFAULT '{}';

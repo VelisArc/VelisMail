@@ -1,5 +1,28 @@
 # Changelog
 
+## v5.0.0 - Resend-only Email & Dependency Modernization
+
+### Changed
+- **Brevo removed completely**: provider option, API-key detection, runtime validation, outbound dispatch, docs, env templates, and SPF guidance are gone.
+- **Resend-only platform email**: OTP, password reset, feedback, and the backend mail relay now use a shared `velismail-email` client backed by Resend. SMTP and `lettre` were removed.
+- **Amazon SES provider fixed**: `amazonses` is accepted by the gateway, validates its region and credentials format, and the frontend sends the AWS region correctly.
+- **Backend restructure**: shared libraries now live in `backend/crates/` and deployable services in `backend/services/`.
+- **Backblaze/S3 storage removed**: storage-service now uses local VM filesystem storage via `STORAGE_ROOT`; external object-storage credentials are no longer required.
+- **VM-first deployment**: Docker files were removed. The backend now deploys as native systemd services behind Caddy, with optional per-service scaling.
+- **Render removed**: `render.yaml`, `RENDER_DEPLOY.md`, and the Render Postgres provider option were deleted.
+
+### Fixed
+- **Unified, versioned migrations**: all schema now lives in `backend/crates/database/migrations` and is applied by SQLx. Tenant and storage tables were previously never created, and the tenant migration used superuser-only statements that fail on a managed database.
+- **Row-Level Security**: tenant context now uses `set_config` with bind parameters instead of invalid `SET LOCAL ... = $1`.
+- **Redis configuration**: a single `REDIS_URL` is the source of truth for every service.
+- Centralized Resend request construction, header-injection checks, error mapping, and provider response handling.
+- Removed unused SMTP/NATS configuration from deployment files.
+- Frontend dependencies upgraded to React 19.3, Vite 8, Vitest 5, ESLint 10, and current type packages. `npm audit` reports zero vulnerabilities.
+- Rust workspace is clean under `cargo clippy --workspace --all-targets -- -D warnings`.
+- **Faster release builds**: the release profile now uses thin LTO with `codegen-units = 4` and `opt-level = 3`, cutting VM deploy time significantly while improving runtime performance.
+
+---
+
 ## v4.0.5 - Platform Directory & Mailbox Stability
 
 ### Added

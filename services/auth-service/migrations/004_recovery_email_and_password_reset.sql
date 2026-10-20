@@ -1,5 +1,0 @@
--- Migration 004: Recovery email and password reset
--- Adds recovery_email and recovery_email_verified columns to the users table to support account recovery.
-
-ALTER TABLE users ADD COLUMN IF NOT EXISTS recovery_email VARCHAR(255);
-ALTER TABLE users ADD COLUMN IF NOT EXISTS recovery_email_verified BOOLEAN NOT NULL DEFAULT FALSE;

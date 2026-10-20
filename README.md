@@ -1,11 +1,11 @@
 # VelisMail
 
-Current release: **v4.0.5**
+Current release: **v5.0.0**
 
-VelisMail now uses a clean split deployment:
+VelisMail uses a clean split deployment:
 
 - `frontend/` deploys to Cloudflare Pages
-- the Rust backend in `services/` deploys to a Linux VM with Docker Compose
+- the Rust backend in `backend/` deploys as native systemd services
 
 ## Env files you need
 
@@ -20,36 +20,63 @@ Important:
 
 - Do not commit `.env` or `frontend/.env`.
 - `frontend/.env` should only contain `VITE_API_URL=https://your-api-domain`.
-- OTP and password-reset mail uses the backend SMTP credentials from `.env`.
-- Live BYO mail-provider validation and direct outbound delivery currently supports `sendgrid`, `resend`, `postmark`, `brevo`, and `custom_webhook`.
+- Platform email (OTP, password reset, feedback, and the backend relay) uses **Resend** through `PLATFORM_RESEND_API_KEY`. SMTP/Brevo is no longer used.
+- Live BYO mail-provider validation and direct outbound delivery supports `sendgrid`, `resend`, `postmark`, `amazonses`, and `custom_webhook`.
 
 ## Backend deploy
 
+The backend is deployed natively (no containers). Every service runs as a
+sandboxed systemd unit behind Caddy, which terminates TLS and load-balances
+across gateway instances.
+
 1. Copy `.env.example` to `.env`.
 2. Fill the required values in `.env`.
-3. On your Linux VM, place that `.env` inside `~/VelisMail/.env`.
-4. Make sure Docker and Docker Compose v2 are installed on the VM.
-5. Make sure ports `80` and `443` are open on the VM security group / firewall.
-6. `api.velismail.online` must point to the VM public IP.
-7. This repo now uses `Caddy` in Docker Compose to terminate TLS and reverse-proxy `https://api.velismail.online` to the internal `api-gateway:3000`.
-8. Make sure your GitHub Actions repo secrets include:
-   - `HOST`
-   - `SSH_PRIVATE_KEY`
-9. Push to `main`, or on the VM run:
+3. Copy the repository to the VM (for example `~/VelisMail`).
+4. Make sure ports `80` and `443` are open on the VM security group / firewall.
+5. `api.velismail.online` must point to the VM public IP. An Elastic IP is
+   recommended so the address survives stop/start; if you skip it, update the
+   Cloudflare A record after any stop/start (see `deploy/native/README.md`).
+6. Run the installer. It installs PostgreSQL, Caddy, the service account, the
+   systemd units and the Caddy reverse proxy, then applies database migrations
+   and starts every service:
 
 ```bash
-bash deploy-vm.sh up
+sudo bash deploy/native/install.sh
+```
+
+The installer validates the env file first (`deploy/native/check-env.sh`) and
+refuses to continue on unbalanced quotes, duplicate keys, CRLF corruption or a
+weak `POSTGRES_PASSWORD`.
+
+Fast update without recompiling:
+
+```bash
+sudo bash deploy/native/deploy-fast.sh
+```
+
+Scale the gateway on an existing node:
+
+```bash
+sudo NEW_SCALE=2 bash deploy/native/scale.sh
 ```
 
 After deploy, these should work:
 
 ```bash
 curl http://127.0.0.1:3000/health
-curl https://api.velismail.online/health
+curl http://127.0.0.1:3000/health/ready
+curl -H "Authorization: Bearer $METRICS_TOKEN" http://127.0.0.1:3000/metrics
+curl https://api.velismail.online/health   # after the DNS A record exists
 ```
 
-The health response includes the running service version. A production v4.0.5
-deploy should report `"version":"4.0.5"` on all Rust services.
+The health response includes the running service version. A production v5.0.0
+deploy should report `"version":"5.0.0"` on all Rust services.
+
+### Database migrations
+Migrations live in `backend/crates/database/migrations` and are applied by
+SQLx at service start. They are versioned and tracked in the
+`_sqlx_migrations` table, so they are safe to re-run and safe to run from
+multiple services at the same time.
 
 ## Frontend deploy
 
@@ -69,34 +96,41 @@ npm run build
 npx wrangler pages deploy dist --project-name velismail
 ```
 
-## CI/CD
+## CI
 
 - `.github/workflows/ci.yml` checks backend and frontend builds.
-- `.github/workflows/deploy-vm.yml` deploys the VM backend.
-- `.github/workflows/deploy-cloudflare.yml` deploys Cloudflare Pages.
+- Backend deploys are manual with `sudo bash deploy/native/install.sh` on the VM.
 
 ## Required backend keys
 
-- `POSTGRES_PASSWORD`: password for the local VM Postgres container.
-- `AUTH_POSTGRES_DB`, `MAIL_POSTGRES_DB`, `STORAGE_POSTGRES_DB`, `TENANT_POSTGRES_DB`, `DELIVERY_POSTGRES_DB`: optional per-service database names. Defaults are already wired for isolated service migrations and are recommended over one shared database.
-- `REDIS_PASSWORD`: password for the local VM Redis container.
+- `POSTGRES_USER`, `POSTGRES_DB`, `POSTGRES_PASSWORD`: local VM PostgreSQL credentials. The password must be 16+ URL-safe characters (letters, digits, `_`, `-`) because it is embedded in `DATABASE_URL`.
+- `REDIS_URL`: optional Redis/Upstash URL. Use `rediss://` for Upstash; the services run without Redis if it is unreachable.
+- `METRICS_TOKEN`: bearer token required by `/metrics` on the gateway. Leave blank to disable the endpoint.
 - `FRONTEND_URL`: your public frontend URL (e.g. `https://velismail.online`). Critical for restrictive CORS on the API Gateway.
 - `JWT_SECRET`: long random secret for auth tokens. Required by both Auth Service and API Gateway.
 - `OTP_SIGNING_SECRET`: long random secret for OTP challenge signing.
-- `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`: your transactional SMTP provider. For Brevo, use `smtp-relay.brevo.com`, port `587`, and the SMTP credentials from the Brevo SMTP settings page.
-- `OTP_FROM_EMAIL`: sender address used for OTP and password-reset mail. This mailbox must be allowed by your SMTP provider.
+- `PLATFORM_RESEND_API_KEY`: Resend API key used for OTP, password-reset, feedback, and the backend mail relay. No SMTP relay is required.
+- `PLATFORM_FROM_EMAIL`, `PLATFORM_FROM_NAME`: sender identity for platform email. The sending domain must be verified in Resend.
+- `OTP_FROM_EMAIL`: sender address used for OTP and password-reset mail. Defaults to `PLATFORM_FROM_EMAIL`.
 - `ENCRYPTION_KEY`: base64-encoded 32-byte key for storage-service encryption.
-- `S3_ENDPOINT`, `S3_BUCKET`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `S3_REGION`: object storage credentials if you want attachments/storage enabled.
+- `STORAGE_ROOT`: local directory used by storage-service for encrypted attachments. It must be writable by the service user.
 - `DKIM_PRIVATE_KEY`, `DKIM_SELECTOR`, `SPF_RECORD`: DNS/mail-auth values if you want DKIM/SPF signing and verification fully enabled.
 
 ## DKIM public key placement
 
-`dkim-public.pem` does not go into this repository, Kubernetes manifests, or `.env`.
+Platform mail for `velismail.online` is DKIM-signed by Resend, which owns that
+key. The steps below are only for BYO domains signed by the delivery engine
+when `DKIM_PRIVATE_KEY` is configured.
+
+`dkim-public.pem` does not go into this repository or `.env`.
 
 Use it like this:
 
 1. Keep `dkim-private.pem` on the machine where you generated it.
-2. Put the private key contents into `DKIM_PRIVATE_KEY` in backend `.env`.
+2. Put the private key into `DKIM_PRIVATE_KEY` as a **single line**, replacing
+   real newlines with the two characters `\n` (the delivery engine expands them
+   at startup). Example:
+   `DKIM_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\nMC4...\n-----END PRIVATE KEY-----\n"`
 3. Keep `DKIM_SELECTOR=velismail` unless you want a different selector.
 4. Publish the public key from `dkim-public.pem` in DNS as a TXT record at:
    `velismail._domainkey.yourdomain.com`
@@ -111,3 +145,5 @@ Important:
 - Do not paste the whole `dkim-public.pem` file with `-----BEGIN PUBLIC KEY-----` into `.env`.
 - Do not commit `dkim-private.pem` or `dkim-public.pem` to GitHub.
 - The public key belongs in DNS, not in application code.
+- Run `sudo bash deploy/native/check-env.sh /etc/velismail/velismail.env`
+  after editing the key; an unbalanced quote hides every variable that follows.

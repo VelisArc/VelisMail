@@ -1456,7 +1456,7 @@ export const mail = {
           target: expandedRecipients.join(', '),
           severity: 'warn',
         });
-        throw new Error(`Mail was accepted for delivery, but VelisMail could not save the sent copy to the business database: ${message}`);
+        throw new Error(`Mail was accepted for delivery, but VelisMail could not save the sent copy to the business database: ${message}`, { cause: error });
       }
     }
     const internalRecipients = expandedRecipients.filter(
@@ -1492,7 +1492,7 @@ export const mail = {
             target: internalRecipients.join(', '),
             severity: 'warn',
           });
-          throw new Error(`Mail was accepted for delivery, but VelisMail could not save the internal inbox copy to the business database: ${message}`);
+          throw new Error(`Mail was accepted for delivery, but VelisMail could not save the internal inbox copy to the business database: ${message}`, { cause: error });
         }
       }
       const internalCache = reloadEmailsCacheFromStorage();

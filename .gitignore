@@ -1,1 +1,48 @@
-Nothing needs to be added to the .gitignore file since the changes only include source code files (.tsx) without any build artifacts, dependencies, or temporary files.
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+!**/.env.example
+*.local
+
+# Rust build output
+target/
+*.rs.bk
+
+# Node / frontend build output
+node_modules/
+dist/
+dist-ssr/
+coverage/
+test-results/
+playwright-report/
+.vite/
+.turbo/
+.wrangler/
+*.tsbuildinfo
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Editor and OS junk
+.idea/
+.vscode/*
+!.vscode/extensions.json
+.DS_Store
+Thumbs.db
+desktop.ini
+*.swp
+*.swo
+*~
+
+# Temporary / backup files
+*.tmp
+*.temp
+*.bak
+*.orig
+*.rej

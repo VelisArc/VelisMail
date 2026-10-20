@@ -1,90 +1,107 @@
 [workspace]
 resolver = "2"
 members = [
-    "services/api-gateway",
-    "services/auth-service",
-    "services/delivery-engine",
-    "services/mail-service",
-    "services/monolith",
-    "services/storage-service",
-    "services/tenant-service",
-    "libs/common",
-    "libs/crypto",
-    "libs/database",
-    "libs/external-api",
+    "backend/services/api-gateway",
+    "backend/services/auth-service",
+    "backend/services/delivery-engine",
+    "backend/services/mail-service",
+    "backend/services/monolith",
+    "backend/services/storage-service",
+    "backend/services/tenant-service",
+    "backend/crates/common",
+    "backend/crates/crypto",
+    "backend/crates/database",
+    "backend/crates/email",
+    "backend/crates/external-api",
 ]
 
 [workspace.package]
-version = "4.0.5"
+version = "5.0.0"
 edition = "2021"
 authors = ["VelisMail Team"]
 license = "MIT"
 
 [workspace.dependencies]
 # Core
-tokio = { version = "1.35", features = ["full"] }
-axum = { version = "0.7", features = ["macros", "http2", "ws", "multipart"] }
+tokio = { version = "1.53", features = ["full"] }
+axum = { version = "0.8", features = ["macros", "http2", "ws", "multipart"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 anyhow = "1.0"
-thiserror = "1.0"
+thiserror = "2.0"
 futures = "0.3"
 
 # Database
-sqlx = { version = "0.8", features = ["runtime-tokio", "tls-rustls", "postgres", "migrate", "uuid", "chrono", "json"] }
-redis = { version = "0.25", features = ["tokio-comp", "cluster"] }
+sqlx = { version = "0.9", features = ["runtime-tokio", "tls-rustls", "postgres", "migrate", "uuid", "chrono", "json"] }
+redis = { version = "1.7", features = ["tokio-comp", "tokio-rustls-comp"] }
 
 # Crypto & Security
 ring = "0.17"
-rustls = "0.22"
-jsonwebtoken = "9.2"
-zeroize = "1.7"
+rustls = "0.23"
+jsonwebtoken = { version = "11.1", features = ["aws_lc_rs"] }
+rand_core = { version = "0.6", features = ["getrandom"] }
+zeroize = "1.8"
 argon2 = "0.5"
 hmac = "0.12"
 sha2 = "0.10"
 
-# Mail protocols
-lettre = { version = "0.11", default-features = false, features = ["builder", "hostname", "pool", "smtp-transport", "rustls-tls"] }
-imap = "2.4"
-
 # Storage
-aws-sdk-s3 = "1.12"
-aws-sdk-sesv2 = "1.23"
-aws-config = "1.1"
+aws-sdk-s3 = "1.152"
+aws-sdk-sesv2 = "1.140"
+aws-config = "1.12"
 
 # Queue
-async-nats = "0.33"
+# (delivery queue is currently backed by PostgreSQL; no broker dependency)
 
 # Validation
-validator = { version = "0.16", features = ["derive"] }
-uuid = { version = "1.7", features = ["serde", "v4"] }
+validator = { version = "0.21", features = ["derive"] }
+uuid = { version = "1.28", features = ["serde", "v4"] }
 chrono = { version = "0.4", features = ["serde"] }
 
 # HTTP utilities
-tower-http = { version = "0.5", features = ["trace", "cors", "limit", "timeout"] }
-tower = { version = "0.5", features = ["limit"] }
+tower-http = { version = "0.7", features = [
+    "trace",
+    "cors",
+    "limit",
+    "timeout",
+    "compression-gzip",
+    "compression-br",
+    "compression-zstd",
+    "catch-panic",
+    "sensitive-headers",
+    "request-id",
+] }
+tower = { version = "0.5", features = ["limit", "util"] }
 
 # HTTP Client
-reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+reqwest = { version = "0.13", default-features = false, features = ["json", "rustls", "query", "stream"] }
 
 # Rate limiting
-governor = "0.6"
+governor = "0.10"
 
 # OpenAPI
-utoipa = { version = "4.2", features = ["axum_extras"] }
-utoipa-swagger-ui = { version = "9.0", features = ["axum"] }
+# (no OpenAPI layer is currently mounted)
+
+# Internal shared crates
+velismail-email = { path = "backend/crates/email" }
 
 # Common utilities
 base64 = "0.22"
 hex = "0.4"
-once_cell = "1.19"
-regex = "1.10"
+once_cell = "1.21"
+regex = "1.12"
 
 [profile.release]
-lto = true
-codegen-units = 1
+# Thin LTO keeps binary size and runtime performance close to full LTO while
+# cutting release build time dramatically, which matters for VM deploys.
+lto = "thin"
+codegen-units = 4
 strip = true
-panic = "abort"
-opt-level = "s"
+# Use unwinding so tower-http's CatchPanicLayer can contain request-level
+# panics. A process-level abort turns one bad request into a full outage.
+panic = "unwind"
+# Servers benefit from full optimisation; "s" (size) made them slower.
+opt-level = 3
+incremental = false

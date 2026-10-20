@@ -1,0 +1,37 @@
+[package]
+name = "velismail-api-gateway"
+version.workspace = true
+edition.workspace = true
+
+[lib]
+name = "velismail_api_gateway"
+path = "src/lib.rs"
+
+
+[[bin]]
+name = "velismail-api-gateway"
+path = "src/main.rs"
+[dependencies]
+tokio.workspace = true
+axum.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+anyhow.workspace = true
+reqwest.workspace = true
+futures.workspace = true
+base64.workspace = true
+hmac.workspace = true
+sha2.workspace = true
+tower-http.workspace = true
+tower.workspace = true
+chrono.workspace = true
+uuid.workspace = true
+jsonwebtoken.workspace = true
+aws-sdk-sesv2.workspace = true
+aws-config.workspace = true
+sqlx.workspace = true
+once_cell.workspace = true
+velismail-common = { path = "../../crates/common" }
+velismail-database = { path = "../../crates/database" }

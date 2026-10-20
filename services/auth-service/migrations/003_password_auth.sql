@@ -1,4 +1,0 @@
--- Migration 003: Password authentication support
--- Adds password_hash column to the users table to enable Argon2 password-based logins.
-
-ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash VARCHAR(255);

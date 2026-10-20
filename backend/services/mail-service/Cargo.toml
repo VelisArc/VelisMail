@@ -1,0 +1,31 @@
+[package]
+name = "velismail-mail-service"
+version.workspace = true
+edition.workspace = true
+
+[lib]
+name = "velismail_mail_service"
+path = "src/lib.rs"
+
+
+[[bin]]
+name = "velismail-mail-service"
+path = "src/main.rs"
+[dependencies]
+tokio.workspace = true
+axum.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+anyhow.workspace = true
+thiserror.workspace = true
+uuid.workspace = true
+chrono.workspace = true
+validator.workspace = true
+sqlx.workspace = true
+velismail-common = { path = "../../crates/common" }
+velismail-database = { path = "../../crates/database" }
+velismail-email.workspace = true
+tower.workspace = true
+tower-http.workspace = true

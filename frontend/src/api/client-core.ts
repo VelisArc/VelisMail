@@ -587,11 +587,16 @@ export function warnBackendSyncFailure(err: unknown) {
 
 export function providerEndpointForRequest(provider?: string, endpoint?: string): string | undefined {
   const normalizedProvider = String(provider || '').trim().toLowerCase();
-  if (normalizedProvider !== 'custom_webhook' && normalizedProvider !== 'amazonses') {
-    return undefined;
-  }
   const trimmedEndpoint = String(endpoint || '').trim();
   if (!trimmedEndpoint) {
+    return undefined;
+  }
+  if (normalizedProvider === 'amazonses') {
+    const validRegion = /^[a-z0-9-]{3,32}$/.test(trimmedEndpoint)
+      && trimmedEndpoint.split('-').length >= 3;
+    return validRegion ? trimmedEndpoint : undefined;
+  }
+  if (normalizedProvider !== 'custom_webhook') {
     return undefined;
   }
   try {

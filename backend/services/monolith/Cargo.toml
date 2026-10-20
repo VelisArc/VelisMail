@@ -1,0 +1,22 @@
+[package]
+name = "velismail-monolith"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "velismail-monolith"
+path = "src/main.rs"
+
+[dependencies]
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber = { workspace = true, features = ["env-filter", "json"] }
+anyhow.workspace = true
+
+velismail-api-gateway = { path = "../api-gateway" }
+velismail-auth-service = { path = "../auth-service" }
+velismail-mail-service = { path = "../mail-service" }
+velismail-storage-service = { path = "../storage-service" }
+velismail-tenant-service = { path = "../tenant-service" }
+velismail-delivery-engine = { path = "../delivery-engine" }
+velismail-common = { path = "../../crates/common" }

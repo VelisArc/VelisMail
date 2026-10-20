@@ -31,8 +31,7 @@ data:
   # Storage Service
   STORAGE_HOST: "0.0.0.0"
   STORAGE_PORT: "3003"
-  S3_REGION: "us-east-1"
-  S3_BUCKET: "velismail"
+  STORAGE_ROOT: "/var/lib/velismail/storage"
   MAX_FILE_SIZE_MB: "50"
   
   # Tenant Service

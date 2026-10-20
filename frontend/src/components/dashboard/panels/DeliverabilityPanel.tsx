@@ -35,19 +35,12 @@ export default function DeliverabilityPanel({ state }: DeliverabilityPanelProps)
     if (dmarcVerified) total += 15;
     if (mxVerified) total += 10;
 
-    let rating: 'excellent' | 'good' | 'critical' = 'critical';
-    let desc = '';
-
-    if (total >= 90) {
-      rating = 'excellent';
-      desc = 'Excellent: Your email security is fully validated. High likelihood of landing in primary user inboxes.';
-    } else if (total >= 70) {
-      rating = 'good';
-      desc = 'Good: Your configuration is working, but adding missing records will protect your domain from phishing and spoofing.';
-    } else {
-      rating = 'critical';
-      desc = 'Critical: Key security parameters are missing. Your domain is at risk of deliverability drops and email rejection.';
-    }
+    const rating: 'excellent' | 'good' | 'critical' = total >= 90 ? 'excellent' : total >= 70 ? 'good' : 'critical';
+    const desc = total >= 90
+      ? 'Excellent: Your email security is fully validated. High likelihood of landing in primary user inboxes.'
+      : total >= 70
+        ? 'Good: Your configuration is working, but adding missing records will protect your domain from phishing and spoofing.'
+        : 'Critical: Key security parameters are missing. Your domain is at risk of deliverability drops and email rejection.';
 
     return {
       score: total,

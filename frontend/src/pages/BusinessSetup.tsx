@@ -27,6 +27,7 @@ import {
   getConnectionHostLabel,
   getDatabaseProvider,
   getMailProvider,
+  getMailProviderEndpointPlaceholder,
   getMailProviderKeyMismatch,
   inferMailProviderFromApiKey,
   inferDatabaseProviderFromUrl,
@@ -195,7 +196,7 @@ export default function BusinessSetup() {
   const handleApiKeyChange = (value: string) => {
     setApiKey(value);
     const inferredProvider = inferMailProviderFromApiKey(value);
-    if (inferredProvider && inferredProvider !== 'brevo_smtp' && inferredProvider !== apiProvider) {
+    if (inferredProvider && inferredProvider !== apiProvider) {
       setApiProvider(inferredProvider);
     }
   };
@@ -229,7 +230,13 @@ export default function BusinessSetup() {
       return;
     }
     if (requiresCustomMailEndpoint(apiProvider) && !customApiUrl.trim()) {
-      setError('Custom mail providers require a valid delivery endpoint URL.');
+      setError(apiProvider === 'amazonses'
+        ? 'Amazon SES requires an AWS region such as us-east-1.'
+        : 'Custom mail providers require a valid delivery endpoint URL.');
+      return;
+    }
+    if (apiProvider === 'amazonses' && !/^[a-z0-9-]{3,32}$/.test(customApiUrl.trim())) {
+      setError('Enter a valid AWS region, for example us-east-1 or eu-west-1.');
       return;
     }
     if (apiProvider === 'resend' && !webhookSecret.trim()) {
@@ -703,8 +710,15 @@ export default function BusinessSetup() {
               </div>
               {requiresCustomMailEndpoint(apiProvider) && (
                 <div className="form-group animate-slide-down">
-                  <label>Custom Endpoint</label>
-                  <input type="url" className="input" placeholder="https://api.yourmail.com/v1/send" value={customApiUrl} onChange={e => setCustomApiUrl(e.target.value)} required />
+                  <label>{apiProvider === 'amazonses' ? 'AWS Region' : 'Custom Endpoint'}</label>
+                  <input
+                    type={apiProvider === 'amazonses' ? 'text' : 'url'}
+                    className="input"
+                    placeholder={getMailProviderEndpointPlaceholder(apiProvider)}
+                    value={customApiUrl}
+                    onChange={e => setCustomApiUrl(e.target.value)}
+                    required
+                  />
                 </div>
               )}
               {apiProvider === 'resend' && (

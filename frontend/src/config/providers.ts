@@ -31,12 +31,6 @@ export const DATABASE_PROVIDERS: ProviderOption[] = [
     placeholder: 'postgresql://user:password@service.region.timescale.com:5432/tsdb?sslmode=require',
   },
   {
-    id: 'render_postgres',
-    label: 'Render Postgres',
-    description: 'Managed PostgreSQL from Render.',
-    placeholder: 'postgresql://user:password@dpg-xxxx-a.oregon-postgres.render.com:5432/database',
-  },
-  {
     id: 'railway_postgres',
     label: 'Railway Postgres',
     description: 'Managed PostgreSQL on Railway.',
@@ -238,12 +232,6 @@ export const MAIL_PROVIDERS: ProviderOption[] = [
     placeholder: 'postmark-server-token',
   },
   {
-    id: 'brevo',
-    label: 'Brevo',
-    description: 'Direct API delivery through Brevo.',
-    placeholder: 'xkeysib-xxxxxxxx',
-  },
-  {
     id: 'custom_webhook',
     label: 'Custom Webhook',
     description: 'Your own HTTP delivery endpoint with bearer auth.',
@@ -252,8 +240,8 @@ export const MAIL_PROVIDERS: ProviderOption[] = [
   {
     id: 'amazonses',
     label: 'Amazon SES',
-    description: 'Amazon Simple Email Service (SES) API delivery.',
-    placeholder: 'AKIA...:SecretKey:Region',
+    description: 'Amazon Simple Email Service (SES) API delivery. Set the AWS region as the endpoint.',
+    placeholder: 'AKIA...:SecretKey',
   },
 ];
 
@@ -309,7 +297,11 @@ export function getMailProvider(id: string): ProviderOption {
 }
 
 export function requiresCustomMailEndpoint(providerId: string): boolean {
-  return providerId === 'custom_webhook';
+  return providerId === 'custom_webhook' || providerId === 'amazonses';
+}
+
+export function getMailProviderEndpointPlaceholder(providerId: string): string {
+  return providerId === 'amazonses' ? 'us-east-1' : 'https://hooks.example.com/mail';
 }
 
 export function inferMailProviderFromApiKey(value: string): string | null {
@@ -317,18 +309,13 @@ export function inferMailProviderFromApiKey(value: string): string | null {
   if (!key) return null;
   if (key.startsWith('SG.')) return 'sendgrid';
   if (key.startsWith('re_')) return 'resend';
-  if (key.startsWith('xkeysib-')) return 'brevo';
-  if (key.startsWith('xsmtpsib-')) return 'brevo_smtp';
+  if (key.startsWith('AKIA')) return 'amazonses';
   return null;
 }
 
 export function getMailProviderKeyMismatch(providerId: string, apiKey: string): string | null {
   const inferredProvider = inferMailProviderFromApiKey(apiKey);
   if (!inferredProvider) return null;
-
-  if (inferredProvider === 'brevo_smtp') {
-    return 'This looks like a Brevo SMTP key. OTP uses SMTP keys, but mail setup requires a Brevo API key from Brevo SMTP & API > API keys, usually starting with xkeysib-.';
-  }
 
   if (inferredProvider !== providerId) {
     return `Selected provider is ${getMailProvider(providerId).label}, but this key looks like ${getMailProvider(inferredProvider).label}. Select the matching provider or paste the correct key.`;
@@ -375,7 +362,6 @@ export function inferDatabaseProviderFromUrl(connectionString: string): string {
     return 'azure_postgres';
   }
   if (normalized.includes('aivencloud.com')) return 'aiven_postgres';
-  if (normalized.includes('render.com')) return 'render_postgres';
   if (normalized.includes('railway.app')) return 'railway_postgres';
   if (normalized.includes('timescale.com')) return 'timescale';
   if (normalized.includes('tidbcloud.com')) return 'tidb_cloud';
