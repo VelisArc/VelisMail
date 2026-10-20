@@ -29,6 +29,10 @@ pub struct GatewayConfig {
     pub db_url: Option<String>,
     // Optional JWT validation for gateway-owned protected routes.
     pub jwt_secret: Option<String>,
+    /// Firebase UIDs that are allowed to enter the /admin control plane as
+    /// platform owner. Comma-separated; matched against the verified
+    /// `firebase_uid` claim.
+    pub platform_owner_uids: Vec<String>,
 }
 
 impl GatewayConfig {
@@ -100,6 +104,13 @@ impl GatewayConfig {
                 .ok()
                 .map(|value| value.trim().to_string())
                 .filter(|value| !value.is_empty()),
+            platform_owner_uids: std::env::var("PLATFORM_OWNER_UIDS")
+                .or_else(|_| std::env::var("PLATFORM_OWNER_FIREBASE_UIDS"))
+                .unwrap_or_default()
+                .split(',')
+                .map(|value| value.trim().to_string())
+                .filter(|value| !value.is_empty())
+                .collect(),
         })
     }
 }

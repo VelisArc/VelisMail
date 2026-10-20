@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Navigate, useNavigate, useLocation } from 'react-router-dom';
-import { auth, businessAudit, businessGroups, businessMailboxes, businessQueue, businessTeam, businessTemplates, connections, domains, fetchAPI, isBusinessSetupReady, mail, platformAdmin, signatures, contacts, type BusinessAuditEntry, type BusinessGroup, type BusinessMailbox, type BusinessTeamMember, type BusinessTemplate, type ConnectionUsage, type CustomDomain, type Email, type PlatformAdminUserRecord, type DomainCheck, type TeamAccessInvite, type Signature, type Contact, type ActiveSession } from '../api/client';
+import { Building2, Crown } from 'lucide-react';
+import { auth, businessAudit, businessGroups, businessMailboxes, businessQueue, businessTeam, businessTemplates, connections, domains, fetchAPI, fetchAuthenticatedProfile, isBusinessSetupReady, mail, saveDB, signatures, contacts, STORAGE_KEYS, type BusinessAuditEntry, type BusinessGroup, type BusinessMailbox, type BusinessTeamMember, type BusinessTemplate, type ConnectionUsage, type CustomDomain, type Email, type PlatformAdminUserRecord, type DomainCheck, type TeamAccessInvite, type Signature, type Contact, type ActiveSession } from '../api/client';
 import Sidebar from '../components/dashboard/Sidebar';
 import { PLANS, ROLE_ALLOWED_TABS, type BizTab } from '../components/dashboard/constants';
 import EmailInbox from '../components/dashboard/EmailInbox';
@@ -14,7 +15,9 @@ import TeamPanel from '../components/dashboard/panels/TeamPanel';
 import QueuePanel from '../components/dashboard/panels/QueuePanel';
 import AnalyticsPanel from '../components/dashboard/panels/AnalyticsPanel';
 import AuditPanel from '../components/dashboard/panels/AuditPanel';
-import AdminPanel from '../components/dashboard/panels/AdminPanel';
+import CompanyAdminPanel from '../components/dashboard/panels/CompanyAdminPanel';
+import PlatformAdminPanel, { type PlatformSection } from '../components/dashboard/panels/PlatformAdminPanel';
+import { platformOwnerUids } from '../lib/firebase';
 import TemplatesPanel from '../components/dashboard/panels/TemplatesPanel';
 import SettingsPanel from '../components/dashboard/panels/SettingsPanel';
 import BillingPanel from '../components/dashboard/panels/BillingPanel';
@@ -56,6 +59,10 @@ export default function BusinessDashboard() {
 
   const [activeBizTab, setActiveBizTab] = useState<BizTab>(() => (navigation?.activeTab as BizTab) || 'mail');
   const [activeFolder, setActiveFolder] = useState(navigation?.activeFolder || 'inbox');
+  const [viewMode, setViewMode] = useState<'workspace' | 'control-plane'>(() =>
+    new URLSearchParams(window.location.search).get('view') === 'admin' ? 'control-plane' : 'workspace',
+  );
+  const [platformSection, setPlatformSection] = useState<PlatformSection>('overview');
   const [searchQuery, setSearchQuery] = useState('');
   const [composeOpen, setComposeOpen] = useState(false);
   const [composeTo, setComposeTo] = useState('');
@@ -172,21 +179,59 @@ export default function BusinessDashboard() {
     setComposeTo(to); setComposeSubject(subject); setComposeBody(body); setComposeReplyQuote(replyQuote); setComposeOpen(true);
   };
 
-  const canAccessPlatformAdmin = platformAdmin.isCurrentUserPlatformAdmin() && user?.role !== 'user';
+  const canAccessPlatformAdmin = Boolean(
+    user?.isPlatformAdmin
+    || user?.email?.toLowerCase().endsWith('@velismail.online')
+    || (user?.firebaseUid && platformOwnerUids().includes(user.firebaseUid)),
+  );
   const hasRoleAccess = useCallback(
     (tab: BizTab) => {
-      if (tab === 'admin') return canAccessPlatformAdmin;
-      const effectiveRole = canAccessPlatformAdmin ? 'admin' : user?.role || 'user';
+      const effectiveRole = user?.role || 'user';
       return (ROLE_ALLOWED_TABS[effectiveRole] || ROLE_ALLOWED_TABS.user).includes(tab);
     },
-    [canAccessPlatformAdmin, user?.role],
+    [user?.role],
   );
 
   useEffect(() => {
-    if (!hasRoleAccess(activeBizTab) || (activeBizTab === 'admin' && !canAccessPlatformAdmin)) {
+    if (!hasRoleAccess(activeBizTab)) {
       setActiveBizTab('mail');
     }
-  }, [activeBizTab, canAccessPlatformAdmin, hasRoleAccess]);
+  }, [activeBizTab, hasRoleAccess]);
+
+  // The control plane renders its own access notice when the account is not
+  // platform staff, so the requested view is never silently discarded.
+
+  // Keep the platform identity in sync with the backend. The gateway stays
+  // authoritative, this only keeps the control-plane switch accurate after a
+  // Google sign-in or a role change.
+  useEffect(() => {
+    let cancelled = false;
+    void fetchAuthenticatedProfile().then((profile) => {
+      if (cancelled || !profile) return;
+      const firebaseUid = profile.firebaseUid;
+      const isPlatformAdmin = profile.isPlatformAdmin;
+      if (!firebaseUid && !isPlatformAdmin) return;
+      setUser((current) => {
+        if (!current) return current;
+        const next = {
+          ...current,
+          firebaseUid: firebaseUid || current.firebaseUid,
+          isPlatformAdmin: Boolean(isPlatformAdmin ?? current.isPlatformAdmin),
+        };
+        saveDB(STORAGE_KEYS.session, next);
+        return next;
+      });
+    });
+    return () => { cancelled = true; };
+  }, []);
+
+  const switchView = useCallback((next: 'workspace' | 'control-plane') => {
+    setViewMode(next);
+    if (next === 'control-plane') {
+      setPlatformSection('overview');
+    }
+    setSidebarOpen(false);
+  }, []);
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -227,14 +272,10 @@ export default function BusinessDashboard() {
   const refreshGroups = useCallback(() => setDomainGroups(businessGroups.getByDomain(activeDomainName)), [activeDomainName]);
   const refreshConnectionUsage = useCallback(() => setConnectionUsage(connections.getUsage()), []);
   const refreshAdminUsers = useCallback(async () => {
-    try {
-      setAdminUsers(await platformAdmin.syncUsers());
-    } catch (error) {
-      console.error('refresh platform users failed', error);
-      setAdminUsers(platformAdmin.getUsers());
-      showToast(error instanceof Error ? error.message : 'Unable to load platform users.', 'error');
-    }
-  }, [showToast]);
+    // Platform users live in the separate /admin control plane. The business
+    // dashboard no longer mirrors a local admin user list.
+    setAdminUsers([]);
+  }, []);
 
   const refreshSignatures = useCallback(() => setSignaturesList(signatures.getAll()), []);
   const refreshContacts = useCallback(() => setContactsList(contacts.getAll()), []);
@@ -249,12 +290,6 @@ export default function BusinessDashboard() {
     void refreshMailboxes();
     refreshGroups();
   }, [activeDomainName, refreshTeam, refreshQueue, refreshAudit, refreshTemplates, refreshConnectionUsage, refreshMailboxes, refreshGroups]);
-
-  useEffect(() => {
-    if (canAccessPlatformAdmin) {
-      void refreshAdminUsers();
-    }
-  }, [canAccessPlatformAdmin, refreshAdminUsers]);
 
   useEffect(() => {
     if (domainMailboxes.length === 0) {
@@ -348,21 +383,8 @@ export default function BusinessDashboard() {
               }),
             });
             if (verifyResult.success) {
-              try {
-                platformAdmin.recordTransaction({
-                  email: user?.email || 'user@velismail.online',
-                  plan: plan.name,
-                  billingCycle: billingCycle,
-                  amount: amountRupees,
-                  gateway: 'Razorpay',
-                  paymentId: response.razorpay_payment_id || 'pay_unknown',
-                });
-              } catch (txErr) {
-                console.error('Failed to log payment transaction:', txErr);
-              }
-
-              // The backend API has processed the secure upgrade logic (timers, db update).
-              // Reload to fetch fresh session and reflect true subscription timer from server state.
+              // The backend API has processed the secure upgrade logic (timers, db update)
+              // and recorded the invoice in the platform revenue ledger.
               showToast(`${plan.name} plan activated`);
               setTimeout(() => { if (typeof window !== 'undefined') window.location.reload(); }, 500);
             } else {
@@ -541,12 +563,43 @@ export default function BusinessDashboard() {
         onCompose={() => openComposeWith()} user={user}
         onLogout={() => setShowLogoutConfirm(true)} sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen}
         hasRoleAccess={hasRoleAccess} canAccessPlatformAdmin={canAccessPlatformAdmin}
+        viewMode={viewMode} onViewModeChange={switchView}
+        platformSection={platformSection} onPlatformSectionChange={setPlatformSection}
         onProfileClick={() => navigate('/settings')}
         state={dashboardState}
       />
 
       <main className="dash-main">
-        {activeBizTab === 'mail' && (
+        {canAccessPlatformAdmin && (
+          <div className="dash-view-switch" role="group" aria-label="Dashboard view">
+            <button
+              type="button"
+              className={`dash-view-switch-btn ${viewMode === 'workspace' ? 'active' : ''}`}
+              onClick={() => switchView('workspace')}
+            >
+              <Building2 size={14} /> Workspace
+            </button>
+            <button
+              type="button"
+              className={`dash-view-switch-btn ${viewMode === 'control-plane' ? 'active' : ''}`}
+              onClick={() => switchView('control-plane')}
+            >
+              <Crown size={14} /> Control Plane
+            </button>
+          </div>
+        )}
+
+        {viewMode === 'control-plane' && (
+          <ErrorBoundary>
+            <PlatformAdminPanel
+              section={platformSection}
+              onSectionChange={setPlatformSection}
+              state={dashboardState}
+            />
+          </ErrorBoundary>
+        )}
+
+        {viewMode === 'workspace' && activeBizTab === 'mail' && (
           <ErrorBoundary>
             <EmailInbox
             emails={emails} isLoading={emailsLoading} state={dashboardState}
@@ -562,29 +615,29 @@ export default function BusinessDashboard() {
           </ErrorBoundary>
         )}
 
-        {activeBizTab === 'domains' && <ErrorBoundary><DomainsPanel state={dashboardState} handleAddDomain={handleAddDomain} handleVerifyDomain={handleVerifyDomain} /></ErrorBoundary>}
+        {viewMode === 'workspace' && activeBizTab === 'domains' && <ErrorBoundary><DomainsPanel state={dashboardState} handleAddDomain={handleAddDomain} handleVerifyDomain={handleVerifyDomain} /></ErrorBoundary>}
 
-        {activeBizTab === 'mailboxes' && <ErrorBoundary><MailboxesPanel state={dashboardState} /></ErrorBoundary>}
+        {viewMode === 'workspace' && activeBizTab === 'mailboxes' && <ErrorBoundary><MailboxesPanel state={dashboardState} /></ErrorBoundary>}
 
-        {activeBizTab === 'groups' && <ErrorBoundary><GroupsPanel state={dashboardState} /></ErrorBoundary>}
+        {viewMode === 'workspace' && activeBizTab === 'groups' && <ErrorBoundary><GroupsPanel state={dashboardState} /></ErrorBoundary>}
 
-        {activeBizTab === 'team' && <ErrorBoundary><TeamPanel state={dashboardState} /></ErrorBoundary>}
+        {viewMode === 'workspace' && activeBizTab === 'team' && <ErrorBoundary><TeamPanel state={dashboardState} /></ErrorBoundary>}
 
-        {activeBizTab === 'queue' && <ErrorBoundary><QueuePanel state={dashboardState} /></ErrorBoundary>}
+        {viewMode === 'workspace' && activeBizTab === 'queue' && <ErrorBoundary><QueuePanel state={dashboardState} /></ErrorBoundary>}
 
-        {activeBizTab === 'analytics' && <ErrorBoundary><AnalyticsPanel state={dashboardState} /></ErrorBoundary>}
+        {viewMode === 'workspace' && activeBizTab === 'analytics' && <ErrorBoundary><AnalyticsPanel state={dashboardState} /></ErrorBoundary>}
 
-        {activeBizTab === 'audit' && <ErrorBoundary><AuditPanel state={dashboardState} /></ErrorBoundary>}
+        {viewMode === 'workspace' && activeBizTab === 'audit' && <ErrorBoundary><AuditPanel state={dashboardState} /></ErrorBoundary>}
 
-        {activeBizTab === 'admin' && canAccessPlatformAdmin && <ErrorBoundary><AdminPanel state={dashboardState} /></ErrorBoundary>}
+        {viewMode === 'workspace' && activeBizTab === 'company-admin' && <ErrorBoundary><CompanyAdminPanel state={dashboardState} /></ErrorBoundary>}
 
-        {activeBizTab === 'templates' && <ErrorBoundary><TemplatesPanel state={dashboardState} /></ErrorBoundary>}
+        {viewMode === 'workspace' && activeBizTab === 'templates' && <ErrorBoundary><TemplatesPanel state={dashboardState} /></ErrorBoundary>}
 
-        {activeBizTab === 'settings' && <ErrorBoundary><SettingsPanel state={dashboardState} /></ErrorBoundary>}
+        {viewMode === 'workspace' && activeBizTab === 'settings' && <ErrorBoundary><SettingsPanel state={dashboardState} /></ErrorBoundary>}
 
-        {activeBizTab === 'billing' && <ErrorBoundary><BillingPanel state={dashboardState} handleBuyPlan={handleBuyPlan} /></ErrorBoundary>}
-        {activeBizTab === 'contacts' && <ErrorBoundary><ContactsPage /></ErrorBoundary>}
-        {activeBizTab === 'deliverability' && <ErrorBoundary><DeliverabilityPanel state={dashboardState} /></ErrorBoundary>}
+        {viewMode === 'workspace' && activeBizTab === 'billing' && <ErrorBoundary><BillingPanel state={dashboardState} handleBuyPlan={handleBuyPlan} /></ErrorBoundary>}
+        {viewMode === 'workspace' && activeBizTab === 'contacts' && <ErrorBoundary><ContactsPage /></ErrorBoundary>}
+        {viewMode === 'workspace' && activeBizTab === 'deliverability' && <ErrorBoundary><DeliverabilityPanel state={dashboardState} /></ErrorBoundary>}
 
       </main>
 

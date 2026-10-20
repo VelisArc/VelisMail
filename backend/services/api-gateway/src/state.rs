@@ -23,6 +23,8 @@ pub struct AppState {
     /// Bounds in-flight requests so a traffic spike cannot exhaust memory.
     pub request_slots: Arc<tokio::sync::Semaphore>,
     pub started_at: Instant,
+    /// Daily traffic rollup counters flushed by a background task.
+    pub traffic: Arc<crate::traffic::DailyTraffic>,
     /// Persistent DB pool (when DATABASE_URL is set), else falls back to in-memory.
     pub db: Option<PgPool>,
     /// Fallback in-memory store when no DB is configured.
@@ -89,6 +91,7 @@ impl AppState {
             metrics: Arc::new(Metrics::default()),
             request_slots,
             started_at: Instant::now(),
+            traffic: Arc::new(crate::traffic::DailyTraffic::default()),
             db,
             team_invites: Arc::new(RwLock::new(HashMap::new())),
             inbound_routes: Arc::new(RwLock::new(HashMap::new())),

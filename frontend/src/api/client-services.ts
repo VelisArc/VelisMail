@@ -5,7 +5,7 @@ import {
   normalizeMailbox, normalizeDomainInput, normalizeLocalPart,
   hashString,
   isJwtLikelyUsable, clearBackendTokens,
-  normalizeSessionUser, buildSessionUser, addBillingPeriod,
+  normalizeSessionUser, buildSessionUser,
   loginIdentifierCandidates, scopedExistingSession,
   fetchAuthenticatedProfile,
   saveUserToPersistentStore, loadPersistentUsers, savePersistentUsers,
@@ -26,7 +26,6 @@ import {
   normalizeBusinessMailboxEntry, normalizeBusinessGroupEntry,
   buildConnectionUsage,
   assertLocalOtpLimit, recordLocalOtpSend,
-  scopedRecordCount, scopedEmailCount, estimateUserStorageBytes, userRisk,
   buildTeamAccessInvite,
   loadTeamAccessInvites, saveTeamAccessInvites,
   cacheTeamAccessInvite, hasTeamAccessWorkspace,
@@ -46,11 +45,12 @@ import type {
   User, DnsRecord, DomainCheck, CustomDomain, BusinessMailbox,
   BusinessGroup, BusinessTeamMember, TeamAccessInvite, BusinessTemplate,
   BusinessMailQueueItem, BusinessAuditEntry, ConnectionUsage,
-  PlatformAdminUserRecord, Email, OtpSendResponse, OtpVerifyResponse,
+  Email, OtpSendResponse, OtpVerifyResponse,
   ActiveSession, Contact, Signature, AutoReply, Label, EmailRule,
-  EmailRuleCondition, EmailRuleAction, PlatformTransaction,
+  EmailRuleCondition, EmailRuleAction,
 } from './types';
 import type { CreateTeamAccessInviteParams } from './client-core';
+import { signInWithGoogle, signOutFirebase } from '../lib/firebase';
 
 // ---- Auth Functions ----
 export const auth = {
@@ -262,6 +262,65 @@ export const auth = {
       }
     }
     return { success: false, error: lastError };
+  },
+
+  /**
+   * Firebase Google sign-in. The ID token is verified server-side by the auth
+   * service; the browser never decides whether an account is valid.
+   */
+  async loginWithGoogle(): Promise<{ success: boolean; error?: string; user?: User }> {
+    try {
+      const identity = await signInWithGoogle();
+      if (!identity.idToken || !identity.email) {
+        return { success: false, error: 'Google did not return an email address for this account.' };
+      }
+      const existingLocal = scopedExistingSession(identity.email);
+      const res = await fetchAPI('/auth/firebase', {
+        method: 'POST',
+        body: JSON.stringify({ idToken: identity.idToken, deviceId: 'google-web' }),
+      });
+      if (!res || typeof res.access_token !== 'string') {
+        return { success: false, error: 'Backend authentication failed.' };
+      }
+      localStorage.setItem('velismail_token', res.access_token);
+      if (typeof res.refresh_token === 'string') {
+        localStorage.setItem('velismail_refresh', res.refresh_token);
+      }
+      const profile = await fetchAuthenticatedProfile();
+      const safeUser = buildSessionUser({
+        token: res.access_token,
+        email: identity.email,
+        displayName: identity.displayName,
+        profile,
+        existing: existingLocal,
+      });
+      safeUser.firebaseUid = identity.uid;
+      if (identity.photoUrl && !safeUser.profileImageUrl) safeUser.profileImageUrl = identity.photoUrl;
+
+      if (safeUser.status === 'suspended' || safeUser.status === 'deactivated') {
+        this.logout();
+        await signOutFirebase();
+        return { success: false, error: 'This account is not active. Contact VelisMail support for review or recovery.' };
+      }
+
+      saveDB(STORAGE_KEYS.session, safeUser);
+      saveUserToPersistentStore(safeUser);
+      reloadAccountCaches();
+      return { success: true, user: safeUser };
+    } catch (error) {
+      await signOutFirebase();
+      const message = error instanceof Error ? error.message : 'Google sign-in failed.';
+      if (message.includes('popup-closed-by-user')) {
+        return { success: false, error: 'Google sign-in was cancelled.' };
+      }
+      if (message.includes('popup-blocked')) {
+        return { success: false, error: 'Your browser blocked the Google popup. Allow popups and try again.' };
+      }
+      if (message.includes('unauthorized') || message.includes('not authorized')) {
+        return { success: false, error: 'Google sign-in succeeded, but this account is not provisioned for VelisMail.' };
+      }
+      return { success: false, error: message };
+    }
   },
 
   async requestPasswordReset(identifier: string): Promise<OtpSendResponse> {
@@ -1721,440 +1780,6 @@ export const mail = {
   },
 };
 
-function platformAdminHostAllowed(): boolean {
-  if (typeof window === 'undefined') return true;
-  const hostname = window.location.hostname.toLowerCase();
-  return (
-    hostname === 'velismail.online' ||
-    hostname === 'www.velismail.online' ||
-    hostname.endsWith('.velismail.online') ||
-    hostname === 'localhost' ||
-    hostname === '127.0.0.1'
-  );
-}
-
-const PLATFORM_ADMIN_DOMAIN = 'velismail.online';
-
-type PlatformUsersApiResponse = {
-  success?: boolean;
-  users?: Partial<User>[];
-  user?: Partial<User>;
-  error?: string;
-  message?: string;
-};
-
-function isPlatformOwnerEmail(email: string): boolean {
-  return normalizeMailbox(email).endsWith(`@${PLATFORM_ADMIN_DOMAIN}`);
-}
-
-function normalizePlatformDirectoryUser(entry: Partial<User>): User | null {
-  const email = normalizeMailbox(entry.email || entry.businessMailboxAddress || '');
-  if (!email) return null;
-  const owner = isPlatformOwnerEmail(email);
-  return normalizeSessionUser({
-    ...entry,
-    id: String(entry.id || `usr_${hashString(email)}`),
-    email,
-    displayName: String(entry.displayName || email.split('@')[0] || 'Business User'),
-    plan: entry.plan || 'Free',
-    accountType: 'business',
-    isSetupComplete: Boolean(entry.isSetupComplete),
-    createdAt: entry.createdAt || new Date().toISOString(),
-    role: owner ? 'admin' : entry.role || 'user',
-    status: owner ? 'active' : entry.status || 'active',
-    isPlatformAdmin: owner,
-  } as User);
-}
-
-function loadPlatformUserDirectory(session?: User | null): Record<string, User> {
-  const users = { ...loadPersistentUsers() };
-  const legacyUsers = loadDB<unknown>(STORAGE_KEYS.users, []);
-  if (Array.isArray(legacyUsers)) {
-    legacyUsers.forEach((entry) => {
-      if (!entry || typeof entry !== 'object') return;
-      const user = normalizePlatformDirectoryUser(entry as Partial<User>);
-      if (user && !users[user.email]) {
-        users[user.email] = user;
-      }
-    });
-  }
-  if (session) {
-    users[normalizeMailbox(session.email)] = normalizeSessionUser({
-      ...users[normalizeMailbox(session.email)],
-      ...session,
-    });
-  }
-
-  Object.entries(users).forEach(([email, user]) => {
-    const owner = isPlatformOwnerEmail(email);
-    users[email] = normalizeSessionUser({
-      ...user,
-      role: owner ? 'admin' : user.role || 'user',
-      status: owner ? 'active' : user.status || 'active',
-      isPlatformAdmin: owner,
-    });
-  });
-  savePersistentUsers(users);
-  return users;
-}
-
-function mergePlatformUsers(users: Record<string, User>, entries: Partial<User>[]): Record<string, User> {
-  entries.forEach((entry) => {
-    const user = normalizePlatformDirectoryUser(entry);
-    if (!user) return;
-    users[user.email] = normalizeSessionUser({
-      ...users[user.email],
-      ...user,
-    });
-  });
-  savePersistentUsers(users);
-  return users;
-}
-
-async function fetchPlatformUsersFromBackend(): Promise<Record<string, User> | null> {
-  try {
-    const response = await fetchApiJsonDetailed<PlatformUsersApiResponse>('/platform/users');
-    if (response.status === 404 || response.status === 400 || response.status === 500) {
-      warnBackendSyncFailure(new Error(response.data?.error || response.data?.message || 'Platform user API is not available or returned bad request.'));
-      return null;
-    }
-    if (!response.ok || !response.data?.success || !Array.isArray(response.data.users)) {
-      warnBackendSyncFailure(new Error(response.data?.error || response.data?.message || 'Unable to load platform users.'));
-      return null;
-    }
-    return mergePlatformUsers(loadPlatformUserDirectory(auth.getSession()), response.data.users);
-  } catch (err) {
-    warnBackendSyncFailure(err instanceof Error ? err : new Error('Unable to connect to platform API.'));
-    return null;
-  }
-}
-
-async function patchPlatformUserOnBackend(payload: {
-  email: string;
-  role?: 'admin' | 'member' | 'viewer' | 'user';
-  status?: 'active' | 'suspended' | 'deactivated';
-  plan?: string;
-  billingCycle?: 'monthly' | 'annual';
-}): Promise<User | null> {
-  const response = await fetchApiJsonDetailed<PlatformUsersApiResponse>('/platform/users', {
-    method: 'PATCH',
-    body: JSON.stringify(payload),
-  });
-  if (response.status === 404) {
-    warnBackendSyncFailure(new Error(response.data?.error || response.data?.message || 'Platform user API is not available.'));
-    return null;
-  }
-  if (!response.ok || !response.data?.success) {
-    throw new Error(response.data?.error || response.data?.message || 'Unable to update platform user.');
-  }
-  const normalized = response.data.user ? normalizePlatformDirectoryUser(response.data.user) : null;
-  if (normalized) {
-    const users = loadPlatformUserDirectory(auth.getSession());
-    users[normalized.email] = normalized;
-    savePersistentUsers(users);
-    persistCurrentSessionUser(normalized);
-  }
-  return normalized;
-}
-
-async function deletePlatformUserOnBackend(email: string): Promise<boolean> {
-  const response = await fetchApiJsonDetailed<PlatformUsersApiResponse>('/platform/users', {
-    method: 'DELETE',
-    body: JSON.stringify({ email }),
-  });
-  if (response.status === 404) {
-    warnBackendSyncFailure(new Error(response.data?.error || response.data?.message || 'Platform user API is not available.'));
-    return false;
-  }
-  if (!response.ok || !response.data?.success) {
-    throw new Error(response.data?.error || response.data?.message || 'Unable to delete platform user.');
-  }
-  return true;
-}
-
-function persistCurrentSessionUser(user: User) {
-  const session = getSessionSafe();
-  if (session && normalizeMailbox(session.email) === normalizeMailbox(user.email)) {
-    saveDB(STORAGE_KEYS.session, normalizeSessionUser(user));
-  }
-}
-
-// ---- Platform Admin ----
-export const platformAdmin = {
-  ownerDomain: PLATFORM_ADMIN_DOMAIN,
-
-  isOwnerEmail(email: string): boolean {
-    return isPlatformOwnerEmail(email);
-  },
-
-  isCurrentUserPlatformAdmin(): boolean {
-    const session = auth.getSession();
-    if (!session) return false;
-    if (session.role === 'user') return false;
-    if (!platformAdminHostAllowed()) return false;
-
-    const normalizedEmail = normalizeMailbox(session.email);
-    const users = loadPlatformUserDirectory(session);
-    const existing = users[normalizedEmail];
-    if (!isPlatformOwnerEmail(normalizedEmail)) {
-      if (existing?.isPlatformAdmin || session.isPlatformAdmin) {
-        const next = normalizeSessionUser({
-          ...existing,
-          ...session,
-          isPlatformAdmin: false,
-        });
-        users[normalizedEmail] = next;
-        savePersistentUsers(users);
-        persistCurrentSessionUser(next);
-      }
-      return false;
-    }
-
-    const next = normalizeSessionUser({
-      ...existing,
-      ...session,
-      role: 'admin',
-      status: 'active',
-      isPlatformAdmin: true,
-    });
-    users[normalizedEmail] = next;
-    savePersistentUsers(users);
-    persistCurrentSessionUser(next);
-    return true;
-  },
-
-  getUsers(): PlatformAdminUserRecord[] {
-    const session = auth.getSession();
-    const usersByEmail = loadPlatformUserDirectory(session);
-    const users = Object.values(usersByEmail).map(normalizeSessionUser);
-    return users
-      .map((user): PlatformAdminUserRecord => {
-        const base = {
-          user,
-          status: user.status || 'active',
-          domain: user.businessDomain || user.customDomain || user.email.split('@')[1] || '',
-          plan: user.plan || 'Free',
-          billingCycle: user.billingCycle || 'monthly',
-          paidPlanPurchasedAt: user.paidPlanPurchasedAt,
-          paidPlanExpiresAt: user.paidPlanExpiresAt,
-          planStartedAt: user.planStartedAt || user.createdAt,
-          lastPlanChangeAt: user.lastPlanChangeAt,
-          createdAt: user.createdAt,
-          lastActiveAt: undefined,
-          emailCount: scopedEmailCount(user.id),
-          domainCount: scopedRecordCount<CustomDomain>(STORAGE_KEYS.domains, user.id),
-          mailboxCount: scopedRecordCount<BusinessMailbox>(STORAGE_KEYS.businessMailboxes, user.id),
-          queueCount: scopedRecordCount<BusinessMailQueueItem>(STORAGE_KEYS.businessQueue, user.id),
-          templateCount: scopedRecordCount<BusinessTemplate>(STORAGE_KEYS.businessTemplates, user.id),
-          teamMemberCount: scopedRecordCount<BusinessTeamMember>(STORAGE_KEYS.businessTeam, user.id),
-          auditCount: scopedRecordCount<BusinessAuditEntry>(STORAGE_KEYS.businessAudit, user.id),
-          storageEstimateBytes: estimateUserStorageBytes(user),
-        };
-        return {
-          ...base,
-          risk: userRisk(base),
-        };
-      })
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-  },
-
-  async syncUsers(): Promise<PlatformAdminUserRecord[]> {
-    await fetchPlatformUsersFromBackend();
-    return this.getUsers();
-  },
-
-  async updateUserStatus(email: string, status: 'active' | 'suspended' | 'deactivated', reason?: string): Promise<User | null> {
-    const users = loadPersistentUsers();
-    const normalizedEmail = normalizeMailbox(email);
-    const user = users[normalizedEmail];
-    if (!user) return null;
-    if (isPlatformOwnerEmail(normalizedEmail) && status !== 'active') {
-      throw new Error('Platform-domain admin accounts cannot be suspended or deactivated.');
-    }
-
-    const next = normalizeSessionUser({
-      ...user,
-      status,
-      suspendedAt: status === 'suspended' ? new Date().toISOString() : undefined,
-      suspensionReason: status === 'suspended' ? reason?.trim() || 'Administrative suspension' : undefined,
-    });
-    users[normalizedEmail] = next;
-    savePersistentUsers(users);
-    persistCurrentSessionUser(next);
-
-    const session = auth.getSession();
-    businessAudit.add({
-      action: status === 'suspended' ? 'Suspended user' : status === 'deactivated' ? 'Deactivated user' : 'Reactivated user',
-      actor: session?.email || 'platform-admin',
-      target: normalizedEmail,
-      severity: status === 'suspended' ? 'critical' : 'warn',
-    });
-
-    return await patchPlatformUserOnBackend({ email: normalizedEmail, status }) || next;
-  },
-
-  async updateUserPlan(email: string, plan: string, billingCycle: 'monthly' | 'annual'): Promise<User | null> {
-    const users = loadPersistentUsers();
-    const normalizedEmail = normalizeMailbox(email);
-    const user = users[normalizedEmail];
-    if (!user) return null;
-
-    const now = new Date().toISOString();
-    const paidPlanPurchasedAt = plan === 'Free' ? undefined : now;
-    const paidPlanExpiresAt = plan === 'Free' ? undefined : addBillingPeriod(now, billingCycle);
-    const next = normalizeSessionUser({
-      ...user,
-      plan,
-      billingCycle,
-      paidPlanPurchasedAt,
-      paidPlanExpiresAt,
-      subscriptionStatus: 'active',
-      planStartedAt: plan === 'Free' ? (user.planStartedAt || user.createdAt || now) : now,
-      lastPlanChangeAt: now,
-    });
-    users[normalizedEmail] = next;
-    savePersistentUsers(users);
-    persistCurrentSessionUser(next);
-
-    const session = auth.getSession();
-    businessAudit.add({
-      action: 'Updated user plan',
-      actor: session?.email || 'platform-admin',
-      target: `${normalizedEmail} -> ${plan} (${billingCycle})`,
-      severity: 'warn',
-    });
-
-    return await patchPlatformUserOnBackend({ email: normalizedEmail, plan, billingCycle }) || next;
-  },
-
-  async updateUserRole(email: string, role: 'admin' | 'member' | 'viewer' | 'user'): Promise<User | null> {
-    const users = loadPersistentUsers();
-    const normalizedEmail = normalizeMailbox(email);
-    const user = users[normalizedEmail];
-    if (!user) return null;
-    if (isPlatformOwnerEmail(normalizedEmail) && role !== 'admin') {
-      throw new Error('Platform-domain accounts are locked to admin access.');
-    }
-
-    const next = normalizeSessionUser({ ...user, role, isPlatformAdmin: isPlatformOwnerEmail(normalizedEmail) });
-    users[normalizedEmail] = next;
-    savePersistentUsers(users);
-    persistCurrentSessionUser(next);
-
-    const session = auth.getSession();
-    businessAudit.add({
-      action: 'Updated user role',
-      actor: session?.email || 'platform-admin',
-      target: `${normalizedEmail} -> ${role}`,
-      severity: 'info',
-    });
-
-    return await patchPlatformUserOnBackend({ email: normalizedEmail, role }) || next;
-  },
-
-  async setPlatformAdmin(email: string, enabled: boolean): Promise<User | null> {
-    const users = loadPersistentUsers();
-    const normalizedEmail = normalizeMailbox(email);
-    const user = users[normalizedEmail];
-    if (!user) return null;
-    if (!isPlatformOwnerEmail(normalizedEmail)) {
-      throw new Error(`Platform Admin access is locked to @${PLATFORM_ADMIN_DOMAIN} accounts.`);
-    }
-    if (!enabled) {
-      throw new Error('Platform-domain accounts cannot be removed from Platform Admin.');
-    }
-
-    const next = normalizeSessionUser({
-      ...user,
-      role: 'admin',
-      status: 'active',
-      isPlatformAdmin: true,
-    });
-    users[normalizedEmail] = next;
-    savePersistentUsers(users);
-    persistCurrentSessionUser(next);
-
-    const session = auth.getSession();
-    businessAudit.add({
-      action: enabled ? 'Granted platform admin' : 'Revoked platform admin',
-      actor: session?.email || 'platform-admin',
-      target: normalizedEmail,
-      severity: 'critical',
-    });
-
-    return await patchPlatformUserOnBackend({ email: normalizedEmail, role: 'admin', status: 'active' }) || next;
-  },
-
-  async deleteUser(email: string): Promise<boolean> {
-    const users = loadPersistentUsers();
-    const normalizedEmail = normalizeMailbox(email);
-    if (!users[normalizedEmail]) return false;
-    if (isPlatformOwnerEmail(normalizedEmail)) {
-      throw new Error('Platform-domain admin accounts cannot be deleted.');
-    }
-
-    await deletePlatformUserOnBackend(normalizedEmail);
-    delete users[normalizedEmail];
-    savePersistentUsers(users);
-
-    const session = auth.getSession();
-    businessAudit.add({
-      action: 'Deleted user',
-      actor: session?.email || 'platform-admin',
-      target: normalizedEmail,
-      severity: 'critical',
-    });
-
-    return true;
-  },
-
-  getTransactions(): PlatformTransaction[] {
-    return loadDB<PlatformTransaction[]>('velismail_platform_transactions', []);
-  },
-
-  addManualTransaction(email: string, plan: string, billingCycle: 'monthly' | 'annual', amount: number): PlatformTransaction {
-    const list = this.getTransactions();
-    const tx: PlatformTransaction = {
-      id: 'tx_pay_' + safeRandomUUID().split('-')[0],
-      email: normalizeMailbox(email),
-      plan,
-      billingCycle,
-      amount,
-      status: 'paid',
-      gateway: 'Manual Admin Credit',
-      paymentId: 'cred_adm_' + safeRandomUUID().split('-')[0].slice(0, 6),
-      timestamp: new Date().toISOString(),
-    };
-    list.unshift(tx);
-    saveDB('velismail_platform_transactions', list);
-    return tx;
-  },
-
-  recordTransaction(data: {
-    email: string;
-    plan: string;
-    billingCycle: 'monthly' | 'annual';
-    amount: number;
-    gateway: string;
-    paymentId: string;
-  }): PlatformTransaction {
-    const list = this.getTransactions();
-    const tx: PlatformTransaction = {
-      id: 'tx_pay_' + safeRandomUUID().split('-')[0],
-      email: normalizeMailbox(data.email),
-      plan: data.plan,
-      billingCycle: data.billingCycle,
-      amount: data.amount,
-      status: 'paid',
-      gateway: data.gateway,
-      paymentId: data.paymentId,
-      timestamp: new Date().toISOString(),
-    };
-    list.unshift(tx);
-    saveDB('velismail_platform_transactions', list);
-    return tx;
-  },
-};
 
 // ---- Connection Usage ----
 export const connections = {

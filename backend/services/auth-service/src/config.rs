@@ -24,6 +24,12 @@ pub struct AuthConfig {
     pub platform_from_name: String,
     pub otp_from_email: String,
     pub otp_from_name: String,
+    /// Firebase Web API key used to verify Google sign-in ID tokens.
+    pub firebase_web_api_key: Option<String>,
+    /// Firebase project ID, used for audit/display only.
+    pub firebase_project_id: Option<String>,
+    /// Firebase UIDs that are allowed into the platform control plane.
+    pub platform_owner_uids: Vec<String>,
 }
 
 fn required_env(name: &str) -> Result<String> {
@@ -108,6 +114,22 @@ impl AuthConfig {
                 .ok()
                 .filter(|value| !value.trim().is_empty())
                 .unwrap_or(platform_from_name),
+            firebase_web_api_key: std::env::var("FIREBASE_WEB_API_KEY")
+                .ok()
+                .or_else(|| std::env::var("FIREBASE_API_KEY").ok())
+                .map(|value| value.trim().to_string())
+                .filter(|value| !value.is_empty()),
+            firebase_project_id: std::env::var("FIREBASE_PROJECT_ID")
+                .ok()
+                .map(|value| value.trim().to_string())
+                .filter(|value| !value.is_empty()),
+            platform_owner_uids: std::env::var("PLATFORM_OWNER_UIDS")
+                .or_else(|_| std::env::var("PLATFORM_OWNER_FIREBASE_UIDS"))
+                .unwrap_or_default()
+                .split(',')
+                .map(|value| value.trim().to_string())
+                .filter(|value| !value.is_empty())
+                .collect(),
         })
     }
 }

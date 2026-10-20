@@ -4338,6 +4338,7 @@ dependencies = [
  "jsonwebtoken",
  "rand_core 0.6.4",
  "redis",
+ "reqwest 0.13.5",
  "ring",
  "serde",
  "serde_json",

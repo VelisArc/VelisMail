@@ -17,15 +17,26 @@ jobs:
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
 
       - name: Cache cargo registry
         uses: Swatinem/rust-cache@v2
+
+      - name: Validate deployment environment template
+        run: bash deploy/native/check-env.sh .env.example
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
 
       - name: Check backend workspace
         run: cargo check --workspace --all-targets
 
       - name: Lint backend workspace
         run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: Run backend tests
+        run: cargo test --workspace --all-targets
 
   frontend:
     name: Frontend Checks

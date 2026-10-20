@@ -22,6 +22,10 @@ pub struct Claims {
     pub mfa_verified: bool,
     pub device_id: String,
     pub security_level: SecurityLevel,
+    /// Firebase UID for accounts that authenticated through Google/Firebase.
+    /// Absent on password and OTP sessions.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub firebase_uid: Option<String>,
 }
 
 /// User roles

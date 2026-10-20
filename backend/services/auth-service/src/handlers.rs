@@ -140,6 +140,123 @@ fn mask_email(email: &str) -> String {
     }
 }
 
+/// Resolve the company workspace for an email address, creating it when the
+/// domain does not have one yet. Every authenticated account belongs to a
+/// tenant so the company administration console and platform analytics stay
+/// tenant-scoped.
+async fn resolve_or_create_tenant(
+    state: &AuthState,
+    email: &str,
+    auth_provider: &str,
+) -> Result<Uuid, StatusCode> {
+    let email_domain = email
+        .split('@')
+        .nth(1)
+        .unwrap_or("velismail.online")
+        .to_lowercase();
+    let existing = sqlx::query(
+        "SELECT id FROM tenants
+         WHERE deleted_at IS NULL
+           AND (organization_email = $1 OR LOWER(SPLIT_PART(organization_email, '@', 2)) = $2)
+         ORDER BY created_at ASC
+         LIMIT 1",
+    )
+    .bind(email)
+    .bind(&email_domain)
+    .fetch_optional(&state.db)
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    if let Some(row) = existing {
+        return row
+            .try_get("id")
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR);
+    }
+
+    let slug = format!(
+        "{}-{}",
+        email_domain.replace(|ch: char| !ch.is_ascii_alphanumeric(), "-"),
+        &Uuid::new_v4().simple().to_string()[..6]
+    );
+    let row = sqlx::query(
+        "INSERT INTO tenants (organization_name, organization_email, plan_tier, status, settings, limits)
+         VALUES ($1, $2, 'free', 'active', jsonb_build_object('domain', $3, 'authProvider', $4), '{}'::jsonb)
+         ON CONFLICT (organization_email) DO UPDATE SET updated_at = NOW()
+         RETURNING id",
+    )
+    .bind(&email_domain)
+    .bind(email)
+    .bind(&email_domain)
+    .bind(auth_provider)
+    .fetch_one(&state.db)
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let tenant_id: Uuid = row
+        .try_get("id")
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let _ = sqlx::query(
+        "INSERT INTO tenant_profiles (tenant_id, slug, legal_name, billing_email, technical_email)
+         VALUES ($1, $2, $3, $4, $4)
+         ON CONFLICT (tenant_id) DO NOTHING",
+    )
+    .bind(tenant_id)
+    .bind(&slug)
+    .bind(&email_domain)
+    .bind(email)
+    .execute(&state.db)
+    .await;
+    Ok(tenant_id)
+}
+
+/// Keep the normalized membership tables in sync with a user's account. The
+/// stored role is never downgraded, and a suspended membership stays
+/// suspended - only a workspace owner or the platform can change that.
+async fn sync_company_membership(
+    state: &AuthState,
+    tenant_id: Uuid,
+    user_id: Uuid,
+    email: &str,
+    display_name: &str,
+    role: &str,
+) {
+    let _ = sqlx::query(
+        "INSERT INTO company_members (tenant_id, user_id, email, display_name, role, status, joined_at, last_active_at)
+         VALUES ($1, $2, $3, $4, $5, 'active', NOW(), NOW())
+         ON CONFLICT (tenant_id, email) DO UPDATE
+         SET user_id = EXCLUDED.user_id,
+             display_name = CASE WHEN EXCLUDED.display_name = '' THEN company_members.display_name ELSE EXCLUDED.display_name END,
+             last_active_at = NOW(),
+             role = CASE
+                 WHEN company_members.role = 'owner' OR EXCLUDED.role = 'owner' THEN 'owner'
+                 WHEN company_members.role = 'admin' OR EXCLUDED.role = 'admin' THEN 'admin'
+                 ELSE company_members.role
+             END",
+    )
+    .bind(tenant_id)
+    .bind(user_id)
+    .bind(email)
+    .bind(display_name)
+    .bind(role)
+    .execute(&state.db)
+    .await;
+    let _ = sqlx::query(
+        "INSERT INTO tenant_users (tenant_id, user_id, role)
+         VALUES ($1, $2, $3)
+         ON CONFLICT (tenant_id, user_id) DO UPDATE
+         SET role = CASE
+                 WHEN tenant_users.role = 'owner' OR EXCLUDED.role = 'owner' THEN 'owner'
+                 WHEN tenant_users.role = 'admin' OR EXCLUDED.role = 'admin' THEN 'admin'
+                 ELSE tenant_users.role
+             END,
+             updated_at = NOW()",
+    )
+    .bind(tenant_id)
+    .bind(user_id)
+    .bind(role)
+    .execute(&state.db)
+    .await;
+}
+
 fn hash_otp_value(secret: &str, email: &str, otp: &str, salt: &str, purpose: &str) -> String {
     let payload = format!(
         "{}:{}:{}:{}:{}",
@@ -354,7 +471,28 @@ pub async fn register(
 
     let password_hash = hash_password(&request.password)?;
     let user_id = Uuid::new_v4();
-    let tenant_id = request.tenant_id.unwrap_or_else(Uuid::nil);
+    let tenant_id = match request.tenant_id {
+        Some(tenant_id) => tenant_id,
+        None => resolve_or_create_tenant(&state, &email, "otp").await?,
+    };
+
+    let member_count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*)::bigint FROM users WHERE tenant_id = $1")
+            .bind(tenant_id)
+            .fetch_one(&state.db)
+            .await
+            .unwrap_or(0);
+    // The first account of a workspace owns it; everyone else joins as a member.
+    let workspace_role = if member_count == 0 { "owner" } else { "member" };
+    let client_role = if member_count == 0 { "admin" } else { "member" };
+    let settings = json!({
+        "role": client_role,
+        "plan": "Free",
+        "billingCycle": "monthly",
+        "accountType": "business",
+        "isSetupComplete": false,
+        "authProvider": "otp",
+    });
 
     sqlx::query(
         r#"INSERT INTO users (
@@ -365,9 +503,10 @@ pub async fn register(
                recovery_email_verified,
                display_name,
                password_hash,
-               status
+               status,
+               settings
            )
-           VALUES ($1, $2, $3, $4, $5, $6, $7, 'active')"#,
+           VALUES ($1, $2, $3, $4, $5, $6, $7, 'active', $8)"#,
     )
     .bind(user_id)
     .bind(tenant_id)
@@ -376,12 +515,23 @@ pub async fn register(
     .bind(recovery_email.is_some())
     .bind(&request.display_name)
     .bind(&password_hash)
+    .bind(&settings)
     .execute(&state.db)
     .await
     .map_err(|e| {
         tracing::error!("register insert failed: {}", e);
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
+
+    sync_company_membership(
+        &state,
+        tenant_id,
+        user_id,
+        &email,
+        &request.display_name,
+        workspace_role,
+    )
+    .await;
 
     Ok(Json(json!({
         "success": true,
@@ -390,6 +540,7 @@ pub async fn register(
             "email": email,
             "recovery_email": recovery_email,
             "display_name": request.display_name,
+            "tenant_id": tenant_id,
         }
     })))
 }
@@ -1024,9 +1175,14 @@ pub async fn get_current_user(
     let user_id = claims.sub.0;
 
     let user = sqlx::query(
-        "SELECT id, tenant_id, email, recovery_email, display_name, status, settings, created_at, updated_at, last_login
-         FROM users
-         WHERE id = $1"
+        "SELECT u.id, u.tenant_id, u.email, u.recovery_email, u.display_name, u.status,
+                u.settings, u.created_at, u.updated_at, u.last_login,
+                (SELECT cm.role FROM company_members cm
+                 WHERE cm.tenant_id = u.tenant_id AND cm.email = u.email
+                   AND cm.status = 'active'
+                 LIMIT 1) AS company_role
+         FROM users u
+         WHERE u.id = $1",
     )
     .bind(user_id)
     .fetch_optional(&state.db)
@@ -1040,9 +1196,7 @@ pub async fn get_current_user(
     let id: Uuid = user
         .try_get("id")
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    let tenant_id: Uuid = user
-        .try_get("tenant_id")
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let tenant_id: Option<Uuid> = user.try_get("tenant_id").ok();
     let email: String = user
         .try_get("email")
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
@@ -1053,7 +1207,27 @@ pub async fn get_current_user(
     let status: String = user
         .try_get("status")
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    let settings: Option<serde_json::Value> = user.try_get("settings").ok();
+    let mut settings: serde_json::Value = user
+        .try_get::<Option<serde_json::Value>, _>("settings")
+        .ok()
+        .flatten()
+        .unwrap_or_else(|| json!({}));
+    let company_role: Option<String> = user
+        .try_get::<Option<String>, _>("company_role")
+        .ok()
+        .flatten();
+    if let Some(role) = company_role.as_deref() {
+        let client_role = match role {
+            "owner" | "admin" => "admin",
+            "viewer" => "viewer",
+            "member" => "member",
+            _ => "",
+        };
+        if !client_role.is_empty() {
+            settings["role"] = json!(client_role);
+            settings["companyRole"] = json!(role);
+        }
+    }
     let created_at: chrono::DateTime<chrono::Utc> = user
         .try_get("created_at")
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
@@ -1061,6 +1235,32 @@ pub async fn get_current_user(
         .try_get("updated_at")
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     let last_login: Option<chrono::DateTime<chrono::Utc>> = user.try_get("last_login").ok();
+
+    // The control-plane switch is shown to platform staff. The gateway stays
+    // authoritative - this only tells the client what to render.
+    let firebase_uid = settings
+        .get("firebaseUid")
+        .and_then(|value| value.as_str())
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty());
+    let is_platform_admin = firebase_uid
+        .as_ref()
+        .map(|uid| {
+            state
+                .config
+                .platform_owner_uids
+                .iter()
+                .any(|allowed| allowed == uid)
+        })
+        .unwrap_or(false)
+        || email.to_lowercase().ends_with("@velismail.online")
+        || sqlx::query_scalar::<_, bool>(
+            "SELECT EXISTS (SELECT 1 FROM platform_admins WHERE email = $1 AND status = 'active')",
+        )
+        .bind(&email)
+        .fetch_one(&state.db)
+        .await
+        .unwrap_or(false);
 
     Ok(Json(json!({
         "success": true,
@@ -1071,10 +1271,12 @@ pub async fn get_current_user(
             "recovery_email": recovery_email,
             "display_name": display_name,
             "status": status,
-            "settings": settings.unwrap_or_else(|| json!({})),
+            "settings": settings,
             "created_at": created_at,
             "updated_at": updated_at,
             "last_login": last_login,
+            "firebase_uid": firebase_uid,
+            "is_platform_admin": is_platform_admin,
         }
     })))
 }
@@ -1343,5 +1545,292 @@ pub async fn feedback(
     Ok(Json(json!({
         "success": true,
         "message": "Feedback submitted successfully"
+    })))
+}
+
+// ---------------------------------------------------------------------------
+// Firebase / Google sign-in
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FirebaseLoginRequest {
+    pub id_token: String,
+    pub device_id: Option<String>,
+    pub tenant_slug: Option<String>,
+}
+
+async fn verify_firebase_id_token(
+    state: &AuthState,
+    id_token: &str,
+) -> Result<serde_json::Value, StatusCode> {
+    let api_key = state
+        .config
+        .firebase_web_api_key
+        .as_deref()
+        .ok_or(StatusCode::SERVICE_UNAVAILABLE)?;
+    let url = format!(
+        "https://identitytoolkit.googleapis.com/v1/accounts:lookup?key={}",
+        api_key
+    );
+    let response = reqwest::Client::new()
+        .post(url)
+        .json(&json!({ "idToken": id_token }))
+        .send()
+        .await
+        .map_err(|err| {
+            tracing::error!("firebase token verification failed: {}", err);
+            StatusCode::BAD_GATEWAY
+        })?;
+    if !response.status().is_success() {
+        tracing::warn!(
+            "firebase rejected an ID token with status {}",
+            response.status()
+        );
+        return Err(StatusCode::UNAUTHORIZED);
+    }
+    let body: serde_json::Value = response.json().await.map_err(|_| StatusCode::BAD_GATEWAY)?;
+    body.get("users")
+        .and_then(|users| users.get(0))
+        .cloned()
+        .ok_or(StatusCode::UNAUTHORIZED)
+}
+
+pub async fn firebase_login(
+    State(state): State<AuthState>,
+    headers: HeaderMap,
+    Json(request): Json<FirebaseLoginRequest>,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    let id_token = request.id_token.trim();
+    if id_token.is_empty() {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+
+    let identity = verify_firebase_id_token(&state, id_token).await?;
+    let firebase_uid = identity
+        .get("localId")
+        .and_then(|value| value.as_str())
+        .unwrap_or_default()
+        .trim()
+        .to_string();
+    let email = identity
+        .get("email")
+        .and_then(|value| value.as_str())
+        .unwrap_or_default()
+        .trim()
+        .to_lowercase();
+    if firebase_uid.is_empty() || email.is_empty() || !email.contains('@') {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+
+    let display_name = identity
+        .get("displayName")
+        .and_then(|value| value.as_str())
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
+        .unwrap_or_else(|| {
+            email
+                .split('@')
+                .next()
+                .unwrap_or("VelisMail user")
+                .to_string()
+        });
+    let photo_url = identity
+        .get("photoUrl")
+        .and_then(|value| value.as_str())
+        .map(str::to_string);
+    let email_verified = identity
+        .get("emailVerified")
+        .and_then(|value| value.as_bool())
+        .unwrap_or(true);
+    if !email_verified {
+        return Err(StatusCode::FORBIDDEN);
+    }
+
+    // Resolve (or provision) the company workspace for this email domain.
+    let tenant_id: Uuid = resolve_or_create_tenant(&state, &email, "google").await?;
+
+    let existing = sqlx::query(
+        "SELECT id, email, display_name, status, settings
+         FROM users
+         WHERE email = $1 OR settings->>'firebaseUid' = $2
+         LIMIT 1",
+    )
+    .bind(&email)
+    .bind(&firebase_uid)
+    .fetch_optional(&state.db)
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let (user_id, user_status): (Uuid, String) = if let Some(row) = existing {
+        let id: Uuid = row
+            .try_get("id")
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        let status: String = row
+            .try_get("status")
+            .unwrap_or_else(|_| "active".to_string());
+        if status != "active" {
+            return Err(StatusCode::FORBIDDEN);
+        }
+        let stored_name: String = row.try_get("display_name").unwrap_or_default();
+        sqlx::query(
+            "UPDATE users
+             SET tenant_id = $1,
+                 display_name = CASE WHEN $2 = '' THEN display_name ELSE $2 END,
+                 settings = COALESCE(settings, '{}'::jsonb)
+                            || jsonb_build_object('firebaseUid', $3, 'authProvider', 'google',
+                                                  'profileImageUrl', COALESCE($4, settings->>'profileImageUrl')),
+                 last_login = NOW(),
+                 updated_at = NOW()
+             WHERE id = $5",
+        )
+        .bind(tenant_id)
+        .bind(if stored_name.trim().is_empty() {
+            display_name.as_str()
+        } else {
+            ""
+        })
+        .bind(&firebase_uid)
+        .bind(&photo_url)
+        .bind(id)
+        .execute(&state.db)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        (id, status)
+    } else {
+        let member_count: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM users WHERE tenant_id = $1")
+                .bind(tenant_id)
+                .fetch_one(&state.db)
+                .await
+                .unwrap_or(0);
+        let role = if member_count == 0 { "admin" } else { "member" };
+        let settings = json!({
+            "firebaseUid": firebase_uid,
+            "authProvider": "google",
+            "role": role,
+            "plan": "Free",
+            "billingCycle": "monthly",
+            "accountType": "business",
+            "isSetupComplete": false,
+            "emailVerified": email_verified,
+            "profileImageUrl": photo_url,
+        });
+        let row = sqlx::query(
+            "INSERT INTO users (tenant_id, email, display_name, status, password_hash, settings, last_login)
+             VALUES ($1, $2, $3, 'active', NULL, $4, NOW())
+             RETURNING id",
+        )
+        .bind(tenant_id)
+        .bind(&email)
+        .bind(&display_name)
+        .bind(&settings)
+        .fetch_one(&state.db)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        let id: Uuid = row
+            .try_get("id")
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        (id, "active".to_string())
+    };
+
+    // Keep the normalized company membership tables in sync.
+    let member_role = sqlx::query_scalar::<_, String>(
+        "SELECT CASE
+             WHEN COALESCE(settings->>'role', CASE WHEN (SELECT COUNT(*) FROM users WHERE tenant_id = $1) = 1 THEN 'admin' ELSE 'member' END) IN ('admin', 'owner')
+              AND NOT EXISTS (
+                  SELECT 1 FROM company_members
+                  WHERE tenant_id = $1 AND role = 'owner' AND status = 'active'
+              )
+             THEN 'owner'
+             ELSE COALESCE(settings->>'role', CASE WHEN (SELECT COUNT(*) FROM users WHERE tenant_id = $1) = 1 THEN 'admin' ELSE 'member' END)
+         END
+         FROM users WHERE id = $2",
+    )
+    .bind(tenant_id)
+    .bind(user_id)
+    .fetch_optional(&state.db)
+    .await
+    .ok()
+    .flatten()
+    .unwrap_or_else(|| "member".to_string());
+    sync_company_membership(
+        &state,
+        tenant_id,
+        user_id,
+        &email,
+        &display_name,
+        &member_role,
+    )
+    .await;
+
+    let device_id = request
+        .device_id
+        .unwrap_or_else(|| format!("firebase-{firebase_uid}"));
+    let access_token = state
+        .jwt_manager
+        .generate_access_token_with_identity(
+            UserId(user_id),
+            &tenant_id.to_string(),
+            &email,
+            UserRole::User,
+            &device_id,
+            email_verified,
+            Some(firebase_uid.clone()),
+        )
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let refresh_token = crate::jwt::JwtManager::generate_refresh_token()
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let token_hash = crate::jwt::JwtManager::hash_refresh_token(&refresh_token);
+    let expires_at =
+        chrono::Utc::now() + chrono::Duration::days(state.config.refresh_token_expiry_days);
+    let ip_address = request_ip(&headers);
+    let user_agent = request_user_agent(&headers);
+
+    let _ = sqlx::query(
+        "INSERT INTO refresh_tokens (user_id, token_hash, device_id, device_fingerprint, expires_at, ip_address)
+         VALUES ($1, $2, $3, $4, $5, $6::inet)",
+    )
+    .bind(user_id)
+    .bind(&token_hash)
+    .bind(&device_id)
+    .bind(&device_id)
+    .bind(expires_at)
+    .bind(&ip_address)
+    .execute(&state.db)
+    .await;
+
+    let session_expires_at =
+        chrono::Utc::now() + chrono::Duration::days(state.config.refresh_token_expiry_days);
+    let _ = sqlx::query(
+        "INSERT INTO sessions (user_id, tenant_id, device_fingerprint, ip_address, user_agent, expires_at, mfa_verified)
+         VALUES ($1, $2, $3, $4::inet, $5, $6, TRUE)",
+    )
+    .bind(user_id)
+    .bind(tenant_id.to_string())
+    .bind(&device_id)
+    .bind(&ip_address)
+    .bind(&user_agent)
+    .bind(session_expires_at)
+    .execute(&state.db)
+    .await;
+
+    Ok(Json(json!({
+        "success": true,
+        "access_token": access_token,
+        "refresh_token": refresh_token,
+        "expires_in": state.config.jwt_expiry_seconds,
+        "token_type": "Bearer",
+        "mfa_required": false,
+        "user": {
+            "id": user_id,
+            "tenant_id": tenant_id,
+            "email": email,
+            "display_name": display_name,
+            "firebase_uid": firebase_uid,
+            "status": user_status,
+            "auth_provider": "google"
+        }
     })))
 }

@@ -29,6 +29,7 @@ export type User = {
   emailLogoUrl?: string;
   role?: 'admin' | 'member' | 'viewer' | 'user';
   isPlatformAdmin?: boolean;
+  firebaseUid?: string;
   isBusinessSetupComplete?: boolean;
   businessDomain?: string;
   businessDbUrl?: string;

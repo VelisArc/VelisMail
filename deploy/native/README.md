@@ -54,6 +54,36 @@ rejects weak or non-URL-safe `POSTGRES_PASSWORD` values, creates the PostgreSQL
 role/database, applies conservative PostgreSQL tuning for a 2 vCPU / 2 GB
 instance, installs memory-capped systemd units and configures Caddy.
 
+## Routine update from a workstation
+
+The VM is updated over SSH - no deploy credentials are stored in the
+repository or in CI:
+
+```bash
+# 1. Sync the backend sources to the VM
+tar -cf - --exclude=target backend Cargo.toml Cargo.lock deploy \
+  | ssh ubuntu@<vm-host> 'tar -xf - -C /home/ubuntu/VelisMail'
+
+# 2. Build and install on the VM (migrations are embedded in the binaries
+#    and are applied automatically when the services start)
+ssh ubuntu@<vm-host> 'cd /home/ubuntu/VelisMail && \
+  CARGO_BUILD_JOBS=2 bash deploy/native/build.sh && \
+  sudo bash deploy/native/deploy-fast.sh'
+```
+
+`deploy-fast.sh` installs the freshly built binaries into `/opt/velismail/bin`,
+validates `/etc/velismail/velismail.env`, restarts every `velismail-*.service`
+unit and waits for the gateway to report healthy.
+
+New environment variables (for example `FIREBASE_WEB_API_KEY`,
+`FIREBASE_PROJECT_ID` and `PLATFORM_OWNER_UIDS`) are added to
+`/etc/velismail/velismail.env` and validated with:
+
+```bash
+sudo bash deploy/native/check-env.sh /etc/velismail/velismail.env
+sudo systemctl restart velismail-api-gateway-1 velismail-auth-service-1
+```
+
 ## Environment file safety
 
 systemd reads `/etc/velismail/velismail.env` as an `EnvironmentFile`. A value

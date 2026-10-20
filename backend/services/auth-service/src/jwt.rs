@@ -30,6 +30,31 @@ impl JwtManager {
         device_id: &str,
         mfa_verified: bool,
     ) -> Result<String> {
+        self.generate_access_token_with_identity(
+            user_id,
+            tenant_id,
+            email,
+            role,
+            device_id,
+            mfa_verified,
+            None,
+        )
+    }
+
+    /// Issue an access token that also carries the verified Firebase UID.
+    /// The gateway uses this to authorize the platform owner without trusting
+    /// an email suffix alone.
+    #[allow(clippy::too_many_arguments)]
+    pub fn generate_access_token_with_identity(
+        &self,
+        user_id: UserId,
+        tenant_id: &str,
+        email: &str,
+        role: UserRole,
+        device_id: &str,
+        mfa_verified: bool,
+        firebase_uid: Option<String>,
+    ) -> Result<String> {
         let now = Utc::now();
         let claims = Claims {
             sub: user_id.clone(),
@@ -47,6 +72,7 @@ impl JwtManager {
             } else {
                 SecurityLevel::Standard
             },
+            firebase_uid,
         };
 
         Ok(encode(&Header::default(), &claims, &self.encoding_key)?)

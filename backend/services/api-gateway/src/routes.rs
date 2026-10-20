@@ -1,5 +1,6 @@
 //! API Gateway routes - reverse proxy plus compatibility endpoints.
 
+use crate::admin;
 use crate::state::AppState;
 use axum::{
     body::{Body, Bytes},
@@ -9,7 +10,7 @@ use axum::{
     },
     http::{HeaderMap, HeaderValue, Method, Request, StatusCode, Uri},
     response::{IntoResponse, Response},
-    routing::{any, get, post},
+    routing::{any, delete, get, patch, post},
     Json, Router,
 };
 use base64::{engine::general_purpose, Engine as _};
@@ -74,6 +75,89 @@ pub fn api_v1_routes(_state: &AppState) -> Router<AppState> {
         .route("/tenants/verify-domain", post(verify_domain))
         .route("/payments/create-order", post(create_payment_order))
         .route("/payments/verify", post(verify_payment))
+        // Platform control plane (/admin). Authorization is enforced in the
+        // handlers using the verified JWT and Firebase owner UID gate.
+        .route("/admin/platform/me", get(admin::platform_me))
+        .route("/admin/platform/overview", get(admin::platform_overview))
+        .route("/admin/platform/analytics", get(admin::platform_analytics))
+        .route("/admin/platform/companies", get(admin::list_companies))
+        .route(
+            "/admin/platform/companies/{id}",
+            get(admin::get_company).patch(admin::update_company),
+        )
+        .route("/admin/platform/users", get(admin::list_platform_users))
+        .route(
+            "/admin/platform/investigations",
+            get(admin::list_investigations).post(admin::create_investigation),
+        )
+        .route(
+            "/admin/platform/investigations/{id}",
+            get(admin::get_investigation).patch(admin::update_investigation),
+        )
+        .route(
+            "/admin/platform/investigations/{id}/events",
+            post(admin::add_investigation_event),
+        )
+        .route("/admin/platform/audit", get(admin::platform_audit))
+        .route(
+            "/admin/platform/team",
+            get(admin::list_platform_team).post(admin::add_platform_admin),
+        )
+        .route(
+            "/admin/platform/team/{email}",
+            patch(admin::update_platform_admin),
+        )
+        .route("/admin/platform/billing", get(admin::platform_billing))
+        .route(
+            "/admin/platform/feature-flags",
+            get(admin::list_feature_flags).patch(admin::update_feature_flag),
+        )
+        .route(
+            "/admin/platform/announcements",
+            get(admin::list_announcements).post(admin::create_announcement),
+        )
+        .route(
+            "/admin/platform/announcements/{id}",
+            patch(admin::update_announcement),
+        )
+        .route("/admin/platform/support", get(admin::list_support_tickets))
+        .route(
+            "/admin/platform/support/{id}",
+            patch(admin::update_support_ticket),
+        )
+        .route("/admin/platform/system", get(admin::platform_system))
+        .route(
+            "/admin/platform/settings",
+            get(admin::list_platform_settings).patch(admin::update_platform_setting),
+        )
+        // Company control plane inside the business dashboard.
+        .route("/admin/company/overview", get(admin::company_overview))
+        .route("/admin/company/members", get(admin::company_members))
+        .route(
+            "/admin/company/members/{id}",
+            patch(admin::company_update_member),
+        )
+        .route("/admin/company/roles", get(admin::company_roles))
+        .route("/admin/company/usage", get(admin::company_usage))
+        .route("/admin/company/audit", get(admin::company_audit))
+        .route("/admin/company/security", get(admin::company_security))
+        .route(
+            "/admin/company/api-keys",
+            get(admin::list_company_api_keys).post(admin::create_company_api_key),
+        )
+        .route(
+            "/admin/company/api-keys/{id}",
+            delete(admin::revoke_company_api_key),
+        )
+        .route("/admin/company/billing", get(admin::company_billing))
+        .route(
+            "/admin/company/integrations",
+            get(admin::company_integrations),
+        )
+        .route(
+            "/admin/company/announcements",
+            get(admin::company_announcements),
+        )
         .route("/ws", get(ws_handler))
         .route("/auth/{*rest}", any(proxy_auth))
         .route("/mail/{*rest}", any(proxy_mail))
@@ -5303,6 +5387,91 @@ pub async fn verify_payment(
                 "message": "Failed to update subscription in database."
             })),
         );
+    }
+
+    // 4. Keep tenant plan and billing ledger in sync. The invoice insert is
+    // idempotent on (gateway, payment_ref) so a retried verification cannot
+    // double-charge the revenue ledger.
+    let tenant_id: Option<uuid::Uuid> =
+        sqlx::query_scalar("SELECT tenant_id FROM users WHERE email = $1 LIMIT 1")
+            .bind(&email)
+            .fetch_optional(db_pool)
+            .await
+            .ok()
+            .flatten()
+            .flatten();
+    if let Some(tenant_id) = tenant_id {
+        let plan_key = plan.trim().to_lowercase();
+        let _ = sqlx::query(
+            "UPDATE tenants SET plan_tier = $2,
+                billing_info = COALESCE(billing_info, '{}'::jsonb)
+                    || jsonb_build_object('billingCycle', $3, 'lastPaymentAt', NOW()),
+                updated_at = NOW()
+             WHERE id = $1",
+        )
+        .bind(tenant_id)
+        .bind(&plan_key)
+        .bind(&billing)
+        .execute(db_pool)
+        .await;
+
+        let already_recorded: bool = sqlx::query_scalar(
+            "SELECT EXISTS (SELECT 1 FROM company_invoices WHERE gateway = 'razorpay' AND payment_ref = $1)",
+        )
+        .bind(payment_id)
+        .fetch_one(db_pool)
+        .await
+        .unwrap_or(false);
+        if !already_recorded {
+            let amount_paise =
+                expected_subscription_amount_paise(&plan_key, &billing).unwrap_or(0) as i64;
+            let invoice_number = format!(
+                "VM-{}-{}",
+                now.format("%Y%m"),
+                uuid::Uuid::new_v4().simple().to_string()[..8].to_uppercase()
+            );
+            let line_items = json!([{
+                "description": format!("{} plan ({})", plan_key, billing),
+                "amountPaise": amount_paise
+            }]);
+            let invoice_result = sqlx::query(
+                "INSERT INTO company_invoices
+                 (tenant_id, invoice_number, plan, billing_cycle, amount_paise, currency, status,
+                  issued_at, paid_at, gateway, payment_ref, line_items)
+                 VALUES ($1,$2,$3,$4,$5,'INR','paid',$6,$6,'razorpay',$7,$8)",
+            )
+            .bind(tenant_id)
+            .bind(&invoice_number)
+            .bind(&plan_key)
+            .bind(&billing)
+            .bind(amount_paise)
+            .bind(now)
+            .bind(payment_id)
+            .bind(&line_items)
+            .execute(db_pool)
+            .await;
+            if let Err(err) = invoice_result {
+                tracing::error!("Failed to record subscription invoice: {}", err);
+            } else {
+                let _ = sqlx::query(
+                    "INSERT INTO platform_audit_logs
+                     (actor_email, actor_role, action, category, resource_type, resource_id, tenant_id, details, severity)
+                     VALUES ($1, 'owner', 'billing.payment_captured', 'billing', 'invoice', $2, $3, $4, 'info')",
+                )
+                .bind(&email)
+                .bind(&invoice_number)
+                .bind(tenant_id)
+                .bind(json!({
+                    "plan": plan_key,
+                    "billing": billing,
+                    "amountPaise": amount_paise,
+                    "paymentId": payment_id,
+                    "orderId": order_id
+                }))
+                .execute(db_pool)
+                .await;
+            }
+        }
     }
 
     (

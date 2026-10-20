@@ -43,6 +43,7 @@ pub async fn run_service() -> anyhow::Result<()> {
             "/login/password",
             axum::routing::post(handlers::login_password),
         )
+        .route("/firebase", axum::routing::post(handlers::firebase_login))
         .route("/send-otp", axum::routing::post(handlers::send_otp))
         .route("/otp/send", axum::routing::post(handlers::send_otp))
         .route(

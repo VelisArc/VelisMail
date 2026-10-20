@@ -114,6 +114,10 @@ pub async fn traffic(
             state
                 .metrics
                 .observe_response(response.status().as_u16(), started.elapsed());
+            state.traffic.record_rate_limited();
+            state
+                .traffic
+                .record(response.status().as_u16(), started.elapsed());
             return response;
         }
 
@@ -133,6 +137,9 @@ pub async fn traffic(
         state
             .metrics
             .observe_response(response.status().as_u16(), started.elapsed());
+        state
+            .traffic
+            .record(response.status().as_u16(), started.elapsed());
         return response;
     }
 
@@ -150,6 +157,9 @@ pub async fn traffic(
     state
         .metrics
         .observe_response(response.status().as_u16(), started.elapsed());
+    state
+        .traffic
+        .record(response.status().as_u16(), started.elapsed());
     response
 }
 
@@ -287,6 +297,7 @@ pub async fn concurrency_limit(
                 .metrics
                 .overload_total
                 .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            state.traffic.record_overload();
             tracing::warn!(
                 limit = state.config.max_concurrent_requests,
                 "Gateway concurrency limit reached"

@@ -1214,11 +1214,17 @@ export async function fetchAuthenticatedProfile(): Promise<Partial<User>> {
     const profile = await fetchAPI('/auth/me');
     const raw = profile?.user || profile || {};
     const settings = raw.settings || {};
+    const backendRole = String(settings.role || raw.role || '').toLowerCase();
+    const normalizedRole = backendRole === 'owner' ? 'admin' : backendRole;
+    const role = ['admin', 'member', 'viewer', 'user'].includes(normalizedRole)
+      ? (normalizedRole as User['role'])
+      : undefined;
     return {
       id: raw.id,
       tenantId: raw.tenant_id || raw.tenantId,
       email: raw.email,
       displayName: raw.display_name || raw.displayName,
+      ...(role ? { role } : {}),
       recoveryEmail: raw.recovery_email || raw.recoveryEmail || undefined,
       recoveryEmailVerified: Boolean(raw.recovery_email || raw.recoveryEmail),
       createdAt: raw.created_at || raw.createdAt,
@@ -1233,6 +1239,10 @@ export async function fetchAuthenticatedProfile(): Promise<Partial<User>> {
       businessProfile: settings.businessProfile || settings.business_profile || raw.business_profile || raw.businessProfile,
       profileImageUrl: settings.profileImageUrl || settings.profile_image_url || raw.profile_image_url || raw.profileImageUrl || undefined,
       emailLogoUrl: settings.emailLogoUrl || settings.email_logo_url || raw.email_logo_url || raw.emailLogoUrl || undefined,
+      // Platform staff identity. The backend is authoritative, the client
+      // only uses it to decide whether the control plane switch is visible.
+      firebaseUid: settings.firebaseUid || settings.firebase_uid || raw.firebase_uid || raw.firebaseUid || undefined,
+      isPlatformAdmin: Boolean(settings.isPlatformAdmin ?? settings.is_platform_admin ?? raw.is_platform_admin ?? raw.isPlatformAdmin),
     };
   } catch {
     return {};

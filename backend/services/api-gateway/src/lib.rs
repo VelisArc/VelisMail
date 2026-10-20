@@ -1,7 +1,9 @@
+mod admin;
 mod config;
 mod middleware;
 mod routes;
 mod state;
+mod traffic;
 
 use std::net::SocketAddr;
 use std::time::Duration;
@@ -13,6 +15,22 @@ pub async fn run_service() -> anyhow::Result<()> {
     // Run gateway migrations if DB is connected
     if let Some(db) = &state.db {
         velismail_database::migrations::run_migrations(db).await?;
+    }
+
+    // Flush in-memory traffic counters to PostgreSQL every 30 seconds. This
+    // keeps the control-plane analytics durable without a write per request.
+    if let Some(db) = state.db.clone() {
+        let traffic = state.traffic.clone();
+        tokio::spawn(async move {
+            let mut ticker = tokio::time::interval(Duration::from_secs(30));
+            ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+            loop {
+                ticker.tick().await;
+                if let Err(err) = traffic.flush(&db).await {
+                    tracing::warn!("traffic rollup flush failed: {}", err);
+                }
+            }
+        });
     }
 
     let cors = build_cors_layer(&config.frontend_url);

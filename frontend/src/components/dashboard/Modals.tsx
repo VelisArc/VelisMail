@@ -2,7 +2,7 @@ import { X, UserCheck, CheckCircle2, Copy, Shield, AlertTriangle, LogOut, Mail, 
 import Composer from '../Composer';
 import type { DashboardState } from './types';
 import { copyToClipboard, providerRecordType } from './utils';
-import { businessTemplates, platformAdmin, teamAccess, connections, businessTeam } from '../../api/client';
+import { businessTemplates, teamAccess, connections, businessTeam } from '../../api/client';
 import { safeRandomUUID } from '../../api/client-core';
 
 interface ModalsProps {
@@ -292,41 +292,6 @@ function ConfirmActionModal({ state }: { state: DashboardState }) {
   );
 }
 
-function AdminStatusConfirmModal({ state }: { state: DashboardState }) {
-  if (!state.adminStatusConfirm) return null;
-  return (
-    <div className="modal-overlay" onClick={() => state.setAdminStatusConfirm(null)} role="dialog" aria-modal="true" aria-label="Admin status confirmation">
-      <div className="biz-form-modal glass animate-scale admin-status-modal" onClick={e => e.stopPropagation()}>
-        <div className="modal-body-center">
-          <div className="modal-icon-warning">
-            <Shield size={24} />
-          </div>
-          <h3 className="admin-status-title">
-            {state.adminStatusConfirm.step === 1 ? 'Review status change' : `Confirm ${state.adminStatusConfirm.status === 'suspended' ? 'Suspend' : 'Reactivate'}`}
-          </h3>
-        </div>
-        <div className="modal-actions-border">
-          <button className="btn btn-ghost" onClick={() => state.setAdminStatusConfirm(null)}>Cancel</button>
-          <button className={state.adminStatusConfirm.status === 'suspended' ? 'btn btn-danger' : 'btn btn-primary'} onClick={async () => {
-            if (state.adminStatusConfirm!.step === 1) { state.setAdminStatusConfirm({ ...state.adminStatusConfirm!, step: 2 }); return; }
-            const email = state.adminStatusConfirm!.record.user.email;
-            const newStatus = state.adminStatusConfirm!.status;
-            try {
-              await platformAdmin.updateUserStatus(email, newStatus as 'active' | 'suspended' | 'deactivated');
-              state.setAdminStatusConfirm(null); state.showToast(`User ${newStatus}`);
-              if (state.refreshAdminUsers) await state.refreshAdminUsers(); else state.refreshTeam();
-            } catch (error) {
-              state.showToast(error instanceof Error ? error.message : 'Admin action failed', 'error');
-            }
-          }}>
-            {state.adminStatusConfirm.step === 1 ? 'Continue' : state.adminStatusConfirm.status === 'suspended' ? 'Confirm Suspend' : 'Confirm Reactivate'}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function DomainVerifyModal({ state, handleVerifyDomain }: { state: DashboardState; handleVerifyDomain: (id: string) => void }) {
   if (!state.domainVerifyOpen) return null;
   const isVerifying = state.domainVerifySteps.length > 0 && state.domainVerifySteps.some(s => s.status === 'pending' || s.status === 'checking');
@@ -415,7 +380,6 @@ export default function Modals({ state, handleVerifyDomain, confirmRoleChangeSte
       {state.showLogoutConfirm && <LogoutConfirmModal state={state} />}
       {state.pendingRoleChange && <RoleChangeConfirmModal state={state} confirmRoleChangeStep={confirmRoleChangeStep} />}
       {state.confirmAction && <ConfirmActionModal state={state} />}
-      {state.adminStatusConfirm && <AdminStatusConfirmModal state={state} />}
       {state.confirmRevokeId && <RevokeConnectionModal state={state} />}
       {state.domainVerifyOpen && <DomainVerifyModal state={state} handleVerifyDomain={handleVerifyDomain} />}
       <ToastNotification state={state} />

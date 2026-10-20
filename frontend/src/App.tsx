@@ -71,6 +71,7 @@ const router = createBrowserRouter([
     children: [
       { path: "/", element: <PageTransition><Home /></PageTransition> },
       { path: "/login", element: <PageTransition><Login /></PageTransition> },
+      { path: "/admin", element: <Navigate to="/business?view=admin" replace /> },
       { path: "/privacy", element: <PageTransition><Privacy /></PageTransition> },
       { path: "/terms", element: <PageTransition><Terms /></PageTransition> },
       { path: "/cookies", element: <PageTransition><Cookies /></PageTransition> },
