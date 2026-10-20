@@ -1,0 +1,290 @@
+/**
+ * Company workspace API.
+ *
+ * These endpoints belong to the customer: they expose the signed-in
+ * company's own team, domains, mailboxes, delivery queue, audit trail,
+ * templates, contacts and signatures. Every response is scoped to the
+ * tenant that the gateway derives from the verified session, so a company
+ * can never read another company's workspace.
+ *
+ * The platform control plane lives in `admin.ts` and is a separate
+ * ecosystem: the VelisMail operator manages every company from there.
+ */
+
+import { fetchApiJsonDetailed } from './client-core';
+import type {
+  BusinessAuditEntry,
+  BusinessMailbox,
+  BusinessTeamMember,
+  BusinessTemplate,
+  Contact,
+  Signature,
+} from './types';
+
+export type WorkspaceMember = {
+  id: string;
+  userId?: string | null;
+  email: string;
+  name: string;
+  role: string;
+  status: string;
+  invitedBy?: string | null;
+  joinedAt?: string | null;
+  lastActiveAt?: string | null;
+  plan?: string;
+};
+
+export type WorkspaceInvitation = {
+  id: string;
+  email: string;
+  role: string;
+  invitedBy: string;
+  status: string;
+  expiresAt?: string | null;
+  createdAt?: string | null;
+};
+
+export type WorkspaceDomain = {
+  id: string;
+  domain: string;
+  status: string;
+  method?: string | null;
+  dnsRecords: Array<Record<string, unknown>>;
+  mxRecords: Array<Record<string, unknown>>;
+  spfRecord?: string | null;
+  dkimRecord?: string | null;
+  dmarcRecord?: string | null;
+  createdAt?: string | null;
+  verifiedAt?: string | null;
+  mailboxes?: number;
+};
+
+export type WorkspaceAuditEntry = {
+  id: string;
+  actor: string;
+  actorRole: string;
+  action: string;
+  category: string;
+  resourceType: string;
+  resourceId?: string | null;
+  details: Record<string, unknown>;
+  severity: string;
+  createdAt?: string | null;
+};
+
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const response = await fetchApiJsonDetailed<T>(path, init);
+  if (!response.ok) {
+    const body = response.data as { error?: string; message?: string } | null;
+    throw new Error(
+      body?.error || body?.message || `Request failed with status ${response.status}`,
+    );
+  }
+  return (response.data ?? ({} as T)) as T;
+}
+
+export const workspaceApi = {
+  team: () =>
+    request<{
+      success: boolean;
+      members: WorkspaceMember[];
+      invitations: WorkspaceInvitation[];
+      seatLimit: { used: number; max: number };
+    }>('/company/team'),
+
+  invite: (payload: { email: string; role: string; expiresInHours?: number }) =>
+    request<{ success: boolean; id: string; email: string; role: string; expiresAt: string }>(
+      '/company/team/invitations',
+      { method: 'POST', body: JSON.stringify(payload) },
+    ),
+
+  revokeInvitation: (id: string) =>
+    request<{ success: boolean }>(`/company/team/invitations/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    }),
+
+  domains: () =>
+    request<{ success: boolean; domains: WorkspaceDomain[] }>('/company/domains'),
+
+  mailboxes: () =>
+    request<{ success: boolean; mailboxes: BusinessMailbox[] }>('/company/mailboxes'),
+
+  createMailbox: (payload: {
+    domain: string;
+    address: string;
+    displayName: string;
+    kind?: string;
+    aliases?: string[];
+    active?: boolean;
+  }) =>
+    request<{ success: boolean; id: string; address: string }>('/company/mailboxes', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+
+  deleteMailbox: (domain: string, address: string) =>
+    request<{ success: boolean }>(
+      `/company/mailboxes/delete?domain=${encodeURIComponent(domain)}&address=${encodeURIComponent(address)}`,
+      { method: 'DELETE' },
+    ),
+
+  queue: (params: { status?: string; limit?: number } = {}) => {
+    const search = new URLSearchParams();
+    if (params.status) search.set('status', params.status);
+    if (params.limit) search.set('limit', String(params.limit));
+    const suffix = search.toString();
+    return request<{ success: boolean; items: Array<Record<string, unknown>> }>(
+      `/company/queue${suffix ? `?${suffix}` : ''}`,
+    );
+  },
+
+  groups: (domain?: string) =>
+    request<{
+      success: boolean;
+      groups: Array<{
+        id: string;
+        domain: string;
+        name: string;
+        address: string;
+        members: string[];
+        createdAt?: string | null;
+        updatedAt?: string | null;
+      }>;
+    }>(`/company/groups${domain ? `?domain=${encodeURIComponent(domain)}` : ''}`),
+
+  saveGroup: (payload: { domain: string; name: string; address: string; members?: string[] }) =>
+    request<{ success: boolean; id: string }>('/company/groups', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+
+  deleteGroup: (id: string) =>
+    request<{ success: boolean }>(`/company/groups/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    }),
+
+  audit: (params: { limit?: number } = {}) => {
+    const suffix = params.limit ? `?limit=${params.limit}` : '';
+    return request<{ success: boolean; entries: WorkspaceAuditEntry[] }>(`/company/audit${suffix}`);
+  },
+
+  templates: () =>
+    request<{ success: boolean; templates: BusinessTemplate[] }>('/company/templates'),
+
+  saveTemplate: (payload: { name: string; subject: string; body: string }) =>
+    request<{ success: boolean; id: string }>('/company/templates', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+
+  deleteTemplate: (id: string) =>
+    request<{ success: boolean }>(`/company/templates/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    }),
+
+  contacts: (params: { search?: string; group?: string } = {}) => {
+    const search = new URLSearchParams();
+    if (params.search) search.set('search', params.search);
+    if (params.group) search.set('group', params.group);
+    const suffix = search.toString();
+    return request<{ success: boolean; contacts: Contact[]; groups: Array<{ name: string; count: number }> }>(
+      `/company/contacts${suffix ? `?${suffix}` : ''}`,
+    );
+  },
+
+  saveContact: (payload: {
+    name: string;
+    email: string;
+    phone?: string;
+    company?: string;
+    group?: string;
+    notes?: string;
+    favorite?: boolean;
+  }) =>
+    request<{ success: boolean; id: string }>('/company/contacts', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+
+  deleteContact: (id: string) =>
+    request<{ success: boolean }>(`/company/contacts/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    }),
+
+  signatures: () =>
+    request<{ success: boolean; signatures: Signature[] }>('/company/signatures'),
+
+  saveSignature: (payload: { name: string; content: string; isDefault?: boolean }) =>
+    request<{ success: boolean; id: string }>('/company/signatures', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+
+  deleteSignature: (id: string) =>
+    request<{ success: boolean }>(`/company/signatures/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    }),
+};
+
+/** Map a workspace member onto the dashboard team shape. */
+export function toTeamMember(member: WorkspaceMember): BusinessTeamMember {
+  return {
+    id: member.id,
+    name: member.name || member.email,
+    email: member.email,
+    role: (member.role === 'owner' ? 'admin' : member.role) as BusinessTeamMember['role'],
+    status: (member.status === 'active' ? 'active' : member.status) as BusinessTeamMember['status'],
+    addedAt: member.joinedAt || member.lastActiveAt || '',
+    lastActive: member.lastActiveAt || '',
+  };
+}
+
+/** Map a workspace audit entry onto the dashboard audit shape. */
+export function toAuditEntry(entry: WorkspaceAuditEntry): BusinessAuditEntry {
+  return {
+    id: entry.id,
+    action: entry.action.replace(/[._]/g, ' '),
+    actor: entry.actor,
+    target: entry.resourceType,
+    timestamp: entry.createdAt || new Date().toISOString(),
+    severity: (entry.severity === 'critical'
+      ? 'critical'
+      : entry.severity === 'warning'
+        ? 'warn'
+        : 'info') as BusinessAuditEntry['severity'],
+  };
+}
+
+/** Map a workspace queue item onto the dashboard queue shape. */
+export function toQueueItem(item: Record<string, unknown>) {
+  return {
+    id: String(item.id || ''),
+    to: String(item.to || ''),
+    subject: String(item.subject || ''),
+    status: String(item.status || 'queued'),
+    queuedAt: String(item.queuedAt || ''),
+    scheduledAt: item.nextRetryAt ? String(item.nextRetryAt) : undefined,
+    retries: Number(item.retries || 0),
+    error: item.error ? String(item.error) : undefined,
+    from: String(item.from || ''),
+  };
+}
+
+/** Map a workspace template onto the dashboard template shape. */
+export function toTemplate(template: {
+  id: string;
+  name: string;
+  subject: string;
+  body: string;
+  usageCount?: number;
+  updatedAt?: string | null;
+}): BusinessTemplate {
+  return {
+    id: template.id,
+    name: template.name,
+    subject: template.subject,
+    body: template.body,
+    usageCount: template.usageCount || 0,
+    lastUsed: template.updatedAt || undefined,
+  };
+}

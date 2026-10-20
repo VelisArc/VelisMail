@@ -24,6 +24,7 @@ import {
   type Announcement,
   type AuditEntry,
   type Company,
+  type CompanyDetail,
   type FeatureFlag,
   type Investigation,
   type PlatformSetting,
@@ -198,6 +199,7 @@ export default function PlatformAdminPanel({ section, onSectionChange, state }: 
   const [newCase, setNewCase] = useState({ title: '', severity: 'medium', tenantId: '' });
   const [caseNote, setCaseNote] = useState('');
   const [activeCase, setActiveCase] = useState<Investigation | null>(null);
+  const [companyDetail, setCompanyDetail] = useState<CompanyDetail | null>(null);
   const [caseEvents, setCaseEvents] = useState<Array<{ id: string; actor: string; kind: string; message: string; createdAt: string }>>([]);
 
   const notify = useCallback((message: string, tone: 'success' | 'error' = 'success') => {
@@ -264,6 +266,43 @@ export default function PlatformAdminPanel({ section, onSectionChange, state }: 
   useEffect(() => {
     void load();
   }, [load]);
+
+  const openCompany = useCallback(async (id: string) => {
+    try {
+      setCompanyDetail(await platformAdminApi.company(id));
+    } catch (error) {
+      notify(error instanceof Error ? error.message : 'Unable to open the company.', 'error');
+    }
+  }, [notify]);
+
+  const runCompanyAction = useCallback(async (
+    id: string,
+    action: 'suspend' | 'activate' | 'set_plan' | 'set_seats' | 'revoke_api_keys' | 'terminate_sessions' | 'close_cases',
+    extra: Record<string, unknown> = {},
+  ) => {
+    try {
+      const result = await platformAdminApi.companyAction(id, { action, ...extra } as never);
+      notify(`${action.replace(/_/g, ' ')} applied to ${result.affected} record(s)`);
+      await openCompany(id);
+      void load();
+    } catch (error) {
+      notify(error instanceof Error ? error.message : 'The action failed.', 'error');
+    }
+  }, [notify, openCompany, load]);
+
+  const runUserAction = useCallback(async (
+    id: string,
+    action: 'suspend' | 'activate' | 'terminate_sessions' | 'set_role',
+    role?: string,
+  ) => {
+    try {
+      const result = await platformAdminApi.userAction(id, { action, role } as never);
+      notify(`${action.replace(/_/g, ' ')} applied to ${result.affected} record(s)`);
+      void load();
+    } catch (error) {
+      notify(error instanceof Error ? error.message : 'The action failed.', 'error');
+    }
+  }, [notify, load]);
 
   const kpis = overview?.kpis;
   const traffic = analytics?.series.traffic || [];
@@ -397,16 +436,28 @@ export default function PlatformAdminPanel({ section, onSectionChange, state }: 
               <div key={company.id} className="admin-user-row">
                 <div className="admin-user-info">
                   <strong>{company.name}</strong>
-                  <span>{company.email} · created {dateTime(company.createdAt)}</span>
+                  <span>
+                    {company.email} · created {dateTime(company.createdAt)}
+                    {company.domainList?.length ? ` · ${company.domainList.join(', ')}` : ' · no domain yet'}
+                  </span>
                 </div>
                 <div className="admin-user-metrics">
                   <span>{number(company.users)} users</span>
                   <span>{number(company.domains)} domains</span>
+                  <span>{number(company.mailboxes)} mailboxes</span>
                   <span>{number(company.sent)} sent</span>
                   <Badge value={company.plan}>{company.plan}</Badge>
                   <Badge value={company.status}>{company.status}</Badge>
                 </div>
                 <div className="admin-row-actions">
+                  <button
+                    className="btn btn-ghost btn-sm"
+                    onClick={() => {
+                      void openCompany(company.id);
+                    }}
+                  >
+                    Manage
+                  </button>
                   <select
                     className="input input-auto"
                     value={company.plan}
@@ -454,13 +505,41 @@ export default function PlatformAdminPanel({ section, onSectionChange, state }: 
               <div key={item.id} className="admin-user-row">
                 <div className="admin-user-info">
                   <strong>{item.displayName || item.email}</strong>
-                  <span>{item.email} · {item.company || 'No company'}</span>
+                  <span>
+                    {item.email} · {item.company || 'No company'}
+                    {item.domains?.length ? ` · ${item.domains.join(', ')}` : ''}
+                  </span>
                 </div>
                 <div className="admin-user-metrics">
                   <span>{item.plan}</span>
+                  <span>{item.companyRole || item.role}</span>
                   <span>{number(item.sent)} sent</span>
                   <span>{number(item.activeSessions)} sessions</span>
                   <Badge value={item.status}>{item.status}</Badge>
+                  <Badge value={item.risk}>{item.risk} risk</Badge>
+                </div>
+                <div className="admin-row-actions">
+                  <button
+                    className="btn btn-ghost btn-sm"
+                    onClick={() => { void runUserAction(item.id, item.status === 'active' ? 'suspend' : 'activate'); }}
+                  >
+                    {item.status === 'active' ? 'Suspend' : 'Reactivate'}
+                  </button>
+                  <button
+                    className="btn btn-ghost btn-sm"
+                    onClick={() => { void runUserAction(item.id, 'terminate_sessions'); }}
+                  >
+                    End sessions
+                  </button>
+                  <select
+                    className="input input-auto"
+                    value={item.companyRole || item.role}
+                    onChange={(event) => { void runUserAction(item.id, 'set_role', event.target.value); }}
+                  >
+                    {['owner', 'admin', 'member', 'viewer'].map((role) => (
+                      <option key={role} value={role}>{role}</option>
+                    ))}
+                  </select>
                 </div>
               </div>
             ))}
@@ -947,6 +1026,193 @@ export default function PlatformAdminPanel({ section, onSectionChange, state }: 
           </>
         )}
       </div>
+
+      {companyDetail && (
+        <div className="modal-overlay" onClick={() => setCompanyDetail(null)} role="dialog" aria-modal="true" aria-label="Company management">
+          <div className="biz-form-modal glass admin-company-modal" onClick={(event) => event.stopPropagation()}>
+            <div className="compose-header">
+              <h3><Building2 size={16} /> {companyDetail.company.name}</h3>
+              <button className="btn btn-ghost btn-icon" onClick={() => setCompanyDetail(null)}><X size={16} /></button>
+            </div>
+            <div className="px-20 py-20 flex flex-col gap-4">
+              <div className="admin-grid-4">
+                <StatCard label="Plan" value={companyDetail.company.plan} icon={<CreditCard size={14} />} />
+                <StatCard label="Status" value={companyDetail.company.status} icon={<Activity size={14} />} />
+                <StatCard label="Seats" value={`${number(companyDetail.company.members)} / ${number(companyDetail.company.seatLimit)}`} icon={<Users size={14} />} />
+                <StatCard label="Domains" value={number(companyDetail.domains.length)} icon={<Globe size={14} />} />
+              </div>
+
+              <div className="admin-card-head">
+                <div>
+                  <h4>Platform controls</h4>
+                  <p>Every action is written to the platform audit trail.</p>
+                </div>
+              </div>
+              <div className="flex gap-2 flex-wrap">
+                {companyDetail.company.status === 'active' ? (
+                  <button className="btn btn-danger btn-sm" onClick={() => { void runCompanyAction(companyDetail.company.id, 'suspend'); }}>
+                    Suspend company
+                  </button>
+                ) : (
+                  <button className="btn btn-primary btn-sm" onClick={() => { void runCompanyAction(companyDetail.company.id, 'activate'); }}>
+                    Reactivate company
+                  </button>
+                )}
+                <button className="btn btn-ghost btn-sm" onClick={() => { void runCompanyAction(companyDetail.company.id, 'revoke_api_keys'); }}>
+                  Revoke all API keys
+                </button>
+                <button className="btn btn-ghost btn-sm" onClick={() => { void runCompanyAction(companyDetail.company.id, 'terminate_sessions'); }}>
+                  End all sessions
+                </button>
+                <button className="btn btn-ghost btn-sm" onClick={() => { void runCompanyAction(companyDetail.company.id, 'close_cases'); }}>
+                  Close investigations
+                </button>
+                <select
+                  className="input input-auto"
+                  value={companyDetail.company.plan}
+                  onChange={(event) => { void runCompanyAction(companyDetail.company.id, 'set_plan', { plan: event.target.value }); }}
+                >
+                  {['free', 'starter', 'business', 'enterprise'].map((plan) => (
+                    <option key={plan} value={plan}>{plan}</option>
+                  ))}
+                </select>
+                <input
+                  className="input input-auto"
+                  type="number"
+                  min={1}
+                  max={100000}
+                  defaultValue={companyDetail.company.seatLimit}
+                  onBlur={(event) => {
+                    const seats = Number(event.target.value);
+                    if (seats && seats !== companyDetail.company.seatLimit) {
+                      void runCompanyAction(companyDetail.company.id, 'set_seats', { seatLimit: seats });
+                    }
+                  }}
+                  aria-label="Seat limit"
+                />
+              </div>
+
+              <div className="admin-card-head">
+                <div><h4>Email domains</h4><p>Every domain this company owns.</p></div>
+              </div>
+              {companyDetail.domains.length === 0 && <EmptyState title="No domain connected" />}
+              {companyDetail.domains.map((domain) => (
+                <div key={domain.id} className="admin-user-row">
+                  <div className="admin-user-info">
+                    <strong>{domain.domain}</strong>
+                    <span>added {dateTime(domain.addedAt)}</span>
+                  </div>
+                  <div className="admin-user-metrics">
+                    <Badge value={domain.status}>{domain.status}</Badge>
+                    {domain.verifiedAt && <span>verified {dateTime(domain.verifiedAt)}</span>}
+                  </div>
+                </div>
+              ))}
+
+              <div className="admin-card-head">
+                <div><h4>Team</h4><p>{companyDetail.members.length} members with workspace access.</p></div>
+              </div>
+              {companyDetail.members.map((member) => (
+                <div key={member.id} className="admin-user-row">
+                  <div className="admin-user-info">
+                    <strong>{member.name || member.email}</strong>
+                    <span>{member.email} · joined {dateTime(member.joinedAt)}</span>
+                  </div>
+                  <div className="admin-user-metrics">
+                    <Badge value={member.role}>{member.role}</Badge>
+                    <Badge value={member.status}>{member.status}</Badge>
+                    {member.lastActiveAt && <span>active {ago(member.lastActiveAt)}</span>}
+                  </div>
+                </div>
+              ))}
+
+              <div className="admin-card-head">
+                <div><h4>Mailboxes</h4><p>{companyDetail.mailboxes.length} mailboxes across their domains.</p></div>
+              </div>
+              {companyDetail.mailboxes.length === 0 && <EmptyState title="No mailbox provisioned" />}
+              {companyDetail.mailboxes.slice(0, 50).map((mailbox) => (
+                <div key={mailbox.id} className="admin-user-row">
+                  <div className="admin-user-info">
+                    <strong>{mailbox.address}</strong>
+                    <span>{mailbox.domain} · {mailbox.kind}</span>
+                  </div>
+                  <div className="admin-user-metrics">
+                    <Badge value={mailbox.active ? 'active' : 'disabled'}>{mailbox.active ? 'active' : 'disabled'}</Badge>
+                    {mailbox.lastUsedAt && <span>used {ago(mailbox.lastUsedAt)}</span>}
+                  </div>
+                </div>
+              ))}
+
+              <div className="admin-card-head">
+                <div><h4>API keys</h4><p>{companyDetail.apiKeys.length} credentials issued to this company.</p></div>
+              </div>
+              {companyDetail.apiKeys.length === 0 && <EmptyState title="No API key issued" />}
+              {companyDetail.apiKeys.map((key) => (
+                <div key={key.id} className="admin-user-row">
+                  <div className="admin-user-info">
+                    <strong>{key.name}</strong>
+                    <span>{key.prefix}… · {key.scopes.join(', ')}</span>
+                  </div>
+                  <div className="admin-user-metrics">
+                    <Badge value={key.revokedAt ? 'revoked' : 'active'}>{key.revokedAt ? 'revoked' : 'active'}</Badge>
+                    {key.lastUsedAt && <span>used {ago(key.lastUsedAt)}</span>}
+                  </div>
+                </div>
+              ))}
+
+              <div className="admin-card-head">
+                <div><h4>Active sessions</h4><p>{companyDetail.sessions.length} signed-in devices.</p></div>
+              </div>
+              {companyDetail.sessions.length === 0 && <EmptyState title="No active session" />}
+              {companyDetail.sessions.map((session) => (
+                <div key={session.id} className="admin-user-row">
+                  <div className="admin-user-info">
+                    <strong>{session.email}</strong>
+                    <span>{session.ip || 'unknown ip'} · {session.device.slice(0, 18)}</span>
+                  </div>
+                  <div className="admin-user-metrics">
+                    <span>active {ago(session.lastActive)}</span>
+                    <Badge value={session.mfaVerified ? 'verified' : 'pending'}>{session.mfaVerified ? 'mfa' : 'no mfa'}</Badge>
+                  </div>
+                </div>
+              ))}
+
+              <div className="admin-card-head">
+                <div><h4>Usage (30 days)</h4><p>Daily rollups recorded for this workspace.</p></div>
+              </div>
+              {companyDetail.usage.length === 0 && <EmptyState title="No usage recorded yet" />}
+              {companyDetail.usage.map((row) => (
+                <div key={row.date} className="admin-user-row">
+                  <div className="admin-user-info">
+                    <strong>{row.date}</strong>
+                    <span>{number(row.sent)} sent · {number(row.received)} received · {number(row.apiRequests)} api calls</span>
+                  </div>
+                  <div className="admin-user-metrics">
+                    <span>{number(row.activeUsers)} users</span>
+                    <span>{number(row.queueDepth)} queued</span>
+                    <span>{row.avgLatencyMs} ms</span>
+                  </div>
+                </div>
+              ))}
+
+              <div className="admin-card-head">
+                <div><h4>Recent platform activity</h4><p>Actions recorded for this company.</p></div>
+              </div>
+              {companyDetail.recentAudit.map((entry) => (
+                <div key={entry.id} className="admin-user-row">
+                  <div className="admin-user-info">
+                    <strong>{entry.action}</strong>
+                    <span>{entry.actor} ({entry.actorRole}) · {dateTime(entry.createdAt)}</span>
+                  </div>
+                  <div className="admin-user-metrics">
+                    <Badge value={entry.severity}>{entry.severity}</Badge>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {activeCase && (
         <div className="modal-overlay" onClick={() => setActiveCase(null)} role="dialog" aria-modal="true" aria-label="Investigation details">

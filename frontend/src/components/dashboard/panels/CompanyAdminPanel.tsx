@@ -28,13 +28,21 @@ import {
   type CompanyOverview,
   type Invoice,
 } from '../../../api/admin';
+import {
+  workspaceApi,
+  type WorkspaceDomain,
+  type WorkspaceInvitation,
+} from '../../../api/company';
+import type { BusinessMailbox } from '../../../api/types';
 import type { DashboardState } from '../types';
 
-type Tab = 'overview' | 'team' | 'usage' | 'billing' | 'security' | 'api' | 'audit' | 'integrations';
+type Tab = 'overview' | 'team' | 'domains' | 'mailboxes' | 'usage' | 'billing' | 'security' | 'api' | 'audit' | 'integrations';
 
 const TABS: Array<{ id: Tab; label: string; icon: typeof Activity }> = [
   { id: 'overview', label: 'Overview', icon: BarChart3 },
   { id: 'team', label: 'Team', icon: Users },
+  { id: 'domains', label: 'Domains', icon: Globe2 },
+  { id: 'mailboxes', label: 'Mailboxes', icon: Mail },
   { id: 'usage', label: 'Usage', icon: Activity },
   { id: 'billing', label: 'Billing', icon: CreditCard },
   { id: 'security', label: 'Security', icon: Shield },
@@ -106,6 +114,9 @@ export default function CompanyAdminPanel({ state }: { state: DashboardState }) 
   const [notice, setNotice] = useState('');
   const [overview, setOverview] = useState<CompanyOverview | null>(null);
   const [members, setMembers] = useState<CompanyMember[]>([]);
+  const [invitations, setInvitations] = useState<WorkspaceInvitation[]>([]);
+  const [domains, setDomains] = useState<WorkspaceDomain[]>([]);
+  const [mailboxes, setMailboxes] = useState<BusinessMailbox[]>([]);
   const [seatLimit, setSeatLimit] = useState({ used: 0, max: 5 });
   const [usage, setUsage] = useState<Awaited<ReturnType<typeof companyAdminApi.usage>> | null>(null);
   const [billing, setBilling] = useState<Awaited<ReturnType<typeof companyAdminApi.billing>> | null>(null);
@@ -129,9 +140,20 @@ export default function CompanyAdminPanel({ state }: { state: DashboardState }) 
     try {
       if (target === 'overview') setOverview(await companyAdminApi.overview());
       if (target === 'team') {
-        const result = await companyAdminApi.members();
-        setMembers(result.members);
+        // The workspace API is the single source of truth for the team: it
+        // returns members and the pending invitations from the same table.
+        const result = await workspaceApi.team();
+        setMembers(result.members as unknown as CompanyMember[]);
+        setInvitations(result.invitations);
         setSeatLimit(result.seatLimit);
+      }
+      if (target === 'domains') {
+        const result = await workspaceApi.domains();
+        setDomains(result.domains);
+      }
+      if (target === 'mailboxes') {
+        const result = await workspaceApi.mailboxes();
+        setMailboxes(result.mailboxes);
       }
       if (target === 'usage') setUsage(await companyAdminApi.usage(days));
       if (target === 'billing') setBilling(await companyAdminApi.billing());
@@ -343,8 +365,91 @@ export default function CompanyAdminPanel({ state }: { state: DashboardState }) 
             </table>
             {members.length === 0 && <p className="admin-empty-state">No members found.</p>}
           </div>
+          {invitations.length > 0 && (
+            <>
+              <div className="admin-card-head mt-16">
+                <div><h3>Pending invitations</h3><p>Invites that have not been accepted yet.</p></div>
+              </div>
+              <div className="admin-table-wrap">
+                <table className="admin-table">
+                  <thead><tr><th>Email</th><th>Role</th><th>Invited by</th><th>Expires</th><th>Status</th></tr></thead>
+                  <tbody>
+                    {invitations.map((invitation) => (
+                      <tr key={invitation.id}>
+                        <td><strong>{invitation.email}</strong></td>
+                        <td>{invitation.role}</td>
+                        <td>{invitation.invitedBy}</td>
+                        <td>{date(invitation.expiresAt)}</td>
+                        <td><Badge value={invitation.status}>{invitation.status}</Badge></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
           {!canManage && <p className="text-xs text-muted">Only company owners and admins can change roles or suspend access.</p>}
         </section>
+      )}
+
+      {tab === 'domains' && (
+        <>
+          <div className="admin-grid-4">
+            <Stat label="Domains" value={number(domains.length)} icon={<Globe2 size={17} />} />
+            <Stat label="Verified" value={number(domains.filter((domain) => domain.status === 'verified').length)} icon={<CheckCircle2 size={17} />} tone="good" />
+            <Stat label="Mailboxes" value={number(mailboxes.length)} icon={<Mail size={17} />} />
+            <Stat label="Pending DNS" value={number(domains.filter((domain) => domain.status !== 'verified').length)} icon={<AlertTriangle size={17} />} tone={domains.some((domain) => domain.status !== 'verified') ? 'warn' : undefined} />
+          </div>
+          <div className="admin-table-wrap">
+            <table className="admin-table">
+              <thead><tr><th>Domain</th><th>Status</th><th>SPF</th><th>DKIM</th><th>DMARC</th><th>Mailboxes</th><th>Verified</th></tr></thead>
+              <tbody>
+                {domains.map((domain) => (
+                  <tr key={domain.id}>
+                    <td><strong>{domain.domain}</strong></td>
+                    <td><Badge value={domain.status}>{domain.status}</Badge></td>
+                    <td>{domain.spfRecord ? 'Configured' : 'Missing'}</td>
+                    <td>{domain.dkimRecord ? 'Configured' : 'Missing'}</td>
+                    <td>{domain.dmarcRecord ? 'Configured' : 'Missing'}</td>
+                    <td>{number(domain.mailboxes)}</td>
+                    <td>{date(domain.verifiedAt)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {domains.length === 0 && <p className="admin-empty-state">No domain connected yet.</p>}
+          </div>
+        </>
+      )}
+
+      {tab === 'mailboxes' && (
+        <>
+          <div className="admin-grid-4">
+            <Stat label="Mailboxes" value={number(mailboxes.length)} icon={<Mail size={17} />} />
+            <Stat label="Active" value={number(mailboxes.filter((mailbox) => mailbox.active).length)} icon={<CheckCircle2 size={17} />} tone="good" />
+            <Stat label="Custom" value={number(mailboxes.filter((mailbox) => mailbox.source === 'custom').length)} icon={<Users size={17} />} />
+            <Stat label="Used" value={number(mailboxes.filter((mailbox) => Boolean(mailbox.lastUsedAt)).length)} icon={<Activity size={17} />} />
+          </div>
+          <div className="admin-table-wrap">
+            <table className="admin-table">
+              <thead><tr><th>Address</th><th>Name</th><th>Domain</th><th>Kind</th><th>Source</th><th>Status</th><th>Last used</th></tr></thead>
+              <tbody>
+                {mailboxes.map((mailbox) => (
+                  <tr key={mailbox.id}>
+                    <td><strong>{mailbox.address}</strong></td>
+                    <td>{mailbox.displayName}</td>
+                    <td>{mailbox.domain}</td>
+                    <td>{mailbox.kind}</td>
+                    <td>{mailbox.source}</td>
+                    <td><Badge value={mailbox.active ? 'active' : 'disabled'}>{mailbox.active ? 'active' : 'disabled'}</Badge></td>
+                    <td>{ago(mailbox.lastUsedAt)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {mailboxes.length === 0 && <p className="admin-empty-state">No mailbox provisioned yet.</p>}
+          </div>
+        </>
       )}
 
       {tab === 'usage' && usage && (

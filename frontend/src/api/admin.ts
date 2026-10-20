@@ -189,6 +189,10 @@ export type Company = {
   queueDepth: number;
   invoices: number;
   openCases: number;
+  /** Every email domain the company owns. */
+  domainList: string[];
+  mailboxes: number;
+  lastActivity?: string | null;
 };
 
 export type CompanyDetail = {
@@ -204,6 +208,62 @@ export type CompanyDetail = {
   }>;
   invoices: Invoice[];
   investigations: Investigation[];
+  mailboxes: Array<{
+    id: string;
+    domain: string;
+    address: string;
+    name: string;
+    kind: string;
+    active: boolean;
+    source: string;
+    createdAt?: string | null;
+    lastUsedAt?: string | null;
+  }>;
+  apiKeys: Array<{
+    id: string;
+    name: string;
+    prefix: string;
+    scopes: string[];
+    createdBy: string;
+    lastUsedAt?: string | null;
+    expiresAt?: string | null;
+    revokedAt?: string | null;
+    createdAt?: string | null;
+  }>;
+  sessions: Array<{
+    id: string;
+    email: string;
+    device: string;
+    ip?: string | null;
+    userAgent?: string | null;
+    createdAt?: string | null;
+    lastActive?: string | null;
+    expiresAt?: string | null;
+    mfaVerified: boolean;
+  }>;
+  usage: Array<{
+    date: string;
+    sent: number;
+    received: number;
+    apiRequests: number;
+    storageBytes: number;
+    activeUsers: number;
+    queueDepth: number;
+    bounces: number;
+    spamBlocked: number;
+    avgLatencyMs: number;
+    errorRate: number;
+  }>;
+  recentAudit: Array<{
+    id: string;
+    actor: string;
+    actorRole: string;
+    action: string;
+    category: string;
+    resourceType: string;
+    severity: string;
+    createdAt?: string | null;
+  }>;
 };
 
 export type CompanyMember = {
@@ -226,9 +286,13 @@ export type PlatformUser = {
   status: string;
   tenantId?: string | null;
   company?: string | null;
+  companyEmail?: string | null;
   plan: string;
   billingCycle: string;
   role: string;
+  companyRole?: string | null;
+  /** Email domains owned by the company of this account. */
+  domains: string[];
   isPlatformAdmin: boolean;
   createdAt: string;
   lastLogin?: string | null;
@@ -429,11 +493,44 @@ export const platformAdminApi = {
 
   company: (id: string) => call<CompanyDetail>(`/admin/platform/companies/${encodeURIComponent(id)}`),
 
+  /**
+   * Platform operator actions on a company: suspend it, move it between
+   * plans, change its seat limit, cut its API keys, force every session
+   * closed or close its open investigations.
+   */
+  companyAction: (
+    id: string,
+    payload: {
+      action: 'suspend' | 'activate' | 'set_plan' | 'set_seats' | 'revoke_api_keys' | 'terminate_sessions' | 'close_cases';
+      plan?: string;
+      seatLimit?: number;
+      reason?: string;
+    },
+  ) =>
+    call<{ success: boolean; action: string; affected: number }>(
+      `/admin/platform/companies/${encodeURIComponent(id)}/actions`,
+      jsonBody(payload),
+    ),
+
   updateCompany: (id: string, payload: Record<string, unknown>) =>
     call<{ success: boolean }>(`/admin/platform/companies/${encodeURIComponent(id)}`, patchBody(payload)),
 
   users: (params: { search?: string; status?: string; plan?: string } = {}) =>
     call<{ success: boolean; users: PlatformUser[] }>(`/admin/platform/users${query(params)}`),
+
+  /** Platform operator actions on an account. */
+  userAction: (
+    id: string,
+    payload: {
+      action: 'suspend' | 'activate' | 'terminate_sessions' | 'set_role';
+      role?: string;
+      reason?: string;
+    },
+  ) =>
+    call<{ success: boolean; action: string; affected: number }>(
+      `/admin/platform/users/${encodeURIComponent(id)}/actions`,
+      jsonBody(payload),
+    ),
 
   investigations: (params: { search?: string; status?: string; severity?: string; assignee?: string } = {}) =>
     call<{

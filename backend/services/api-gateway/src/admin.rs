@@ -28,11 +28,11 @@ use velismail_common::Claims;
 
 type ApiResult = (StatusCode, Json<Value>);
 
-fn ok(value: Value) -> ApiResult {
+pub(crate) fn ok(value: Value) -> ApiResult {
     (StatusCode::OK, Json(value))
 }
 
-fn fail(status: StatusCode, message: &str) -> ApiResult {
+pub(crate) fn fail(status: StatusCode, message: &str) -> ApiResult {
     (status, Json(json!({ "success": false, "error": message })))
 }
 
@@ -59,7 +59,7 @@ fn bearer_token(headers: &HeaderMap) -> Option<String> {
         .map(str::to_string)
 }
 
-fn decode_claims(state: &AppState, headers: &HeaderMap) -> Result<Claims, ApiResult> {
+pub(crate) fn decode_claims(state: &AppState, headers: &HeaderMap) -> Result<Claims, ApiResult> {
     let secret = state.config.jwt_secret.as_deref().ok_or_else(|| {
         platform_api_error(
             StatusCode::SERVICE_UNAVAILABLE,
@@ -82,7 +82,7 @@ fn decode_claims(state: &AppState, headers: &HeaderMap) -> Result<Claims, ApiRes
     .map_err(|_| platform_api_error(StatusCode::UNAUTHORIZED, "Invalid or expired bearer token."))
 }
 
-fn pool(state: &AppState) -> Result<&PgPool, ApiResult> {
+pub(crate) fn pool(state: &AppState) -> Result<&PgPool, ApiResult> {
     state.db.as_ref().ok_or_else(|| {
         platform_api_error(
             StatusCode::SERVICE_UNAVAILABLE,
@@ -222,13 +222,12 @@ async fn authorize_platform(
             role = "owner".to_string();
             permissions = vec!["*".to_string()];
             status = "active".to_string();
-            let owner_permissions = json!(["*"]);
             let _ = sqlx::query(
-                "UPDATE platform_admins SET role = 'owner', permissions = $2, status = 'active', updated_at = NOW()
+                "UPDATE platform_admins SET role = 'owner', permissions = $2::jsonb, status = 'active', updated_at = NOW()
                  WHERE email = $1",
             )
             .bind(&email)
-            .bind(&owner_permissions)
+            .bind(json!(["*"]))
             .execute(db)
             .await;
         }
@@ -1186,7 +1185,11 @@ SELECT t.id, t.organization_name, t.organization_email, t.plan_tier, t.status,
           AND EXISTS (SELECT 1 FROM custom_domains d
                       WHERE d.tenant_id = t.id AND q.sender ILIKE '%@' || d.domain_name)) AS queue_depth,
        (SELECT COUNT(*)::bigint FROM company_invoices i WHERE i.tenant_id = t.id AND i.status = 'paid') AS invoice_count,
-       (SELECT COUNT(*)::bigint FROM investigations i WHERE i.tenant_id = t.id AND i.status IN ('open','investigating','contained')) AS open_cases
+       (SELECT COUNT(*)::bigint FROM investigations i WHERE i.tenant_id = t.id AND i.status IN ('open','investigating','contained')) AS open_cases,
+       (SELECT COALESCE(jsonb_agg(d.domain_name ORDER BY d.domain_name), '[]'::jsonb)
+        FROM custom_domains d WHERE d.tenant_id = t.id) AS domain_list,
+       (SELECT COUNT(*)::bigint FROM business_mailboxes bm WHERE bm.tenant_id = t.id) AS mailbox_count,
+       (SELECT MAX(u2.last_login) FROM users u2 WHERE u2.tenant_id = t.id) AS last_activity
 FROM tenants t
 LEFT JOIN tenant_profiles p ON p.tenant_id = t.id
 "#;
@@ -1221,6 +1224,9 @@ fn company_json(row: &sqlx::postgres::PgRow) -> Value {
         "queueDepth": row.try_get::<i64, _>("queue_depth").unwrap_or(0),
         "invoices": row.try_get::<i64, _>("invoice_count").unwrap_or(0),
         "openCases": row.try_get::<i64, _>("open_cases").unwrap_or(0),
+        "domainList": row.try_get::<Value, _>("domain_list").unwrap_or_else(|_| json!([])),
+        "mailboxes": row.try_get::<i64, _>("mailbox_count").unwrap_or(0),
+        "lastActivity": row.try_get::<Option<DateTime<Utc>>, _>("last_activity").ok().flatten().map(|v| v.to_rfc3339()),
     })
 }
 
@@ -1422,6 +1428,138 @@ pub async fn get_company(
     .unwrap_or_default();
     let cases: Vec<Value> = cases.iter().map(investigation_json).collect();
 
+    // Operational detail: the platform operator needs the same visibility the
+    // customer has, plus the credentials and sessions that belong to them.
+    let mailboxes = sqlx::query(
+        "SELECT id, domain, address, display_name, kind, active, source, created_at, last_used_at
+         FROM business_mailboxes WHERE tenant_id = $1 ORDER BY domain, address LIMIT 500",
+    )
+    .bind(tenant_id)
+    .fetch_all(db)
+    .await
+    .unwrap_or_default();
+    let mailboxes: Vec<Value> = mailboxes
+        .iter()
+        .map(|row| {
+            json!({
+                "id": row.try_get::<String, _>("id").unwrap_or_default(),
+                "domain": row.try_get::<String, _>("domain").unwrap_or_default(),
+                "address": row.try_get::<String, _>("address").unwrap_or_default(),
+                "name": row.try_get::<String, _>("display_name").unwrap_or_default(),
+                "kind": row.try_get::<String, _>("kind").unwrap_or_default(),
+                "active": row.try_get::<bool, _>("active").unwrap_or(true),
+                "source": row.try_get::<String, _>("source").unwrap_or_default(),
+                "createdAt": row.try_get::<Option<String>, _>("created_at").ok().flatten(),
+                "lastUsedAt": row.try_get::<Option<String>, _>("last_used_at").ok().flatten(),
+            })
+        })
+        .collect();
+
+    let api_keys = sqlx::query(
+        "SELECT id, name, key_prefix, scopes, created_by, last_used_at, expires_at, revoked_at, created_at
+         FROM company_api_keys WHERE tenant_id = $1 ORDER BY created_at DESC LIMIT 200",
+    )
+    .bind(tenant_id)
+    .fetch_all(db)
+    .await
+    .unwrap_or_default();
+    let api_keys: Vec<Value> = api_keys
+        .iter()
+        .map(|row| {
+            json!({
+                "id": row.try_get::<Uuid, _>("id").map(|v| v.to_string()).unwrap_or_default(),
+                "name": row.try_get::<String, _>("name").unwrap_or_default(),
+                "prefix": row.try_get::<String, _>("key_prefix").unwrap_or_default(),
+                "scopes": row.try_get::<Vec<String>, _>("scopes").unwrap_or_default(),
+                "createdBy": row.try_get::<String, _>("created_by").unwrap_or_default(),
+                "lastUsedAt": row.try_get::<Option<DateTime<Utc>>, _>("last_used_at").ok().flatten().map(|v| v.to_rfc3339()),
+                "expiresAt": row.try_get::<Option<DateTime<Utc>>, _>("expires_at").ok().flatten().map(|v| v.to_rfc3339()),
+                "revokedAt": row.try_get::<Option<DateTime<Utc>>, _>("revoked_at").ok().flatten().map(|v| v.to_rfc3339()),
+                "createdAt": row.try_get::<Option<DateTime<Utc>>, _>("created_at").ok().flatten().map(|v| v.to_rfc3339()),
+            })
+        })
+        .collect();
+
+    let sessions = sqlx::query(
+        "SELECT s.id, u.email, s.device_fingerprint, s.ip_address::text, s.user_agent,
+                s.created_at, s.last_active, s.expires_at, s.mfa_verified
+         FROM sessions s JOIN users u ON u.id = s.user_id
+         WHERE u.tenant_id = $1 AND s.is_active AND s.expires_at > NOW()
+         ORDER BY s.last_active DESC LIMIT 200",
+    )
+    .bind(tenant_id)
+    .fetch_all(db)
+    .await
+    .unwrap_or_default();
+    let sessions: Vec<Value> = sessions
+        .iter()
+        .map(|row| {
+            json!({
+                "id": row.try_get::<Uuid, _>("id").map(|v| v.to_string()).unwrap_or_default(),
+                "email": row.try_get::<String, _>("email").unwrap_or_default(),
+                "device": row.try_get::<String, _>("device_fingerprint").unwrap_or_default(),
+                "ip": row.try_get::<Option<String>, _>("ip_address").ok().flatten(),
+                "userAgent": row.try_get::<Option<String>, _>("user_agent").ok().flatten(),
+                "createdAt": row.try_get::<Option<DateTime<Utc>>, _>("created_at").ok().flatten().map(|v| v.to_rfc3339()),
+                "lastActive": row.try_get::<Option<DateTime<Utc>>, _>("last_active").ok().flatten().map(|v| v.to_rfc3339()),
+                "expiresAt": row.try_get::<Option<DateTime<Utc>>, _>("expires_at").ok().flatten().map(|v| v.to_rfc3339()),
+                "mfaVerified": row.try_get::<bool, _>("mfa_verified").unwrap_or(false),
+            })
+        })
+        .collect();
+
+    let usage = sqlx::query(
+        "SELECT day, emails_sent, emails_received, api_requests, storage_bytes,
+                active_users, queue_depth, bounces, spam_blocked, avg_latency_ms, error_rate
+         FROM tenant_usage_daily WHERE tenant_id = $1 ORDER BY day DESC LIMIT 30",
+    )
+    .bind(tenant_id)
+    .fetch_all(db)
+    .await
+    .unwrap_or_default();
+    let usage: Vec<Value> = usage
+        .iter()
+        .map(|row| {
+            json!({
+                "date": row.try_get::<Option<chrono::NaiveDate>, _>("day").ok().flatten().map(|v| v.to_string()).unwrap_or_default(),
+                "sent": row.try_get::<i32, _>("emails_sent").unwrap_or(0),
+                "received": row.try_get::<i32, _>("emails_received").unwrap_or(0),
+                "apiRequests": row.try_get::<i32, _>("api_requests").unwrap_or(0),
+                "storageBytes": row.try_get::<i64, _>("storage_bytes").unwrap_or(0),
+                "activeUsers": row.try_get::<i32, _>("active_users").unwrap_or(0),
+                "queueDepth": row.try_get::<i32, _>("queue_depth").unwrap_or(0),
+                "bounces": row.try_get::<i32, _>("bounces").unwrap_or(0),
+                "spamBlocked": row.try_get::<i32, _>("spam_blocked").unwrap_or(0),
+                "avgLatencyMs": row.try_get::<i32, _>("avg_latency_ms").unwrap_or(0),
+                "errorRate": row.try_get::<f64, _>("error_rate").unwrap_or(0.0),
+            })
+        })
+        .collect();
+
+    let recent_audit = sqlx::query(
+        "SELECT id, actor_email, actor_role, action, category, resource_type, severity, created_at
+         FROM platform_audit_logs WHERE tenant_id = $1 ORDER BY created_at DESC LIMIT 50",
+    )
+    .bind(tenant_id)
+    .fetch_all(db)
+    .await
+    .unwrap_or_default();
+    let recent_audit: Vec<Value> = recent_audit
+        .iter()
+        .map(|row| {
+            json!({
+                "id": row.try_get::<Uuid, _>("id").map(|v| v.to_string()).unwrap_or_default(),
+                "actor": row.try_get::<String, _>("actor_email").unwrap_or_default(),
+                "actorRole": row.try_get::<String, _>("actor_role").unwrap_or_default(),
+                "action": row.try_get::<String, _>("action").unwrap_or_default(),
+                "category": row.try_get::<String, _>("category").unwrap_or_default(),
+                "resourceType": row.try_get::<String, _>("resource_type").unwrap_or_default(),
+                "severity": row.try_get::<String, _>("severity").unwrap_or_default(),
+                "createdAt": row.try_get::<Option<DateTime<Utc>>, _>("created_at").ok().flatten().map(|v| v.to_rfc3339()),
+            })
+        })
+        .collect();
+
     ok(json!({
         "success": true,
         "company": company_json(&row),
@@ -1429,6 +1567,11 @@ pub async fn get_company(
         "domains": domains,
         "invoices": invoices,
         "investigations": cases,
+        "mailboxes": mailboxes,
+        "apiKeys": api_keys,
+        "sessions": sessions,
+        "usage": usage,
+        "recentAudit": recent_audit,
     }))
 }
 
@@ -1444,6 +1587,371 @@ pub struct CompanyUpdateRequest {
     pub billing_email: Option<String>,
     pub legal_name: Option<String>,
     pub note: Option<String>,
+}
+
+// ---------------------------------------------------------------------------
+// Platform actions
+//
+// The control plane belongs to the VelisMail operator: it can suspend a
+// company, move it between plans, cut its credentials and force every
+// session closed. Every action is audited.
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlatformCompanyAction {
+    pub action: String,
+    pub plan: Option<String>,
+    pub seat_limit: Option<i32>,
+    pub reason: Option<String>,
+}
+
+pub async fn company_action(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Json(payload): Json<PlatformCompanyAction>,
+) -> ApiResult {
+    let actor = match authorize_platform(&state, &headers).await {
+        Ok(actor) => actor,
+        Err(response) => return response,
+    };
+    if let Err(response) = require_permission(&actor, "companies.write") {
+        return response;
+    }
+    let db = match pool(&state) {
+        Ok(db) => db,
+        Err(response) => return response,
+    };
+    let tenant_id = match Uuid::parse_str(&id) {
+        Ok(value) => value,
+        Err(_) => return fail(StatusCode::BAD_REQUEST, "Invalid company id."),
+    };
+    let action = payload.action.trim().to_lowercase();
+    let reason = payload
+        .reason
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
+
+    let affected = match action.as_str() {
+        "suspend" => {
+            let result = sqlx::query(
+                "UPDATE tenants SET status = 'suspended', updated_at = NOW() WHERE id = $1",
+            )
+            .bind(tenant_id)
+            .execute(db)
+            .await;
+            match result {
+                Ok(done) => done.rows_affected(),
+                Err(_) => {
+                    return fail(
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "Unable to suspend the company.",
+                    )
+                }
+            }
+        }
+        "activate" => {
+            let result = sqlx::query(
+                "UPDATE tenants SET status = 'active', updated_at = NOW() WHERE id = $1",
+            )
+            .bind(tenant_id)
+            .execute(db)
+            .await;
+            match result {
+                Ok(done) => done.rows_affected(),
+                Err(_) => {
+                    return fail(
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "Unable to reactivate the company.",
+                    )
+                }
+            }
+        }
+        "set_plan" => {
+            let plan = payload
+                .plan
+                .as_deref()
+                .map(|value| value.trim().to_lowercase())
+                .filter(|value| !value.is_empty());
+            let plan = match plan {
+                Some(value)
+                    if matches!(
+                        value.as_str(),
+                        "free" | "starter" | "business" | "enterprise"
+                    ) =>
+                {
+                    value
+                }
+                _ => return fail(StatusCode::BAD_REQUEST, "Unknown plan."),
+            };
+            let result =
+                sqlx::query("UPDATE tenants SET plan_tier = $2, updated_at = NOW() WHERE id = $1")
+                    .bind(tenant_id)
+                    .bind(&plan)
+                    .execute(db)
+                    .await;
+            match result {
+                Ok(done) => done.rows_affected(),
+                Err(_) => {
+                    return fail(
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "Unable to change the plan.",
+                    )
+                }
+            }
+        }
+        "set_seats" => {
+            let seats = payload.seat_limit.unwrap_or(0);
+            if !(1..=100_000).contains(&seats) {
+                return fail(
+                    StatusCode::BAD_REQUEST,
+                    "Seat limit must be between 1 and 100000.",
+                );
+            }
+            let result = sqlx::query(
+                "INSERT INTO tenant_profiles (tenant_id, seat_limit) VALUES ($1, $2)
+                 ON CONFLICT (tenant_id) DO UPDATE SET seat_limit = EXCLUDED.seat_limit",
+            )
+            .bind(tenant_id)
+            .bind(seats)
+            .execute(db)
+            .await;
+            match result {
+                Ok(done) => done.rows_affected(),
+                Err(_) => {
+                    return fail(
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "Unable to update the seat limit.",
+                    )
+                }
+            }
+        }
+        "revoke_api_keys" => {
+            let result = sqlx::query(
+                "UPDATE company_api_keys SET revoked_at = NOW()
+                 WHERE tenant_id = $1 AND revoked_at IS NULL",
+            )
+            .bind(tenant_id)
+            .execute(db)
+            .await;
+            match result {
+                Ok(done) => done.rows_affected(),
+                Err(_) => {
+                    return fail(
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "Unable to revoke the API keys.",
+                    )
+                }
+            }
+        }
+        "terminate_sessions" => {
+            let result = sqlx::query(
+                "UPDATE sessions SET is_active = FALSE
+                 WHERE user_id IN (SELECT id FROM users WHERE tenant_id = $1) AND is_active",
+            )
+            .bind(tenant_id)
+            .execute(db)
+            .await;
+            match result {
+                Ok(done) => done.rows_affected(),
+                Err(_) => {
+                    return fail(
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "Unable to terminate the sessions.",
+                    )
+                }
+            }
+        }
+        "close_cases" => {
+            let result = sqlx::query(
+                "UPDATE investigations SET status = 'closed', updated_at = NOW()
+                 WHERE tenant_id = $1 AND status IN ('open','investigating','contained')",
+            )
+            .bind(tenant_id)
+            .execute(db)
+            .await;
+            match result {
+                Ok(done) => done.rows_affected(),
+                Err(_) => {
+                    return fail(
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "Unable to close the investigations.",
+                    )
+                }
+            }
+        }
+        _ => return fail(StatusCode::BAD_REQUEST, "Unknown company action."),
+    };
+
+    if affected == 0 {
+        return fail(StatusCode::NOT_FOUND, "Nothing to change for this company.");
+    }
+
+    audit(
+        db,
+        &actor.email,
+        &actor.role,
+        &format!("platform.company_{}", action),
+        "companies",
+        "company",
+        Some(&tenant_id.to_string()),
+        Some(tenant_id),
+        json!({ "reason": reason, "affected": affected }),
+        "warning",
+    )
+    .await;
+
+    ok(json!({ "success": true, "action": action, "affected": affected }))
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlatformUserAction {
+    pub action: String,
+    pub role: Option<String>,
+    pub reason: Option<String>,
+}
+
+pub async fn platform_user_action(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Json(payload): Json<PlatformUserAction>,
+) -> ApiResult {
+    let actor = match authorize_platform(&state, &headers).await {
+        Ok(actor) => actor,
+        Err(response) => return response,
+    };
+    if let Err(response) = require_permission(&actor, "users.write") {
+        return response;
+    }
+    let db = match pool(&state) {
+        Ok(db) => db,
+        Err(response) => return response,
+    };
+    let user_id = match Uuid::parse_str(&id) {
+        Ok(value) => value,
+        Err(_) => return fail(StatusCode::BAD_REQUEST, "Invalid user id."),
+    };
+    let action = payload.action.trim().to_lowercase();
+
+    let affected = match action.as_str() {
+        "suspend" => {
+            let result = sqlx::query(
+                "UPDATE users SET status = 'suspended', updated_at = NOW() WHERE id = $1",
+            )
+            .bind(user_id)
+            .execute(db)
+            .await;
+            match result {
+                Ok(done) => done.rows_affected(),
+                Err(_) => {
+                    return fail(
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "Unable to suspend the account.",
+                    )
+                }
+            }
+        }
+        "activate" => {
+            let result =
+                sqlx::query("UPDATE users SET status = 'active', updated_at = NOW() WHERE id = $1")
+                    .bind(user_id)
+                    .execute(db)
+                    .await;
+            match result {
+                Ok(done) => done.rows_affected(),
+                Err(_) => {
+                    return fail(
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "Unable to reactivate the account.",
+                    )
+                }
+            }
+        }
+        "terminate_sessions" => {
+            let result = sqlx::query(
+                "UPDATE sessions SET is_active = FALSE WHERE user_id = $1 AND is_active",
+            )
+            .bind(user_id)
+            .execute(db)
+            .await;
+            match result {
+                Ok(done) => done.rows_affected(),
+                Err(_) => {
+                    return fail(
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "Unable to terminate the sessions.",
+                    )
+                }
+            }
+        }
+        "set_role" => {
+            let role = payload
+                .role
+                .as_deref()
+                .map(|value| value.trim().to_lowercase())
+                .filter(|value| !value.is_empty());
+            let role = match role {
+                Some(value)
+                    if matches!(value.as_str(), "owner" | "admin" | "member" | "viewer") =>
+                {
+                    value
+                }
+                _ => return fail(StatusCode::BAD_REQUEST, "Unknown workspace role."),
+            };
+            let result = sqlx::query(
+                "UPDATE company_members SET role = $2, updated_at = NOW()
+                 WHERE user_id = $1 AND status <> 'removed'",
+            )
+            .bind(user_id)
+            .bind(&role)
+            .execute(db)
+            .await;
+            let membership_rows = match result {
+                Ok(done) => done.rows_affected(),
+                Err(_) => {
+                    return fail(
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "Unable to change the workspace role.",
+                    )
+                }
+            };
+            let _ = sqlx::query(
+                "UPDATE users SET settings = COALESCE(settings, '{}'::jsonb)
+                    || jsonb_build_object('role', $2), updated_at = NOW()
+                 WHERE id = $1",
+            )
+            .bind(user_id)
+            .bind(&role)
+            .execute(db)
+            .await;
+            membership_rows
+        }
+        _ => return fail(StatusCode::BAD_REQUEST, "Unknown account action."),
+    };
+
+    if affected == 0 {
+        return fail(StatusCode::NOT_FOUND, "Nothing to change for this account.");
+    }
+
+    audit(
+        db,
+        &actor.email,
+        &actor.role,
+        &format!("platform.user_{}", action),
+        "users",
+        "user",
+        Some(&user_id.to_string()),
+        None,
+        json!({ "reason": payload.reason, "affected": affected }),
+        "warning",
+    )
+    .await;
+
+    ok(json!({ "success": true, "action": action, "affected": affected }))
 }
 
 pub async fn update_company(
@@ -1653,7 +2161,12 @@ pub async fn list_platform_users(
 
     let rows = sqlx::query(
         "SELECT u.id, u.email, u.display_name, u.status, u.settings, u.created_at, u.last_login,
-                u.tenant_id, t.organization_name,
+                u.tenant_id, t.organization_name, t.organization_email,
+                (SELECT cm.role FROM company_members cm
+                 WHERE cm.tenant_id = u.tenant_id AND LOWER(cm.email) = LOWER(u.email)
+                   AND cm.status = 'active' LIMIT 1) AS company_role,
+                (SELECT COALESCE(jsonb_agg(d.domain_name ORDER BY d.domain_name), '[]'::jsonb)
+                 FROM custom_domains d WHERE d.tenant_id = u.tenant_id) AS domain_list,
                 (SELECT COUNT(*)::bigint FROM delivery_queue q WHERE q.sender = u.email) AS sent_count,
                 (SELECT COUNT(*)::bigint FROM sessions s WHERE s.user_id = u.id AND s.is_active AND s.expires_at > NOW()) AS active_sessions,
                 (SELECT COUNT(*)::bigint FROM failed_login_attempts f WHERE f.user_id = u.id AND f.attempted_at > NOW() - INTERVAL '30 days') AS failed_logins
@@ -1697,9 +2210,12 @@ pub async fn list_platform_users(
                 "status": user_status,
                 "tenantId": row.try_get::<Option<Uuid>, _>("tenant_id").ok().flatten().map(|v| v.to_string()),
                 "company": row.try_get::<Option<String>, _>("organization_name").ok().flatten(),
+                "companyEmail": row.try_get::<Option<String>, _>("organization_email").ok().flatten(),
                 "plan": settings.get("plan").and_then(Value::as_str).unwrap_or("Free"),
                 "billingCycle": settings.get("billingCycle").and_then(Value::as_str).unwrap_or("monthly"),
                 "role": settings.get("role").and_then(Value::as_str).unwrap_or("member"),
+                "companyRole": row.try_get::<Option<String>, _>("company_role").ok().flatten(),
+                "domains": row.try_get::<Value, _>("domain_list").unwrap_or_else(|_| json!([])),
                 "isPlatformAdmin": settings.get("isPlatformAdmin").and_then(Value::as_bool).unwrap_or(false),
                 "createdAt": row.try_get::<DateTime<Utc>, _>("created_at").map(|v| v.to_rfc3339()).unwrap_or_default(),
                 "lastLogin": row.try_get::<Option<DateTime<Utc>>, _>("last_login").ok().flatten().map(|v| v.to_rfc3339()),
@@ -3266,6 +3782,14 @@ fn plan_limits(plan: &str) -> Value {
             json!({ "seats": 5, "emailsPerMonth": 1_000, "storageBytes": 1024 * 1024 * 1024i64, "apiRequestsPerMonth": 10_000 })
         }
     }
+}
+
+/// Seat allowance for a plan, used by the workspace API as well.
+pub(crate) fn plan_seats(plan: &str) -> i64 {
+    plan_limits(plan)
+        .get("seats")
+        .and_then(Value::as_i64)
+        .unwrap_or(5)
 }
 
 pub async fn company_overview(State(state): State<AppState>, headers: HeaderMap) -> ApiResult {

@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { Building2, Crown } from 'lucide-react';
-import { auth, businessAudit, businessGroups, businessMailboxes, businessQueue, businessTeam, businessTemplates, connections, domains, fetchAPI, fetchAuthenticatedProfile, isBusinessSetupReady, mail, saveDB, signatures, contacts, STORAGE_KEYS, type BusinessAuditEntry, type BusinessGroup, type BusinessMailbox, type BusinessTeamMember, type BusinessTemplate, type ConnectionUsage, type CustomDomain, type Email, type PlatformAdminUserRecord, type DomainCheck, type TeamAccessInvite, type Signature, type Contact, type ActiveSession } from '../api/client';
+import { auth, connections, domains, fetchAPI, fetchAuthenticatedProfile, isBusinessSetupReady, mail, saveDB, signatures, contacts, STORAGE_KEYS, type BusinessAuditEntry, type BusinessGroup, type BusinessMailbox, type BusinessTeamMember, type BusinessTemplate, type ConnectionUsage, type CustomDomain, type Email, type PlatformAdminUserRecord, type DomainCheck, type TeamAccessInvite, type Signature, type Contact, type ActiveSession } from '../api/client';
 import Sidebar from '../components/dashboard/Sidebar';
 import { PLANS, ROLE_ALLOWED_TABS, type BizTab } from '../components/dashboard/constants';
 import EmailInbox from '../components/dashboard/EmailInbox';
@@ -18,6 +18,8 @@ import AuditPanel from '../components/dashboard/panels/AuditPanel';
 import CompanyAdminPanel from '../components/dashboard/panels/CompanyAdminPanel';
 import PlatformAdminPanel, { type PlatformSection } from '../components/dashboard/panels/PlatformAdminPanel';
 import { platformOwnerUids, platformOwnerEmails } from '../lib/firebase';
+import { toAuditEntry, toQueueItem, toTeamMember, toTemplate, workspaceApi } from '../api/company';
+import { companyAdminApi } from '../api/admin';
 import TemplatesPanel from '../components/dashboard/panels/TemplatesPanel';
 import SettingsPanel from '../components/dashboard/panels/SettingsPanel';
 import BillingPanel from '../components/dashboard/panels/BillingPanel';
@@ -253,26 +255,97 @@ export default function BusinessDashboard() {
 
   const { data: emails = [], isLoading: emailsLoading, refetch } = useEmails(activeDomainName, activeFolder);
 
-  const refreshDomains = () => setDomainsList(domains.getAll().map(toDomainRecord));
-  const refreshTeam = useCallback(() => setTeamMembers(businessTeam.getByDomain(activeDomainName)), [activeDomainName]);
-  const refreshQueue = useCallback(() => setMailQueue(businessQueue.getByDomain(activeDomainName).map(i => ({ id: i.id, to: i.to, subject: i.subject, status: i.status, queuedAt: i.queuedAt, scheduledAt: i.scheduledAt, retries: i.retryCount, error: i.error, from: i.fromAddress }))), [activeDomainName]);
-  const refreshAudit = useCallback(() => setAuditLog(businessAudit.getByDomain(activeDomainName)), [activeDomainName]);
-  const refreshTemplates = useCallback(() => setTemplates(businessTemplates.getByDomain(activeDomainName)), [activeDomainName]);
-  const refreshMailboxes = useCallback(async () => {
-    if (!activeDomainName) {
-      setDomainMailboxes([]);
-      return;
-    }
+  const refreshDomains = useCallback(async () => {
     try {
-      const entries = await businessMailboxes.syncFromDb(activeDomainName);
-      setDomainMailboxes(entries);
+      const result = await workspaceApi.domains();
+      setDomainsList(
+        result.domains.map((domain) => ({
+          id: domain.id,
+          domain: domain.domain,
+          status: domain.status === 'verified' ? 'active' : domain.status === 'failed' ? 'error' : 'pending',
+          reputation: 100,
+          mailCount: domain.mailboxes || 0,
+          addedAt: domain.createdAt || new Date().toISOString(),
+          health: [
+            { key: 'mx', label: 'MX Record', status: domain.mxRecords?.length ? 'verified' : 'pending', detail: domain.mxRecords?.length ? 'Mail exchange configured' : 'Not configured', lastCheck: domain.verifiedAt || '' },
+            { key: 'spf', label: 'SPF Record', status: domain.spfRecord ? 'verified' : 'pending', detail: domain.spfRecord ? 'Sender policy published' : 'Not published', lastCheck: domain.verifiedAt || '' },
+            { key: 'dkim', label: 'DKIM Signature', status: domain.dkimRecord ? 'verified' : 'pending', detail: domain.dkimRecord ? 'DKIM key active' : 'Not configured', lastCheck: domain.verifiedAt || '' },
+            { key: 'dmarc', label: 'DMARC Policy', status: domain.dmarcRecord ? 'verified' : 'pending', detail: domain.dmarcRecord ? 'DMARC policy published' : 'Not published', lastCheck: domain.verifiedAt || '' },
+          ],
+          checks: [],
+          mxVerified: Boolean(domain.mxRecords?.length),
+          dkimVerified: Boolean(domain.dkimRecord),
+          dmarcVerified: Boolean(domain.dmarcRecord),
+        })),
+      );
+    } catch (error) {
+      console.error('refresh domains failed', error);
+      showToast(error instanceof Error ? error.message : 'Unable to load domains.', 'error');
+    }
+  }, [showToast]);
+  const refreshTeam = useCallback(async () => {
+    try {
+      const result = await workspaceApi.team();
+      setTeamMembers(result.members.map(toTeamMember));
+    } catch (error) {
+      console.error('refresh team failed', error);
+      showToast(error instanceof Error ? error.message : 'Unable to load the team.', 'error');
+    }
+  }, [showToast]);
+  const refreshQueue = useCallback(async () => {
+    try {
+      const result = await workspaceApi.queue({ limit: 200 });
+      setMailQueue(result.items.map(toQueueItem));
+    } catch (error) {
+      console.error('refresh queue failed', error);
+      showToast(error instanceof Error ? error.message : 'Unable to load the mail queue.', 'error');
+    }
+  }, [showToast]);
+  const refreshAudit = useCallback(async () => {
+    try {
+      const result = await workspaceApi.audit({ limit: 300 });
+      setAuditLog(result.entries.map(toAuditEntry));
+    } catch (error) {
+      console.error('refresh audit failed', error);
+      showToast(error instanceof Error ? error.message : 'Unable to load the audit trail.', 'error');
+    }
+  }, [showToast]);
+  const refreshTemplates = useCallback(async () => {
+    try {
+      const result = await workspaceApi.templates();
+      setTemplates(result.templates.map(toTemplate));
+    } catch (error) {
+      console.error('refresh templates failed', error);
+      showToast(error instanceof Error ? error.message : 'Unable to load templates.', 'error');
+    }
+  }, [showToast]);
+  const refreshMailboxes = useCallback(async () => {
+    try {
+      const result = await workspaceApi.mailboxes();
+      setDomainMailboxes(result.mailboxes);
     } catch (error) {
       console.error('refresh mailboxes failed', error);
-      setDomainMailboxes(businessMailboxes.getByDomain(activeDomainName));
-      showToast(error instanceof Error ? error.message : 'Unable to refresh mailboxes from database.', 'error');
+      setDomainMailboxes([]);
+      showToast(error instanceof Error ? error.message : 'Unable to refresh mailboxes.', 'error');
     }
-  }, [activeDomainName, showToast]);
-  const refreshGroups = useCallback(() => setDomainGroups(businessGroups.getByDomain(activeDomainName)), [activeDomainName]);
+  }, [showToast]);
+  const refreshGroups = useCallback(async () => {
+    try {
+      const result = await workspaceApi.groups(activeDomainName);
+      setDomainGroups(result.groups.map((group) => ({
+        id: group.id,
+        domain: group.domain,
+        name: group.name,
+        address: group.address,
+        members: group.members || [],
+        createdAt: group.createdAt || '',
+        updatedAt: group.updatedAt || '',
+      })));
+    } catch (error) {
+      console.error('refresh groups failed', error);
+      setDomainGroups([]);
+    }
+  }, [activeDomainName]);
   const refreshConnectionUsage = useCallback(() => setConnectionUsage(connections.getUsage()), []);
   const refreshAdminUsers = useCallback(async () => {
     // Platform users live in the separate /admin control plane. The business
@@ -280,11 +353,28 @@ export default function BusinessDashboard() {
     setAdminUsers([]);
   }, []);
 
-  const refreshSignatures = useCallback(() => setSignaturesList(signatures.getAll()), []);
-  const refreshContacts = useCallback(() => setContactsList(contacts.getAll()), []);
+  const refreshSignatures = useCallback(async () => {
+    try {
+      const result = await workspaceApi.signatures();
+      setSignaturesList(result.signatures);
+    } catch (error) {
+      console.error('refresh signatures failed', error);
+      setSignaturesList([]);
+    }
+  }, []);
+  const refreshContacts = useCallback(async () => {
+    try {
+      const result = await workspaceApi.contacts();
+      setContactsList(result.contacts);
+    } catch (error) {
+      console.error('refresh contacts failed', error);
+      setContactsList([]);
+    }
+  }, []);
   const refreshSessions = useCallback(async () => { try { const res = await auth.listSessions(); if (res.success) setActiveSessions(res.sessions); } catch (e) { console.error('refresh sessions failed', e); } }, []);
 
   useEffect(() => {
+    void refreshDomains();
     refreshTeam();
     refreshQueue();
     refreshAudit();
@@ -292,7 +382,7 @@ export default function BusinessDashboard() {
     refreshConnectionUsage();
     void refreshMailboxes();
     refreshGroups();
-  }, [activeDomainName, refreshTeam, refreshQueue, refreshAudit, refreshTemplates, refreshConnectionUsage, refreshMailboxes, refreshGroups]);
+  }, [activeDomainName, refreshDomains, refreshTeam, refreshQueue, refreshAudit, refreshTemplates, refreshConnectionUsage, refreshMailboxes, refreshGroups]);
 
   useEffect(() => {
     if (domainMailboxes.length === 0) {
@@ -473,11 +563,29 @@ export default function BusinessDashboard() {
     catch (e) { console.error('add domain failed', e); showToast('Failed to add domain', 'error'); }
   };
 
-  const confirmRoleChangeStep = () => {
+  const confirmRoleChangeStep = async () => {
     if (!pendingRoleChange) return;
     if (pendingRoleChange.step === 1) { setPendingRoleChange({ ...pendingRoleChange, step: 2 }); return; }
-    businessTeam.updateRole(pendingRoleChange.id, pendingRoleChange.role as 'admin' | 'member' | 'viewer');
-    refreshTeam(); setPendingRoleChange(null); showToast('Role updated');
+    try {
+      // The role lives in PostgreSQL. Resolve the member by email and update
+      // the real record instead of a browser copy.
+      const result = await workspaceApi.team();
+      const member = result.members.find((entry) => entry.email === pendingRoleChange.id);
+      if (!member) {
+        showToast('That member is no longer part of this workspace.', 'error');
+        setPendingRoleChange(null);
+        return;
+      }
+      await companyAdminApi.updateMember(member.id, {
+        role: pendingRoleChange.role as 'admin' | 'member' | 'viewer',
+      });
+      await refreshTeam();
+      showToast('Role updated');
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Unable to update the role.', 'error');
+    } finally {
+      setPendingRoleChange(null);
+    }
   };
 
   const handleBulkAction = async (action: string, ids?: string[]) => {

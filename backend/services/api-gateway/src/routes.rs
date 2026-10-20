@@ -1,6 +1,7 @@
 //! API Gateway routes - reverse proxy plus compatibility endpoints.
 
 use crate::admin;
+use crate::company_api;
 use crate::state::AppState;
 use axum::{
     body::{Body, Bytes},
@@ -88,7 +89,15 @@ pub fn api_v1_routes(_state: &AppState) -> Router<AppState> {
             "/admin/platform/companies/{id}",
             get(admin::get_company).patch(admin::update_company),
         )
+        .route(
+            "/admin/platform/companies/{id}/actions",
+            post(admin::company_action),
+        )
         .route("/admin/platform/users", get(admin::list_platform_users))
+        .route(
+            "/admin/platform/users/{id}/actions",
+            post(admin::platform_user_action),
+        )
         .route(
             "/admin/platform/investigations",
             get(admin::list_investigations).post(admin::create_investigation),
@@ -160,6 +169,58 @@ pub fn api_v1_routes(_state: &AppState) -> Router<AppState> {
         .route(
             "/admin/company/announcements",
             get(admin::company_announcements),
+        )
+        // Company workspace API. These endpoints belong to the customer: they
+        // only ever expose the caller's own tenant (team, domains, mailboxes,
+        // queue, audit trail, templates, contacts, signatures).
+        .route("/company/team", get(company_api::list_team))
+        .route(
+            "/company/team/invitations",
+            post(company_api::create_invitation),
+        )
+        .route(
+            "/company/team/invitations/{id}",
+            delete(company_api::revoke_invitation),
+        )
+        .route("/company/domains", get(company_api::list_domains))
+        .route(
+            "/company/mailboxes",
+            get(company_api::list_mailboxes).post(company_api::create_mailbox),
+        )
+        .route(
+            "/company/mailboxes/delete",
+            delete(company_api::delete_mailbox),
+        )
+        .route("/company/queue", get(company_api::list_queue))
+        .route(
+            "/company/groups",
+            get(company_api::list_groups).post(company_api::create_group),
+        )
+        .route("/company/groups/{id}", delete(company_api::delete_group))
+        .route("/company/audit", get(company_api::list_audit))
+        .route(
+            "/company/templates",
+            get(company_api::list_templates).post(company_api::create_template),
+        )
+        .route(
+            "/company/templates/{id}",
+            delete(company_api::delete_template),
+        )
+        .route(
+            "/company/contacts",
+            get(company_api::list_contacts).post(company_api::create_contact),
+        )
+        .route(
+            "/company/contacts/{id}",
+            delete(company_api::delete_contact),
+        )
+        .route(
+            "/company/signatures",
+            get(company_api::list_signatures).post(company_api::create_signature),
+        )
+        .route(
+            "/company/signatures/{id}",
+            delete(company_api::delete_signature),
         )
         .route("/ws", get(ws_handler))
         .route("/auth/{*rest}", any(proxy_auth))

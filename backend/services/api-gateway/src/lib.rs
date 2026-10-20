@@ -1,4 +1,5 @@
 mod admin;
+mod company_api;
 mod config;
 mod middleware;
 mod routes;
