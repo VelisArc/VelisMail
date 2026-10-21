@@ -1311,18 +1311,18 @@ async fn build_dns_report(
     state: &AppState,
     db: &PgPool,
     tenant_id: Uuid,
-    email: &str,
     domain: &str,
 ) -> DnsReport {
     // The provider credentials live on the account that owns the workspace.
+    // The owner of the company is preferred, because that is the account that
+    // holds the sending credentials.
     let row = sqlx::query(
         "SELECT u.settings FROM users u
          JOIN company_members cm ON cm.user_id = u.id AND cm.tenant_id = $1 AND cm.status = 'active'
-         WHERE LOWER(cm.email) = LOWER($2)
+         ORDER BY (cm.role = 'owner') DESC, cm.created_at ASC
          LIMIT 1",
     )
     .bind(tenant_id)
-    .bind(email)
     .fetch_optional(db)
     .await
     .ok()
@@ -1402,7 +1402,8 @@ async fn build_dns_report(
         })
         .collect();
     let message = if complete {
-        "Every DNS record is published and active. The domain can send and receive mail.".to_string()
+        "Every DNS record is published and active. The domain can send and receive mail."
+            .to_string()
     } else {
         format!(
             "{} DNS record(s) still need attention. Publish them and run the check again.",
@@ -1440,7 +1441,7 @@ pub async fn dns_requirements(
         return Err(fail(StatusCode::BAD_REQUEST, "A domain is required."));
     }
 
-    let report = build_dns_report(&state, db, context.tenant_id, &context.email, &domain).await;
+    let report = build_dns_report(&state, db, context.tenant_id, &domain).await;
     let domain_status: String = sqlx::query_scalar(
         "SELECT verification_status FROM custom_domains
          WHERE tenant_id = $1 AND LOWER(domain_name) = LOWER($2) LIMIT 1",
@@ -1491,7 +1492,7 @@ pub async fn verify_domain(
         }
     };
 
-    let report = build_dns_report(&state, db, context.tenant_id, &context.email, &domain).await;
+    let report = build_dns_report(&state, db, context.tenant_id, &domain).await;
 
     // Store what is published, so the console and the deliverability score
     // show the real records instead of an empty state.
@@ -1539,7 +1540,11 @@ pub async fn verify_domain(
         })
         .collect();
 
-    let status = if report.complete { "verified" } else { "pending" };
+    let status = if report.complete {
+        "verified"
+    } else {
+        "pending"
+    };
     let _ = sqlx::query(
         "UPDATE custom_domains
          SET verification_status = $1,
@@ -1577,10 +1582,54 @@ pub async fn verify_domain(
     ok(report.to_json(&domain, status))
 }
 
+/// Whether a domain may send mail right now.
+///
+/// A domain that is not verified yet is checked against the live DNS, so the
+/// customer is told exactly which record is still missing instead of getting
+/// a mail that bounces later.
+pub(crate) async fn domain_send_readiness(
+    state: &AppState,
+    db: &PgPool,
+    domain: &str,
+) -> Option<(bool, Vec<String>, String)> {
+    let row = sqlx::query(
+        "SELECT tenant_id, verification_status FROM custom_domains
+         WHERE LOWER(domain_name) = LOWER($1) LIMIT 1",
+    )
+    .bind(domain)
+    .fetch_optional(db)
+    .await
+    .ok()
+    .flatten()?;
+    let tenant_id: Uuid = row.try_get("tenant_id").ok()?;
+    let status: String = row
+        .try_get::<Option<String>, _>("verification_status")
+        .ok()
+        .flatten()
+        .unwrap_or_else(|| "pending".to_string());
+    if status == "verified" {
+        return Some((true, Vec::new(), String::new()));
+    }
+
+    let report = build_dns_report(state, db, tenant_id, domain).await;
+    if report.complete {
+        // The records are live, so the stored status was simply out of date.
+        let _ = sqlx::query(
+            "UPDATE custom_domains SET verification_status = 'verified', verified_at = NOW()
+             WHERE tenant_id = $1 AND LOWER(domain_name) = LOWER($2)",
+        )
+        .bind(tenant_id)
+        .bind(domain)
+        .execute(db)
+        .await;
+        return Some((true, Vec::new(), String::new()));
+    }
+    Some((false, report.missing, report.message))
+}
+
 // ---------------------------------------------------------------------------
 // Contacts
 // ---------------------------------------------------------------------------
-
 pub async fn list_contacts(
     State(state): State<AppState>,
     headers: HeaderMap,

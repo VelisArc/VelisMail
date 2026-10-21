@@ -223,6 +223,7 @@ pub async fn requirements(
             purpose: "Authorises the sending server for this domain".to_string(),
             status: "pending".to_string(),
             actual: String::new(),
+            detail: String::new(),
             match_mode: "spf".to_string(),
         });
         let selector = discover_dkim_selector(client, &domain, dkim_selector).await;
@@ -235,6 +236,7 @@ pub async fn requirements(
             purpose: "Signs outgoing mail so receivers can verify it".to_string(),
             status: "pending".to_string(),
             actual: String::new(),
+            detail: String::new(),
             match_mode: "exists".to_string(),
         });
     }
@@ -252,6 +254,7 @@ pub async fn requirements(
         purpose: "Enable receiving - inbound mail for this domain".to_string(),
         status: "pending".to_string(),
         actual: String::new(),
+        detail: String::new(),
         // Any Resend inbound host of the right region is accepted.
         match_mode: "resend_inbound".to_string(),
     });
@@ -267,6 +270,7 @@ pub async fn requirements(
         purpose: "Policy for receivers when a message fails SPF or DKIM".to_string(),
         status: "pending".to_string(),
         actual: String::new(),
+        detail: String::new(),
         // Any valid DMARC1 policy is accepted, but only one record may exist.
         match_mode: "prefix".to_string(),
     });
@@ -463,7 +467,8 @@ pub async fn verify(
                 record.status = "unknown".to_string();
                 record.actual = err;
                 record.detail =
-                    "The DNS could not be read. Check the record again in a few minutes.".to_string();
+                    "The DNS could not be read. Check the record again in a few minutes."
+                        .to_string();
                 continue;
             }
         };
@@ -471,7 +476,10 @@ pub async fn verify(
         record.actual = if published {
             answers.join(", ")
         } else {
-            format!("No {} record found for {}.", record.record_type, record.host)
+            format!(
+                "No {} record found for {}.",
+                record.record_type, record.host
+            )
         };
 
         if record.record_type == "MX" && record.match_mode == "resend_inbound" {
@@ -487,7 +495,8 @@ pub async fn verify(
             } else if published {
                 "The MX record points somewhere else. Replace it with the value below so inbound mail reaches this domain.".to_string()
             } else {
-                "Add this MX record to enable receiving. Without it the domain cannot receive mail.".to_string()
+                "Add this MX record to enable receiving. Without it the domain cannot receive mail."
+                    .to_string()
             };
         } else if record.record_type == "MX" {
             let expected = normalize(
@@ -559,7 +568,8 @@ pub async fn verify(
             } else if published {
                 "The published SPF record does not authorise the sending service. Replace it with the value below.".to_string()
             } else {
-                "Add this SPF record so receivers accept the mail sent from this domain.".to_string()
+                "Add this SPF record so receivers accept the mail sent from this domain."
+                    .to_string()
             };
         } else {
             let expected = normalize(&record.value);

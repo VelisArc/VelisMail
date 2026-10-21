@@ -75,12 +75,18 @@ export type DnsRequirement = {
   status: string;
   /** What the DNS currently returns. */
   actual: string;
+  /** What the customer has to do to make the record active. */
+  detail: string;
 };
 
 export type DnsRequirements = {
   success: boolean;
   domain: string;
   provider: string;
+  /** The host that actually sends the mail. */
+  sendingDomain: string;
+  /** The stored verification state of the domain. */
+  domainStatus: string;
   /** True when every record is published and matches. */
   complete: boolean;
   records: DnsRequirement[];
@@ -184,6 +190,16 @@ export const workspaceApi = {
    */
   dnsRequirements: (domain: string) =>
     request<DnsRequirements>(`/company/domains/dns-requirements?domain=${encodeURIComponent(domain)}`),
+
+  /**
+   * Check a domain against the live DNS and store the result. The domain is
+   * only marked as verified when every record is published and active.
+   */
+  verifyDomain: (id: string) =>
+    request<DnsRequirements & { domainStatus: string }>(
+      `/company/domains/${encodeURIComponent(id)}/verify`,
+      { method: 'POST' },
+    ),
 
   mailboxes: () =>
     request<{ success: boolean; mailboxes: BusinessMailbox[] }>('/company/mailboxes'),

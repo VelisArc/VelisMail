@@ -2776,13 +2776,13 @@ pub async fn send_mail(
             );
         }
 
+        let sender_domain = email_address_domain(from).unwrap_or_default();
         let db_url = payload.db_url.as_deref().or_else(|| {
             headers
                 .get("x-business-db-url")
                 .and_then(|value| value.to_str().ok())
         });
         if let Some(db_url) = db_url {
-            let sender_domain = email_address_domain(from).unwrap_or_default();
             match business_mailbox_exists(db_url, &sender_domain, from).await {
                 Ok(true) => {}
                 Ok(false) => {
@@ -2802,6 +2802,31 @@ pub async fn send_mail(
                             "message": format!("Unable to verify sender mailbox: {err}")
                         })),
                     )
+                }
+            }
+        }
+
+        // The domain has to be fully set up before mail leaves the platform.
+        // The customer is told which record is still missing.
+        if let Some(db) = state.db.as_ref() {
+            if let Some((ready, missing, message)) =
+                crate::company_api::domain_send_readiness(&state, db, &sender_domain).await
+            {
+                if !ready {
+                    return (
+                        StatusCode::FORBIDDEN,
+                        Json(json!({
+                            "success": false,
+                            "errorType": "DomainSetupIncomplete",
+                            "message": format!(
+                                "The setup of {sender_domain} is not complete yet. Publish the missing DNS records and verify the domain again: {}",
+                                missing.join(", ")
+                            ),
+                            "missing": missing,
+                            "detail": message,
+                            "action": "Complete the setup in Business - Domains before sending mail."
+                        })),
+                    );
                 }
             }
         }

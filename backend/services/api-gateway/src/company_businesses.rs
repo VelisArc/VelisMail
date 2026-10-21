@@ -295,7 +295,11 @@ pub async fn create_business(
     // The sending mailboxes of the business.
     for (address, display_name, kind) in [
         (format!("admin@{domain}"), name.to_string(), "primary"),
-        (format!("postmaster@{domain}"), "Postmaster".to_string(), "user"),
+        (
+            format!("postmaster@{domain}"),
+            "Postmaster".to_string(),
+            "user",
+        ),
     ] {
         let _ = sqlx::query(
             "INSERT INTO business_mailboxes
