@@ -28,6 +28,17 @@ use velismail_common::Claims;
 
 type ApiResult = (StatusCode, Json<Value>);
 
+/// Roles that only the platform owner may hand out.
+///
+/// Everybody else can invite staff, but handing out a role that manages
+/// members or escalates to full platform operations is an owner decision.
+const OWNER_ONLY_ROLES: &[&str] = &["owner", "superadmin", "member_manager"];
+
+/// True when the role may only be assigned by the platform owner.
+fn is_owner_only_role(role: &str) -> bool {
+    OWNER_ONLY_ROLES.contains(&role)
+}
+
 pub(crate) fn ok(value: Value) -> ApiResult {
     (StatusCode::OK, Json(value))
 }
@@ -434,14 +445,34 @@ async fn authorize_company(
         .execute(db)
         .await;
 
+    // The workspace role is taken from an explicit membership row (an
+    // invitation or the company console) or from the account that created the
+    // workspace. It is never derived from the email domain or from
+    // client-supplied settings, otherwise anybody holding a mail address on a
+    // company domain would silently join that workspace as an administrator.
+    let explicit_member_role: Option<String> = sqlx::query_scalar(
+        "SELECT role FROM company_members
+         WHERE tenant_id = $1 AND LOWER(email) = LOWER($2) AND status = 'active'",
+    )
+    .bind(tenant_id)
+    .bind(&email)
+    .fetch_optional(db)
+    .await
+    .ok()
+    .flatten();
+    let member_count: i64 = sqlx::query_scalar("SELECT COUNT(*)::bigint FROM users WHERE tenant_id = $1")
+        .bind(tenant_id)
+        .fetch_one(db)
+        .await
+        .unwrap_or(0);
     let initial_role = if is_platform {
         "owner"
+    } else if let Some(role) = explicit_member_role.as_deref() {
+        role
+    } else if member_count <= 1 {
+        "admin"
     } else {
-        match settings_role.as_str() {
-            "owner" => "owner",
-            "admin" => "admin",
-            _ => "member",
-        }
+        "member"
     };
     sqlx::query(
         "INSERT INTO company_members (tenant_id, user_id, email, display_name, role, status, joined_at, last_active_at)
@@ -2860,13 +2891,16 @@ pub async fn platform_audit(
 }
 
 pub async fn list_platform_team(State(state): State<AppState>, headers: HeaderMap) -> ApiResult {
-    if let Err(response) = authorize_platform(&state, &headers).await {
-        return response;
-    }
+    let actor = match authorize_platform(&state, &headers).await {
+        Ok(actor) => actor,
+        Err(response) => return response,
+    };
     let db = match pool(&state) {
         Ok(db) => db,
         Err(response) => return response,
     };
+    // Only the owner may see - and therefore hand out - the privileged roles.
+    let is_owner = actor.role == "owner";
     let rows = sqlx::query(
         "SELECT a.email, a.display_name, a.role, a.status, a.permissions, a.mfa_enabled,
                 a.last_seen_at, a.created_at, r.name AS role_name, r.description AS role_description
@@ -2903,6 +2937,11 @@ pub async fn list_platform_team(State(state): State<AppState>, headers: HeaderMa
     .unwrap_or_default();
     let roles: Vec<Value> = roles
         .iter()
+        .filter(|row| {
+            // Staff that is not the owner never sees the privileged roles, so
+            // they cannot hand them out either.
+            is_owner || !is_owner_only_role(&row.try_get::<String, _>("key").unwrap_or_default())
+        })
         .map(|row| {
             json!({
                 "key": row.try_get::<String, _>("key").unwrap_or_default(),
@@ -2910,10 +2949,17 @@ pub async fn list_platform_team(State(state): State<AppState>, headers: HeaderMa
                 "description": row.try_get::<String, _>("description").unwrap_or_default(),
                 "permissions": row.try_get::<Value, _>("permissions").unwrap_or_else(|_| json!([])),
                 "isSystem": row.try_get::<bool, _>("is_system").unwrap_or(true),
+                "ownerOnly": is_owner_only_role(&row.try_get::<String, _>("key").unwrap_or_default()),
             })
         })
         .collect();
-    ok(json!({ "success": true, "admins": admins, "roles": roles }))
+    ok(json!({
+        "success": true,
+        "admins": admins,
+        "roles": roles,
+        "viewerRole": actor.role,
+        "isOwner": is_owner,
+    }))
 }
 
 #[derive(Debug, Deserialize)]
@@ -2956,6 +3002,12 @@ pub async fn add_platform_admin(
             .unwrap_or(false);
     if !valid || role == "owner" {
         return fail(StatusCode::BAD_REQUEST, "Invalid platform role.");
+    }
+    if is_owner_only_role(&role) && actor.role != "owner" {
+        return fail(
+            StatusCode::FORBIDDEN,
+            "Only the platform owner can grant this role.",
+        );
     }
     let display_name = payload.display_name.unwrap_or_else(|| {
         email
@@ -3063,6 +3115,12 @@ pub async fn update_platform_admin(
                 .unwrap_or(false);
         if !valid || normalized == "owner" {
             return fail(StatusCode::BAD_REQUEST, "Invalid platform role.");
+        }
+        if is_owner_only_role(&normalized) && actor.role != "owner" {
+            return fail(
+                StatusCode::FORBIDDEN,
+                "Only the platform owner can grant this role.",
+            );
         }
     }
     let permissions: Value = match payload.role.as_deref() {

@@ -431,7 +431,7 @@ export default function PlatformAdminPanel({ section, onSectionChange, state }: 
 
   if (denied) {
     return (
-      <div className="dash-panel">
+      <div className="dash-panel dash-panel-admin">
         <div className="panel-header">
           <button className="toolbar-icon sidebar-toggle" onClick={() => state.setSidebarOpen(true)}><Menu size={18} /></button>
           <h3><Crown size={16} /> Platform Control Plane</h3>
@@ -455,7 +455,7 @@ export default function PlatformAdminPanel({ section, onSectionChange, state }: 
   }
 
   return (
-    <div className="dash-panel">
+    <div className="dash-panel dash-panel-admin">
       <div className="panel-header">
         <button className="toolbar-icon sidebar-toggle" onClick={() => state.setSidebarOpen(true)}><Menu size={18} /></button>
         <h3><Crown size={16} /> Platform Control Plane</h3>

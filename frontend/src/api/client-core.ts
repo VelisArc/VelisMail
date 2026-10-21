@@ -1152,8 +1152,10 @@ export function sessionHasMismatch(session: User | null): boolean {
 export function normalizeSessionUser(session: User): User {
   const normalized = { ...session };
   if (!normalized.role) {
-    const email = (normalized.email || '').toLowerCase().trim();
-    normalized.role = email.endsWith('@velismail.online') ? 'admin' : 'user';
+    // The role always comes from the server (the verified Firebase identity or
+    // the team invitation). It is never derived from the email domain: that
+    // turned every account on a mail domain into a workspace admin.
+    normalized.role = 'user';
   }
   if (!normalized.accountType) {
     normalized.accountType = 'business';

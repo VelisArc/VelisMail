@@ -1737,20 +1737,25 @@ pub async fn firebase_login(
     };
 
     // Keep the normalized company membership tables in sync.
+    //
+    // The workspace role comes from an explicit membership row (an invitation
+    // or the company console) or from the account that created the
+    // workspace. It is never derived from the email domain or from
+    // client-supplied settings, otherwise anybody holding a mail address on a
+    // company domain would silently join that workspace as an administrator.
     let member_role = sqlx::query_scalar::<_, String>(
-        "SELECT CASE
-             WHEN COALESCE(settings->>'role', CASE WHEN (SELECT COUNT(*) FROM users WHERE tenant_id = $1) = 1 THEN 'admin' ELSE 'member' END) IN ('admin', 'owner')
-              AND NOT EXISTS (
-                  SELECT 1 FROM company_members
-                  WHERE tenant_id = $1 AND role = 'owner' AND status = 'active'
-              )
-             THEN 'owner'
-             ELSE COALESCE(settings->>'role', CASE WHEN (SELECT COUNT(*) FROM users WHERE tenant_id = $1) = 1 THEN 'admin' ELSE 'member' END)
-         END
+        "SELECT COALESCE(
+             (SELECT cm.role FROM company_members cm
+               WHERE cm.tenant_id = $1
+                 AND LOWER(cm.email) = LOWER($3)
+                 AND cm.status = 'active'),
+             CASE WHEN (SELECT COUNT(*) FROM users WHERE tenant_id = $1) <= 1 THEN 'admin' ELSE 'member' END
+         )
          FROM users WHERE id = $2",
     )
     .bind(tenant_id)
     .bind(user_id)
+    .bind(&email)
     .fetch_optional(&state.db)
     .await
     .ok()
