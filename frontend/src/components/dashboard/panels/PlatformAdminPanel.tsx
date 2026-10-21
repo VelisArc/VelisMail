@@ -13,6 +13,7 @@ import {
   Menu,
   Plus,
   RefreshCw,
+  Send,
   Server,
   Shield,
   Users,
@@ -27,6 +28,7 @@ import {
   type CompanyDetail,
   type FeatureFlag,
   type Investigation,
+  type PlatformBroadcast,
   type PlatformSetting,
   type PlatformTeam,
   type PlatformUser,
@@ -36,6 +38,7 @@ import {
 import type { DashboardState } from '../types';
 import { AdminConfirmSelect } from '../AdminConfirm';
 import { useAdminConfirm } from '../useAdminConfirm';
+import LoadingSpinner from '../../LoadingSpinner';
 
 export type PlatformSection =
   | 'overview'
@@ -48,7 +51,8 @@ export type PlatformSection =
   | 'team'
   | 'audit'
   | 'config'
-  | 'health';
+  | 'health'
+  | 'broadcast';
 
 interface PlatformAdminPanelProps {
   section: PlatformSection;
@@ -66,6 +70,7 @@ const SECTIONS: Array<{ id: PlatformSection; label: string }> = [
   { id: 'usage', label: 'Usage & Load' },
   { id: 'revenue', label: 'Revenue' },
   { id: 'support', label: 'Support' },
+  { id: 'broadcast', label: 'Broadcast' },
   { id: 'team', label: 'Platform Team' },
   { id: 'audit', label: 'Audit Trail' },
   { id: 'config', label: 'Configuration' },
@@ -286,6 +291,24 @@ export default function PlatformAdminPanel({ section, onSectionChange, state }: 
   const [companyDetail, setCompanyDetail] = useState<CompanyDetail | null>(null);
   const [caseEvents, setCaseEvents] = useState<Array<{ id: string; actor: string; kind: string; message: string; createdAt: string }>>([]);
 
+  // Broadcast composer
+  const [broadcastRecipients, setBroadcastRecipients] = useState<PlatformUser[]>([]);
+  const [broadcastSelected, setBroadcastSelected] = useState<string[]>([]);
+  const [broadcastSearch, setBroadcastSearch] = useState('');
+  const [broadcastAudience, setBroadcastAudience] = useState('all');
+  const [broadcastCategory, setBroadcastCategory] = useState('notification');
+  const [broadcastSubject, setBroadcastSubject] = useState('');
+  const [broadcastBody, setBroadcastBody] = useState('');
+  const [broadcastExtra, setBroadcastExtra] = useState('');
+  const [broadcastSending, setBroadcastSending] = useState(false);
+  const [broadcastResult, setBroadcastResult] = useState<{
+    recipientCount: number;
+    deliveredCount: number;
+    failedCount: number;
+    status: string;
+  } | null>(null);
+  const [broadcastHistory, setBroadcastHistory] = useState<PlatformBroadcast[]>([]);
+
   const notify = useCallback((message: string, tone: 'success' | 'error' = 'success') => {
     setBanner({ tone, message });
     state.showToast(message, tone);
@@ -332,6 +355,17 @@ export default function PlatformAdminPanel({ section, onSectionChange, state }: 
         setSettings(settingResult.settings);
       } else if (section === 'health') {
         setSystem(await platformAdminApi.system());
+      } else if (section === 'broadcast') {
+        const [recipientResult, historyResult] = await Promise.all([
+          platformAdminApi.users({
+            search: broadcastSearch || undefined,
+            status: broadcastAudience === 'active' || broadcastAudience === 'suspended' ? broadcastAudience : undefined,
+            plan: broadcastAudience === 'free' || broadcastAudience === 'paid' ? broadcastAudience : undefined,
+          }),
+          platformAdminApi.broadcasts(),
+        ]);
+        setBroadcastRecipients(recipientResult.users);
+        setBroadcastHistory(historyResult.broadcasts);
       }
     } catch (error) {
       if (error instanceof AdminApiError && error.status === 403) {
@@ -345,7 +379,7 @@ export default function PlatformAdminPanel({ section, onSectionChange, state }: 
     } finally {
       setLoading(false);
     }
-  }, [section, companySearch, caseFilter, auditFilter, days]);
+  }, [section, companySearch, caseFilter, auditFilter, days, broadcastSearch, broadcastAudience]);
 
   useEffect(() => {
     void load();
@@ -419,6 +453,73 @@ export default function PlatformAdminPanel({ section, onSectionChange, state }: 
       onConfirm: () => runUserAction(id, action, role),
     });
   }, [confirm, runUserAction]);
+
+  // ─── Broadcast composer ───
+  const broadcastExtraEmails = useMemo(
+    () => broadcastExtra.split(/[\s,;]+/).map((value) => value.trim()).filter((value) => value.includes('@')),
+    [broadcastExtra],
+  );
+  const broadcastTargetCount = broadcastSelected.length + broadcastExtraEmails.length;
+  const broadcastAudienceSize = broadcastRecipients.length;
+
+  const toggleBroadcastRecipient = useCallback((id: string) => {
+    setBroadcastSelected((current) => (
+      current.includes(id) ? current.filter((value) => value !== id) : [...current, id]
+    ));
+  }, []);
+
+  const sendBroadcast = useCallback(() => {
+    const subject = broadcastSubject.trim();
+    const body = broadcastBody.trim();
+    const targetCount = broadcastSelected.length || broadcastAudienceSize;
+    confirm({
+      title: 'Send platform broadcast',
+      message: `"${subject}" is delivered privately to ${targetCount + broadcastExtraEmails.length} recipient(s) as a ${broadcastCategory} message. Every recipient receives their own copy and nobody sees the other addresses.`,
+      confirmLabel: 'Send now',
+      tone: 'danger',
+      onConfirm: async () => {
+        setBroadcastSending(true);
+        setBroadcastResult(null);
+        try {
+          const result = await platformAdminApi.broadcast({
+            subject,
+            body,
+            category: broadcastCategory,
+            audience: broadcastAudience,
+            recipientIds: broadcastSelected,
+            additionalEmails: broadcastExtraEmails,
+          });
+          setBroadcastResult({
+            recipientCount: result.recipientCount || 0,
+            deliveredCount: result.deliveredCount || 0,
+            failedCount: result.failedCount || 0,
+            status: result.status || 'sent',
+          });
+          notify(`Broadcast delivered to ${result.deliveredCount || 0} recipient(s).`);
+          setBroadcastSubject('');
+          setBroadcastBody('');
+          setBroadcastSelected([]);
+          setBroadcastExtra('');
+          void load();
+        } catch (error) {
+          notify(error instanceof Error ? error.message : 'The broadcast failed.', 'error');
+        } finally {
+          setBroadcastSending(false);
+        }
+      },
+    });
+  }, [
+    broadcastAudience,
+    broadcastAudienceSize,
+    broadcastBody,
+    broadcastCategory,
+    broadcastExtraEmails,
+    broadcastSelected,
+    broadcastSubject,
+    confirm,
+    load,
+    notify,
+  ]);
 
   // The gateway only hands out the roles the signed-in staff member is
   // allowed to grant, so a non-owner never even sees the privileged ones.
@@ -930,6 +1031,208 @@ export default function PlatformAdminPanel({ section, onSectionChange, state }: 
                 </div>
               </div>
             ))}
+          </>
+        )}
+
+        {section === 'broadcast' && (
+          <>
+            <div className="admin-broadcast-grid">
+              {/* ── Recipient selection ── */}
+              <section className="glass-card admin-broadcast-card">
+                <div className="admin-card-head">
+                  <div>
+                    <h4>Select recipients</h4>
+                    <p>Pick the accounts that should receive the message. Nothing is sent until you confirm.</p>
+                  </div>
+                  <span className="text-xs text-muted">{number(broadcastAudienceSize)} match</span>
+                </div>
+
+                <input
+                  className="input"
+                  placeholder="Search name or email"
+                  value={broadcastSearch}
+                  onChange={(event) => setBroadcastSearch(event.target.value)}
+                  aria-label="Search recipients"
+                />
+
+                <div className="admin-segmented admin-broadcast-filters">
+                  {[
+                    { id: 'all', label: 'All' },
+                    { id: 'active', label: 'Active' },
+                    { id: 'suspended', label: 'Suspended' },
+                    { id: 'free', label: 'Free' },
+                    { id: 'paid', label: 'Paid' },
+                    { id: 'verified', label: 'Verified' },
+                    { id: 'unverified', label: 'Unverified' },
+                  ].map((filter) => (
+                    <button
+                      key={filter.id}
+                      type="button"
+                      className={broadcastAudience === filter.id ? 'active' : ''}
+                      onClick={() => setBroadcastAudience(filter.id)}
+                    >
+                      {filter.label}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="admin-broadcast-actions">
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm"
+                    onClick={() => setBroadcastSelected(broadcastRecipients.map((user) => user.id))}
+                  >
+                    Select all ({number(broadcastAudienceSize)})
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm"
+                    onClick={() => setBroadcastSelected([])}
+                    disabled={broadcastSelected.length === 0}
+                  >
+                    Clear selection
+                  </button>
+                  <span className="text-xs text-muted">
+                    {broadcastSelected.length
+                      ? `${number(broadcastSelected.length)} selected`
+                      : 'No selection - the whole audience is used'}
+                  </span>
+                </div>
+
+                <div className="admin-broadcast-list">
+                  {broadcastRecipients.length === 0 && (
+                    <p className="text-sm text-muted">No account matches this filter.</p>
+                  )}
+                  {broadcastRecipients.slice(0, 200).map((user) => (
+                    <label key={user.id} className="admin-broadcast-row">
+                      <input
+                        type="checkbox"
+                        checked={broadcastSelected.includes(user.id)}
+                        onChange={() => toggleBroadcastRecipient(user.id)}
+                      />
+                      <span className="admin-person">
+                        <span className="avatar avatar-sm">{(user.displayName || user.email).charAt(0).toUpperCase()}</span>
+                        <span>
+                          <strong>{user.displayName || user.email}</strong>
+                          <span>{user.email} · {user.plan}</span>
+                        </span>
+                      </span>
+                      <Badge value={user.status}>{user.status}</Badge>
+                    </label>
+                  ))}
+                </div>
+              </section>
+
+              {/* ── Composer ── */}
+              <section className="glass-card admin-broadcast-card">
+                <div className="admin-card-head">
+                  <div>
+                    <h4>Compose broadcast</h4>
+                    <p>Delivered individually in private batches. No recipient sees the other addresses.</p>
+                  </div>
+                </div>
+
+                <div className="admin-broadcast-field">
+                  <label htmlFor="broadcast-category">Category</label>
+                  <select
+                    id="broadcast-category"
+                    className="input"
+                    value={broadcastCategory}
+                    onChange={(event) => setBroadcastCategory(event.target.value)}
+                  >
+                    <option value="notification">Notification</option>
+                    <option value="event">Event</option>
+                    <option value="feature">Feature update</option>
+                    <option value="alert">Alert</option>
+                    <option value="maintenance">Maintenance</option>
+                  </select>
+                </div>
+
+                <div className="admin-broadcast-field">
+                  <label htmlFor="broadcast-subject">Subject</label>
+                  <input
+                    id="broadcast-subject"
+                    className="input"
+                    placeholder="What is this about?"
+                    value={broadcastSubject}
+                    onChange={(event) => setBroadcastSubject(event.target.value)}
+                  />
+                </div>
+
+                <div className="admin-broadcast-field">
+                  <label htmlFor="broadcast-body">Message</label>
+                  <textarea
+                    id="broadcast-body"
+                    className="input"
+                    rows={9}
+                    placeholder="Write the message that every recipient receives."
+                    value={broadcastBody}
+                    onChange={(event) => setBroadcastBody(event.target.value)}
+                  />
+                </div>
+
+                <div className="admin-broadcast-field">
+                  <label htmlFor="broadcast-extra">Custom additional emails</label>
+                  <input
+                    id="broadcast-extra"
+                    className="input"
+                    placeholder="Comma or space separated emails"
+                    value={broadcastExtra}
+                    onChange={(event) => setBroadcastExtra(event.target.value)}
+                  />
+                </div>
+
+                <div className="admin-broadcast-summary">
+                  <span>Recipients from selection: <strong>{number(broadcastSelected.length)}</strong></span>
+                  <span>Total private deliveries: <strong>{number(broadcastTargetCount || broadcastAudienceSize)}</strong></span>
+                </div>
+
+                {broadcastResult && (
+                  <div className="admin-broadcast-result">
+                    <strong>
+                      {broadcastResult.deliveredCount} delivered
+                      {broadcastResult.failedCount > 0 ? ` · ${broadcastResult.failedCount} failed` : ''}
+                    </strong>
+                    <span>{number(broadcastResult.recipientCount)} recipient(s) · {broadcastResult.status}</span>
+                  </div>
+                )}
+
+                <button
+                  type="button"
+                  className="btn btn-primary w-full"
+                  disabled={broadcastSending || broadcastSubject.trim().length < 4 || broadcastBody.trim().length < 10}
+                  onClick={sendBroadcast}
+                >
+                  {broadcastSending
+                    ? <LoadingSpinner size="sm" label="Sending" />
+                    : <><Send size={15} /> Send to {number(broadcastTargetCount || broadcastAudienceSize)} recipients</>}
+                </button>
+              </section>
+            </div>
+
+            {broadcastHistory.length > 0 && (
+              <section className="glass-card mt-16">
+                <div className="admin-card-head">
+                  <div><h4>Broadcast history</h4><p>Everything the control plane sent to the accounts.</p></div>
+                </div>
+                <div className="admin-broadcast-list">
+                  {broadcastHistory.map((entry) => (
+                    <div key={entry.id} className="admin-broadcast-row">
+                      <span className="admin-person">
+                        <span>
+                          <strong>{entry.subject}</strong>
+                          <span>{entry.category} · {entry.audience} · {dateTime(entry.createdAt)}</span>
+                        </span>
+                      </span>
+                      <Badge value={entry.status}>{entry.status}</Badge>
+                      <span className="text-xs text-muted">
+                        {number(entry.deliveredCount)} delivered · {number(entry.failedCount)} failed
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
           </>
         )}
 

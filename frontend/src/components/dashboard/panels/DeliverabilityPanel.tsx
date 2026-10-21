@@ -1,5 +1,6 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import { Shield, Check, AlertCircle, Menu, RefreshCcw, Copy } from 'lucide-react';
+import { workspaceApi, type DnsRequirement } from '../../../api/company';
 import type { DashboardState } from '../types';
 import './DeliverabilityPanel.css';
 
@@ -15,10 +16,35 @@ export default function DeliverabilityPanel({ state }: DeliverabilityPanelProps)
     }
     return '';
   });
+  const [dns, setDns] = useState<{ loading: boolean; records: DnsRequirement[]; message: string }>({
+    loading: false,
+    records: [],
+    message: '',
+  });
 
   const activeDomain = useMemo(() => {
     return state.domainsList.find(d => d.id === selectedDomainId) || null;
   }, [state.domainsList, selectedDomainId]);
+
+  const loadDns = useCallback(async () => {
+    const domain = activeDomain?.domain;
+    if (!domain) return;
+    setDns((current) => ({ ...current, loading: true }));
+    try {
+      const result = await workspaceApi.dnsRequirements(domain);
+      setDns({ loading: false, records: result.records, message: result.message });
+    } catch (error) {
+      setDns({
+        loading: false,
+        records: [],
+        message: error instanceof Error ? error.message : 'Unable to read the DNS requirements.',
+      });
+    }
+  }, [activeDomain?.domain]);
+
+  useEffect(() => {
+    void loadDns();
+  }, [loadDns]);
 
   // Calculate deliverability score dynamically
   const scoreMetrics = useMemo(() => {
@@ -59,11 +85,12 @@ export default function DeliverabilityPanel({ state }: DeliverabilityPanelProps)
   const handleVerify = () => {
     if (activeDomain) {
       state.setVerifyingDomainId(activeDomain.id);
-      // Trigger verify in background
+      // Re-read the live DNS and refresh the domain list.
+      void loadDns();
       setTimeout(() => {
         state.refreshDomains();
-        state.showToast('Deliverability records verified');
-      }, 500);
+        state.showToast('Deliverability records checked');
+      }, 800);
     }
   };
 
@@ -197,41 +224,57 @@ export default function DeliverabilityPanel({ state }: DeliverabilityPanelProps)
                 </div>
               </div>
 
-              {/* Recommendations */}
-              {( !scoreMetrics.mxVerified || !scoreMetrics.spfVerified || !scoreMetrics.dkimVerified || !scoreMetrics.dmarcVerified ) && (
+              {/* DNS requirements straight from the mail provider */}
+              {(dns.loading || dns.records.length > 0) && (
                 <div className="recommendations-card">
-                  <h4 className="recommendations-title">Improve your score: Required DNS modifications</h4>
-                  <p className="text-xs text-muted">Add these TXT records to your domain's registrar (GoDaddy, Cloudflare, Namecheap) to verify your mail authenticity:</p>
-
-                  {!scoreMetrics.spfVerified && (
-                    <div className="dns-instruction-box">
-                      <div className="dns-instruction-header">
-                        <span className="dns-instruction-type">SPF Record (Type: TXT)</span>
-                        <button type="button" className="btn btn-ghost btn-sm" onClick={() => { navigator.clipboard.writeText('v=spf1 include:send.velismail.online ~all'); state.showToast('Copied'); }}><Copy size={12} /></button>
-                      </div>
-                      <div className="dns-code-block">v=spf1 include:send.velismail.online ~all</div>
+                  <div className="dns-requirements-head">
+                    <div>
+                      <h4 className="recommendations-title">Required DNS records</h4>
+                      <p className="text-xs text-muted">
+                        {dns.loading
+                          ? 'Checking the live DNS for this domain...'
+                          : dns.message}
+                      </p>
                     </div>
-                  )}
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-sm"
+                      onClick={() => void loadDns()}
+                      disabled={dns.loading}
+                    >
+                      <RefreshCcw size={12} /> Check DNS
+                    </button>
+                  </div>
 
-                  {!scoreMetrics.dkimVerified && (
-                    <div className="dns-instruction-box">
+                  {dns.records.map((record) => (
+                    <div key={`${record.recordType}-${record.name}-${record.value}`} className="dns-instruction-box">
                       <div className="dns-instruction-header">
-                        <span className="dns-instruction-type">DKIM Signature (Type: TXT, Host: velis._domainkey)</span>
-                        <button type="button" className="btn btn-ghost btn-sm" onClick={() => { navigator.clipboard.writeText('v=DKIM1; k=rsa; p=MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA0velism...'); state.showToast('Copied'); }}><Copy size={12} /></button>
+                        <span className="dns-instruction-type">
+                          {record.purpose} ({record.recordType})
+                        </span>
+                        <span className={`badge badge-${record.status === 'verified' ? 'success' : 'danger'}`}>
+                          {record.status === 'verified' ? 'active' : record.status}
+                        </span>
+                        <button
+                          type="button"
+                          className="btn btn-ghost btn-sm"
+                          title="Copy value"
+                          onClick={() => { navigator.clipboard.writeText(record.value); state.showToast('Value copied'); }}
+                        >
+                          <Copy size={12} />
+                        </button>
                       </div>
-                      <div className="dns-code-block">v=DKIM1; k=rsa; p=MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA0velism...</div>
-                    </div>
-                  )}
-
-                  {!scoreMetrics.dmarcVerified && (
-                    <div className="dns-instruction-box">
-                      <div className="dns-instruction-header">
-                        <span className="dns-instruction-type">DMARC Policy (Type: TXT, Host: _dmarc)</span>
-                        <button type="button" className="btn btn-ghost btn-sm" onClick={() => { navigator.clipboard.writeText('v=DMARC1; p=quarantine; pct=100'); state.showToast('Copied'); }}><Copy size={12} /></button>
+                      <div className="dns-record-meta">
+                        <span><strong>Name</strong> {record.name}</span>
+                        <span><strong>Host</strong> {record.host}</span>
+                        <span><strong>TTL</strong> {record.ttl}</span>
                       </div>
-                      <div className="dns-code-block">v=DMARC1; p=quarantine; pct=100</div>
+                      <div className="dns-code-block">{record.value}</div>
+                      {record.actual && record.status !== 'verified' && (
+                        <p className="text-xs text-muted">Currently: {record.actual}</p>
+                      )}
                     </div>
-                  )}
+                  ))}
                 </div>
               )}
             </>

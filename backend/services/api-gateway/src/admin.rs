@@ -136,6 +136,10 @@ struct PlatformActor {
     email: String,
     role: String,
     permissions: Vec<String>,
+    /// True when the account is listed in PLATFORM_OWNER_UIDS or
+    /// PLATFORM_OWNER_EMAILS. Only these accounts may run the owner-only
+    /// operations, for example a platform wide broadcast.
+    is_configured_owner: bool,
 }
 
 impl PlatformActor {
@@ -267,6 +271,7 @@ async fn authorize_platform(
         email,
         role,
         permissions,
+        is_configured_owner,
     })
 }
 
@@ -808,7 +813,8 @@ pub async fn platform_me(State(state): State<AppState>, headers: HeaderMap) -> A
     match authorize_platform(&state, &headers).await {
         Ok(actor) => ok(json!({
             "success": true,
-            "owner": actor.role == "owner",
+            "owner": actor.is_configured_owner,
+            "roleOwner": actor.role == "owner",
             "admin": {
                 "email": actor.email,
                 "role": actor.role,
@@ -3522,6 +3528,382 @@ pub async fn update_announcement(
             "Unable to update announcement.",
         ),
     }
+}
+
+// ---------------------------------------------------------------------------
+// Platform broadcast
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BroadcastRequest {
+    pub subject: String,
+    pub body: String,
+    /// event | feature | notification | alert | maintenance
+    #[serde(default)]
+    pub category: Option<String>,
+    /// all | active | suspended | free | paid | verified | unverified
+    #[serde(default)]
+    pub audience: Option<String>,
+    /// Free text filter on email and display name.
+    #[serde(default)]
+    pub search: Option<String>,
+    /// Explicit recipient selection.
+    #[serde(default)]
+    pub recipient_ids: Option<Vec<Uuid>>,
+    /// Extra addresses that are not accounts on the platform.
+    #[serde(default)]
+    pub additional_emails: Option<Vec<String>>,
+    /// Preview the recipients without sending anything.
+    #[serde(default)]
+    pub dry_run: Option<bool>,
+    /// Safety valve for a single broadcast.
+    #[serde(default)]
+    pub max_recipients: Option<i64>,
+}
+
+/// How many recipients are contacted at the same time.
+const BROADCAST_CONCURRENCY: usize = 5;
+/// Upper bound for a single broadcast.
+const BROADCAST_HARD_LIMIT: i64 = 5_000;
+
+/// Resolve the recipients of a broadcast from the account directory.
+async fn resolve_broadcast_recipients(
+    db: &PgPool,
+    search: &str,
+    audience: &str,
+    recipient_ids: Option<&[Uuid]>,
+    limit: i64,
+) -> Result<Vec<(String, String)>, sqlx::Error> {
+    let audience = audience.to_lowercase();
+    // The audience maps onto the three directory filters.
+    let status_filter = match audience.as_str() {
+        "active" | "suspended" => audience.as_str(),
+        _ => "all",
+    };
+    let plan_filter = match audience.as_str() {
+        "free" | "paid" => audience.as_str(),
+        _ => "all",
+    };
+    let verified_filter = match audience.as_str() {
+        "verified" | "unverified" => audience.as_str(),
+        _ => "all",
+    };
+    let rows = sqlx::query(
+        "SELECT u.email, COALESCE(u.display_name, '') AS display_name
+         FROM users u
+         WHERE ($1::uuid[] IS NULL OR u.id = ANY($1::uuid[]))
+           AND ($2 = '' OR LOWER(u.email) LIKE '%' || LOWER($2) || '%'
+                OR LOWER(COALESCE(u.display_name, '')) LIKE '%' || LOWER($2) || '%')
+           AND ($3 = 'all' OR LOWER(u.status) = $3)
+           AND ($4 = 'all' OR LOWER(COALESCE(u.settings->>'plan', 'free')) = $4)
+           AND ($5 = 'all'
+                OR ($5 = 'verified' AND COALESCE(u.recovery_email_verified, FALSE))
+                OR ($5 = 'unverified' AND NOT COALESCE(u.recovery_email_verified, FALSE)))
+           AND COALESCE(u.status, 'active') <> 'deactivated'
+         ORDER BY u.created_at DESC
+         LIMIT $6",
+    )
+    .bind(recipient_ids.map(|ids| ids.to_vec()))
+    .bind(search)
+    .bind(status_filter)
+    .bind(plan_filter)
+    .bind(verified_filter)
+    .bind(limit)
+    .fetch_all(db)
+    .await?;
+
+    Ok(rows
+        .iter()
+        .map(|row| {
+            (
+                row.try_get::<String, _>("email").unwrap_or_default(),
+                row.try_get::<String, _>("display_name").unwrap_or_default(),
+            )
+        })
+        .collect())
+}
+
+/// Deliver one message to one recipient. The mail service is called per
+/// recipient so nobody sees another recipient's address.
+async fn deliver_broadcast(
+    state: &AppState,
+    headers: &HeaderMap,
+    to: &str,
+    subject: &str,
+    body: &str,
+) -> Result<(), String> {
+    let mut request = state
+        .http_client
+        .post(format!(
+            "{}/emails",
+            state.config.mail_service_url.trim_end_matches('/')
+        ))
+        .json(&json!({
+            "to": [to],
+            "cc": Value::Null,
+            "bcc": Value::Null,
+            "subject": subject,
+            "body": body,
+            "html_body": Value::Null,
+            "attachment_ids": Value::Null,
+            "schedule_send_at": Value::Null,
+            "from": Value::Null,
+            "from_name": Value::Null
+        }));
+    if let Some(auth_header) = headers.get(axum::http::header::AUTHORIZATION) {
+        request = request.header(axum::http::header::AUTHORIZATION, auth_header);
+    }
+    let response = request.send().await.map_err(|err| err.to_string())?;
+    if response.status().is_success() {
+        return Ok(());
+    }
+    let status = response.status();
+    let detail = response.text().await.unwrap_or_default();
+    Err(format!(
+        "{status}: {}",
+        detail.chars().take(180).collect::<String>()
+    ))
+}
+
+pub async fn platform_broadcast(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(payload): Json<BroadcastRequest>,
+) -> ApiResult {
+    let actor = match authorize_platform(&state, &headers).await {
+        Ok(actor) => actor,
+        Err(response) => return response,
+    };
+    // A platform wide broadcast reaches every account, so it stays with the
+    // configured owner. Invited staff can use the console, but not this.
+    if !actor.is_configured_owner {
+        return fail(
+            StatusCode::FORBIDDEN,
+            "Only the platform owner can send a platform broadcast.",
+        );
+    }
+    let subject = payload.subject.trim().to_string();
+    let body = payload.body.trim().to_string();
+    if subject.len() < 4 {
+        return fail(StatusCode::BAD_REQUEST, "The subject is too short.");
+    }
+    if body.len() < 10 {
+        return fail(StatusCode::BAD_REQUEST, "The message is too short to send.");
+    }
+    let category = payload
+        .category
+        .unwrap_or_else(|| "notification".to_string())
+        .to_lowercase();
+    if !matches!(
+        category.as_str(),
+        "event" | "feature" | "notification" | "alert" | "maintenance"
+    ) {
+        return fail(StatusCode::BAD_REQUEST, "Invalid broadcast category.");
+    }
+    let audience = payload
+        .audience
+        .unwrap_or_else(|| "all".to_string())
+        .to_lowercase();
+    if !matches!(
+        audience.as_str(),
+        "all" | "active" | "suspended" | "free" | "paid" | "verified" | "unverified"
+    ) {
+        return fail(StatusCode::BAD_REQUEST, "Invalid broadcast audience.");
+    }
+    let db = match pool(&state) {
+        Ok(db) => db,
+        Err(response) => return response,
+    };
+
+    let limit = payload
+        .max_recipients
+        .unwrap_or(BROADCAST_HARD_LIMIT)
+        .clamp(1, BROADCAST_HARD_LIMIT);
+    let search = payload.search.unwrap_or_default().trim().to_string();
+    let selected = payload.recipient_ids.unwrap_or_default();
+    // An empty selection means "the whole audience", so the filter is not
+    // narrowed down to a list of ids.
+    let recipient_ids: Option<Vec<Uuid>> = if selected.is_empty() {
+        None
+    } else {
+        Some(selected)
+    };
+
+    let mut recipients =
+        match resolve_broadcast_recipients(db, &search, &audience, recipient_ids.as_deref(), limit)
+            .await
+        {
+            Ok(rows) => rows,
+            Err(err) => {
+                tracing::error!("broadcast recipient lookup failed: {}", err);
+                return fail(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "Unable to resolve the broadcast recipients.",
+                );
+            }
+        };
+
+    // Extra addresses that are not accounts on the platform.
+    let mut extra: Vec<String> = Vec::new();
+    for value in payload.additional_emails.unwrap_or_default() {
+        let email = value.trim().to_lowercase();
+        if email.is_empty() || !email.contains('@') {
+            continue;
+        }
+        if recipients
+            .iter()
+            .any(|(existing, _)| existing.eq_ignore_ascii_case(&email))
+        {
+            continue;
+        }
+        extra.push(email);
+    }
+
+    let account_count = recipients.len();
+    recipients.extend(extra.iter().map(|email| (email.clone(), String::new())));
+
+    if recipients.is_empty() {
+        return fail(
+            StatusCode::BAD_REQUEST,
+            "No recipient matches the selected audience.",
+        );
+    }
+
+    if payload.dry_run.unwrap_or(false) {
+        return ok(json!({
+            "success": true,
+            "dryRun": true,
+            "recipientCount": recipients.len(),
+            "accountCount": account_count,
+            "additionalCount": extra.len(),
+            "recipients": recipients.iter().map(|(email, name)| json!({ "email": email, "name": name })).collect::<Vec<_>>(),
+        }));
+    }
+
+    let total = recipients.len();
+    let mut delivered = 0usize;
+    let mut failures: Vec<Value> = Vec::new();
+
+    // Deliver in small private batches: one request per recipient so nobody
+    // ever sees another recipient's address.
+    for chunk in recipients.chunks(BROADCAST_CONCURRENCY) {
+        let pending = chunk
+            .iter()
+            .map(|recipient| deliver_broadcast(&state, &headers, &recipient.0, &subject, &body));
+        let outcomes = futures::future::join_all(pending).await;
+        for (recipient, outcome) in chunk.iter().zip(outcomes) {
+            match outcome {
+                Ok(()) => delivered += 1,
+                Err(reason) => {
+                    tracing::warn!("broadcast delivery failed for {}: {}", recipient.0, reason);
+                    failures.push(json!({ "email": recipient.0, "error": reason }));
+                }
+            }
+        }
+    }
+
+    let failed = failures.len();
+    let status = if failed == 0 { "sent" } else { "partial" };
+
+    if let Err(err) = sqlx::query(
+        "INSERT INTO platform_broadcasts
+           (subject, body, category, audience, recipient_count, delivered_count, failed_count, status, created_by)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
+    )
+    .bind(&subject)
+    .bind(&body)
+    .bind(&category)
+    .bind(&audience)
+    .bind(total as i32)
+    .bind(delivered as i32)
+    .bind(failed as i32)
+    .bind(status)
+    .bind(&actor.email)
+    .execute(db)
+    .await
+    {
+        tracing::error!("broadcast record failed: {}", err);
+    }
+
+    audit(
+        db,
+        &actor.email,
+        &actor.role,
+        "platform.broadcast.sent",
+        "system",
+        "broadcast",
+        None,
+        None,
+        json!({
+            "subject": subject,
+            "category": category,
+            "audience": audience,
+            "recipients": total,
+            "delivered": delivered,
+            "failed": failed,
+        }),
+        "critical",
+    )
+    .await;
+
+    ok(json!({
+        "success": true,
+        "recipientCount": total,
+        "deliveredCount": delivered,
+        "failedCount": failed,
+        "status": status,
+        "failures": failures,
+    }))
+}
+
+pub async fn list_platform_broadcasts(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> ApiResult {
+    let actor = match authorize_platform(&state, &headers).await {
+        Ok(actor) => actor,
+        Err(response) => return response,
+    };
+    if !actor.is_configured_owner {
+        return fail(
+            StatusCode::FORBIDDEN,
+            "Only the platform owner can see the broadcast history.",
+        );
+    }
+    let db = match pool(&state) {
+        Ok(db) => db,
+        Err(response) => return response,
+    };
+    let rows = sqlx::query(
+        "SELECT id, subject, body, category, audience, recipient_count, delivered_count,
+                failed_count, status, created_by, created_at
+         FROM platform_broadcasts ORDER BY created_at DESC LIMIT 50",
+    )
+    .fetch_all(db)
+    .await
+    .unwrap_or_default();
+    let items: Vec<Value> = rows
+        .iter()
+        .map(|row| {
+            json!({
+                "id": row.try_get::<Uuid, _>("id").unwrap_or_default().to_string(),
+                "subject": row.try_get::<String, _>("subject").unwrap_or_default(),
+                "body": row.try_get::<String, _>("body").unwrap_or_default(),
+                "category": row.try_get::<String, _>("category").unwrap_or_default(),
+                "audience": row.try_get::<String, _>("audience").unwrap_or_default(),
+                "recipientCount": row.try_get::<i32, _>("recipient_count").unwrap_or_default(),
+                "deliveredCount": row.try_get::<i32, _>("delivered_count").unwrap_or_default(),
+                "failedCount": row.try_get::<i32, _>("failed_count").unwrap_or_default(),
+                "status": row.try_get::<String, _>("status").unwrap_or_default(),
+                "createdBy": row.try_get::<String, _>("created_by").unwrap_or_default(),
+                "createdAt": row.try_get::<DateTime<Utc>, _>("created_at")
+                    .map(|value| value.to_rfc3339())
+                    .unwrap_or_default(),
+            })
+        })
+        .collect();
+    ok(json!({ "success": true, "broadcasts": items }))
 }
 
 pub async fn list_support_tickets(State(state): State<AppState>, headers: HeaderMap) -> ApiResult {

@@ -84,7 +84,10 @@ function patchBody(value: unknown): RequestInit {
 
 export type AdminMe = {
   success: boolean;
+  /** True when the account is the configured platform owner. */
   owner: boolean;
+  /** True when the account holds the owner role. */
+  roleOwner?: boolean;
   admin: { email: string; role: string; permissions: string[] };
 };
 
@@ -372,6 +375,20 @@ export type Invoice = {
   lineItems?: unknown[];
 };
 
+export type PlatformBroadcast = {
+  id: string;
+  subject: string;
+  body: string;
+  category: string;
+  audience: string;
+  recipientCount: number;
+  deliveredCount: number;
+  failedCount: number;
+  status: string;
+  createdBy: string;
+  createdAt: string;
+};
+
 export type PlatformTeam = {
   success: boolean;
   admins: Array<{
@@ -572,6 +589,33 @@ export const platformAdminApi = {
     ),
 
   team: () => call<PlatformTeam>('/admin/platform/team'),
+
+  broadcast: (payload: {
+    subject: string;
+    body: string;
+    category?: string;
+    audience?: string;
+    search?: string;
+    recipientIds?: string[];
+    additionalEmails?: string[];
+    dryRun?: boolean;
+    maxRecipients?: number;
+  }) =>
+    call<{
+      success: boolean;
+      dryRun?: boolean;
+      recipientCount?: number;
+      accountCount?: number;
+      additionalCount?: number;
+      deliveredCount?: number;
+      failedCount?: number;
+      status?: string;
+      recipients?: Array<{ email: string; name: string }>;
+      failures?: Array<{ email: string; error: string }>;
+    }>('/admin/platform/broadcast', jsonBody(payload)),
+
+  broadcasts: () =>
+    call<{ success: boolean; broadcasts: PlatformBroadcast[] }>('/admin/platform/broadcasts'),
 
   addAdmin: (payload: { email: string; role?: string; displayName?: string }) =>
     call<{ success: boolean }>('/admin/platform/team', jsonBody(payload)),

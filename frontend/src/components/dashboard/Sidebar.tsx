@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { LogOut, Mail, Layers, Server, Globe, Inbox, Users, Shield, BarChart3, Activity, Settings, CreditCard, Crown, Plus, User, Contact as ContactIcon, Building2, FileText, LifeBuoy, Flag, Gauge } from 'lucide-react';
+import { LogOut, Mail, Layers, Server, Globe, Inbox, Users, Shield, BarChart3, Activity, Settings, CreditCard, Crown, Plus, User, Contact as ContactIcon, Building2, FileText, LifeBuoy, Flag, Gauge, Send } from 'lucide-react';
 import type { User as UserType } from '../../api/client';
 import { domains } from '../../api/client';
 import { BIZ_FOLDERS } from './constants';
@@ -18,6 +18,8 @@ interface SidebarProps {
   sidebarOpen: boolean;
   setSidebarOpen: (open: boolean) => void;
   hasRoleAccess: (tab: BizTab) => boolean;
+  /** True when the signed-in staff member is the configured platform owner. */
+  isPlatformOwner?: boolean;
   viewMode: 'workspace' | 'control-plane';
   platformSection: PlatformSection;
   onPlatformSectionChange: (section: PlatformSection) => void;
@@ -25,7 +27,7 @@ interface SidebarProps {
   state?: DashboardState;
 }
 
-const PLATFORM_NAV: Array<{ group: string; items: Array<{ id: PlatformSection; label: string; icon: typeof Activity }> }> = [
+const PLATFORM_NAV: Array<{ group: string; items: Array<{ id: PlatformSection; label: string; icon: typeof Activity; ownerOnly?: boolean }> }> = [
   {
     group: 'Control Plane',
     items: [{ id: 'overview', label: 'Overview', icon: Gauge }],
@@ -43,7 +45,10 @@ const PLATFORM_NAV: Array<{ group: string; items: Array<{ id: PlatformSection; l
   },
   {
     group: 'Operations',
-    items: [{ id: 'usage', label: 'Usage & Load', icon: Activity }],
+    items: [
+      { id: 'usage', label: 'Usage & Load', icon: Activity },
+      { id: 'broadcast', label: 'Broadcast', icon: Send, ownerOnly: true },
+    ],
   },
   {
     group: 'Business',
@@ -83,6 +88,7 @@ export default function Sidebar({
   sidebarOpen,
   setSidebarOpen,
   hasRoleAccess,
+  isPlatformOwner = false,
   viewMode,
   platformSection,
   onPlatformSectionChange,
@@ -279,21 +285,26 @@ export default function Sidebar({
 
           {isControlPlane && (
             <>
-              {PLATFORM_NAV.map((group) => (
-                <Section key={group.group} label={group.group}>
-                  {group.items.map((item) => (
-                    <button
-                      key={item.id}
-                      type="button"
-                      className={`side-nav-btn ${platformSection === item.id ? 'active' : ''}`}
-                      aria-current={platformSection === item.id ? 'page' : undefined}
-                      onClick={() => handlePlatformNav(item.id)}
-                    >
-                      <item.icon size={16} /> <span>{item.label}</span>
-                    </button>
-                  ))}
-                </Section>
-              ))}
+              {PLATFORM_NAV.map((group) => {
+                // Owner-only entries stay hidden for everybody else.
+                const items = group.items.filter((item) => !item.ownerOnly || isPlatformOwner);
+                if (items.length === 0) return null;
+                return (
+                  <Section key={group.group} label={group.group}>
+                    {items.map((item) => (
+                      <button
+                        key={item.id}
+                        type="button"
+                        className={`side-nav-btn ${platformSection === item.id ? 'active' : ''}`}
+                        aria-current={platformSection === item.id ? 'page' : undefined}
+                        onClick={() => handlePlatformNav(item.id)}
+                      >
+                        <item.icon size={16} /> <span>{item.label}</span>
+                      </button>
+                    ))}
+                  </Section>
+                );
+              })}
             </>
           )}
         </nav>

@@ -133,6 +133,11 @@ pub fn api_v1_routes(_state: &AppState) -> Router<AppState> {
             "/admin/platform/announcements/{id}",
             patch(admin::update_announcement),
         )
+        .route("/admin/platform/broadcast", post(admin::platform_broadcast))
+        .route(
+            "/admin/platform/broadcasts",
+            get(admin::list_platform_broadcasts),
+        )
         .route("/admin/platform/support", get(admin::list_support_tickets))
         .route(
             "/admin/platform/support/{id}",
@@ -186,6 +191,14 @@ pub fn api_v1_routes(_state: &AppState) -> Router<AppState> {
         .route(
             "/company/domains",
             get(company_api::list_domains).post(company_api::create_domain),
+        )
+        .route(
+            "/company/domains/dns-requirements",
+            get(company_api::dns_requirements),
+        )
+        .route(
+            "/company/domains/dns-requirements",
+            get(company_api::dns_requirements),
         )
         .route(
             "/company/mailboxes",
@@ -2641,10 +2654,24 @@ pub async fn verify_domain(
         runtime_checks.push(verify_resend_inbound_webhook(&state.http_client, api_key).await);
     }
 
+    // A verified domain always gets its sending mailbox so the first mail
+    // does not fail with "sender mailbox is not registered".
     let initial_dns_passed = checks.iter().all(|check| check.status == "verified");
     let initial_runtime_passed = runtime_checks
         .iter()
         .all(|check| check.status == "verified");
+    let mut registered_mailboxes: Vec<String> = Vec::new();
+    if initial_dns_passed && initial_runtime_passed {
+        for (address, kind) in [
+            (format!("admin@{domain}"), "primary"),
+            (format!("postmaster@{domain}"), "user"),
+        ] {
+            match ensure_business_mailbox(db_url, &domain, &address, "VelisMail", kind).await {
+                Ok(()) => registered_mailboxes.push(address),
+                Err(err) => tracing::warn!("could not register mailbox {address}: {err}"),
+            }
+        }
+    }
     if initial_dns_passed && initial_runtime_passed && provider.eq_ignore_ascii_case("resend") {
         let route_check = register_inbound_route(
             &state,
@@ -2693,6 +2720,7 @@ pub async fn verify_domain(
             "checks": checks,
             "runtimeChecks": runtime_checks,
             "providerRecords": provider_records,
+            "registeredMailboxes": registered_mailboxes,
             "provider": provider,
         })),
     )
@@ -4886,6 +4914,41 @@ pub async fn query_business_mailboxes(
     }
 
     read_business_mailboxes(payload.db_url.trim(), payload.domain.trim()).await
+}
+
+/// Register a mailbox in the company business database.
+///
+/// A verified domain always gets its sending mailbox, otherwise the first
+/// mail would fail with "sender mailbox is not registered".
+async fn ensure_business_mailbox(
+    db_url: &str,
+    domain: &str,
+    address: &str,
+    display_name: &str,
+    kind: &str,
+) -> Result<(), String> {
+    let pool = get_tenant_pool(db_url).await?;
+    ensure_business_mailboxes_table(&pool).await?;
+    let aliases = serde_json::to_string(&Vec::<String>::new()).unwrap_or_else(|_| "[]".to_string());
+    let id = format!("mbx_{}", uuid::Uuid::new_v4().simple());
+    sqlx::query(
+        "INSERT INTO business_mailboxes (id, domain, address, display_name, kind, aliases, active, source, created_at, last_used_at)
+         VALUES ($1, $2, $3, $4, $5, $6, TRUE, 'system', NOW(), NULL)
+         ON CONFLICT (domain, address) DO UPDATE SET
+            display_name = EXCLUDED.display_name,
+            kind = EXCLUDED.kind,
+            active = TRUE",
+    )
+    .bind(&id)
+    .bind(domain.trim().to_lowercase())
+    .bind(address.trim().to_lowercase())
+    .bind(display_name)
+    .bind(kind)
+    .bind(&aliases)
+    .execute(&pool)
+    .await
+    .map(|_| ())
+    .map_err(|err| format!("{err}"))
 }
 
 pub async fn save_business_mailbox(

@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { Building2, Crown } from 'lucide-react';
 import { auth, connections, domains, fetchAPI, fetchAuthenticatedProfile, isBusinessSetupReady, mail, saveDB, signatures, contacts, STORAGE_KEYS, type BusinessAuditEntry, type BusinessGroup, type BusinessMailbox, type BusinessTeamMember, type BusinessTemplate, type ConnectionUsage, type CustomDomain, type Email, type PlatformAdminUserRecord, type DomainCheck, type TeamAccessInvite, type Signature, type Contact, type ActiveSession } from '../api/client';
+import { platformAdminApi } from '../api/admin';
 import Sidebar from '../components/dashboard/Sidebar';
 import { PLANS, ROLE_ALLOWED_TABS, type BizTab } from '../components/dashboard/constants';
 import EmailInbox from '../components/dashboard/EmailInbox';
@@ -66,6 +67,7 @@ export default function BusinessDashboard() {
     new URLSearchParams(window.location.search).get('view') === 'admin' ? 'control-plane' : 'workspace',
   );
   const [platformSection, setPlatformSection] = useState<PlatformSection>('overview');
+  const [isPlatformOwner, setIsPlatformOwner] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [composeOpen, setComposeOpen] = useState(false);
   const [composeTo, setComposeTo] = useState('');
@@ -230,6 +232,20 @@ export default function BusinessDashboard() {
     });
     return () => { cancelled = true; };
   }, []);
+
+  // The configured platform owner is the only account that may broadcast to
+  // every user, so the console asks the gateway who it is dealing with.
+  useEffect(() => {
+    if (!canAccessPlatformAdmin) {
+      setIsPlatformOwner(false);
+      return;
+    }
+    let cancelled = false;
+    void platformAdminApi.me()
+      .then((result) => { if (!cancelled) setIsPlatformOwner(Boolean(result.owner)); })
+      .catch(() => { if (!cancelled) setIsPlatformOwner(false); });
+    return () => { cancelled = true; };
+  }, [canAccessPlatformAdmin]);
 
   const switchView = useCallback((next: 'workspace' | 'control-plane') => {
     setViewMode(next);
@@ -677,7 +693,7 @@ export default function BusinessDashboard() {
         activeFolder={activeFolder} setActiveFolder={setActiveFolder}
         onCompose={() => openComposeWith()} user={user}
         onLogout={() => setShowLogoutConfirm(true)} sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen}
-        hasRoleAccess={hasRoleAccess}
+        hasRoleAccess={hasRoleAccess} isPlatformOwner={isPlatformOwner}
         viewMode={viewMode}
         platformSection={platformSection} onPlatformSectionChange={setPlatformSection}
         onProfileClick={() => navigate('/settings')}

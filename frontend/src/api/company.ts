@@ -59,6 +59,35 @@ export type WorkspaceDomain = {
   mailboxes?: number;
 };
 
+/** A DNS record the customer has to publish. */
+export type DnsRequirement = {
+  recordType: 'MX' | 'TXT' | string;
+  /** The name to enter in the DNS provider (`@` for the root domain). */
+  name: string;
+  /** The fully qualified host the record lives on. */
+  host: string;
+  /** The value to publish. */
+  value: string;
+  ttl: number;
+  /** What the record is for. */
+  purpose: string;
+  /** verified, missing, mismatch, pending or unknown. */
+  status: string;
+  /** What the DNS currently returns. */
+  actual: string;
+};
+
+export type DnsRequirements = {
+  success: boolean;
+  domain: string;
+  provider: string;
+  /** True when every record is published and matches. */
+  complete: boolean;
+  records: DnsRequirement[];
+  missing: string[];
+  message: string;
+};
+
 export type WorkspaceAuditEntry = {
   id: string;
   actor: string;
@@ -111,6 +140,14 @@ export const workspaceApi = {
       '/company/domains',
       { method: 'POST', body: JSON.stringify(payload) },
     ),
+
+  /**
+   * The exact DNS records the domain needs, with the live status of every
+   * record. The records come from the mail provider, so the name and the
+   * value are always the ones that have to be published.
+   */
+  dnsRequirements: (domain: string) =>
+    request<DnsRequirements>(`/company/domains/dns-requirements?domain=${encodeURIComponent(domain)}`),
 
   mailboxes: () =>
     request<{ success: boolean; mailboxes: BusinessMailbox[] }>('/company/mailboxes'),

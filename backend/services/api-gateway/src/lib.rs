@@ -2,6 +2,7 @@ mod admin;
 mod api_keys;
 mod company_api;
 mod config;
+mod domain_dns;
 mod middleware;
 mod routes;
 mod state;

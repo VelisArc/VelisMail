@@ -1267,6 +1267,98 @@ pub async fn delete_group(
 }
 
 // ---------------------------------------------------------------------------
+// Domain DNS requirements
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Deserialize)]
+pub struct DomainQuery {
+    pub domain: String,
+}
+
+/// The exact DNS records a domain has to publish, with the live status of
+/// each one. The console uses this to tell the customer what is missing
+/// instead of guessing.
+pub async fn dns_requirements(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<DomainQuery>,
+) -> ApiResult {
+    let context = workspace_context(&state, &headers).await?;
+    let db = db_pool(&state)?;
+
+    let domain = query
+        .domain
+        .trim()
+        .trim_end_matches('.')
+        .to_ascii_lowercase();
+    if domain.is_empty() {
+        return Err(fail(StatusCode::BAD_REQUEST, "A domain is required."));
+    }
+
+    // The provider credentials live on the account that owns the workspace.
+    let row = sqlx::query(
+        "SELECT u.settings FROM users u
+         JOIN company_members cm ON cm.user_id = u.id AND cm.tenant_id = $1 AND cm.status = 'active'
+         WHERE LOWER(cm.email) = LOWER($2)
+         LIMIT 1",
+    )
+    .bind(context.tenant_id)
+    .bind(&context.email)
+    .fetch_optional(db)
+    .await
+    .ok()
+    .flatten();
+
+    let settings: Value = row
+        .as_ref()
+        .and_then(|row| row.try_get::<Value, _>("settings").ok())
+        .unwrap_or_else(|| json!({}));
+    let provider = settings
+        .get("businessMailProvider")
+        .and_then(Value::as_str)
+        .unwrap_or("resend")
+        .to_string();
+    let api_key = settings
+        .get("businessApiKey")
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .to_string();
+
+    let (sending_domain, records) =
+        crate::domain_dns::requirements(&state.http_client, &provider, &api_key, &domain).await;
+    let records = crate::domain_dns::verify(&state.http_client, records).await;
+    let complete = crate::domain_dns::is_complete(&records);
+    let missing: Vec<String> = records
+        .iter()
+        .filter(|record| record.status != "verified")
+        .map(|record| {
+            format!(
+                "{} {} ({})",
+                record.record_type, record.name, record.purpose
+            )
+        })
+        .collect();
+
+    ok(json!({
+        "success": true,
+        "domain": domain,
+        "provider": provider,
+        "sendingDomain": sending_domain,
+        "complete": complete,
+        "records": records,
+        "missing": missing,
+        "message": if complete {
+            "Every DNS record is published and active. The domain can send and receive mail.".to_string()
+        } else {
+            format!(
+                "{} DNS record(s) still need attention. Publish them and run the check again.",
+                missing.len()
+            )
+        }
+    }))
+}
+
+// ---------------------------------------------------------------------------
 // Contacts
 // ---------------------------------------------------------------------------
 
