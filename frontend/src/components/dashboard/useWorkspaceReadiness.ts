@@ -93,6 +93,10 @@ export default function useWorkspaceReadiness(user: User | null): WorkspaceReadi
       setRecords(requirements.records);
       setComplete(requirements.complete);
       setChecked(true);
+      // The stored status is kept in sync when the live DNS is complete.
+      if (requirements.complete && primary.status !== 'verified') {
+        void workspaceApi.verifyDomain(primary.id).catch(() => undefined);
+      }
     } catch (err) {
       setRecords([]);
       setComplete(false);
@@ -112,7 +116,11 @@ export default function useWorkspaceReadiness(user: User | null): WorkspaceReadi
   }, [load]);
 
   const receiving = useMemo(
-    () => records.find((record) => record.purpose.toLowerCase().includes('receiv')),
+    () =>
+      records.find(
+        (record) =>
+          record.recordType === 'MX' && record.purpose.toLowerCase().includes('receiving'),
+      ),
     [records],
   );
   const pending = useMemo(
@@ -122,8 +130,10 @@ export default function useWorkspaceReadiness(user: User | null): WorkspaceReadi
 
   const checks = useMemo<SetupCheck[]>(() => {
     const primary = domains[0];
-    const domainReady = Boolean(primary) && primary.status === 'verified';
     const dnsReady = checked && complete && records.length > 0;
+    // The live DNS is the truth: a domain whose records are all active is
+    // ready, even when the stored status is still out of date.
+    const domainReady = Boolean(primary) && (primary.status === 'verified' || dnsReady);
 
     return [
       {
@@ -169,7 +179,9 @@ export default function useWorkspaceReadiness(user: User | null): WorkspaceReadi
         description: 'The domain your company sends from. It has to be verified.',
         icon: Globe,
         done: domainReady,
-        detail: primary ? `${primary.domain} - ${primary.status}` : 'No domain connected yet',
+        detail: primary
+          ? `${primary.domain} - ${domainReady ? 'verified' : primary.status}`
+          : 'No domain connected yet',
       },
       {
         key: 'dns',
