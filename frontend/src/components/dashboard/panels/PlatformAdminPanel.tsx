@@ -420,8 +420,18 @@ export default function PlatformAdminPanel({ section, onSectionChange, state }: 
     });
   }, [confirm, runUserAction]);
 
-  const kpis = overview?.kpis;
-  const traffic = analytics?.series.traffic || [];
+  // The gateway only hands out the roles the signed-in staff member is
+  // allowed to grant, so a non-owner never even sees the privileged ones.
+  const assignableRoles = useMemo(
+    () => (team?.roles || []).filter((role) => role.key !== 'owner'),
+    [team?.roles],
+  );
+  const selectedRoleDescription = useMemo(
+    () => assignableRoles.find((role) => role.key === newAdmin.role)?.description || '',
+    [assignableRoles, newAdmin.role],
+  );
+
+  const kpis = overview?.kpis;  const traffic = analytics?.series.traffic || [];
   const trafficMax = Math.max(1, ...traffic.map((point) => point.requests));
 
   const growthSeries = useMemo(
@@ -928,10 +938,13 @@ export default function PlatformAdminPanel({ section, onSectionChange, state }: 
                 onChange={(event) => setNewAdmin((current) => ({ ...current, email: event.target.value }))}
               />
               <select className="input input-auto" value={newAdmin.role} onChange={(event) => setNewAdmin((current) => ({ ...current, role: event.target.value }))}>
-                <option value="admin">admin</option>
-                <option value="superadmin">superadmin</option>
-                <option value="viewer">viewer</option>
+                {assignableRoles.map((role) => (
+                  <option key={role.key} value={role.key}>{role.name}</option>
+                ))}
               </select>
+              {selectedRoleDescription && (
+                <span className="text-xs text-muted admin-role-hint">{selectedRoleDescription}</span>
+              )}
               <button
                 className="btn btn-primary btn-sm"
                 onClick={() => {
@@ -978,10 +991,13 @@ export default function PlatformAdminPanel({ section, onSectionChange, state }: 
                 <div className="admin-row-actions">
                   <AdminConfirmSelect
                     value={admin.role}
-                    options={(team?.roles || []).map((role) => role.key)}
+                    options={assignableRoles.map((role) => ({ value: role.key, label: role.name }))}
                     confirm={confirm}
                     title={(role) => `Change role to ${role}`}
-                    message={(role) => `${admin.email} changes from ${admin.role} to ${role}. The new permissions apply right away.`}
+                    message={(role) => {
+                      const next = assignableRoles.find((entry) => entry.key === role);
+                      return `${admin.email} changes from ${admin.role} to ${role}.${next?.description ? ` ${next.description}` : ''}`;
+                    }}
                     confirmLabel="Change role"
                     tone="primary"
                     onApply={async (role) => {

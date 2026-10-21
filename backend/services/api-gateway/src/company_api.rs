@@ -212,11 +212,11 @@ pub(crate) async fn workspace_context(
         .and_then(|row| row.try_get::<String, _>("role").ok())
         .unwrap_or_default();
     if role.is_empty() {
-        role = settings
-            .get("role")
-            .and_then(Value::as_str)
-            .unwrap_or("member")
-            .to_lowercase();
+        // The role always comes from the explicit membership record. It is
+        // never derived from the email domain or from client-supplied
+        // settings, otherwise anybody with a mail address on a company domain
+        // would inherit that access.
+        role = "member".to_string();
     }
     if let Some(row) = membership.as_ref() {
         let member_status: String = row

@@ -43,8 +43,27 @@ function ComposeModal({ state }: { state: DashboardState }) {
   );
 }
 
-function InviteModal({ state }: { state: DashboardState }) {
-  return (
+/**
+ * What a member can do once they joined with a given role.
+ *
+ * The invitation is issued for a specific role and the access follows from
+ * that role, so the issuer always sees exactly what the joiner receives.
+ */
+const INVITE_ROLE_LABELS: Record<string, string> = {
+  admin: 'Workspace Admin',
+  member: 'Member',
+  viewer: 'Viewer',
+  user: 'User',
+};
+
+const INVITE_ROLE_ACCESS: Record<string, string> = {
+  admin: 'Full workspace access: mailboxes, domains, groups, templates, team management, billing and audit log.',
+  member: 'Sends and receives mail, manages templates and the queue, and can view domains, mailboxes, groups and the audit log.',
+  viewer: 'Read-only access to mail, domains, mailboxes, groups, analytics, billing and the audit log. Cannot change anything.',
+  user: 'Only the personal mailbox and contacts. No workspace administration.',
+};
+
+function InviteModal({ state }: { state: DashboardState }) {  return (
     <div className="modal-overlay" onClick={() => { state.setInviteOpen(false); }} role="dialog" aria-modal="true" aria-label="Invite team member">
       <div className="biz-form-modal glass" onClick={e => e.stopPropagation()}>
         <div className="compose-header"><h3><UserCheck size={16} /> Invite Team Member</h3><button className="btn btn-ghost btn-icon" onClick={() => { state.setInviteOpen(false); }}><X size={16} /></button></div>
@@ -55,6 +74,10 @@ function InviteModal({ state }: { state: DashboardState }) {
             <select className="input" value={state.inviteRole} onChange={e => state.setInviteRole(e.target.value as 'admin' | 'member' | 'viewer' | 'user')}>
               <option value="admin">Admin</option><option value="member">Member</option><option value="viewer">Viewer</option><option value="user">User</option>
             </select>
+            <div className="invite-role-access">
+              <strong>{INVITE_ROLE_LABELS[state.inviteRole] || state.inviteRole}</strong>
+              <span>{INVITE_ROLE_ACCESS[state.inviteRole]}</span>
+            </div>
             <select className="input" value={state.inviteExpiresHours} onChange={e => state.setInviteExpiresHours(Number(e.target.value))}>
               <option value={24}>24 hours</option><option value={48}>48 hours</option><option value={72}>72 hours</option><option value={168}>7 days</option>
             </select>

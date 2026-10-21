@@ -256,7 +256,7 @@ export default function CompanyAdminPanel({ state }: { state: DashboardState }) 
             <button
               key={item.id}
               type="button"
-              className={`btn btn-sm ${tab === item.id ? 'btn-primary' : 'btn-ghost'}`}
+              className={`admin-tab-btn ${tab === item.id ? 'active' : ''}`}
               onClick={() => setTab(item.id)}
             >
               <item.icon size={15} /> {item.label}

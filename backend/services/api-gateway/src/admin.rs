@@ -387,11 +387,6 @@ async fn authorize_company(
             "This account is suspended. Contact VelisMail support.",
         ));
     }
-    let settings_role = settings
-        .get("role")
-        .and_then(Value::as_str)
-        .unwrap_or("member")
-        .to_lowercase();
     let plan = settings
         .get("plan")
         .and_then(Value::as_str)
@@ -460,11 +455,12 @@ async fn authorize_company(
     .await
     .ok()
     .flatten();
-    let member_count: i64 = sqlx::query_scalar("SELECT COUNT(*)::bigint FROM users WHERE tenant_id = $1")
-        .bind(tenant_id)
-        .fetch_one(db)
-        .await
-        .unwrap_or(0);
+    let member_count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*)::bigint FROM users WHERE tenant_id = $1")
+            .bind(tenant_id)
+            .fetch_one(db)
+            .await
+            .unwrap_or(0);
     let initial_role = if is_platform {
         "owner"
     } else if let Some(role) = explicit_member_role.as_deref() {
@@ -559,7 +555,13 @@ async fn authorize_company(
             row.try_get::<String, _>("status")
                 .unwrap_or_else(|_| "active".to_string()),
         ),
-        None => (settings_role.clone(), "active".to_string()),
+        // No explicit membership row yet: the account that created the
+        // workspace owns it, everybody else joins with the lowest role. The
+        // role is never taken from the email domain or from client settings.
+        None => (
+            if member_count <= 1 { "admin" } else { "member" }.to_string(),
+            "active".to_string(),
+        ),
     };
 
     if membership_status != "active" && !is_platform {
