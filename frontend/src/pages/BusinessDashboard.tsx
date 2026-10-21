@@ -19,6 +19,7 @@ import AuditPanel from '../components/dashboard/panels/AuditPanel';
 import CompanyAdminPanel from '../components/dashboard/panels/CompanyAdminPanel';
 import SetupRequired from '../components/dashboard/SetupRequired';
 import useWorkspaceReadiness from '../components/dashboard/useWorkspaceReadiness';
+import LoadingSpinner from '../components/LoadingSpinner';
 import PlatformAdminPanel, { type PlatformSection } from '../components/dashboard/panels/PlatformAdminPanel';
 import { platformOwnerUids, platformOwnerEmails } from '../lib/firebase';
 import { toAuditEntry, toQueueItem, toTeamMember, toTemplate, workspaceApi, type WorkspaceBusiness } from '../api/company';
@@ -795,10 +796,32 @@ export default function BusinessDashboard() {
   // setup panel names every missing step. The platform control plane does not
   // depend on the workspace, so the owner can still open it.
   const controlPlaneOpen = viewMode === 'control-plane' && canAccessPlatformAdmin;
-  if (!controlPlaneOpen && (!isBusinessSetupReady(user) || !readiness.ready)) {
+  const sessionReady = isBusinessSetupReady(user);
+  if (!controlPlaneOpen && !sessionReady) {
     return (
       <SetupRequired
         user={user}
+        readiness={readiness}
+        canOpenControlPlane={canAccessPlatformAdmin}
+        onOpenControlPlane={() => switchView('control-plane')}
+      />
+    );
+  }
+  if (!controlPlaneOpen && readiness.loading) {
+    return (
+      <div className="setup-required">
+        <div className="setup-required-card setup-required-loading">
+          <LoadingSpinner size="md" label="Checking the setup" />
+          <span className="setup-signed-in">Checking the setup of {user.email}</span>
+        </div>
+      </div>
+    );
+  }
+  if (!controlPlaneOpen && !readiness.ready) {
+    return (
+      <SetupRequired
+        user={user}
+        readiness={readiness}
         canOpenControlPlane={canAccessPlatformAdmin}
         onOpenControlPlane={() => switchView('control-plane')}
       />

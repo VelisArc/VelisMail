@@ -195,6 +195,7 @@
 
 .dns-instruction-box.todo {
   border-color: var(--danger-200);
+  border-left: 3px solid var(--danger);
 }
 
 .dns-instruction-header {

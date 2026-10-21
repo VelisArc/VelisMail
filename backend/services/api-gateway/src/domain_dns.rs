@@ -97,7 +97,9 @@ pub async fn query(
         .cloned()
         .unwrap_or_default()
         .into_iter()
-        .filter_map(|item| item["data"].as_str().map(normalize))
+        // The answer keeps its original case: a DKIM key is case sensitive and
+        // has to be shown exactly as it is published.
+        .filter_map(|item| item["data"].as_str().map(|value| value.trim().to_string()))
         .collect())
 }
 
@@ -575,7 +577,8 @@ pub async fn verify(
             let expected = normalize(&record.value);
             let found = answers
                 .iter()
-                .any(|answer| answer == &expected || answer.contains(&expected));
+                .map(|answer| normalize(answer))
+                .any(|answer| answer == expected || answer.contains(&expected));
             record.status = if found { "verified" } else { "missing" }.to_string();
             record.detail = if found {
                 String::new()
@@ -592,4 +595,67 @@ pub async fn verify(
 /// True when every record is published and matches.
 pub fn is_complete(records: &[DnsRequirement]) -> bool {
     !records.is_empty() && records.iter().all(|record| record.status == "verified")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn resolves_the_host_of_a_record_name() {
+        assert_eq!(host_for("VelisMail.online", "@"), "velismail.online");
+        assert_eq!(host_for("velismail.online", ""), "velismail.online");
+        assert_eq!(
+            host_for("velismail.online", "send"),
+            "send.velismail.online"
+        );
+        assert_eq!(
+            host_for("velismail.online", "resend._domainkey."),
+            "resend._domainkey.velismail.online"
+        );
+    }
+
+    #[test]
+    fn derives_the_inbound_mail_exchanger_of_the_region() {
+        assert_eq!(
+            resend_inbound_mx_for("feedback-smtp.ap-northeast-1.amazonses.com"),
+            Some("inbound-smtp.ap-northeast-1.amazonaws.com".to_string())
+        );
+        assert_eq!(
+            resend_inbound_mx_for("feedback-smtp.us-east-1.amazonaws.com"),
+            Some("inbound-smtp.us-east-1.amazonaws.com".to_string())
+        );
+        assert_eq!(resend_inbound_mx_for("mx.example.com"), None);
+    }
+
+    #[test]
+    fn a_domain_is_only_complete_when_every_record_is_active() {
+        let records = vec![
+            DnsRequirement {
+                record_type: "TXT".to_string(),
+                name: "send".to_string(),
+                host: "send.velismail.online".to_string(),
+                value: "v=spf1 include:amazonses.com ~all".to_string(),
+                ttl: 3600,
+                purpose: "Authorises the sending server".to_string(),
+                status: "verified".to_string(),
+                actual: String::new(),
+                detail: String::new(),
+                match_mode: "spf".to_string(),
+            },
+            DnsRequirement {
+                record_type: "TXT".to_string(),
+                name: "_dmarc".to_string(),
+                host: "_dmarc.velismail.online".to_string(),
+                value: "v=DMARC1; p=quarantine".to_string(),
+                ttl: 3600,
+                purpose: "Policy for receivers".to_string(),
+                status: "mismatch".to_string(),
+                actual: String::new(),
+                detail: "Two DMARC records are published for this name.".to_string(),
+                match_mode: "prefix".to_string(),
+            },
+        ];
+        assert!(!is_complete(&records));
+    }
 }

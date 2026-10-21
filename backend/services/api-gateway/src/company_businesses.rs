@@ -274,10 +274,12 @@ pub async fn create_business(
     // The domain with its verification record, exactly like a domain that is
     // added to an existing business.
     let verification_token = Uuid::new_v4().to_string();
-    let _ = sqlx::query(
+    let domain_result = sqlx::query(
         "INSERT INTO custom_domains (tenant_id, domain_name, verification_status, verification_method, dns_records, mx_records)
          VALUES ($1, $2, 'pending', 'dns', $3, '[]'::jsonb)
-         ON CONFLICT (domain_name) DO UPDATE SET tenant_id = EXCLUDED.tenant_id, updated_at = NOW()",
+         ON CONFLICT (domain_name) DO UPDATE
+         SET tenant_id = EXCLUDED.tenant_id, verification_status = 'pending'
+         RETURNING id",
     )
     .bind(tenant_id)
     .bind(&domain)
@@ -289,8 +291,15 @@ pub async fn create_business(
             "ttl": 300
         }
     ]))
-    .execute(db)
+    .fetch_optional(db)
     .await;
+    if let Err(err) = &domain_result {
+        tracing::error!("business domain creation failed: {}", err);
+    }
+    let domain_id = match domain_result {
+        Ok(Some(row)) => row.try_get::<Uuid, _>("id").ok(),
+        _ => None,
+    };
 
     // The sending mailboxes of the business.
     for (address, display_name, kind) in [
@@ -365,6 +374,7 @@ pub async fn create_business(
         "success": true,
         "business": business,
         "domain": domain,
+        "domainId": domain_id.map(|value| value.to_string()),
         "verificationToken": verification_token,
     }))
 }

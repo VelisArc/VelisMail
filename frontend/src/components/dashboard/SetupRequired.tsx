@@ -1,10 +1,12 @@
 import { useNavigate } from 'react-router-dom';
 import { AlertTriangle, ArrowRight, Check, Copy, Crown, RefreshCw, X } from 'lucide-react';
 import type { User } from '../../api/client';
-import useWorkspaceReadiness from './useWorkspaceReadiness';
+import type { WorkspaceReadiness } from './useWorkspaceReadiness';
 
 interface SetupRequiredProps {
   user: User | null;
+  /** The live state of the setup. */
+  readiness: WorkspaceReadiness;
   /** The platform owner can still open the control plane. */
   canOpenControlPlane?: boolean;
   onOpenControlPlane?: () => void;
@@ -19,9 +21,13 @@ interface SetupRequiredProps {
  * DNS records that still have to be published - with the name and the value -
  * and takes the user straight into the setup.
  */
-export default function SetupRequired({ user, canOpenControlPlane, onOpenControlPlane }: SetupRequiredProps) {
+export default function SetupRequired({
+  user,
+  readiness,
+  canOpenControlPlane,
+  onOpenControlPlane,
+}: SetupRequiredProps) {
   const navigate = useNavigate();
-  const readiness = useWorkspaceReadiness(user);
   const { checks, pending, error, loading } = readiness;
 
   const completed = checks.filter((check) => check.done).length;
