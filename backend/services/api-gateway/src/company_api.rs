@@ -51,6 +51,22 @@ fn db_pool(state: &AppState) -> Result<&PgPool, ApiError> {
     })
 }
 
+/// Read the bearer token of a request.
+fn bearer_token(headers: &HeaderMap) -> Option<String> {
+    headers
+        .get(axum::http::header::AUTHORIZATION)
+        .and_then(|value| value.to_str().ok())
+        .map(str::trim)
+        .and_then(|value| {
+            value
+                .strip_prefix("Bearer ")
+                .or_else(|| value.strip_prefix("bearer "))
+        })
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
+}
+
 /// Verify the bearer token and return its claims.
 fn session_claims(state: &AppState, headers: &HeaderMap) -> Result<Claims, ApiError> {
     let secret = state.config.jwt_secret.as_deref().ok_or_else(|| {
@@ -139,6 +155,30 @@ pub(crate) async fn workspace_context(
     state: &AppState,
     headers: &HeaderMap,
 ) -> Result<WorkspaceContext, ApiError> {
+    // A workspace API key authenticates on its own and is bound to one
+    // company, so an integration or an assistant can run the workspace
+    // without a user session.
+    if let Some(token) = bearer_token(headers) {
+        if token.starts_with(crate::api_keys::API_KEY_PREFIX) {
+            return match crate::api_keys::resolve(state, &token).await {
+                Ok(key) => Ok(WorkspaceContext {
+                    tenant_id: key.tenant_id,
+                    user_id: key.tenant_id,
+                    email: key.created_by.clone(),
+                    role: "owner".to_string(),
+                    plan: "Business".to_string(),
+                }),
+                Err(_) => Err((
+                    StatusCode::UNAUTHORIZED,
+                    Json(json!({
+                        "success": false,
+                        "error": "This API key is not valid."
+                    })),
+                )),
+            };
+        }
+    }
+
     let claims = session_claims(state, headers)?;
     let db = db_pool(state)?;
 
