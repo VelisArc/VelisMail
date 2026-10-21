@@ -569,6 +569,21 @@ export const businessQueue = {
 };
 
 let businessMailboxDbRouteUnavailable = false;
+/**
+ * A customer database that is unreachable must not slow the dashboard down on
+ * every request. After a failed call the database is skipped for a short
+ * while and the local cache is used instead.
+ */
+let businessDbUnreachableUntil = 0;
+const BUSINESS_DB_BACKOFF_MS = 60_000;
+
+function businessDbIsUnreachable(): boolean {
+  return Date.now() < businessDbUnreachableUntil;
+}
+
+function markBusinessDbUnreachable() {
+  businessDbUnreachableUntil = Date.now() + BUSINESS_DB_BACKOFF_MS;
+}
 
 type BusinessMailboxApiEntry = Partial<BusinessMailbox> & {
   display_name?: string;
@@ -624,6 +639,7 @@ function businessMailboxDbHeaders(dbUrl: string): Record<string, string> {
 async function fetchBusinessMailboxesFromDb(domain: string): Promise<BusinessMailbox[] | null> {
   const session = getSessionSafe();
   if (!session?.businessDbUrl || businessMailboxDbRouteUnavailable) return null;
+  if (businessDbIsUnreachable()) return null;
 
   const response = await fetchApiJsonDetailed<BusinessMailboxApiResponse>('/mail/business-mailboxes/query', {
     method: 'POST',
@@ -642,6 +658,7 @@ async function fetchBusinessMailboxesFromDb(domain: string): Promise<BusinessMai
   if (!response.ok || !response.data?.success || !Array.isArray(response.data.mailboxes)) {
     const message = businessMailboxApiError(response.data, 'Unable to load mailboxes from the business database.');
     if (isTransientBusinessDbError(response.status, message)) {
+      if (response.status === 503) markBusinessDbUnreachable();
       warnBackendSyncFailure(new Error(message));
       return null;
     }
@@ -1323,7 +1340,7 @@ export const mail = {
     const session = auth.getSession();
     let sourceEmails = loadUserDB<Email[]>(STORAGE_KEYS.emails, EMPTY_EMAILS);
 
-    if (session?.businessDbUrl && !businessEmailDbRouteUnavailable) {
+    if (session?.businessDbUrl && !businessEmailDbRouteUnavailable && !businessDbIsUnreachable()) {
       const headers: Record<string, string> = {
         'x-business-db-url': session.businessDbUrl
       };
@@ -1339,6 +1356,7 @@ export const mail = {
       } else if (response.status === 404) {
         setBusinessEmailDbRouteUnavailable(true);
       } else if (isTransientBusinessDbError(response.status, String(response.data?.error || response.data?.message || 'Business email database query failed.'))) {
+        if (response.status === 503) markBusinessDbUnreachable();
         warnBackendSyncFailure(new Error(String(response.data?.error || response.data?.message || 'Business email database query failed.')));
       }
     }

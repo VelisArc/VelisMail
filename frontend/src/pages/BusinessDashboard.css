@@ -344,6 +344,18 @@
   min-height: 0;
 }
 
+/* The administration consoles are long, document-style pages. They scroll
+   inside the panel instead of being clipped by the dashboard shell. */
+.dash-panel-admin .dash-body {
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: var(--space-2);
+}
+
+.dash-panel-admin .dash-body > * {
+  flex-shrink: 0;
+}
+
 .panel-header {
   display: flex;
   align-items: center;
@@ -1823,7 +1835,8 @@
 /* ─── Platform Admin Tabs ─── */
 .admin-tabs {
   display: flex;
-  gap: 0;
+  flex-wrap: wrap;
+  gap: var(--space-1);
   border-bottom: 1px solid var(--border-primary);
   margin: var(--space-4) 0 var(--space-5) 0;
   padding-bottom: 0;
@@ -2654,13 +2667,6 @@
 .admin-company-head h2 {
   font-size: var(--text-xl);
   color: var(--text-primary);
-}
-
-.admin-tabs {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
-  margin-bottom: var(--space-4);
 }
 
 @media (max-width: 900px) {

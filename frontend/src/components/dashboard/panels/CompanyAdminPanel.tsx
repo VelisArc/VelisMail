@@ -35,6 +35,8 @@ import {
 } from '../../../api/company';
 import type { BusinessMailbox } from '../../../api/types';
 import type { DashboardState } from '../types';
+import { AdminConfirmSelect } from '../AdminConfirm';
+import { useAdminConfirm } from '../useAdminConfirm';
 
 type Tab = 'overview' | 'team' | 'domains' | 'mailboxes' | 'usage' | 'billing' | 'security' | 'api' | 'audit' | 'integrations';
 
@@ -125,6 +127,9 @@ export default function CompanyAdminPanel({ state }: { state: DashboardState }) 
   const [audit, setAudit] = useState<Awaited<ReturnType<typeof companyAdminApi.audit>> | null>(null);
   const [integrations, setIntegrations] = useState<Awaited<ReturnType<typeof companyAdminApi.integrations>> | null>(null);
   const [days, setDays] = useState(30);
+  // Every state-changing action in the company console needs a second,
+  // explicit confirmation before it is sent to the API.
+  const { confirm, dialog } = useAdminConfirm();
   const [keyOpen, setKeyOpen] = useState(false);
   const [keyForm, setKeyForm] = useState({ name: '', scopes: ['mail.send'], expiresInDays: 365 });
   const [newKey, setNewKey] = useState('');
@@ -345,18 +350,38 @@ export default function CompanyAdminPanel({ state }: { state: DashboardState }) 
                   <tr key={member.id}>
                     <td><div className="admin-person"><span className="avatar avatar-sm">{(member.name || member.email).charAt(0).toUpperCase()}</span><div><strong>{member.name || member.email}</strong><span>{member.email}</span></div></div></td>
                     <td>
-                      <select className="input input-auto" value={member.role} disabled={!canManage || savingMember === member.id} onChange={(event) => void updateMember(member, { role: event.target.value })}>
-                        <option value="owner">Owner</option><option value="admin">Admin</option><option value="member">Member</option><option value="viewer">Viewer</option>
-                      </select>
+                      <AdminConfirmSelect
+                        value={member.role}
+                        options={[{ value: 'owner', label: 'Owner' }, { value: 'admin', label: 'Admin' }, { value: 'member', label: 'Member' }, { value: 'viewer', label: 'Viewer' }]}
+                        confirm={confirm}
+                        title={(role) => `Change role to ${role}`}
+                        message={(role) => `${member.email} changes from ${member.role} to ${role}. The new permissions apply right away.`}
+                        confirmLabel="Change role"
+                        tone={(role) => (role === 'owner' || role === 'admin' ? 'danger' : 'primary')}
+                        disabled={!canManage || savingMember === member.id}
+                        onApply={async (role) => { await updateMember(member, { role }); }}
+                        ariaLabel={`Role for ${member.email}`}
+                      />
                     </td>
                     <td><Badge value={member.status}>{member.status}</Badge></td>
                     <td>{ago(member.lastActiveAt)}</td>
                     <td>{date(member.joinedAt)}</td>
                     <td>
                       {member.email === state.user?.email ? <span className="text-sm text-muted">You</span> : (
-                        <select className="input input-auto" value={member.status} disabled={!canManage || savingMember === member.id} onChange={(event) => void updateMember(member, { status: event.target.value })}>
-                          <option value="active">Active</option><option value="suspended">Suspended</option><option value="removed">Remove</option>
-                        </select>
+                        <AdminConfirmSelect
+                          value={member.status}
+                          options={[{ value: 'active', label: 'Active' }, { value: 'suspended', label: 'Suspended' }, { value: 'removed', label: 'Remove' }]}
+                          confirm={confirm}
+                          title={(next) => (next === 'removed' ? 'Remove member' : `Set status to ${next}`)}
+                          message={(next) => (next === 'removed'
+                            ? `${member.email} is removed from the workspace and loses access right away.`
+                            : `${member.email} changes from ${member.status} to ${next}.`)}
+                          confirmLabel={(next) => (next === 'removed' ? 'Remove member' : 'Change status')}
+                          tone={(next) => (next === 'active' ? 'primary' : 'danger')}
+                          disabled={!canManage || savingMember === member.id}
+                          onApply={async (next) => { await updateMember(member, { status: next }); }}
+                          ariaLabel={`Status for ${member.email}`}
+                        />
                       )}
                     </td>
                   </tr>
@@ -549,7 +574,15 @@ export default function CompanyAdminPanel({ state }: { state: DashboardState }) 
             <div className="admin-table-wrap">
               <table className="admin-table">
                 <thead><tr><th>Name</th><th>Key prefix</th><th>Scopes</th><th>Created by</th><th>Last used</th><th>Expires</th><th>Status</th><th>Action</th></tr></thead>
-                <tbody>{keys.keys.map((key) => <tr key={key.id}><td><strong>{key.name}</strong></td><td className="admin-mono">{key.prefix}…</td><td>{key.scopes.join(', ')}</td><td>{key.createdBy}</td><td>{ago(key.lastUsedAt)}</td><td>{date(key.expiresAt)}</td><td>{key.revokedAt ? <Badge value="revoked">Revoked</Badge> : <Badge value="active">Active</Badge>}</td><td>{!key.revokedAt && canManage ? <button type="button" className="btn btn-primary btn-sm btn btn-danger btn-sm" onClick={() => void revokeKey(key.id)}>Revoke</button> : <span className="text-sm text-muted">—</span>}</td></tr>)}</tbody>
+                <tbody>{keys.keys.map((key) => <tr key={key.id}><td><strong>{key.name}</strong></td><td className="admin-mono">{key.prefix}…</td><td>{key.scopes.join(', ')}</td><td>{key.createdBy}</td><td>{ago(key.lastUsedAt)}</td><td>{date(key.expiresAt)}</td><td>{key.revokedAt ? <Badge value="revoked">Revoked</Badge> : <Badge value="active">Active</Badge>}</td><td>{!key.revokedAt && canManage ? <button type="button" className="btn btn-primary btn-sm btn btn-danger btn-sm" onClick={() => {
+                  confirm({
+                    title: 'Revoke API key',
+                    message: `"${key.name}" (${key.prefix}...) stops working immediately. Any integration that still uses it will fail.`,
+                    confirmLabel: 'Revoke key',
+                    tone: 'danger',
+                    onConfirm: async () => { await revokeKey(key.id); },
+                  });
+                }}>Revoke</button> : <span className="text-sm text-muted">—</span>}</td></tr>)}</tbody>
               </table>
               {keys.keys.length === 0 && <p className="admin-empty-state">No API keys yet. Create one for server-to-server mail sending.</p>}
             </div>
@@ -604,7 +637,17 @@ export default function CompanyAdminPanel({ state }: { state: DashboardState }) 
                 <label>Key name<input className="input" value={keyForm.name} onChange={(event) => setKeyForm((current) => ({ ...current, name: event.target.value }))} placeholder="Transactional mail — production" /></label>
                 <label>Expiry (days)<input className="input" type="number" min={1} max={3650} value={keyForm.expiresInDays} onChange={(event) => setKeyForm((current) => ({ ...current, expiresInDays: Number(event.target.value) }))} /></label>
                 <fieldset><legend>Scopes</legend>{['mail.send', 'mail.read', 'contacts.read', 'domains.read', 'analytics.read'].map((scope) => <label key={scope} className="admin-check"><input type="checkbox" checked={keyForm.scopes.includes(scope)} onChange={(event) => setKeyForm((current) => ({ ...current, scopes: event.target.checked ? [...current.scopes, scope] : current.scopes.filter((item) => item !== scope) }))} />{scope}</label>)}</fieldset>
-                <div className="admin-modal-actions"><button type="button" className="btn btn-ghost btn-sm" onClick={() => setKeyOpen(false)}>Cancel</button><button type="button" className="btn btn-primary btn-sm" onClick={() => void createKey()} disabled={keyForm.name.trim().length < 2 || keyForm.scopes.length === 0}>Create key</button></div>
+                <div className="admin-modal-actions"><button type="button" className="btn btn-ghost btn-sm" onClick={() => setKeyOpen(false)}>Cancel</button><button type="button" className="btn btn-primary btn-sm" onClick={() => {
+                  const name = keyForm.name;
+                  const scopes = keyForm.scopes;
+                  confirm({
+                    title: 'Create API key',
+                    message: `"${name}" is created with the ${scopes.join(', ')} scope(s). The secret is only shown once, so store it immediately.`,
+                    confirmLabel: 'Create key',
+                    tone: 'primary',
+                    onConfirm: async () => { await createKey(); },
+                  });
+                }} disabled={keyForm.name.trim().length < 2 || keyForm.scopes.length === 0}>Create key</button></div>
               </div>
             ) : (
               <div className="admin-form">
@@ -616,6 +659,7 @@ export default function CompanyAdminPanel({ state }: { state: DashboardState }) 
           </div>
         </div>
       )}
+      {dialog}
     </div>
   );
 }

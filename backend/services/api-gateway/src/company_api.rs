@@ -482,6 +482,107 @@ pub async fn revoke_invitation(
 // Domains
 // ---------------------------------------------------------------------------
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DomainRequest {
+    pub domain: String,
+}
+
+pub async fn create_domain(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(payload): Json<DomainRequest>,
+) -> ApiResult {
+    let context = workspace_context(&state, &headers).await?;
+    context.require_manage()?;
+    let db = db_pool(&state)?;
+
+    let domain = payload.domain.trim().to_lowercase();
+    let valid = domain.len() >= 3
+        && domain.contains('.')
+        && !domain.starts_with('.')
+        && !domain.ends_with('.')
+        && domain
+            .chars()
+            .all(|ch| ch.is_ascii_alphanumeric() || ch == '.' || ch == '-');
+    if !valid {
+        return Err(fail(
+            StatusCode::BAD_REQUEST,
+            "Enter a valid domain, for example acme.com.",
+        ));
+    }
+
+    let owned: bool =
+        sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM custom_domains WHERE tenant_id = $1)")
+            .bind(context.tenant_id)
+            .fetch_one(db)
+            .await
+            .unwrap_or(false);
+    if !owned {
+        return Err(fail(
+            StatusCode::CONFLICT,
+            "This company already has a domain.",
+        ));
+    }
+
+    let verification_token = Uuid::new_v4().to_string();
+    let result = sqlx::query(
+        "INSERT INTO custom_domains (tenant_id, domain_name, verification_status, verification_method, dns_records, mx_records)
+         VALUES ($1, $2, 'pending', 'dns', $3, '[]'::jsonb)
+         ON CONFLICT (domain_name) DO UPDATE
+         SET tenant_id = EXCLUDED.tenant_id, verification_status = 'pending', updated_at = NOW()
+         RETURNING id",
+    )
+    .bind(context.tenant_id)
+    .bind(&domain)
+    .bind(json!([
+        {
+            "type": "TXT",
+            "name": "_velismail-verification",
+            "value": verification_token,
+            "ttl": 300
+        }
+    ]))
+    .fetch_optional(db)
+    .await;
+
+    let domain_id = match result {
+        Ok(Some(row)) => row.try_get::<Uuid, _>("id").ok(),
+        Ok(None) => None,
+        Err(_) => {
+            return Err(fail(
+                StatusCode::CONFLICT,
+                "That domain is already connected to another company.",
+            ))
+        }
+    };
+    if domain_id.is_none() {
+        return Err(fail(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Unable to add the domain.",
+        ));
+    }
+
+    audit(
+        db,
+        &context.email,
+        &context.role,
+        "company.domain_added",
+        "domain",
+        domain_id.map(|value| value.to_string()).as_deref(),
+        context.tenant_id,
+        json!({ "domain": domain }),
+    )
+    .await;
+
+    ok(json!({
+        "success": true,
+        "id": domain_id.map(|value| value.to_string()),
+        "domain": domain,
+        "verificationToken": verification_token,
+    }))
+}
+
 pub async fn list_domains(State(state): State<AppState>, headers: HeaderMap) -> ApiResult {
     let context = workspace_context(&state, &headers).await?;
     let db = db_pool(&state)?;

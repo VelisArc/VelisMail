@@ -34,6 +34,8 @@ import {
   type SystemInfo,
 } from '../../../api/admin';
 import type { DashboardState } from '../types';
+import { AdminConfirmSelect } from '../AdminConfirm';
+import { useAdminConfirm } from '../useAdminConfirm';
 
 export type PlatformSection =
   | 'overview'
@@ -170,10 +172,92 @@ function BarChart({ data, unit = '' }: { data: Array<{ label: string; value: num
   );
 }
 
+type ConfirmSpec = {
+  title: string;
+  message: string;
+  confirmLabel: string;
+  tone: 'danger' | 'primary';
+};
+
+const COMPANY_ACTION_CONFIRM: Record<string, ConfirmSpec> = {
+  suspend: {
+    title: 'Suspend company',
+    message: 'every mailbox on it stops sending and receiving mail immediately. Members keep their data and the change can be reverted.',
+    confirmLabel: 'Suspend company',
+    tone: 'danger',
+  },
+  activate: {
+    title: 'Reactivate company',
+    message: 'it becomes active again and its mailboxes start delivering again.',
+    confirmLabel: 'Reactivate company',
+    tone: 'primary',
+  },
+  revoke_api_keys: {
+    title: 'Revoke all API keys',
+    message: 'every API key of this company stops working immediately. Integrations that use them fail until new keys are issued.',
+    confirmLabel: 'Revoke all keys',
+    tone: 'danger',
+  },
+  terminate_sessions: {
+    title: 'End all sessions',
+    message: 'all members of this company are signed out and have to sign in again.',
+    confirmLabel: 'End all sessions',
+    tone: 'danger',
+  },
+  close_cases: {
+    title: 'Close investigations',
+    message: 'every open investigation of this company is closed.',
+    confirmLabel: 'Close investigations',
+    tone: 'danger',
+  },
+  set_plan: {
+    title: 'Change plan',
+    message: 'the plan and the entitlements that come with it change right away.',
+    confirmLabel: 'Change plan',
+    tone: 'primary',
+  },
+  set_seats: {
+    title: 'Change seat limit',
+    message: 'the number of seats this company can use changes right away.',
+    confirmLabel: 'Change seats',
+    tone: 'primary',
+  },
+};
+
+const USER_ACTION_CONFIRM: Record<string, ConfirmSpec> = {
+  suspend: {
+    title: 'Suspend user',
+    message: 'the account is blocked. The user cannot sign in or send mail until it is reactivated.',
+    confirmLabel: 'Suspend user',
+    tone: 'danger',
+  },
+  activate: {
+    title: 'Reactivate user',
+    message: 'the account is unblocked and the user can sign in again.',
+    confirmLabel: 'Reactivate user',
+    tone: 'primary',
+  },
+  terminate_sessions: {
+    title: 'End sessions',
+    message: 'every active session of this user is ended immediately.',
+    confirmLabel: 'End sessions',
+    tone: 'danger',
+  },
+  set_role: {
+    title: 'Change role',
+    message: 'the workspace role of this user changes right away. The new role is applied immediately.',
+    confirmLabel: 'Change role',
+    tone: 'primary',
+  },
+};
+
 export default function PlatformAdminPanel({ section, onSectionChange, state }: PlatformAdminPanelProps) {
   const [loading, setLoading] = useState(true);
   const [banner, setBanner] = useState<Banner>(null);
   const [denied, setDenied] = useState('');
+  // Every state-changing action in the control plane needs a second,
+  // explicit confirmation before it is sent to the API.
+  const { confirm, dialog } = useAdminConfirm();
 
   const [overview, setOverview] = useState<Awaited<ReturnType<typeof platformAdminApi.overview>> | null>(null);
   const [companies, setCompanies] = useState<Company[]>([]);
@@ -303,6 +387,38 @@ export default function PlatformAdminPanel({ section, onSectionChange, state }: 
       notify(error instanceof Error ? error.message : 'The action failed.', 'error');
     }
   }, [notify, load]);
+
+  const confirmCompanyAction = useCallback((
+    id: string,
+    action: 'suspend' | 'activate' | 'set_plan' | 'set_seats' | 'revoke_api_keys' | 'terminate_sessions' | 'close_cases',
+    extra: Record<string, unknown> = {},
+    subject = 'This company',
+  ) => {
+    const spec = COMPANY_ACTION_CONFIRM[action];
+    confirm({
+      title: spec.title,
+      message: `${subject} - ${spec.message}`,
+      confirmLabel: spec.confirmLabel,
+      tone: spec.tone,
+      onConfirm: () => runCompanyAction(id, action, extra),
+    });
+  }, [confirm, runCompanyAction]);
+
+  const confirmUserAction = useCallback((
+    id: string,
+    action: 'suspend' | 'activate' | 'terminate_sessions' | 'set_role',
+    role?: string,
+    subject = 'This account',
+  ) => {
+    const spec = USER_ACTION_CONFIRM[action];
+    confirm({
+      title: spec.title,
+      message: `${subject} - ${role ? spec.message.replace('the new role', `the ${role} role`) : spec.message}`,
+      confirmLabel: spec.confirmLabel,
+      tone: spec.tone,
+      onConfirm: () => runUserAction(id, action, role),
+    });
+  }, [confirm, runUserAction]);
 
   const kpis = overview?.kpis;
   const traffic = analytics?.series.traffic || [];
@@ -458,40 +574,44 @@ export default function PlatformAdminPanel({ section, onSectionChange, state }: 
                   >
                     Manage
                   </button>
-                  <select
-                    className="input input-auto"
+                  <AdminConfirmSelect
                     value={company.plan}
-                    onChange={async (event) => {
+                    options={['free', 'starter', 'business', 'enterprise']}
+                    confirm={confirm}
+                    title={(plan) => `Move to the ${plan} plan`}
+                    message={(plan) => `${company.name} moves from the ${company.plan} plan to the ${plan} plan. Billing and entitlements change right away.`}
+                    confirmLabel="Change plan"
+                    tone="primary"
+                    onApply={async (plan) => {
                       try {
-                        await platformAdminApi.updateCompany(company.id, { plan: event.target.value });
-                        notify(`${company.name} moved to ${event.target.value}`);
+                        await platformAdminApi.updateCompany(company.id, { plan });
+                        notify(`${company.name} moved to ${plan}`);
                         void load();
                       } catch (error) {
                         notify(error instanceof Error ? error.message : 'Update failed', 'error');
                       }
                     }}
-                  >
-                    {['free', 'starter', 'business', 'enterprise'].map((plan) => (
-                      <option key={plan} value={plan}>{plan}</option>
-                    ))}
-                  </select>
-                  <select
-                    className="input input-auto"
+                    ariaLabel={`Plan for ${company.name}`}
+                  />
+                  <AdminConfirmSelect
                     value={company.status}
-                    onChange={async (event) => {
+                    options={['active', 'suspended', 'pending_verification', 'disabled']}
+                    confirm={confirm}
+                    title={(status) => `Set status to ${status}`}
+                    message={(status) => `${company.name} changes from ${company.status} to ${status}. Mail delivery follows the new status right away.`}
+                    confirmLabel="Change status"
+                    tone={(status) => (status === 'suspended' || status === 'disabled' ? 'danger' : 'primary')}
+                    onApply={async (status) => {
                       try {
-                        await platformAdminApi.updateCompany(company.id, { status: event.target.value });
-                        notify(`${company.name} is now ${event.target.value}`);
+                        await platformAdminApi.updateCompany(company.id, { status });
+                        notify(`${company.name} is now ${status}`);
                         void load();
                       } catch (error) {
                         notify(error instanceof Error ? error.message : 'Update failed', 'error');
                       }
                     }}
-                  >
-                    {['active', 'suspended', 'pending_verification', 'disabled'].map((status) => (
-                      <option key={status} value={status}>{status}</option>
-                    ))}
-                  </select>
+                    ariaLabel={`Status for ${company.name}`}
+                  />
                 </div>
               </div>
             ))}
@@ -521,25 +641,27 @@ export default function PlatformAdminPanel({ section, onSectionChange, state }: 
                 <div className="admin-row-actions">
                   <button
                     className="btn btn-ghost btn-sm"
-                    onClick={() => { void runUserAction(item.id, item.status === 'active' ? 'suspend' : 'activate'); }}
+                    onClick={() => { confirmUserAction(item.id, item.status === 'active' ? 'suspend' : 'activate', undefined, item.email); }}
                   >
                     {item.status === 'active' ? 'Suspend' : 'Reactivate'}
                   </button>
                   <button
                     className="btn btn-ghost btn-sm"
-                    onClick={() => { void runUserAction(item.id, 'terminate_sessions'); }}
+                    onClick={() => { confirmUserAction(item.id, 'terminate_sessions', undefined, item.email); }}
                   >
                     End sessions
                   </button>
-                  <select
-                    className="input input-auto"
+                  <AdminConfirmSelect
                     value={item.companyRole || item.role}
-                    onChange={(event) => { void runUserAction(item.id, 'set_role', event.target.value); }}
-                  >
-                    {['owner', 'admin', 'member', 'viewer'].map((role) => (
-                      <option key={role} value={role}>{role}</option>
-                    ))}
-                  </select>
+                    options={['owner', 'admin', 'member', 'viewer']}
+                    confirm={confirm}
+                    title={(role) => `Change role to ${role}`}
+                    message={(role) => `${item.email} changes from ${item.companyRole || item.role} to ${role}. The new role is applied right away.`}
+                    confirmLabel="Change role"
+                    tone="primary"
+                    onApply={async (role) => { await runUserAction(item.id, 'set_role', role); }}
+                    ariaLabel={`Role for ${item.email}`}
+                  />
                 </div>
               </div>
             ))}
@@ -577,25 +699,35 @@ export default function PlatformAdminPanel({ section, onSectionChange, state }: 
               </select>
               <button
                 className="btn btn-primary btn-sm"
-                onClick={async () => {
+                onClick={() => {
                   if (newCase.title.trim().length < 4) {
                     notify('Case title is too short', 'error');
                     return;
                   }
-                  try {
-                    await platformAdminApi.createInvestigation({
-                      title: newCase.title.trim(),
-                      severity: newCase.severity,
-                      type: 'abuse',
-                      priority: newCase.severity === 'critical' ? 'P1' : 'P2',
-                      summary: 'Created from the control plane console',
-                    });
-                    setNewCase({ title: '', severity: 'medium', tenantId: '' });
-                    notify('Investigation created');
-                    void load();
-                  } catch (error) {
-                    notify(error instanceof Error ? error.message : 'Unable to create investigation', 'error');
-                  }
+                  const title = newCase.title.trim();
+                  const severity = newCase.severity;
+                  confirm({
+                    title: 'Open a new case',
+                    message: `"${title}" is opened as a ${severity} severity case and is written to the platform audit trail.`,
+                    confirmLabel: 'Open case',
+                    tone: 'primary',
+                    onConfirm: async () => {
+                      try {
+                        await platformAdminApi.createInvestigation({
+                          title,
+                          severity,
+                          type: 'abuse',
+                          priority: severity === 'critical' ? 'P1' : 'P2',
+                          summary: 'Created from the control plane console',
+                        });
+                        setNewCase({ title: '', severity: 'medium', tenantId: '' });
+                        notify('Investigation created');
+                        void load();
+                      } catch (error) {
+                        notify(error instanceof Error ? error.message : 'Unable to create investigation', 'error');
+                      }
+                    },
+                  });
                 }}
               >
                 <Plus size={13} /> New case
@@ -630,15 +762,23 @@ export default function PlatformAdminPanel({ section, onSectionChange, state }: 
                   </button>
                   <button
                     className="btn btn-ghost btn-sm"
-                    onClick={async () => {
+                    onClick={() => {
                       const next = item.status === 'resolved' ? 'open' : 'resolved';
-                      try {
-                        await platformAdminApi.updateInvestigation(item.id, { status: next });
-                        notify(`Case marked ${next}`);
-                        void load();
-                      } catch (error) {
-                        notify(error instanceof Error ? error.message : 'Update failed', 'error');
-                      }
+                      confirm({
+                        title: item.status === 'resolved' ? 'Reopen case' : 'Resolve case',
+                        message: `${item.caseNumber} (${item.title}) changes from ${item.status} to ${next}.`,
+                        confirmLabel: item.status === 'resolved' ? 'Reopen case' : 'Resolve case',
+                        tone: 'primary',
+                        onConfirm: async () => {
+                          try {
+                            await platformAdminApi.updateInvestigation(item.id, { status: next });
+                            notify(`Case marked ${next}`);
+                            void load();
+                          } catch (error) {
+                            notify(error instanceof Error ? error.message : 'Update failed', 'error');
+                          }
+                        },
+                      });
                     }}
                   >
                     {item.status === 'resolved' ? 'Reopen' : 'Resolve'}
@@ -753,23 +893,25 @@ export default function PlatformAdminPanel({ section, onSectionChange, state }: 
                   <Badge value={ticket.status}>{ticket.status}</Badge>
                 </div>
                 <div className="admin-row-actions">
-                  <select
-                    className="input input-auto"
+                  <AdminConfirmSelect
                     value={ticket.status}
-                    onChange={async (event) => {
+                    options={['open', 'pending', 'resolved', 'closed']}
+                    confirm={confirm}
+                    title={(status) => `Move ticket to ${status}`}
+                    message={(status) => `The ticket changes from ${ticket.status} to ${status}.`}
+                    confirmLabel="Change status"
+                    tone={(status) => (status === 'closed' ? 'danger' : 'primary')}
+                    onApply={async (status) => {
                       try {
-                        await platformAdminApi.updateTicket(ticket.id, { status: event.target.value });
-                        notify(`Ticket moved to ${event.target.value}`);
+                        await platformAdminApi.updateTicket(ticket.id, { status });
+                        notify(`Ticket moved to ${status}`);
                         void load();
                       } catch (error) {
                         notify(error instanceof Error ? error.message : 'Update failed', 'error');
                       }
                     }}
-                  >
-                    {['open', 'pending', 'resolved', 'closed'].map((status) => (
-                      <option key={status} value={status}>{status}</option>
-                    ))}
-                  </select>
+                    ariaLabel={`Status for ticket ${ticket.id}`}
+                  />
                 </div>
               </div>
             ))}
@@ -792,19 +934,29 @@ export default function PlatformAdminPanel({ section, onSectionChange, state }: 
               </select>
               <button
                 className="btn btn-primary btn-sm"
-                onClick={async () => {
+                onClick={() => {
                   if (!newAdmin.email.includes('@')) {
                     notify('Enter a valid email address', 'error');
                     return;
                   }
-                  try {
-                    await platformAdminApi.addAdmin({ email: newAdmin.email.trim(), role: newAdmin.role });
-                    setNewAdmin({ email: '', role: 'admin' });
-                    notify('Administrator added');
-                    void load();
-                  } catch (error) {
-                    notify(error instanceof Error ? error.message : 'Unable to add administrator', 'error');
-                  }
+                  const email = newAdmin.email.trim();
+                  const role = newAdmin.role;
+                  confirm({
+                    title: 'Add platform administrator',
+                    message: `${email} is added to the platform team with the ${role} role and can sign in to the control plane.`,
+                    confirmLabel: 'Add administrator',
+                    tone: 'primary',
+                    onConfirm: async () => {
+                      try {
+                        await platformAdminApi.addAdmin({ email, role });
+                        setNewAdmin({ email: '', role: 'admin' });
+                        notify('Administrator added');
+                        void load();
+                      } catch (error) {
+                        notify(error instanceof Error ? error.message : 'Unable to add administrator', 'error');
+                      }
+                    },
+                  });
                 }}
               >
                 <Plus size={13} /> Add administrator
@@ -824,23 +976,25 @@ export default function PlatformAdminPanel({ section, onSectionChange, state }: 
                   <span>{admin.permissions?.length || 0} permissions</span>
                 </div>
                 <div className="admin-row-actions">
-                  <select
-                    className="input input-auto"
+                  <AdminConfirmSelect
                     value={admin.role}
-                    onChange={async (event) => {
+                    options={(team?.roles || []).map((role) => role.key)}
+                    confirm={confirm}
+                    title={(role) => `Change role to ${role}`}
+                    message={(role) => `${admin.email} changes from ${admin.role} to ${role}. The new permissions apply right away.`}
+                    confirmLabel="Change role"
+                    tone="primary"
+                    onApply={async (role) => {
                       try {
-                        await platformAdminApi.updateAdmin(admin.email, { role: event.target.value });
-                        notify(`${admin.email} is now ${event.target.value}`);
+                        await platformAdminApi.updateAdmin(admin.email, { role });
+                        notify(`${admin.email} is now ${role}`);
                         void load();
                       } catch (error) {
                         notify(error instanceof Error ? error.message : 'Update failed', 'error');
                       }
                     }}
-                  >
-                    {(team?.roles || []).map((role) => (
-                      <option key={role.key} value={role.key}>{role.key}</option>
-                    ))}
-                  </select>
+                    ariaLabel={`Role for ${admin.email}`}
+                  />
                 </div>
               </div>
             ))}
@@ -891,14 +1045,23 @@ export default function PlatformAdminPanel({ section, onSectionChange, state }: 
                   <div className="admin-row-actions">
                     <button
                       className="btn btn-ghost btn-sm"
-                      onClick={async () => {
-                        try {
-                          await platformAdminApi.updateFlag({ key: flag.key, enabled: !flag.enabled });
-                          notify(`${flag.name} ${flag.enabled ? 'disabled' : 'enabled'}`);
-                          void load();
-                        } catch (error) {
-                          notify(error instanceof Error ? error.message : 'Update failed', 'error');
-                        }
+                      onClick={() => {
+                        const enabled = !flag.enabled;
+                        confirm({
+                          title: enabled ? 'Enable feature flag' : 'Disable feature flag',
+                          message: `${flag.name} (${flag.key}) is ${enabled ? 'enabled' : 'disabled'} for every workspace on the platform.`,
+                          confirmLabel: enabled ? 'Enable flag' : 'Disable flag',
+                          tone: enabled ? 'primary' : 'danger',
+                          onConfirm: async () => {
+                            try {
+                              await platformAdminApi.updateFlag({ key: flag.key, enabled });
+                              notify(`${flag.name} ${enabled ? 'enabled' : 'disabled'}`);
+                              void load();
+                            } catch (error) {
+                              notify(error instanceof Error ? error.message : 'Update failed', 'error');
+                            }
+                          },
+                        });
                       }}
                     >
                       {flag.enabled ? 'Disable' : 'Enable'}
@@ -923,15 +1086,23 @@ export default function PlatformAdminPanel({ section, onSectionChange, state }: 
                   <div className="admin-row-actions">
                     <button
                       className="btn btn-ghost btn-sm"
-                      onClick={async () => {
+                      onClick={() => {
                         const next = announcement.status === 'published' ? 'archived' : 'published';
-                        try {
-                          await platformAdminApi.updateAnnouncement(announcement.id, next);
-                          notify(`Announcement ${next}`);
-                          void load();
-                        } catch (error) {
-                          notify(error instanceof Error ? error.message : 'Update failed', 'error');
-                        }
+                        confirm({
+                          title: next === 'published' ? 'Publish announcement' : 'Archive announcement',
+                          message: `"${announcement.title}" is ${next} for the ${announcement.audience} audience.`,
+                          confirmLabel: next === 'published' ? 'Publish' : 'Archive',
+                          tone: 'primary',
+                          onConfirm: async () => {
+                            try {
+                              await platformAdminApi.updateAnnouncement(announcement.id, next);
+                              notify(`Announcement ${next}`);
+                              void load();
+                            } catch (error) {
+                              notify(error instanceof Error ? error.message : 'Update failed', 'error');
+                            }
+                          },
+                        });
                       }}
                     >
                       {announcement.status === 'published' ? 'Archive' : 'Publish'}
@@ -961,17 +1132,28 @@ export default function PlatformAdminPanel({ section, onSectionChange, state }: 
                         const key = setting.key;
                         const raw = window.prompt(`Value for ${key} (JSON)`, JSON.stringify(setting.value));
                         if (raw === null) return;
+                        let parsed: unknown;
                         try {
-                          const parsed = JSON.parse(raw);
-                          void platformAdminApi.updateSetting(key, parsed).then(() => {
-                            notify(`${key} updated`);
-                            void load();
-                          }).catch((error: unknown) => {
-                            notify(error instanceof Error ? error.message : 'Update failed', 'error');
-                          });
+                          parsed = JSON.parse(raw);
                         } catch {
                           notify('Value must be valid JSON', 'error');
+                          return;
                         }
+                        confirm({
+                          title: 'Update platform setting',
+                          message: `${key} is set to ${raw}. The new value applies to the whole platform right away.`,
+                          confirmLabel: 'Save setting',
+                          tone: 'primary',
+                          onConfirm: async () => {
+                            try {
+                              await platformAdminApi.updateSetting(key, parsed);
+                              notify(`${key} updated`);
+                              void load();
+                            } catch (error) {
+                              notify(error instanceof Error ? error.message : 'Update failed', 'error');
+                            }
+                          },
+                        });
                       }}
                     >
                       <Flag size={13} /> Edit
@@ -1050,32 +1232,34 @@ export default function PlatformAdminPanel({ section, onSectionChange, state }: 
               </div>
               <div className="flex gap-2 flex-wrap">
                 {companyDetail.company.status === 'active' ? (
-                  <button className="btn btn-danger btn-sm" onClick={() => { void runCompanyAction(companyDetail.company.id, 'suspend'); }}>
+                  <button className="btn btn-danger btn-sm" onClick={() => { confirmCompanyAction(companyDetail.company.id, 'suspend', {}, companyDetail.company.name); }}>
                     Suspend company
                   </button>
                 ) : (
-                  <button className="btn btn-primary btn-sm" onClick={() => { void runCompanyAction(companyDetail.company.id, 'activate'); }}>
+                  <button className="btn btn-primary btn-sm" onClick={() => { confirmCompanyAction(companyDetail.company.id, 'activate', {}, companyDetail.company.name); }}>
                     Reactivate company
                   </button>
                 )}
-                <button className="btn btn-ghost btn-sm" onClick={() => { void runCompanyAction(companyDetail.company.id, 'revoke_api_keys'); }}>
+                <button className="btn btn-ghost btn-sm" onClick={() => { confirmCompanyAction(companyDetail.company.id, 'revoke_api_keys', {}, companyDetail.company.name); }}>
                   Revoke all API keys
                 </button>
-                <button className="btn btn-ghost btn-sm" onClick={() => { void runCompanyAction(companyDetail.company.id, 'terminate_sessions'); }}>
+                <button className="btn btn-ghost btn-sm" onClick={() => { confirmCompanyAction(companyDetail.company.id, 'terminate_sessions', {}, companyDetail.company.name); }}>
                   End all sessions
                 </button>
-                <button className="btn btn-ghost btn-sm" onClick={() => { void runCompanyAction(companyDetail.company.id, 'close_cases'); }}>
+                <button className="btn btn-ghost btn-sm" onClick={() => { confirmCompanyAction(companyDetail.company.id, 'close_cases', {}, companyDetail.company.name); }}>
                   Close investigations
                 </button>
-                <select
-                  className="input input-auto"
+                <AdminConfirmSelect
                   value={companyDetail.company.plan}
-                  onChange={(event) => { void runCompanyAction(companyDetail.company.id, 'set_plan', { plan: event.target.value }); }}
-                >
-                  {['free', 'starter', 'business', 'enterprise'].map((plan) => (
-                    <option key={plan} value={plan}>{plan}</option>
-                  ))}
-                </select>
+                  options={['free', 'starter', 'business', 'enterprise']}
+                  confirm={confirm}
+                  title={(plan) => `Move to the ${plan} plan`}
+                  message={(plan) => `${companyDetail.company.name} moves from the ${companyDetail.company.plan} plan to the ${plan} plan. Billing and entitlements change right away.`}
+                  confirmLabel="Change plan"
+                  tone="primary"
+                  onApply={async (plan) => { await runCompanyAction(companyDetail.company.id, 'set_plan', { plan }); }}
+                  ariaLabel={`Plan for ${companyDetail.company.name}`}
+                />
                 <input
                   className="input input-auto"
                   type="number"
@@ -1084,9 +1268,8 @@ export default function PlatformAdminPanel({ section, onSectionChange, state }: 
                   defaultValue={companyDetail.company.seatLimit}
                   onBlur={(event) => {
                     const seats = Number(event.target.value);
-                    if (seats && seats !== companyDetail.company.seatLimit) {
-                      void runCompanyAction(companyDetail.company.id, 'set_seats', { seatLimit: seats });
-                    }
+                    if (!seats || seats === companyDetail.company.seatLimit) return;
+                    confirmCompanyAction(companyDetail.company.id, 'set_seats', { seatLimit: seats }, companyDetail.company.name);
                   }}
                   aria-label="Seat limit"
                 />
@@ -1250,18 +1433,27 @@ export default function PlatformAdminPanel({ section, onSectionChange, state }: 
                 />
                 <button
                   className="btn btn-primary btn-sm"
-                  onClick={async () => {
-                    if (!caseNote.trim()) return;
-                    try {
-                      await platformAdminApi.addInvestigationEvent(activeCase.id, { message: caseNote.trim(), kind: 'note' });
-                      setCaseNote('');
-                      const detail = await platformAdminApi.investigation(activeCase.id);
-                      setActiveCase(detail.investigation);
-                      setCaseEvents(detail.events);
-                      notify('Note added to the case');
-                    } catch (error) {
-                      notify(error instanceof Error ? error.message : 'Unable to add note', 'error');
-                    }
+                  onClick={() => {
+                    const message = caseNote.trim();
+                    if (!message) return;
+                    confirm({
+                      title: 'Add note to the case',
+                      message: `The note is appended to the ${activeCase.caseNumber} timeline and is written to the platform audit trail.`,
+                      confirmLabel: 'Add note',
+                      tone: 'primary',
+                      onConfirm: async () => {
+                        try {
+                          await platformAdminApi.addInvestigationEvent(activeCase.id, { message, kind: 'note' });
+                          setCaseNote('');
+                          const detail = await platformAdminApi.investigation(activeCase.id);
+                          setActiveCase(detail.investigation);
+                          setCaseEvents(detail.events);
+                          notify('Note added to the case');
+                        } catch (error) {
+                          notify(error instanceof Error ? error.message : 'Unable to add note', 'error');
+                        }
+                      },
+                    });
                   }}
                 >
                   <Plus size={13} /> Add note
@@ -1271,6 +1463,7 @@ export default function PlatformAdminPanel({ section, onSectionChange, state }: 
           </div>
         </div>
       )}
+      {dialog}
     </div>
   );
 }

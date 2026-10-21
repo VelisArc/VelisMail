@@ -106,6 +106,12 @@ export const workspaceApi = {
   domains: () =>
     request<{ success: boolean; domains: WorkspaceDomain[] }>('/company/domains'),
 
+  createDomain: (payload: { domain: string }) =>
+    request<{ success: boolean; id: string; domain: string; verificationToken: string }>(
+      '/company/domains',
+      { method: 'POST', body: JSON.stringify(payload) },
+    ),
+
   mailboxes: () =>
     request<{ success: boolean; mailboxes: BusinessMailbox[] }>('/company/mailboxes'),
 

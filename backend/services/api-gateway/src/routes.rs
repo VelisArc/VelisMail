@@ -28,6 +28,7 @@ use sqlx::{
 use std::collections::HashMap;
 use std::net::{IpAddr, SocketAddr};
 use std::sync::Mutex;
+use std::time::Instant;
 use tokio::{
     net::{lookup_host, TcpStream},
     time::{sleep, timeout, Duration},
@@ -182,7 +183,10 @@ pub fn api_v1_routes(_state: &AppState) -> Router<AppState> {
             "/company/team/invitations/{id}",
             delete(company_api::revoke_invitation),
         )
-        .route("/company/domains", get(company_api::list_domains))
+        .route(
+            "/company/domains",
+            get(company_api::list_domains).post(company_api::create_domain),
+        )
         .route(
             "/company/mailboxes",
             get(company_api::list_mailboxes).post(company_api::create_mailbox),
@@ -3752,9 +3756,49 @@ pub async fn delete_platform_user(
 }
 
 static POOLS: Lazy<Mutex<HashMap<String, PgPool>>> = Lazy::new(|| Mutex::new(HashMap::new()));
+/// Recently failed tenant databases. A dead customer database must not make
+/// every request wait for the full connect timeout, so failures are cached
+/// briefly and returned immediately.
+static FAILED_POOLS: Lazy<Mutex<HashMap<String, (Instant, String)>>> =
+    Lazy::new(|| Mutex::new(HashMap::new()));
+
+/// How long a failed tenant database is remembered.
+const FAILED_POOL_TTL: Duration = Duration::from_secs(30);
+/// Hard limit for reaching a customer database.
+const TENANT_DB_CONNECT_TIMEOUT: Duration = Duration::from_secs(8);
+/// Hard limit for a single customer database query.
+const TENANT_DB_QUERY_TIMEOUT: Duration = Duration::from_secs(10);
+
+fn remember_failed_pool(url: &str, reason: &str) {
+    if let Ok(mut pools) = FAILED_POOLS.lock() {
+        pools.insert(url.to_string(), (Instant::now(), reason.to_string()));
+    }
+}
+
+fn recent_failed_pool(url: &str) -> Option<String> {
+    let pools = FAILED_POOLS.lock().ok()?;
+    match pools.get(url) {
+        Some((at, reason)) if at.elapsed() < FAILED_POOL_TTL => Some(reason.clone()),
+        Some(_) => {
+            drop(pools);
+            if let Ok(mut pools) = FAILED_POOLS.lock() {
+                pools.remove(url);
+            }
+            None
+        }
+        None => None,
+    }
+}
 
 async fn get_tenant_pool(db_url: &str) -> Result<PgPool, String> {
     let normalized_url = velismail_common::traffic::validate_external_db_url(db_url).await?;
+
+    if let Some(reason) = recent_failed_pool(&normalized_url) {
+        return Err(format!(
+            "The business database is temporarily unreachable: {}",
+            reason
+        ));
+    }
 
     if let Some(pool) = {
         let pools = POOLS
@@ -3770,15 +3814,33 @@ async fn get_tenant_pool(db_url: &str) -> Result<PgPool, String> {
         }
     }
 
-    let pool = PgPoolOptions::new()
-        .max_connections(8)
-        .min_connections(0)
-        .idle_timeout(Some(Duration::from_secs(60)))
-        .max_lifetime(Some(Duration::from_secs(300)))
-        .acquire_timeout(Duration::from_secs(10))
-        .connect(&normalized_url)
-        .await
-        .map_err(|e| e.to_string())?;
+    let pool: PgPool = match timeout(
+        TENANT_DB_CONNECT_TIMEOUT,
+        PgPoolOptions::new()
+            .max_connections(8)
+            .min_connections(0)
+            .idle_timeout(Some(Duration::from_secs(60)))
+            .max_lifetime(Some(Duration::from_secs(300)))
+            .acquire_timeout(Duration::from_secs(10))
+            .connect(&normalized_url),
+    )
+    .await
+    {
+        Ok(Ok(pool)) => pool,
+        Ok(Err(err)) => {
+            let reason = err.to_string();
+            remember_failed_pool(&normalized_url, &reason);
+            return Err(reason);
+        }
+        Err(_) => {
+            let reason = format!(
+                "no answer within {} seconds",
+                TENANT_DB_CONNECT_TIMEOUT.as_secs()
+            );
+            remember_failed_pool(&normalized_url, &reason);
+            return Err(reason);
+        }
+    };
 
     {
         let mut pools = POOLS
@@ -4067,7 +4129,7 @@ async fn read_business_mailboxes(db_url: &str, domain: &str) -> (StatusCode, Jso
         Ok(p) => p,
         Err(e) => {
             return (
-                StatusCode::INTERNAL_SERVER_ERROR,
+                StatusCode::SERVICE_UNAVAILABLE,
                 Json(json!({"success": false, "error": format!("DB Error: {}", e)})),
             )
         }
@@ -4075,26 +4137,33 @@ async fn read_business_mailboxes(db_url: &str, domain: &str) -> (StatusCode, Jso
 
     if let Err(e) = ensure_business_mailboxes_table(&pool).await {
         return (
-            StatusCode::INTERNAL_SERVER_ERROR,
+            StatusCode::SERVICE_UNAVAILABLE,
             Json(json!({"success": false, "error": format!("Schema Error: {}", e)})),
         );
     }
 
-    let rows = match sqlx::query(
+    let query = sqlx::query(
         "SELECT id, domain, address, display_name, kind, aliases, active, source, created_at, last_used_at
          FROM business_mailboxes
          WHERE domain = $1
          ORDER BY active DESC, created_at ASC",
     )
-    .bind(&domain)
-    .fetch_all(&pool)
-    .await
-    {
-        Ok(rows) => rows,
-        Err(e) => {
+    .bind(&domain);
+    let rows = match timeout(TENANT_DB_QUERY_TIMEOUT, query.fetch_all(&pool)).await {
+        Ok(Ok(rows)) => rows,
+        Ok(Err(e)) => {
             return (
-                StatusCode::INTERNAL_SERVER_ERROR,
+                StatusCode::SERVICE_UNAVAILABLE,
                 Json(json!({"success": false, "error": format!("Query Error: {}", e)})),
+            )
+        }
+        Err(_) => {
+            return (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(json!({
+                    "success": false,
+                    "error": "The business database did not answer in time."
+                })),
             )
         }
     };
@@ -4704,7 +4773,7 @@ async fn read_business_emails(db_url: &str) -> (StatusCode, Json<Value>) {
         Ok(p) => p,
         Err(e) => {
             return (
-                StatusCode::INTERNAL_SERVER_ERROR,
+                StatusCode::SERVICE_UNAVAILABLE,
                 Json(json!({"success": false, "error": format!("DB Error: {}", e)})),
             )
         }
@@ -4712,18 +4781,31 @@ async fn read_business_emails(db_url: &str) -> (StatusCode, Json<Value>) {
 
     if let Err(e) = ensure_business_emails_table(&pool).await {
         return (
-            StatusCode::INTERNAL_SERVER_ERROR,
+            StatusCode::SERVICE_UNAVAILABLE,
             Json(json!({"success": false, "error": format!("Schema Error: {}", e)})),
         );
     }
 
-    let rows = match sqlx::query(
-        "SELECT id, sender, sender_name, recipients, subject, body, folder, created_at, is_read, is_starred, has_attachment, html_body, in_reply_to, thread_id, message_id FROM business_emails ORDER BY created_at DESC"
-    )
-    .fetch_all(&pool)
-    .await {
-        Ok(r) => r,
-        Err(e) => return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"success": false, "error": format!("Query Error: {}", e)}))),
+    let query = sqlx::query(
+        "SELECT id, sender, sender_name, recipients, subject, body, folder, created_at, is_read, is_starred, has_attachment, html_body, in_reply_to, thread_id, message_id FROM business_emails ORDER BY created_at DESC",
+    );
+    let rows = match timeout(TENANT_DB_QUERY_TIMEOUT, query.fetch_all(&pool)).await {
+        Ok(Ok(rows)) => rows,
+        Ok(Err(e)) => {
+            return (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(json!({"success": false, "error": format!("Query Error: {}", e)})),
+            )
+        }
+        Err(_) => {
+            return (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(json!({
+                    "success": false,
+                    "error": "The business database did not answer in time."
+                })),
+            )
+        }
     };
 
     let mut emails = Vec::new();
