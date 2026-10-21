@@ -18,7 +18,6 @@ interface SidebarProps {
   sidebarOpen: boolean;
   setSidebarOpen: (open: boolean) => void;
   hasRoleAccess: (tab: BizTab) => boolean;
-  canAccessPlatformAdmin: boolean;
   viewMode: 'workspace' | 'control-plane';
   onViewModeChange: (mode: 'workspace' | 'control-plane') => void;
   platformSection: PlatformSection;
@@ -85,7 +84,6 @@ export default function Sidebar({
   sidebarOpen,
   setSidebarOpen,
   hasRoleAccess,
-  canAccessPlatformAdmin,
   viewMode,
   onViewModeChange,
   platformSection,
@@ -274,15 +272,6 @@ export default function Sidebar({
             {hasRoleAccess('billing') && (
               <button type="button" className={`side-nav-btn ${activeBizTab === 'billing' ? 'active' : ''}`} onClick={() => handleNav('billing')}>
                 <CreditCard size={16} /> <span>Billing</span>
-              </button>
-            )}
-            {canAccessPlatformAdmin && (
-              <button
-                type="button"
-                className="side-nav-btn"
-                onClick={() => { onViewModeChange('control-plane'); setSidebarOpen(false); }}
-              >
-                <Crown size={16} /> <span>Platform Admin</span>
               </button>
             )}
           </Section>

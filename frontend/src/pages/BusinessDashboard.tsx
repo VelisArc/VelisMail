@@ -673,7 +673,7 @@ export default function BusinessDashboard() {
         activeFolder={activeFolder} setActiveFolder={setActiveFolder}
         onCompose={() => openComposeWith()} user={user}
         onLogout={() => setShowLogoutConfirm(true)} sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen}
-        hasRoleAccess={hasRoleAccess} canAccessPlatformAdmin={canAccessPlatformAdmin}
+        hasRoleAccess={hasRoleAccess}
         viewMode={viewMode} onViewModeChange={switchView}
         platformSection={platformSection} onPlatformSectionChange={setPlatformSection}
         onProfileClick={() => navigate('/settings')}
