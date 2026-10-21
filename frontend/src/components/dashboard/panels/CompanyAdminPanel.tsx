@@ -40,6 +40,27 @@ import { useAdminConfirm } from '../useAdminConfirm';
 
 type Tab = 'overview' | 'team' | 'domains' | 'mailboxes' | 'usage' | 'billing' | 'security' | 'api' | 'audit' | 'integrations';
 
+/** Every scope a workspace API key can carry, with what it unlocks. */
+const API_SCOPES: Array<{ id: string; detail: string }> = [
+  { id: 'admin.full', detail: 'Everything below, in one key' },
+  { id: 'mail.send', detail: 'Send transactional mail' },
+  { id: 'mail.read', detail: 'Read mailboxes and the delivery queue' },
+  { id: 'team.read', detail: 'List members and invitations' },
+  { id: 'team.write', detail: 'Invite, re-role and remove members' },
+  { id: 'domains.read', detail: 'List domains and DNS records' },
+  { id: 'domains.write', detail: 'Add and verify domains' },
+  { id: 'mailboxes.read', detail: 'List mailboxes' },
+  { id: 'mailboxes.write', detail: 'Create and remove mailboxes' },
+  { id: 'contacts.read', detail: 'List contacts and groups' },
+  { id: 'contacts.write', detail: 'Create and remove contacts' },
+  { id: 'templates.read', detail: 'List templates' },
+  { id: 'templates.write', detail: 'Create and edit templates' },
+  { id: 'signatures.read', detail: 'List signatures' },
+  { id: 'signatures.write', detail: 'Create and edit signatures' },
+  { id: 'audit.read', detail: 'Read the workspace audit trail' },
+  { id: 'analytics.read', detail: 'Read usage and analytics' },
+];
+
 const TABS: Array<{ id: Tab; label: string; icon: typeof Activity }> = [
   { id: 'overview', label: 'Overview', icon: BarChart3 },
   { id: 'team', label: 'Team', icon: Users },
@@ -282,10 +303,34 @@ export default function CompanyAdminPanel({ state }: { state: DashboardState }) 
 
           <div className="admin-grid-2">
             <section className="glass-card">
-              <div className="admin-card-head"><div><h3>Plan consumption</h3><p>Current billing period</p></div><BarChart3 size={16} /></div>
-              <div className="admin-progress"><div><span>Email volume</span><strong>{number(overview.counts.sent30d)} / {number(overview.limits.emailsPerMonth)}</strong></div><div className="admin-progress-track"><i className={overview.usage.emailPercent > 85 ? 'warn' : ''} style={{ width: `${Math.max(1, overview.usage.emailPercent)}%` }} /></div></div>
-              <div className="admin-progress"><div><span>Storage</span><strong>{bytes(overview.counts.storageBytes)} / {bytes(overview.limits.storageBytes)}</strong></div><div className="admin-progress-track"><i className={overview.usage.storagePercent > 85 ? 'warn' : ''} style={{ width: `${Math.max(1, overview.usage.storagePercent)}%` }} /></div></div>
-              <div className="admin-progress"><div><span>Seats</span><strong>{number(overview.counts.members)} / {number(overview.limits.seats)}</strong></div><div className="admin-progress-track"><i style={{ width: `${Math.min(100, (overview.counts.members / Math.max(1, overview.limits.seats)) * 100)}%` }} /></div></div>
+              <div className="admin-card-head"><div><h3>Plan consumption</h3><p>What your plan includes and what you have used</p></div><BarChart3 size={16} /></div>
+              {overview.trial?.active && (
+                <div className="setup-inline-note">
+                  <AlertTriangle size={14} />
+                  <span>{overview.trial.detail}</span>
+                </div>
+              )}
+              <div className="quota-list">
+                {(overview.quotas || []).map((quota) => {
+                  const percent = quota.limit > 0 ? Math.min(100, (quota.used / quota.limit) * 100) : 0;
+                  const tone = percent >= 100 ? 'over' : percent >= 80 ? 'warn' : '';
+                  const used = quota.unit === 'bytes' ? bytes(quota.used) : number(quota.used);
+                  const limit = quota.unit === 'bytes' ? bytes(quota.limit) : number(quota.limit);
+                  return (
+                    <div key={quota.key} className="quota-row">
+                      <div className="quota-row-head">
+                        <strong>{quota.label}</strong>
+                        <span>{used} / {limit} {quota.unit !== 'bytes' ? quota.unit : ''}</span>
+                      </div>
+                      <div className={`quota-track ${tone}`}><i style={{ width: `${Math.max(1, percent)}%` }} /></div>
+                      <div className="quota-foot">
+                        <span>{quota.source}</span>
+                        <span>{percent.toFixed(0)}% used{percent >= 80 ? ' · upgrade to keep going' : ''}</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
               <div className="admin-usage-foot"><span>{number(overview.counts.apiKeys)} active API keys</span><span>{overview.company.role} access</span></div>
             </section>
 
@@ -588,9 +633,30 @@ export default function CompanyAdminPanel({ state }: { state: DashboardState }) 
             </div>
           </section>
           <section className="glass-card">
-            <div className="admin-card-head"><div><h3>API access</h3><p>Use keys with the VelisMail API gateway</p></div><KeyRound size={16} /></div>
-            <div className="admin-code-block"><code>Authorization: Bearer vsk_live_…</code><code>POST /api/v1/mail/send</code></div>
-            <p className="text-xs text-muted">Scopes limit what a key can do. Secrets are hashed in PostgreSQL and shown only once at creation.</p>
+            <div className="admin-card-head"><div><h3>What a key can do</h3><p>Scopes are enforced by the API, not only in this console</p></div><KeyRound size={16} /></div>
+            <div className="scope-grid">
+              {API_SCOPES.map((scope) => (
+                <div key={scope.id} className="scope-card">
+                  <strong>{scope.id}</strong>
+                  <span className="text-xs text-muted">{scope.detail}</span>
+                </div>
+              ))}
+            </div>
+            <p className="text-xs text-muted">
+              A key with <code>admin.full</code> can run the whole workspace - team, domains, mailboxes,
+              contacts, templates and audit - which is what an assistant or an automation needs. Secrets are
+              hashed in PostgreSQL and shown only once at creation.
+            </p>
+          </section>
+          <section className="glass-card">
+            <div className="admin-card-head"><div><h3>API access</h3><p>Call the workspace API with a key</p></div><KeyRound size={16} /></div>
+            <div className="admin-code-block">
+              <code>Authorization: Bearer vsk_live_…</code>
+              <code>GET /api/v1/company/team</code>
+              <code>GET /api/v1/company/domains</code>
+              <code>POST /api/v1/company/team/invitations</code>
+            </div>
+            <p className="text-xs text-muted">A key is bound to this company only. Revoke it and every integration using it stops immediately.</p>
           </section>
         </>
       )}
@@ -631,30 +697,93 @@ export default function CompanyAdminPanel({ state }: { state: DashboardState }) 
       {keyOpen && (
         <div className="modal-overlay" role="dialog" aria-modal="true" onClick={() => setKeyOpen(false)}>
           <div className="biz-form-modal glass" onClick={(event) => event.stopPropagation()}>
-            <div className="compose-header"><div><h3>Create API key</h3><p>Store the secret immediately — it is only shown once.</p></div><button type="button" className="btn btn-ghost btn-icon" onClick={() => setKeyOpen(false)}><X size={16} /></button></div>
+            <div className="modal-header">
+              <div>
+                <h3><KeyRound size={16} /> Create API key</h3>
+                <p>Store the secret immediately - it is only shown once.</p>
+              </div>
+              <button type="button" className="btn btn-ghost btn-icon" onClick={() => setKeyOpen(false)} aria-label="Close"><X size={16} /></button>
+            </div>
             {!newKey ? (
-              <div className="admin-form">
-                <label>Key name<input className="input" value={keyForm.name} onChange={(event) => setKeyForm((current) => ({ ...current, name: event.target.value }))} placeholder="Transactional mail — production" /></label>
-                <label>Expiry (days)<input className="input" type="number" min={1} max={3650} value={keyForm.expiresInDays} onChange={(event) => setKeyForm((current) => ({ ...current, expiresInDays: Number(event.target.value) }))} /></label>
-                <fieldset><legend>Scopes</legend>{['mail.send', 'mail.read', 'contacts.read', 'domains.read', 'analytics.read'].map((scope) => <label key={scope} className="admin-check"><input type="checkbox" checked={keyForm.scopes.includes(scope)} onChange={(event) => setKeyForm((current) => ({ ...current, scopes: event.target.checked ? [...current.scopes, scope] : current.scopes.filter((item) => item !== scope) }))} />{scope}</label>)}</fieldset>
-                <div className="admin-modal-actions"><button type="button" className="btn btn-ghost btn-sm" onClick={() => setKeyOpen(false)}>Cancel</button><button type="button" className="btn btn-primary btn-sm" onClick={() => {
-                  const name = keyForm.name;
-                  const scopes = keyForm.scopes;
-                  confirm({
-                    title: 'Create API key',
-                    message: `"${name}" is created with the ${scopes.join(', ')} scope(s). The secret is only shown once, so store it immediately.`,
-                    confirmLabel: 'Create key',
-                    tone: 'primary',
-                    onConfirm: async () => { await createKey(); },
-                  });
-                }} disabled={keyForm.name.trim().length < 2 || keyForm.scopes.length === 0}>Create key</button></div>
-              </div>
+              <>
+                <div className="modal-body">
+                  <div className="form-grid">
+                    <div className="form-field">
+                      <label htmlFor="api-key-name">Key name</label>
+                      <input
+                        id="api-key-name"
+                        className="input"
+                        value={keyForm.name}
+                        onChange={(event) => setKeyForm((current) => ({ ...current, name: event.target.value }))}
+                        placeholder="Transactional mail - production"
+                      />
+                    </div>
+                    <div className="form-field">
+                      <label htmlFor="api-key-expiry">Expiry (days)</label>
+                      <input
+                        id="api-key-expiry"
+                        className="input"
+                        type="number"
+                        min={1}
+                        max={3650}
+                        value={keyForm.expiresInDays}
+                        onChange={(event) => setKeyForm((current) => ({ ...current, expiresInDays: Number(event.target.value) }))}
+                      />
+                    </div>
+                    <div className="form-field form-field-full">
+                      <span className="form-label">Scopes</span>
+                      <div className="check-grid">
+                        {API_SCOPES.map((scope) => (
+                          <label key={scope.id} className="check-option">
+                            <input
+                              type="checkbox"
+                              checked={keyForm.scopes.includes(scope.id)}
+                              onChange={(event) => setKeyForm((current) => ({
+                                ...current,
+                                scopes: event.target.checked
+                                  ? [...current.scopes, scope.id]
+                                  : current.scopes.filter((item) => item !== scope.id),
+                              }))}
+                            />
+                            <span>
+                              <strong>{scope.id}</strong>
+                              <span className="text-xs text-muted"> {scope.detail}</span>
+                            </span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div className="modal-footer">
+                  <button type="button" className="btn btn-ghost btn-sm" onClick={() => setKeyOpen(false)}>Cancel</button>
+                  <button type="button" className="btn btn-primary btn-sm" onClick={() => {
+                    const name = keyForm.name;
+                    const scopes = keyForm.scopes;
+                    confirm({
+                      title: 'Create API key',
+                      message: `"${name}" is created with the ${scopes.join(', ')} scope(s). The secret is only shown once, so store it immediately.`,
+                      confirmLabel: 'Create key',
+                      tone: 'primary',
+                      onConfirm: async () => { await createKey(); },
+                    });
+                  }} disabled={keyForm.name.trim().length < 2 || keyForm.scopes.length === 0}>Create key</button>
+                </div>
+              </>
             ) : (
-              <div className="admin-form">
-                <div className="admin-secret-box"><span>New API secret</span><code>{newKey}</code><button type="button" className="btn btn-primary btn-sm" onClick={() => { state.copyToClipboard(newKey); setNotice('API key copied to clipboard.'); }}><Copy size={14} /> Copy</button></div>
-                <p className="text-xs text-muted">This secret cannot be retrieved again. If it is lost, revoke the key and create another.</p>
-                <div className="admin-modal-actions"><button type="button" className="btn btn-primary btn-sm" onClick={() => { setNewKey(''); setKeyOpen(false); setKeyForm({ name: '', scopes: ['mail.send'], expiresInDays: 365 }); }}>Done</button></div>
-              </div>
+              <>
+                <div className="modal-body">
+                  <div className="admin-secret-box">
+                    <span>New API secret</span>
+                    <code>{newKey}</code>
+                    <button type="button" className="btn btn-primary btn-sm" onClick={() => { state.copyToClipboard(newKey); setNotice('API key copied to clipboard.'); }}><Copy size={14} /> Copy secret</button>
+                  </div>
+                  <p className="text-xs text-muted">This secret cannot be retrieved again. If it is lost, revoke the key and create another.</p>
+                </div>
+                <div className="modal-footer">
+                  <button type="button" className="btn btn-primary btn-sm" onClick={() => { setNewKey(''); setKeyOpen(false); setKeyForm({ name: '', scopes: ['mail.send'], expiresInDays: 365 }); }}>Done</button>
+                </div>
+              </>
             )}
           </div>
         </div>

@@ -19,7 +19,6 @@ interface SidebarProps {
   setSidebarOpen: (open: boolean) => void;
   hasRoleAccess: (tab: BizTab) => boolean;
   viewMode: 'workspace' | 'control-plane';
-  onViewModeChange: (mode: 'workspace' | 'control-plane') => void;
   platformSection: PlatformSection;
   onPlatformSectionChange: (section: PlatformSection) => void;
   onProfileClick?: () => void;
@@ -85,7 +84,6 @@ export default function Sidebar({
   setSidebarOpen,
   hasRoleAccess,
   viewMode,
-  onViewModeChange,
   platformSection,
   onPlatformSectionChange,
   onProfileClick,
@@ -151,9 +149,10 @@ export default function Sidebar({
         )}
 
         {isControlPlane && (
-          <button type="button" className="btn btn-primary side-compose" onClick={() => onViewModeChange('workspace')}>
-            <Building2 size={16} /> Back to workspace
-          </button>
+          <div className="side-mode-hint">
+            <Crown size={14} />
+            <span>You are in the platform control plane. Use the switch in the top bar to return to your workspace.</span>
+          </div>
         )}
 
         <nav className="side-nav">

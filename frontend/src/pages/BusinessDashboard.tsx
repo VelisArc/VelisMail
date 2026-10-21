@@ -16,6 +16,7 @@ import QueuePanel from '../components/dashboard/panels/QueuePanel';
 import AnalyticsPanel from '../components/dashboard/panels/AnalyticsPanel';
 import AuditPanel from '../components/dashboard/panels/AuditPanel';
 import CompanyAdminPanel from '../components/dashboard/panels/CompanyAdminPanel';
+import SetupRequired from '../components/dashboard/SetupRequired';
 import PlatformAdminPanel, { type PlatformSection } from '../components/dashboard/panels/PlatformAdminPanel';
 import { platformOwnerUids, platformOwnerEmails } from '../lib/firebase';
 import { toAuditEntry, toQueueItem, toTeamMember, toTemplate, workspaceApi } from '../api/company';
@@ -664,7 +665,10 @@ export default function BusinessDashboard() {
   }), [activeBizTab, activeFolder, searchQuery, composeOpen, composeTo, composeSubject, composeBody, composeReplyQuote, sending, selectedFromAddress, activeMailboxAddress, annual, loadingPayment, toast, showLogoutConfirm, confirmRevokeId, pendingRoleChange, confirmAction, domainsList, activeDomain, domainMailboxes, domainGroups, teamMembers, mailQueue, auditLog, templates, connectionUsage, adminUsers, sortOrder, selectedEmails, mailStatusFilter, notificationEnabled, soundEnabled, showQueueFilters, queueStatusFilter, templateSearch, showAddDomain, newDomainInput, teamFilter, auditFilter, adminSearch, adminPlanFilter, adminStatusFilter, adminRiskFilter, adminPage, sidebarOpen, user, inviteOpen, inviteName, inviteEmail, inviteRole, inviteExpiresHours, issuedInvite, templateEditorOpen, templateName, templateSubject, templateBody, previewTemplate, selectedAdminUser, adminStatusConfirm, domainDetails, mailboxDetails, groupDetails, mailboxLocalPart, mailboxDisplayName, mailboxKind, groupName, groupLocalPart, groupMembers, verifyingDomainId, domainVerifyOpen, domainVerifySteps, domainVerifyProviderRecords, copiedField, signaturesList, contactsList, contactsSearch, activeSessions, signatureEditorOpen, signatureEditorName, signatureEditorContent, editingSignatureId, contactEditorOpen, contactEditorName, contactEditorEmail, contactEditorPhone, contactEditorCompany, editingContactId, showToast, activeDomainName, canAccessPlatformAdmin, handleLogout, handleSendEmail, hasRoleAccess, refreshAdminUsers, refreshAudit, refreshConnectionUsage, refreshContacts, refreshGroups, refreshMailboxes, refreshQueue, refreshSessions, refreshSignatures, refreshTeam, refreshTemplates]);
 
   if (!user) return <Navigate to="/login" replace />;
-  if (!isBusinessSetupReady(user)) return <Navigate to="/business-setup" replace />;
+  // The product needs a database, a mail API key, a verified domain and a mail
+  // provider. Until the workspace is configured the dashboard explains what is
+  // missing instead of showing screens that cannot work.
+  if (!isBusinessSetupReady(user)) return <SetupRequired user={user} />;
 
   return (
     <div className="biz-dash">
@@ -674,7 +678,7 @@ export default function BusinessDashboard() {
         onCompose={() => openComposeWith()} user={user}
         onLogout={() => setShowLogoutConfirm(true)} sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen}
         hasRoleAccess={hasRoleAccess}
-        viewMode={viewMode} onViewModeChange={switchView}
+        viewMode={viewMode}
         platformSection={platformSection} onPlatformSectionChange={setPlatformSection}
         onProfileClick={() => navigate('/settings')}
         state={dashboardState}

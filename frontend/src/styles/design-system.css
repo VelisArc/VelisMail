@@ -1,0 +1,446 @@
+/* ====================================================================
+   VelisMail - additive component styles
+   --------------------------------------------------------------------
+   These rules only add the components that did not exist before (view
+   switch, setup gate, quota rows, scope matrix, modal body/footer). The
+   colour, type and shape language of the product is defined in
+   `index.css` and is intentionally left untouched here.
+   ==================================================================== */
+
+/* ─── Modals: body and footer regions ──────────────────────────────── */
+
+.modal-header,
+.compose-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-4) var(--space-5);
+  border-bottom: 1px solid var(--border-primary);
+  background: var(--bg-surface);
+  flex-shrink: 0;
+}
+
+.modal-header h3,
+.compose-header h3 {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-base);
+  font-weight: var(--font-weight-bold);
+  color: var(--text-primary);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wide);
+  margin: 0;
+}
+
+.modal-header p,
+.compose-header p {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  margin: 2px 0 0;
+}
+
+.modal-body {
+  padding: var(--space-5);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  flex: 1;
+  min-height: 0;
+}
+
+.modal-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-5);
+  border-top: 1px solid var(--border-primary);
+  background: var(--bg-surface-2);
+  flex-shrink: 0;
+}
+
+/* ─── Form layout helpers ──────────────────────────────────────────── */
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-4);
+}
+
+.form-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.form-field > label,
+.form-label {
+  font-size: var(--text-xs);
+  font-weight: var(--font-weight-bold);
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wide);
+}
+
+.form-field-full { grid-column: 1 / -1; }
+.form-field.full-width { grid-column: 1 / -1; }
+
+.check-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: var(--space-2);
+  border: 1px solid var(--border-primary);
+  padding: var(--space-3);
+  background: var(--bg-surface-2);
+}
+
+.check-option {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  font-size: var(--text-xs);
+  color: var(--text-primary);
+  cursor: pointer;
+  text-align: left;
+}
+
+.check-option > span {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.check-option strong {
+  font-weight: var(--font-weight-bold);
+}
+
+/* ─── View switch ──────────────────────────────────────────────────── */
+
+.dash-view-switch,
+.admin-view-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 3px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-primary);
+}
+
+.dash-view-switch-btn,
+.admin-view-switch-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 0;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  font-weight: var(--font-weight-bold);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wide);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.dash-view-switch-btn:hover,
+.admin-view-switch-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.dash-view-switch-btn.active,
+.admin-view-switch-btn.active {
+  background: var(--primary);
+  color: var(--text-inverted);
+}
+
+.admin-view-switch {
+  margin-bottom: var(--space-5);
+  flex-wrap: wrap;
+  align-self: flex-start;
+  max-width: 100%;
+}
+
+/* ─── Sidebar note (control plane) ─────────────────────────────────── */
+
+.side-mode-hint {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  margin: 0 12px 12px;
+  padding: var(--space-3);
+  background: var(--bg-surface-2);
+  border: 1px solid var(--border-primary);
+  color: var(--text-secondary);
+  font-size: var(--text-2xs);
+  line-height: 1.5;
+}
+
+.side-mode-hint svg {
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+/* ─── Setup gate ───────────────────────────────────────────────────── */
+
+.setup-required {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-8) var(--space-5);
+  background: var(--bg-body);
+}
+
+.setup-required-card {
+  width: 100%;
+  max-width: 560px;
+  padding: var(--space-8);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.setup-required-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  align-self: flex-start;
+  padding: 4px 10px;
+  border: 1px solid var(--border-primary);
+  background: var(--bg-surface-2);
+  color: var(--text-secondary);
+  font-size: var(--text-2xs);
+  font-weight: var(--font-weight-bold);
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+}
+
+.setup-required-card h1 {
+  font-size: var(--text-2xl);
+  line-height: 1.25;
+}
+
+.setup-progress {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.setup-progress-bar {
+  flex: 1;
+  height: 6px;
+  background: var(--bg-surface-2);
+  border: 1px solid var(--border-primary);
+  overflow: hidden;
+}
+
+.setup-progress-bar span {
+  display: block;
+  height: 100%;
+  background: var(--primary);
+}
+
+.setup-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+}
+
+.setup-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--border-primary);
+  background: var(--bg-surface);
+}
+
+.setup-item.done {
+  border-color: var(--border-accent);
+}
+
+.setup-item-icon {
+  display: inline-flex;
+  color: var(--text-muted);
+}
+
+.setup-item-icon-alt {
+  display: inline-flex;
+  color: var(--text-muted);
+}
+
+.setup-item-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.setup-item-copy strong {
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-bold);
+  color: var(--text-primary);
+}
+
+.setup-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding-top: var(--space-2);
+}
+
+/* ─── Quota rows ───────────────────────────────────────────────────── */
+
+.quota-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.quota-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.quota-row-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.quota-row-head strong {
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-bold);
+  color: var(--text-primary);
+}
+
+.quota-row-head span {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
+.quota-track {
+  height: 6px;
+  background: var(--bg-surface-2);
+  border: 1px solid var(--border-primary);
+  overflow: hidden;
+}
+
+.quota-track i {
+  display: block;
+  height: 100%;
+  background: var(--primary);
+}
+
+.quota-track.warn i { background: var(--warning-500); }
+.quota-track.over i { background: var(--danger-500); }
+
+.quota-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  font-size: var(--text-2xs);
+  color: var(--text-muted);
+}
+
+/* ─── Scope matrix ─────────────────────────────────────────────────── */
+
+.scope-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+}
+
+.scope-card {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space-3);
+  border: 1px solid var(--border-primary);
+  background: var(--bg-surface-2);
+}
+
+.scope-card strong {
+  font-size: var(--text-xs);
+  font-weight: var(--font-weight-bold);
+  color: var(--text-primary);
+  font-family: var(--font-mono, monospace);
+}
+
+.setup-inline-note {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  margin-bottom: var(--space-4);
+  border: 1px solid var(--border-primary);
+  background: var(--bg-surface-2);
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  line-height: 1.5;
+}
+
+.setup-inline-note svg {
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+/* ─── Brand logo ───────────────────────────────────────────────────── */
+
+.brand-logo {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.brand-logo-copy {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.brand-logo-name {
+  font-size: var(--text-base);
+  font-weight: var(--font-weight-extrabold);
+  letter-spacing: var(--tracking-tight);
+  color: var(--text-primary);
+  line-height: 1.15;
+  text-transform: uppercase;
+}
+
+.brand-logo-badge {
+  font-size: 9px;
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+  color: var(--text-muted);
+  font-weight: var(--font-weight-bold);
+}
+
+/* ─── Administration panels scroll inside the dashboard shell ────────── */
+
+.dash-panel-admin .dash-body {
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.dash-panel-admin .dash-body > * {
+  flex-shrink: 0;
+}
+
+@media (max-width: 640px) {
+  .form-grid { grid-template-columns: minmax(0, 1fr); }
+}

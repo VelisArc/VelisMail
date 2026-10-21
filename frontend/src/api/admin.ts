@@ -664,6 +664,18 @@ export type CompanyOverview = {
     storageBytes: number;
     apiRequestsPerMonth: number;
   };
+  /** Every allowance of the plan with the real consumption. */
+  quotas: Array<{
+    key: string;
+    label: string;
+    used: number;
+    limit: number;
+    unit: string;
+    period: string;
+    source: string;
+  }>;
+  /** Free trial information for workspaces that never upgraded. */
+  trial: { active: boolean; label: string; detail: string };
   usage: { emailPercent: number; storagePercent: number };
   activity: Array<{ date: string; sent: number; delivered: number; failed: number }>;
   members: Array<{ email: string; name: string; role: string; status: string; lastActiveAt?: string | null }>;

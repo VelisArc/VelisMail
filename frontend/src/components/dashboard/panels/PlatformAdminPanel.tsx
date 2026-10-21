@@ -470,22 +470,27 @@ export default function PlatformAdminPanel({ section, onSectionChange, state }: 
         <button className="toolbar-icon sidebar-toggle" onClick={() => state.setSidebarOpen(true)}><Menu size={18} /></button>
         <h3><Crown size={16} /> Platform Control Plane</h3>
         <div className="toolbar-spacer" />
-        <select
-          className="input input-auto admin-section-select"
-          value={section}
-          onChange={(event) => onSectionChange(event.target.value as PlatformSection)}
-          aria-label="Control plane section"
-        >
-          {SECTIONS.map((item) => (
-            <option key={item.id} value={item.id}>{item.label}</option>
-          ))}
-        </select>
         {banner && (
           <span className={`badge badge-${banner.tone === 'error' ? 'danger' : 'success'}`}>{banner.message}</span>
         )}
         <button className="btn btn-ghost btn-sm" onClick={() => void load()} title="Refresh section">
           <RefreshCw size={14} />
         </button>
+      </div>
+
+      <div className="admin-view-switch" role="tablist" aria-label="Control plane sections">
+        {SECTIONS.map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            role="tab"
+            aria-selected={section === item.id}
+            className={`admin-view-switch-btn ${section === item.id ? 'active' : ''}`}
+            onClick={() => onSectionChange(item.id)}
+          >
+            {item.label}
+          </button>
+        ))}
       </div>
 
       <div className="dash-body">

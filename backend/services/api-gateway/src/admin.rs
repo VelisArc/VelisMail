@@ -3839,7 +3839,8 @@ fn plan_limits(plan: &str) -> Value {
             json!({ "seats": 1000, "emailsPerMonth": 1_000_000, "storageBytes": 500 * 1024 * 1024 * 1024i64, "apiRequestsPerMonth": 25_000_000 })
         }
         _ => {
-            json!({ "seats": 5, "emailsPerMonth": 1_000, "storageBytes": 1024 * 1024 * 1024i64, "apiRequestsPerMonth": 10_000 })
+            // Free trial: 500 MB of database storage and 100 mail API sends.
+            json!({ "seats": 5, "emailsPerMonth": 100, "storageBytes": 500 * 1024 * 1024i64, "apiRequestsPerMonth": 1_000 })
         }
     }
 }
@@ -3878,7 +3879,9 @@ pub async fn company_overview(State(state): State<AppState>, headers: HeaderMap)
             (SELECT COUNT(*)::bigint FROM delivery_queue q JOIN users u ON u.email = q.sender
                 WHERE u.tenant_id = $1 AND q.status IN ('pending','sending','retry')) AS queue_depth,
             (SELECT COUNT(*)::bigint FROM delivery_queue q JOIN users u ON u.email = q.sender
-                WHERE u.tenant_id = $1 AND q.status = 'failed' AND q.created_at > NOW() - INTERVAL '30 days') AS failed30",
+                WHERE u.tenant_id = $1 AND q.status = 'failed' AND q.created_at > NOW() - INTERVAL '30 days') AS failed30,
+            (SELECT COALESCE(SUM(u2.api_requests),0)::bigint FROM tenant_usage_daily u2
+                WHERE u2.tenant_id = $1 AND u2.day >= CURRENT_DATE - 30) AS api_requests30",
     )
     .bind(tenant_id)
     .fetch_one(db)
@@ -3994,6 +3997,54 @@ pub async fn company_overview(State(state): State<AppState>, headers: HeaderMap)
         .get("storageBytes")
         .and_then(Value::as_i64)
         .unwrap_or(1);
+    let api_requests_used = counts
+        .get("apiRequests30")
+        .and_then(Value::as_i64)
+        .unwrap_or(0);
+    let api_requests_limit = limits
+        .get("apiRequestsPerMonth")
+        .and_then(Value::as_i64)
+        .unwrap_or(1);
+    let seats_used = counts.get("members").and_then(Value::as_i64).unwrap_or(0);
+    let seats_limit = limits.get("seats").and_then(Value::as_i64).unwrap_or(5);
+    let is_free_trial = actor.plan.eq_ignore_ascii_case("free");
+
+    // Every allowance the workspace has, with the real consumption, so the
+    // customer can see what is included, what is used and what to buy next.
+    let quotas = json!({
+        "emails": {
+            "label": "Mail volume",
+            "used": sent_used,
+            "limit": email_limit,
+            "unit": "emails",
+            "period": "per month",
+            "source": "Delivery engine volume over the last 30 days"
+        },
+        "storage": {
+            "label": "Database storage",
+            "used": storage_used,
+            "limit": storage_limit,
+            "unit": "bytes",
+            "period": "per month",
+            "source": "Object storage attached to this workspace"
+        },
+        "apiRequests": {
+            "label": "Mail API requests",
+            "used": api_requests_used,
+            "limit": api_requests_limit,
+            "unit": "requests",
+            "period": "per month",
+            "source": "Requests made with your API keys"
+        },
+        "seats": {
+            "label": "Team seats",
+            "used": seats_used,
+            "limit": seats_limit,
+            "unit": "seats",
+            "period": "per month",
+            "source": "People with access to this workspace"
+        }
+    });
 
     ok(json!({
         "success": true,
@@ -4008,6 +4059,16 @@ pub async fn company_overview(State(state): State<AppState>, headers: HeaderMap)
         },
         "counts": counts,
         "limits": limits,
+        "quotas": quotas,
+        "trial": {
+            "active": is_free_trial,
+            "label": if is_free_trial { "Free trial" } else { "" },
+            "detail": if is_free_trial {
+                "The free plan includes 500 MB of database storage and 100 mail API sends. Upgrade to keep sending when the trial ends."
+            } else {
+                ""
+            }
+        },
         "usage": {
             "emailPercent": if email_limit > 0 { (sent_used as f64 / email_limit as f64 * 100.0).min(100.0) } else { 0.0 },
             "storagePercent": if storage_limit > 0 { (storage_used as f64 / storage_limit as f64 * 100.0).min(100.0) } else { 0.0 },
@@ -4672,11 +4733,26 @@ pub async fn create_company_api_key(
     if name.len() < 2 {
         return fail(StatusCode::BAD_REQUEST, "API key name is required.");
     }
+    // A key can do everything the workspace allows, so an automation or an
+    // assistant can run the team, the domains and the billing without a user
+    // session. Each scope is enforced on the API, not just in the console.
     let allowed = [
+        "admin.full",
         "mail.send",
         "mail.read",
-        "contacts.read",
+        "team.read",
+        "team.write",
         "domains.read",
+        "domains.write",
+        "mailboxes.read",
+        "mailboxes.write",
+        "contacts.read",
+        "contacts.write",
+        "templates.read",
+        "templates.write",
+        "signatures.read",
+        "signatures.write",
+        "audit.read",
         "analytics.read",
     ];
     let scopes: Vec<String> = payload

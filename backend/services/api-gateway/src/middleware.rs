@@ -9,10 +9,30 @@ use axum::{
     middleware::Next,
     response::{IntoResponse, Response},
 };
+use chrono::{DateTime, Utc};
 use serde_json::json;
+use sqlx::Row;
+use sha2::{Digest, Sha256};
 use std::net::SocketAddr;
 use std::time::Instant;
+use uuid::Uuid;
 use velismail_common::traffic::{client_ip, RateLimitDecision};
+
+/// Read the bearer token of a request.
+fn bearer_token(headers: &axum::http::HeaderMap) -> Option<String> {
+    headers
+        .get(axum::http::header::AUTHORIZATION)
+        .and_then(|value| value.to_str().ok())
+        .map(str::trim)
+        .and_then(|value| {
+            value
+                .strip_prefix("Bearer ")
+                .or_else(|| value.strip_prefix("bearer "))
+        })
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
+}
 
 /// End-to-end request middleware.
 ///
@@ -260,6 +280,17 @@ pub async fn require_auth(
         );
     };
 
+    // Workspace API keys authenticate on their own. A key is bound to exactly
+    // one company and carries the scopes the customer granted, so an
+    // automation or an assistant can run the workspace without a user
+    // session - and never without the permissions the key was issued with.
+    if let Some(token) = bearer_token(request.headers()) {
+        if token.starts_with(API_KEY_PREFIX) {
+            let owned_path = path.to_string();
+            return authorize_api_key(&state, request, next, &owned_path, &token).await;
+        }
+    }
+
     match velismail_common::validate_bearer(request.headers(), secret) {
         Ok(claims) => {
             request.extensions_mut().insert(claims);
@@ -271,6 +302,128 @@ pub async fn require_auth(
             "A valid bearer token is required for this endpoint.",
         ),
     }
+}
+
+/// Prefix of every workspace API key.
+pub const API_KEY_PREFIX: &str = "vsk_live_";
+
+/// The scope a workspace route needs. `None` means the route is not part of
+/// the key driven workspace API.
+fn required_scope(method: &Method, path: &str) -> Option<&'static str> {
+    let route = path.strip_prefix("/company").unwrap_or(path);
+    match (method.as_str(), route) {
+        ("GET", "/team") => Some("team.read"),
+        ("POST", "/team/invitations") => Some("team.write"),
+        ("DELETE", p) if p.starts_with("/team/invitations") => Some("team.write"),
+        ("GET", "/domains") => Some("domains.read"),
+        ("POST", "/domains") => Some("domains.write"),
+        ("GET", "/mailboxes") => Some("mailboxes.read"),
+        ("POST", "/mailboxes") => Some("mailboxes.write"),
+        ("DELETE", "/mailboxes") => Some("mailboxes.write"),
+        ("GET", "/queue") => Some("mail.read"),
+        ("GET", "/audit") => Some("audit.read"),
+        ("GET", "/templates") => Some("templates.read"),
+        ("POST", "/templates") => Some("templates.write"),
+        ("DELETE", p) if p.starts_with("/templates") => Some("templates.write"),
+        ("GET", "/contacts") => Some("contacts.read"),
+        ("POST", "/contacts") => Some("contacts.write"),
+        ("DELETE", p) if p.starts_with("/contacts") => Some("contacts.write"),
+        ("GET", "/signatures") => Some("signatures.read"),
+        ("POST", "/signatures") => Some("signatures.write"),
+        ("DELETE", p) if p.starts_with("/signatures") => Some("signatures.write"),
+        _ => None,
+    }
+}
+
+/// Authenticate a workspace API key and enforce its scopes.
+async fn authorize_api_key(
+    state: &AppState,
+    mut request: Request<Body>,
+    next: Next,
+    path: &str,
+    token: &str,
+) -> Response {
+    let Some(db) = state.db.as_ref() else {
+        return error_response(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "SERVICE_UNAVAILABLE",
+            "The workspace database is not connected.",
+        );
+    };
+
+    let mut hasher = Sha256::new();
+    hasher.update(token.as_bytes());
+    let hash = format!("{:x}", hasher.finalize());
+
+    let record = sqlx::query(
+        "SELECT id, tenant_id, scopes, created_by, revoked_at, expires_at
+         FROM company_api_keys WHERE key_hash = $1",
+    )
+    .bind(&hash)
+    .fetch_optional(db)
+    .await
+    .ok()
+    .flatten();
+
+    let Some(record) = record else {
+        return error_response(
+            StatusCode::UNAUTHORIZED,
+            "UNAUTHORIZED",
+            "This API key is not valid.",
+        );
+    };
+
+    let revoked_at: Option<DateTime<Utc>> = record.try_get("revoked_at").ok().flatten();
+    let expires_at: Option<DateTime<Utc>> = record.try_get("expires_at").ok().flatten();
+    if revoked_at.is_some() {
+        return error_response(
+            StatusCode::UNAUTHORIZED,
+            "UNAUTHORIZED",
+            "This API key was revoked.",
+        );
+    }
+    if let Some(expires_at) = expires_at {
+        if expires_at <= Utc::now() {
+            return error_response(
+                StatusCode::UNAUTHORIZED,
+                "UNAUTHORIZED",
+                "This API key has expired.",
+            );
+        }
+    }
+
+    let scopes: Vec<String> = record.try_get("scopes").unwrap_or_default();
+    if let Some(required) = required_scope(request.method(), path) {
+        let allowed = scopes.iter().any(|scope| scope == "*" || scope == "admin.full" || scope == required);
+        if !allowed {
+            return error_response(
+                StatusCode::FORBIDDEN,
+                "FORBIDDEN",
+                &format!("This API key is missing the {} scope.", required),
+            );
+        }
+    }
+
+    let tenant_id: Uuid = record.try_get("tenant_id").unwrap_or_else(|_| Uuid::nil());
+    let created_by: String = record.try_get("created_by").unwrap_or_default();
+    let key_id: Uuid = record.try_get("id").unwrap_or_else(|_| Uuid::nil());
+
+    let claims = velismail_common::Claims {
+        sub: velismail_common::types::UserId(tenant_id),
+        tenant_id: tenant_id.to_string(),
+        email: created_by,
+        iat: (Utc::now().timestamp()),
+        exp: (Utc::now() + chrono::Duration::hours(1)).timestamp(),
+        nbf: Utc::now().timestamp(),
+        jti: format!("api-key:{}", key_id),
+        role: velismail_common::UserRole::User,
+        mfa_verified: false,
+        device_id: format!("api-key:{}", key_id),
+        security_level: velismail_common::SecurityLevel::Standard,
+        firebase_uid: None,
+    };
+    request.extensions_mut().insert(claims);
+    next.run(request).await
 }
 
 fn error_response(status: StatusCode, code: &str, message: &str) -> Response {
