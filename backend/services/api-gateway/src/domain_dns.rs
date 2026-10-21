@@ -538,6 +538,8 @@ pub async fn verify(
                 record.value = policies[0].clone();
                 record.detail = String::new();
             } else if policies.len() > 1 {
+                // The first policy is the one to keep, the extra one has to go.
+                record.value = policies[0].clone();
                 record.detail = "Two DMARC records are published for this name. A domain may only have one policy - delete the extra record, otherwise receivers ignore the policy.".to_string();
             } else {
                 record.detail =

@@ -209,6 +209,7 @@ pub fn api_v1_routes(_state: &AppState) -> Router<AppState> {
             "/company/domains/{id}/verify",
             post(company_api::verify_domain),
         )
+        .route("/company/domains/{id}", delete(company_api::delete_domain))
         .route(
             "/company/mailboxes",
             get(company_api::list_mailboxes).post(company_api::create_mailbox),

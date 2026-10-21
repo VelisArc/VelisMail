@@ -552,25 +552,40 @@ pub async fn create_domain(
         ));
     }
 
-    let owned: bool =
-        sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM custom_domains WHERE tenant_id = $1)")
-            .bind(context.tenant_id)
-            .fetch_one(db)
-            .await
-            .unwrap_or(false);
-    if !owned {
-        return Err(fail(
-            StatusCode::CONFLICT,
-            "This company already has a domain.",
-        ));
+    // A workspace can own several domains. An existing domain may only be
+    // re-used by the same workspace - it is never moved away from its owner.
+    let existing = sqlx::query(
+        "SELECT id, tenant_id FROM custom_domains
+         WHERE LOWER(domain_name) = LOWER($1) LIMIT 1",
+    )
+    .bind(&domain)
+    .fetch_optional(db)
+    .await
+    .ok()
+    .flatten();
+    if let Some(row) = existing {
+        let owner: Option<Uuid> = row.try_get("tenant_id").ok();
+        if owner != Some(context.tenant_id) {
+            return Err(fail(
+                StatusCode::CONFLICT,
+                "That domain is already connected to another company.",
+            ));
+        }
+        let domain_id: Option<Uuid> = row.try_get("id").ok();
+        return ok(json!({
+            "success": true,
+            "id": domain_id.map(|value| value.to_string()),
+            "domain": domain,
+            "verificationToken": "",
+            "existing": true,
+        }));
     }
 
     let verification_token = Uuid::new_v4().to_string();
     let result = sqlx::query(
         "INSERT INTO custom_domains (tenant_id, domain_name, verification_status, verification_method, dns_records, mx_records)
          VALUES ($1, $2, 'pending', 'dns', $3, '[]'::jsonb)
-         ON CONFLICT (domain_name) DO UPDATE
-         SET tenant_id = EXCLUDED.tenant_id, verification_status = 'pending'
+         ON CONFLICT (domain_name) DO NOTHING
          RETURNING id",
     )
     .bind(context.tenant_id)
@@ -578,7 +593,7 @@ pub async fn create_domain(
     .bind(json!([
         {
             "type": "TXT",
-            "name": "_velismail-verification",
+            "name": "_velismail-verify",
             "value": verification_token,
             "ttl": 300
         }
@@ -635,7 +650,7 @@ pub async fn list_domains(State(state): State<AppState>, headers: HeaderMap) -> 
                  WHERE bm.domain = cd.domain_name AND bm.tenant_id = cd.tenant_id) AS mailboxes
          FROM custom_domains cd
          WHERE cd.tenant_id = $1
-         ORDER BY cd.created_at DESC",
+         ORDER BY cd.created_at ASC, cd.id ASC",
     )
     .bind(context.tenant_id)
     .fetch_all(db)
@@ -644,10 +659,15 @@ pub async fn list_domains(State(state): State<AppState>, headers: HeaderMap) -> 
 
     let domains: Vec<Value> = rows
         .iter()
-        .map(|row| {
+        .enumerate()
+        .map(|(index, row)| {
             json!({
                 "id": row.try_get::<Uuid, _>("id").map(|v| v.to_string()).unwrap_or_default(),
                 "domain": row.try_get::<String, _>("domain_name").unwrap_or_default(),
+                // The first domain of the workspace is the primary one. The
+                // business endpoints use the same rule, so the console and the
+                // setup gate always talk about the same domain.
+                "primary": index == 0,
                 "status": row.try_get::<String, _>("verification_status").unwrap_or_else(|_| "pending".to_string()),
                 "method": row.try_get::<Option<String>, _>("verification_method").ok().flatten(),
                 "dnsRecords": row.try_get::<Value, _>("dns_records").unwrap_or_else(|_| json!([])),
