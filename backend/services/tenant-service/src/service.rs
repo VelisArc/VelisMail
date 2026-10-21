@@ -311,7 +311,7 @@ impl TenantService {
         let dns_records = json!([
             {
                 "type": "TXT",
-                "name": "_velismail-verification",
+                "name": "_velismail-verify",
                 "value": verification_token,
                 "ttl": 300
             },

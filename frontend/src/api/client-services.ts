@@ -1994,74 +1994,57 @@ export const domains = {
     if (!domain) return null;
 
     const session = getSessionSafe();
-    if (session?.businessDbUrl && session?.businessApiKey && session?.businessMailProvider) {
-      try {
-        const response = await fetchAPI('/tenants/verify-domain', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            domain: domain.domain,
-            dbUrl: session.businessDbUrl,
-            apiKey: session.businessApiKey,
-            webhookSecret: session.businessMailWebhookSecret || undefined,
-            verificationToken: domain.verificationToken,
-            provider: session.businessMailProvider,
-            apiProvider: session.businessMailProvider,
-            providerEndpoint: session.businessMailProviderEndpoint || undefined,
-            apiEndpoint: session.businessMailProviderEndpoint || undefined,
-          }),
-        });
-
-        if (response && response.checks) {
-          const nextChecks = domain.checks.map(check => {
-            const remote = response.checks.find((c: { key: string; status: string; actual?: string }) => c.key === check.key);
-            if (remote) {
-              return {
-                ...check,
-                status: 'verified' as const,
-                actual: remote.actual || check.actual || check.expected,
-              };
-            }
-            return {
-              ...check,
-              status: 'verified' as const,
-              actual: check.expected,
-            };
-          });
-
-          const updatedDomain = this.runVerification(id, nextChecks);
-          if (updatedDomain) {
-            updatedDomain.status = 'verified';
-            const all = this.getAll();
-            const idx = all.findIndex(d => d.id === id);
-            if (idx >= 0) {
-              all[idx] = updatedDomain;
-              saveUserDB(STORAGE_KEYS.domains, all);
-            }
-            return updatedDomain;
-          }
-        }
-      } catch (err) {
-        console.error('Failed to verify domain with backend:', err);
-      }
+    if (!session?.businessDbUrl || !session?.businessApiKey || !session?.businessMailProvider) {
+      // Without the workspace infrastructure there is nothing to check against.
+      // Returning the current state is honest - it is never marked verified.
+      return domain;
     }
 
-    const nextChecks = domain.checks.map(check => ({
-      ...check,
-      status: 'verified' as const,
-      actual: check.expected,
-    }));
-    const updated = this.runVerification(id, nextChecks);
-    if (updated) {
-      updated.status = 'verified';
-      const all = this.getAll();
-      const idx = all.findIndex(d => d.id === id);
-      if (idx >= 0) {
-        all[idx] = updated;
-        saveUserDB(STORAGE_KEYS.domains, all);
+    try {
+      const response = await fetchAPI('/tenants/verify-domain', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          domain: domain.domain,
+          dbUrl: session.businessDbUrl,
+          apiKey: session.businessApiKey,
+          webhookSecret: session.businessMailWebhookSecret || undefined,
+          verificationToken: domain.verificationToken,
+          provider: session.businessMailProvider,
+          apiProvider: session.businessMailProvider,
+          providerEndpoint: session.businessMailProviderEndpoint || undefined,
+          apiEndpoint: session.businessMailProviderEndpoint || undefined,
+        }),
+      });
+
+      if (!response || response.success === false) {
+        throw new Error(response?.message || 'The domain could not be verified.');
       }
+      const remoteChecks = Array.isArray(response.checks) ? response.checks : [];
+      if (remoteChecks.length === 0) {
+        throw new Error('The verification did not return any DNS result.');
+      }
+
+      const nextChecks = domain.checks.map(check => {
+        const remote = remoteChecks.find((entry: { key: string; status?: string; actual?: string }) => entry.key === check.key);
+        if (!remote) return check;
+        return {
+          ...check,
+          status: remote.status === 'verified'
+            ? 'verified' as const
+            : remote.status === 'failed'
+              ? 'failed' as const
+              : 'pending' as const,
+          actual: remote.actual || check.actual,
+        };
+      });
+
+      return this.runVerification(id, nextChecks);
+    } catch (err) {
+      console.error('Failed to verify domain with backend:', err);
+      // Keep the last stored state instead of pretending the domain is ready.
+      return this.getById(id);
     }
-    return updated;
   },
   register(domain: string): CustomDomain {
     return this.addDomain(domain);

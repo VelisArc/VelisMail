@@ -40,7 +40,7 @@ export default function About() {
 
   const getDashboardLink = () => {
     if (!user) return '/login';
-    return isBusinessSetupReady(user) ? '/business' : '/business-setup';
+    return '/business';
   };
 
   const getDashboardText = () => {

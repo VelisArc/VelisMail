@@ -15,7 +15,7 @@ export default function Contacts() {
     if (!user) {
       navigate('/login');
     } else if (!isBusinessSetupReady(user)) {
-      navigate('/business-setup');
+      navigate('/business');
     }
   }, [navigate, user]);
 
@@ -119,7 +119,7 @@ export default function Contacts() {
   });
 
   if (!user) return <Navigate to="/login" replace />;
-  if (!isBusinessSetupReady(user)) return <Navigate to="/business-setup" replace />;
+  if (!isBusinessSetupReady(user)) return <Navigate to="/business" replace />;
 
   return (
     <div className="contacts-page">

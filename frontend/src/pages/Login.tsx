@@ -15,7 +15,7 @@ import {
   AlertCircle,
   CheckCircle2,
 } from 'lucide-react';
-import { auth, domains, isBusinessSetupReady, teamAccess, type TeamAccessInvite, type User } from '../api/client';
+import { auth, isBusinessSetupReady, teamAccess, type TeamAccessInvite, type User } from '../api/client';
 import LoadingSpinner from '../components/LoadingSpinner';
 import './Login.css';
 
@@ -27,7 +27,7 @@ type TeamAccessStep = 'key' | 'email' | 'otp';
 const TEAM_STEP_ORDER: TeamAccessStep[] = ['key', 'email', 'otp'];
 
 function nextRouteForUser(user: User) {
-  return isBusinessSetupReady(user) ? '/business?tab=inbox' : '/business-setup';
+  return isBusinessSetupReady(user) ? '/business?tab=inbox' : '/business';
 }
 
 function normalizeDomain(value: string) {
@@ -218,10 +218,6 @@ export default function Login() {
       verificationToken: verifiedToken || verificationToken || undefined,
     });
     if (res.success && res.user) {
-      // Auto-add default velismail.online domain so user has a working from address
-      if (!domains.getAll().find(d => d.domain === 'velismail.online')) {
-        domains.register('velismail.online');
-      }
       navigate(nextRouteForUser(res.user), { replace: true });
     } else {
       throw new Error(res.error || 'Registration failed');

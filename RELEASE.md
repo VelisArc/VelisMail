@@ -1,4 +1,4 @@
-# VelisMail v5.0.0 Release Checklist
+# VelisMail v5.1.0 Release Checklist
 
 # Verification gates
 ```bash

@@ -139,7 +139,7 @@ export default function Home(): React.ReactElement {
 
   const getDashboardLink = useCallback((): string => {
     if (!user) return '/login';
-    return isBusinessSetupReady(user) ? '/business' : '/business-setup';
+    return '/business';
   }, [user]);
 
   const getDashboardText = useCallback((): string => {

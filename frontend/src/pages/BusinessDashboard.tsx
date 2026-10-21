@@ -1,7 +1,7 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, type Dispatch, type SetStateAction } from 'react';
 import { Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { Building2, Check, ChevronDown, ChevronUp, Crown, Globe, Plus, X } from 'lucide-react';
-import { auth, connections, domains, fetchAPI, fetchAuthenticatedProfile, isBusinessSetupReady, mail, saveDB, signatures, contacts, STORAGE_KEYS, type BusinessAuditEntry, type BusinessGroup, type BusinessMailbox, type BusinessTeamMember, type BusinessTemplate, type ConnectionUsage, type CustomDomain, type Email, type PlatformAdminUserRecord, type DomainCheck, type TeamAccessInvite, type Signature, type Contact, type ActiveSession } from '../api/client';
+import { auth, connections, fetchAPI, fetchAuthenticatedProfile, isBusinessSetupReady, mail, saveDB, signatures, contacts, STORAGE_KEYS, type BusinessAuditEntry, type BusinessGroup, type BusinessMailbox, type BusinessTeamMember, type BusinessTemplate, type ConnectionUsage, type Email, type PlatformAdminUserRecord, type TeamAccessInvite, type Signature, type Contact, type ActiveSession, type User } from '../api/client';
 import { platformAdminApi } from '../api/admin';
 import Sidebar from '../components/dashboard/Sidebar';
 import { PLANS, ROLE_ALLOWED_TABS, type BizTab } from '../components/dashboard/constants';
@@ -19,7 +19,6 @@ import AuditPanel from '../components/dashboard/panels/AuditPanel';
 import CompanyAdminPanel from '../components/dashboard/panels/CompanyAdminPanel';
 import SetupRequired from '../components/dashboard/SetupRequired';
 import useWorkspaceReadiness from '../components/dashboard/useWorkspaceReadiness';
-import LoadingSpinner from '../components/LoadingSpinner';
 import PlatformAdminPanel, { type PlatformSection } from '../components/dashboard/panels/PlatformAdminPanel';
 import { platformOwnerUids, platformOwnerEmails } from '../lib/firebase';
 import { toAuditEntry, toQueueItem, toTeamMember, toTemplate, workspaceApi, type WorkspaceBusiness } from '../api/company';
@@ -40,34 +39,105 @@ import DeliverabilityPanel from '../components/dashboard/panels/DeliverabilityPa
 const ADD_DOMAIN_VALUE = '__add_domain__';
 
 
-function toDomainRecord(domain: CustomDomain): DomainRecord {
-  const statusFor = (key: string) => domain.checks?.find((c: DomainCheck) => c.key === key)?.status || 'pending';
-  const now = new Date().toISOString();
-  return {
-    id: domain.id, domain: domain.domain, status: domain.status || 'active', reputation: 100,
-    mailCount: 0, addedAt: domain.addedAt || now,
-    health: [
-      { key: 'mx', label: 'MX Record', status: statusFor('mx') as DomainHealth['status'], detail: statusFor('mx') === 'verified' ? 'Mail exchange configured' : 'Not configured', lastCheck: domain.lastCheckedAt || '' },
-      { key: 'spf', label: 'SPF Record', status: statusFor('spf') as DomainHealth['status'], detail: statusFor('spf') === 'verified' ? 'Sender policy published' : 'Not published', lastCheck: domain.lastCheckedAt || '' },
-      { key: 'dkim', label: 'DKIM Signature', status: statusFor('dkim') as DomainHealth['status'], detail: statusFor('dkim') === 'verified' ? 'DKIM key active' : 'Not configured', lastCheck: domain.lastCheckedAt || '' },
-      { key: 'dmarc', label: 'DMARC Policy', status: statusFor('dmarc') as DomainHealth['status'], detail: statusFor('dmarc') === 'verified' ? 'DMARC policy published' : 'Not published', lastCheck: domain.lastCheckedAt || '' },
-    ],
-    checks: domain.checks?.map((c: DomainCheck) => ({ key: c.key, status: c.status, label: c.label, detail: c.expected })) || [],
-    mxVerified: statusFor('mx') === 'verified', spfVerified: statusFor('spf') === 'verified',
-    dkimVerified: statusFor('dkim') === 'verified', dmarcVerified: statusFor('dmarc') === 'verified',
-  };
-}
-
 export default function BusinessDashboard() {
   const navigate = useNavigate();
-  const location = useLocation();
   const [user, setUser] = useState(auth.getSession());
-  const navigation = useNavigation();
-  const { updateNavigation } = useSessionActions();
-  const queryClient = useQueryClient();
   // The live state of the setup. The dashboard only opens when every step of
   // the setup is done.
   const readiness = useWorkspaceReadiness(user);
+
+  // Once every live check passes, the session is updated as well so the rest of
+  // the app (settings, contacts, refresh) agrees with the gate. This never
+  // clears an existing value and runs only when the state is actually behind.
+  useEffect(() => {
+    if (!user || !readiness.ready) return;
+    const primary = readiness.primaryDomain;
+    if (!primary) return;
+    const alreadyReady =
+      isBusinessSetupReady(user) &&
+      user.businessDomain === primary.domain &&
+      user.businessDomainVerified === true;
+    if (alreadyReady) return;
+    const updated = auth.updateSettings({
+      isBusinessSetupComplete: true,
+      businessDomain: primary.domain,
+      businessDomainVerified: true,
+      dkimStatus: 'verified',
+      spfStatus: 'verified',
+      dmarcStatus: 'verified',
+      businessProfile: {
+        ...user.businessProfile,
+        domain: primary.domain,
+        verified: true,
+        dkimStatus: 'verified',
+        spfStatus: 'verified',
+        dmarcStatus: 'verified',
+      },
+    });
+    if (updated.user) setUser(updated.user);
+  }, [readiness.primaryDomain, readiness.ready, user]);
+
+  // A stale "ready" flag must never open another route while the live state is
+  // incomplete. Keep the session in sync in both directions; the credentials
+  // and the primary domain are preserved, only the verification flags change.
+  useEffect(() => {
+    if (!user || !readiness.loaded || readiness.ready || !isBusinessSetupReady(user)) return;
+    const updated = auth.updateSettings({
+      isBusinessSetupComplete: false,
+      businessDomainVerified: false,
+      dkimStatus: 'pending',
+      spfStatus: 'pending',
+      dmarcStatus: 'pending',
+      businessProfile: {
+        ...user.businessProfile,
+        verified: false,
+        dkimStatus: 'pending',
+        spfStatus: 'pending',
+        dmarcStatus: 'pending',
+      },
+    });
+    if (updated.user) setUser(updated.user);
+  }, [readiness.loaded, readiness.ready, user]);
+
+  if (!user) return <Navigate to="/login" replace />;
+  // The product needs a database, a mail API key, a mail provider with its
+  // inbound webhook, a verified domain and every DNS record published and
+  // active. Until all of that is done the dashboard stays closed and the setup
+  // panel names every missing step. The control plane is not a way around the
+  // gate: a workspace that is not ready has no console at all.
+  //
+  // A member that signed in with a workspace API key works in the workspace
+  // the owner configured, so the setup does not belong to them.
+  const invitedMember = Boolean(user.teamAccessRole);
+  if (!invitedMember && !readiness.ready) {
+    return (
+      <SetupRequired
+        user={user}
+        readiness={readiness}
+        onUserUpdate={setUser}
+        onLogout={() => { auth.logout(); navigate('/login'); }}
+      />
+    );
+  }
+
+  // Everything below only mounts after the live gate has passed. The dashboard
+  // effects (mail, team, queue, audit, control plane) never run for a workspace
+  // that is still being set up.
+  return <WorkspaceDashboard user={user} setUser={setUser} reloadReadiness={readiness.reload} />;
+}
+
+interface WorkspaceDashboardProps {
+  user: User;
+  setUser: Dispatch<SetStateAction<User | null>>;
+  reloadReadiness: () => Promise<void>;
+}
+
+function WorkspaceDashboard({ user, setUser, reloadReadiness }: WorkspaceDashboardProps) {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const navigation = useNavigation();
+  const { updateNavigation } = useSessionActions();
+  const queryClient = useQueryClient();
 
   const [activeBizTab, setActiveBizTab] = useState<BizTab>(() => (navigation?.activeTab as BizTab) || 'mail');
   const [activeFolder, setActiveFolder] = useState(navigation?.activeFolder || 'inbox');
@@ -99,12 +169,18 @@ export default function BusinessDashboard() {
   const [confirmRevokeId, setConfirmRevokeId] = useState<string | null>(null);
   const [pendingRoleChange, setPendingRoleChange] = useState<{ id: string; role: string; step: number } | null>(null);
   const [confirmAction, setConfirmAction] = useState<{ title: string; message: string; onConfirm: () => void } | null>(null);
-  const [domainsList, setDomainsList] = useState<DomainRecord[]>(() => domains.getAll().map(toDomainRecord));
+  const [domainsList, setDomainsList] = useState<DomainRecord[]>([]);
   const [activeDomain, setActiveDomain] = useState('');
   const activeDomainName = activeDomain || domainsList[0]?.domain || '';
+  // A deleted or renamed domain must not stay selected: the mail hooks would
+  // keep querying a domain that no longer belongs to the workspace.
+  useEffect(() => {
+    if (!activeDomain) return;
+    if (domainsList.some((entry) => entry.domain === activeDomain)) return;
+    setActiveDomain(domainsList[0]?.domain || '');
+  }, [activeDomain, domainsList]);
   const [domainMailboxes, setDomainMailboxes] = useState<BusinessMailbox[]>([]);
-  const [domainGroups, setDomainGroups] = useState<BusinessGroup[]>([]);
-  const [teamMembers, setTeamMembers] = useState<BusinessTeamMember[]>([]);
+  const [domainGroups, setDomainGroups] = useState<BusinessGroup[]>([]);  const [teamMembers, setTeamMembers] = useState<BusinessTeamMember[]>([]);
   const [mailQueue, setMailQueue] = useState<MailQueueItem[]>([]);
   const [auditLog, setAuditLog] = useState<BusinessAuditEntry[]>([]);
   const [templates, setTemplates] = useState<BusinessTemplate[]>([]);
@@ -246,7 +322,7 @@ export default function BusinessDashboard() {
       });
     });
     return () => { cancelled = true; };
-  }, []);
+  }, [setUser]);
 
   // The configured platform owner is the only account that may broadcast to
   // every user, so the console asks the gateway who it is dealing with.
@@ -453,8 +529,6 @@ export default function BusinessDashboard() {
       const domain = result.business.primaryDomain;
       if (domain) {
         setActiveDomain(domain);
-        const matched = domains.getAll().find((entry) => entry.domain === domain);
-        if (matched) domains.setPrimary(matched.id);
       }
       setActiveBizTab('mail');
       setActiveFolder('inbox');
@@ -468,6 +542,7 @@ export default function BusinessDashboard() {
         refreshGroups(),
         refreshContacts(),
       ]);
+      await reloadReadiness();
       showToast(`Switched to ${result.business.name}`);
     } catch (error) {
       showToast(error instanceof Error ? error.message : 'Unable to switch business.', 'error');
@@ -481,6 +556,7 @@ export default function BusinessDashboard() {
     refreshQueue,
     refreshTeam,
     refreshTemplates,
+    reloadReadiness,
     showToast,
   ]);
 
@@ -653,40 +729,84 @@ export default function BusinessDashboard() {
     if (!dom) return;
     setVerifyingDomainId(domainId);
     setDomainVerifySteps([
-      { key: 'mx', label: 'MX Record', status: 'checking', detail: 'Checking MX record...', lastCheck: new Date().toISOString() },
-      { key: 'spf', label: 'SPF Record', status: 'checking', detail: 'Checking SPF record...', lastCheck: new Date().toISOString() },
-      { key: 'dkim', label: 'DKIM Signature', status: 'checking', detail: 'Checking DKIM key...', lastCheck: new Date().toISOString() },
-      { key: 'dmarc', label: 'DMARC Policy', status: 'checking', detail: 'Checking DMARC policy...', lastCheck: new Date().toISOString() },
+      { key: 'checking', label: 'Reading the live DNS', status: 'checking', detail: `Checking every record of ${dom.domain}...`, lastCheck: new Date().toISOString() },
     ]);
     setDomainVerifyOpen(true);
     setDomainVerifyProviderRecords([]);
 
     try {
-      const updated = await domains.verify(domainId);
-      if (updated) {
-        const steps: DomainHealth[] = [
-          { key: 'mx', label: 'MX Record', status: (updated.checks.find((c: DomainCheck) => c.key === 'mx')?.status || 'pending') as DomainHealth['status'], detail: 'MX record check', lastCheck: new Date().toISOString() },
-          { key: 'spf', label: 'SPF Record', status: (updated.checks.find((c: DomainCheck) => c.key === 'spf')?.status || 'pending') as DomainHealth['status'], detail: 'SPF record check', lastCheck: new Date().toISOString() },
-          { key: 'dkim', label: 'DKIM Signature', status: (updated.checks.find((c: DomainCheck) => c.key === 'dkim')?.status || 'pending') as DomainHealth['status'], detail: 'DKIM key check', lastCheck: new Date().toISOString() },
-          { key: 'dmarc', label: 'DMARC Policy', status: (updated.checks.find((c: DomainCheck) => c.key === 'dmarc')?.status || 'pending') as DomainHealth['status'], detail: 'DMARC policy check', lastCheck: new Date().toISOString() },
-        ];
-        setDomainVerifySteps(steps);
-        if (Array.isArray(updated.dnsRecords)) {
-          setDomainVerifyProviderRecords(updated.dnsRecords as unknown as Record<string, string>[]);
-        }
+      const result = await workspaceApi.verifyDomain(domainId);
+      const steps: DomainHealth[] = result.records.map((record) => ({
+        key: `${record.recordType}-${record.host}`,
+        label: `${record.purpose} (${record.recordType})`,
+        status: record.status === 'verified'
+          ? 'verified'
+          : record.status === 'mismatch'
+            ? 'failed'
+            : 'pending',
+        detail: record.detail || record.actual || record.value || 'Waiting for the DNS answer',
+        lastCheck: new Date().toISOString(),
+      }));
+      setDomainVerifySteps(steps);
+      setDomainVerifyProviderRecords(
+        result.records.map((record) => ({
+          type: record.recordType,
+          name: record.host,
+          value: record.value,
+          status: record.status,
+          ttl: String(record.ttl),
+        })),
+      );
+      if (result.complete) {
+        showToast(`${dom.domain} is verified. Every record is live.`);
+      } else {
+        const missing = result.records.filter((record) => record.status !== 'verified').length;
+        showToast(`${missing} record${missing === 1 ? '' : 's'} still need attention.`, 'error');
       }
-    } catch (err) {
-      console.error(err);
+      await refreshDomains();
+      await reloadReadiness();
+    } catch (error) {
+      console.error('verify domain failed', error);
+      showToast(error instanceof Error ? error.message : 'Unable to verify the domain.', 'error');
     } finally {
-      refreshDomains();
       setVerifyingDomainId('');
     }
   };
 
   const handleAddDomain = async () => {
-    if (!newDomainInput.trim()) return;
-    try { await domains.register(newDomainInput.trim()); setNewDomainInput(''); setShowAddDomain(false); refreshDomains(); }
-    catch (e) { console.error('add domain failed', e); showToast('Failed to add domain', 'error'); }
+    const domain = newDomainInput.trim().toLowerCase();
+    if (!domain) return;
+    try {
+      const created = await workspaceApi.createDomain({ domain });
+      setNewDomainInput('');
+      setShowAddDomain(false);
+      await refreshDomains();
+      await refreshBusinesses();
+      await reloadReadiness();
+      if (!user?.businessDomain) {
+        const updated = auth.updateSettings({ businessDomain: created.domain });
+        if (updated.user) setUser(updated.user);
+      }
+      showToast(created.existing ? `${created.domain} is already connected.` : `${created.domain} added. Publish its DNS records next.`);
+    } catch (error) {
+      console.error('add domain failed', error);
+      showToast(error instanceof Error ? error.message : 'Unable to add the domain.', 'error');
+    }
+  };
+
+  const handleDeleteDomain = async (domainId: string) => {
+    const dom = domainsList.find(entry => entry.id === domainId);
+    if (!dom) return;
+    try {
+      await workspaceApi.deleteDomain(domainId);
+      await refreshDomains();
+      await refreshBusinesses();
+      await reloadReadiness();
+      showToast(`${dom.domain} removed.`);
+    } catch (error) {
+      console.error('delete domain failed', error);
+      showToast(error instanceof Error ? error.message : 'Unable to delete the domain.', 'error');
+    }
   };
 
   const confirmRoleChangeStep = async () => {
@@ -787,49 +907,7 @@ export default function BusinessDashboard() {
     contactEditorPhone, setContactEditorPhone,
     contactEditorCompany, setContactEditorCompany,
     editingContactId, setEditingContactId,
-  }), [activeBizTab, activeFolder, searchQuery, composeOpen, composeTo, composeSubject, composeBody, composeReplyQuote, sending, selectedFromAddress, activeMailboxAddress, annual, loadingPayment, toast, showLogoutConfirm, confirmRevokeId, pendingRoleChange, confirmAction, domainsList, activeDomain, domainMailboxes, domainGroups, teamMembers, mailQueue, auditLog, templates, connectionUsage, adminUsers, sortOrder, selectedEmails, mailStatusFilter, notificationEnabled, soundEnabled, showQueueFilters, queueStatusFilter, templateSearch, showAddDomain, newDomainInput, teamFilter, auditFilter, adminSearch, adminPlanFilter, adminStatusFilter, adminRiskFilter, adminPage, sidebarOpen, user, inviteOpen, inviteName, inviteEmail, inviteRole, inviteExpiresHours, issuedInvite, templateEditorOpen, templateName, templateSubject, templateBody, previewTemplate, selectedAdminUser, adminStatusConfirm, domainDetails, mailboxDetails, groupDetails, mailboxLocalPart, mailboxDisplayName, mailboxKind, groupName, groupLocalPart, groupMembers, verifyingDomainId, domainVerifyOpen, domainVerifySteps, domainVerifyProviderRecords, copiedField, signaturesList, contactsList, contactsSearch, activeSessions, signatureEditorOpen, signatureEditorName, signatureEditorContent, editingSignatureId, contactEditorOpen, contactEditorName, contactEditorEmail, contactEditorPhone, contactEditorCompany, editingContactId, showToast, activeDomainName, canAccessPlatformAdmin, handleLogout, handleSendEmail, hasRoleAccess, refreshAdminUsers, refreshAudit, refreshConnectionUsage, refreshContacts, refreshGroups, refreshMailboxes, refreshQueue, refreshSessions, refreshSignatures, refreshTeam, refreshTemplates]);
-
-  if (!user) return <Navigate to="/login" replace />;
-  // The product needs a database, a mail API key, a mail provider with its
-  // inbound webhook, a verified domain and every DNS record published and
-  // active. Until all of that is done the dashboard stays closed and the
-  // setup panel names every missing step. The platform control plane does not
-  // depend on the workspace, so the owner can still open it.
-  const controlPlaneOpen = viewMode === 'control-plane' && canAccessPlatformAdmin;
-  const sessionReady = isBusinessSetupReady(user);
-  // A member that signed in with a workspace API key works in the workspace
-  // the owner configured, so the setup does not belong to them.
-  const invitedMember = Boolean(user.teamAccessRole);
-  if (!controlPlaneOpen && !invitedMember && !sessionReady) {
-    return (
-      <SetupRequired
-        user={user}
-        readiness={readiness}
-        canOpenControlPlane={canAccessPlatformAdmin}
-        onOpenControlPlane={() => switchView('control-plane')}
-      />
-    );
-  }
-  if (!controlPlaneOpen && !invitedMember && readiness.loading) {
-    return (
-      <div className="setup-required">
-        <div className="setup-required-card setup-required-loading">
-          <LoadingSpinner size="md" label="Checking the setup" />
-          <span className="setup-signed-in">Checking the setup of {user.email}</span>
-        </div>
-      </div>
-    );
-  }
-  if (!controlPlaneOpen && !invitedMember && !readiness.ready) {
-    return (
-      <SetupRequired
-        user={user}
-        readiness={readiness}
-        canOpenControlPlane={canAccessPlatformAdmin}
-        onOpenControlPlane={() => switchView('control-plane')}
-      />
-    );
-  }
+  }), [activeBizTab, activeFolder, searchQuery, composeOpen, composeTo, composeSubject, composeBody, composeReplyQuote, sending, selectedFromAddress, activeMailboxAddress, annual, loadingPayment, toast, showLogoutConfirm, confirmRevokeId, pendingRoleChange, confirmAction, domainsList, activeDomain, domainMailboxes, domainGroups, teamMembers, mailQueue, auditLog, templates, connectionUsage, adminUsers, sortOrder, selectedEmails, mailStatusFilter, notificationEnabled, soundEnabled, showQueueFilters, queueStatusFilter, templateSearch, showAddDomain, newDomainInput, teamFilter, auditFilter, adminSearch, adminPlanFilter, adminStatusFilter, adminRiskFilter, adminPage, sidebarOpen, user, inviteOpen, inviteName, inviteEmail, inviteRole, inviteExpiresHours, issuedInvite, templateEditorOpen, templateName, templateSubject, templateBody, previewTemplate, selectedAdminUser, adminStatusConfirm, domainDetails, mailboxDetails, groupDetails, mailboxLocalPart, mailboxDisplayName, mailboxKind, groupName, groupLocalPart, groupMembers, verifyingDomainId, domainVerifyOpen, domainVerifySteps, domainVerifyProviderRecords, copiedField, signaturesList, contactsList, contactsSearch, activeSessions, signatureEditorOpen, signatureEditorName, signatureEditorContent, editingSignatureId, contactEditorOpen, contactEditorName, contactEditorEmail, contactEditorPhone, contactEditorCompany, editingContactId, showToast, activeDomainName, canAccessPlatformAdmin, handleLogout, handleSendEmail, hasRoleAccess, refreshAdminUsers, refreshAudit, refreshConnectionUsage, refreshContacts, refreshGroups, refreshMailboxes, refreshQueue, refreshSessions, refreshSignatures, refreshTeam, refreshTemplates, refreshDomains]);
 
   return (
     <div className="biz-dash">
@@ -880,8 +958,6 @@ export default function BusinessDashboard() {
                           return;
                         }
                         setActiveDomain(domName);
-                        const matched = domainsList.find((domain) => domain.domain === domName);
-                        if (matched) domains.setPrimary(matched.id);
                         showToast(`Switched active domain to ${domName}`);
                       }}
                       aria-label="Active domain"
@@ -1046,7 +1122,7 @@ export default function BusinessDashboard() {
           </ErrorBoundary>
         )}
 
-        {viewMode === 'workspace' && activeBizTab === 'domains' && <ErrorBoundary><DomainsPanel state={dashboardState} handleAddDomain={handleAddDomain} handleVerifyDomain={handleVerifyDomain} /></ErrorBoundary>}
+        {viewMode === 'workspace' && activeBizTab === 'domains' && <ErrorBoundary><DomainsPanel state={dashboardState} handleAddDomain={handleAddDomain} handleVerifyDomain={handleVerifyDomain} handleDeleteDomain={handleDeleteDomain} /></ErrorBoundary>}
 
         {viewMode === 'workspace' && activeBizTab === 'mailboxes' && <ErrorBoundary><MailboxesPanel state={dashboardState} /></ErrorBoundary>}
 

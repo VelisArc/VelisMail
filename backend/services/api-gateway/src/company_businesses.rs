@@ -310,7 +310,17 @@ pub async fn create_business(
                 "That domain is already connected to another business.",
             ));
         }
-        _ => None,
+        Err(err) => {
+            tracing::error!("business domain creation failed: {}", err);
+            let _ = sqlx::query("UPDATE tenants SET deleted_at = NOW() WHERE id = $1")
+                .bind(tenant_id)
+                .execute(db)
+                .await;
+            return Err(fail(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Unable to connect the domain to the new business.",
+            ));
+        }
     };
 
     // The sending mailboxes of the business.

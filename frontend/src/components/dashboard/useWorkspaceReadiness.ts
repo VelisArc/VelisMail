@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertTriangle,
   CircleCheck,
@@ -31,9 +31,20 @@ export type SetupCheck = {
   detail: string;
 };
 
+export type ReadinessDomain = {
+  id: string;
+  domain: string;
+  status: string;
+  primary: boolean;
+};
+
 export type WorkspaceReadiness = {
-  /** True while the live state is being read. */
+  /** True while the first live state is being read. */
   loading: boolean;
+  /** True while a background re-check is running. */
+  refreshing: boolean;
+  /** True once the live state has been read at least once. */
+  loaded: boolean;
   /** A message that stopped the check. The setup has to be completed. */
   error: string;
   checks: SetupCheck[];
@@ -41,21 +52,27 @@ export type WorkspaceReadiness = {
   records: DnsRequirement[];
   /** The records that are not active yet. */
   pending: DnsRequirement[];
+  /** The primary domain of the active business, when one exists. */
+  primaryDomain: ReadinessDomain | null;
   /** True only when every single item of the setup is done. */
   ready: boolean;
-  /** Read the live state again. */
-  reload: () => void;
+  /** Read the live state again. Resolves after the new state is applied. */
+  reload: () => Promise<void>;
 };
 
-type DomainSummary = { id: string; domain: string; status: string };
+const POLL_INTERVAL_MS = 15_000;
 
 /**
  * Read the live state of the workspace setup.
  *
  * The dashboard is only opened when every item of the setup is done, so this
  * check combines what the session knows (database, key, provider) with the
- * live DNS of the domain (records, receiving). A domain that is not fully
- * published keeps the dashboard closed.
+ * live DNS of the primary domain (records, receiving). A domain that is not
+ * fully published keeps the dashboard closed.
+ *
+ * It also re-checks in the background and whenever the window regains focus,
+ * which is what makes access open automatically as soon as the last DNS
+ * record becomes active - no manual reload, no sign-out.
  */
 export default function useWorkspaceReadiness(user: User | null): WorkspaceReadiness {
   const dbUrl = user?.businessDbUrl?.trim() || '';
@@ -64,62 +81,84 @@ export default function useWorkspaceReadiness(user: User | null): WorkspaceReadi
   const webhookSecret = user?.businessMailWebhookSecret?.trim() || '';
 
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState('');
-  const [domains, setDomains] = useState<DomainSummary[]>([]);
+  const [domains, setDomains] = useState<ReadinessDomain[]>([]);
   const [records, setRecords] = useState<DnsRequirement[]>([]);
   const [complete, setComplete] = useState(false);
   const [checked, setChecked] = useState(false);
+  const inFlight = useRef<Promise<void> | null>(null);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError('');
-    try {
-      const domainList = await workspaceApi.domains();
-      const summary = domainList.domains.map((entry) => ({
-        id: entry.id,
-        domain: entry.domain,
-        status: entry.status,
-      }));
-      setDomains(summary);
+  const load = useCallback(() => {
+    if (inFlight.current) return inFlight.current;
+    const run = (async () => {
+      if (loaded) setRefreshing(true);
+      else setLoading(true);
+      setError('');
+      try {
+        const domainList = await workspaceApi.domains();
+        const summary: ReadinessDomain[] = domainList.domains
+          .map((entry) => ({
+            id: entry.id,
+            domain: entry.domain,
+            status: entry.status,
+            primary: Boolean(entry.primary),
+          }))
+          .sort((left, right) => Number(right.primary) - Number(left.primary));
+        setDomains(summary);
 
-      const primary = summary[0];
-      if (!primary) {
-        setRecords([]);
-        setComplete(false);
+        const primary = summary.find((entry) => entry.primary) || summary[0];
+        if (!primary) {
+          setRecords([]);
+          setComplete(false);
+          setChecked(true);
+          return;
+        }
+
+        const requirements = await workspaceApi.dnsRequirements(primary.domain);
+        setRecords(requirements.records);
+        setComplete(requirements.complete);
         setChecked(true);
-        return;
-      }
-      const requirements = await workspaceApi.dnsRequirements(primary.domain);
-      setRecords(requirements.records);
-      setComplete(requirements.complete);
-      setChecked(true);
-      // The stored status is kept in sync when the live DNS is complete.
-      if (requirements.complete && primary.status !== 'verified') {
-        void workspaceApi.verifyDomain(primary.id).catch(() => undefined);
-      }
-    } catch (err) {
-      setRecords([]);
-      setComplete(false);
-      setChecked(true);
-      setError(
-        err instanceof Error
-          ? err.message
-          : 'The setup could not be verified. Complete the setup and try again.',
-      );
-    } finally {
-      setLoading(false);
-    }
-  }, []);
 
+        // The stored verification status is kept in sync with the live DNS, so
+        // a workspace that is already fully published never stays locked.
+        if (requirements.complete && primary.status !== 'verified') {
+          await workspaceApi.verifyDomain(primary.id).catch(() => undefined);
+          setDomains((current) =>
+            current.map((entry) =>
+              entry.id === primary.id ? { ...entry, status: 'verified' } : entry,
+            ),
+          );
+        }
+      } catch (err) {
+        setError(
+          err instanceof Error
+            ? err.message
+            : 'The setup could not be verified. Complete the setup and try again.',
+        );
+      } finally {
+        inFlight.current = null;
+        setLoading(false);
+        setRefreshing(false);
+        setLoaded(true);
+      }
+    })();
+    inFlight.current = run;
+    return run;
+  }, [loaded]);
+
+  // A new session (or freshly saved infrastructure) has to be checked again.
   useEffect(() => {
     void load();
-  }, [load]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dbUrl, apiKey, provider, webhookSecret]);
 
   const receiving = useMemo(
     () =>
       records.find(
         (record) =>
-          record.recordType === 'MX' && record.purpose.toLowerCase().includes('receiving'),
+          record.recordType === 'MX' && record.purpose.toLowerCase().includes('receiv'),
       ),
     [records],
   );
@@ -129,7 +168,7 @@ export default function useWorkspaceReadiness(user: User | null): WorkspaceReadi
   );
 
   const checks = useMemo<SetupCheck[]>(() => {
-    const primary = domains[0];
+    const primary = domains.find((entry) => entry.primary) || domains[0];
     const dnsReady = checked && complete && records.length > 0;
     // The live DNS is the truth: a domain whose records are all active is
     // ready, even when the stored status is still out of date.
@@ -202,7 +241,11 @@ export default function useWorkspaceReadiness(user: User | null): WorkspaceReadi
         icon: CircleCheck,
         done: Boolean(receiving && receiving.status === 'verified'),
         detail: receiving
-          ? `MX ${receiving.name} -> ${receiving.value} (${receiving.status})`
+          ? `MX ${receiving.name} -> ${
+              receiving.status === 'verified' && receiving.actual
+                ? receiving.actual
+                : receiving.value
+            } (${receiving.status})`
           : 'Add the inbound MX record to enable receiving',
       },
     ];
@@ -213,15 +256,37 @@ export default function useWorkspaceReadiness(user: User | null): WorkspaceReadi
     [checks, error, loading],
   );
 
+  // Keep the gate honest while the customer publishes records in another tab.
+  useEffect(() => {
+    if (ready) return;
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === 'visible') void load();
+    }, POLL_INTERVAL_MS);
+    return () => window.clearInterval(timer);
+  }, [load, ready]);
+
+  useEffect(() => {
+    const recheck = () => {
+      if (document.visibilityState === 'visible') void load();
+    };
+    window.addEventListener('focus', recheck);
+    document.addEventListener('visibilitychange', recheck);
+    return () => {
+      window.removeEventListener('focus', recheck);
+      document.removeEventListener('visibilitychange', recheck);
+    };
+  }, [load]);
+
   return {
     loading,
+    refreshing,
+    loaded,
     error,
     checks,
     records,
     pending,
+    primaryDomain: domains.find((entry) => entry.primary) || domains[0] || null,
     ready,
-    reload: () => {
-      void load();
-    },
+    reload: load,
   };
 }

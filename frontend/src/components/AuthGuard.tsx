@@ -10,10 +10,9 @@ interface AuthGuardProps {
 /**
  * AuthGuard — Protects routes that require authentication.
  * Redirects to /login if no valid session exists.
- * Enforces infrastructure connectivity: database URL AND API key must be
- * present before any business dashboard access is granted.
- * If infrastructure was removed (e.g. database deleted, API key revoked),
- * the setup flag is reset and the user is redirected to /business-setup.
+ * The workspace console (/business) owns the authoritative live setup gate, so
+ * a workspace that is not configured yet is sent there instead of to a second
+ * setup implementation.
  */
 export default function AuthGuard({ children, requireSetup = false }: AuthGuardProps) {
   const location = useLocation();
@@ -23,10 +22,8 @@ export default function AuthGuard({ children, requireSetup = false }: AuthGuardP
     return <Navigate to="/login" state={{ from: location.pathname }} replace />;
   }
 
-  if (requireSetup) {
-    if (!isBusinessSetupReady(user)) {
-      return <Navigate to="/business-setup" replace />;
-    }
+  if (requireSetup && !isBusinessSetupReady(user)) {
+    return <Navigate to="/business" replace />;
   }
 
   return <>{children}</>;

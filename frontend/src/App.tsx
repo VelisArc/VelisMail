@@ -10,7 +10,6 @@ import './App.css';
 const Home = lazy(() => import('./pages/Home'));
 const Login = lazy(() => import('./pages/Login'));
 const BusinessDashboard = lazy(() => import('./pages/BusinessDashboard'));
-const BusinessSetup = lazy(() => import('./pages/BusinessSetup'));
 const Contacts = lazy(() => import('./pages/Contacts'));
 const Settings = lazy(() => import('./pages/Settings'));
 const Privacy = lazy(() => import('./pages/Privacy'));
@@ -82,8 +81,8 @@ const router = createBrowserRouter([
       { path: "/docs", element: <PageTransition><Documentation /></PageTransition> },
       { path: "/status", element: <PageTransition><Status /></PageTransition> },
       { path: "/pricing", element: <PageTransition><Pricing /></PageTransition> },
-      { path: "/business", element: <PageTransition><AuthGuard requireSetup><BusinessDashboard /></AuthGuard></PageTransition> },
-      { path: "/business-setup", element: <PageTransition><AuthGuard><BusinessSetup /></AuthGuard></PageTransition> },
+      { path: "/business", element: <PageTransition><AuthGuard><BusinessDashboard /></AuthGuard></PageTransition> },
+      { path: "/business-setup", element: <Navigate to="/business" replace /> },
       { path: "/contacts", element: <PageTransition><AuthGuard requireSetup><Contacts /></AuthGuard></PageTransition> },
       { path: "/settings", element: <PageTransition><AuthGuard requireSetup><Settings /></AuthGuard></PageTransition> },
       { path: "/404", element: <PageTransition><NotFound /></PageTransition> },

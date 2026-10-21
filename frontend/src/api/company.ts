@@ -47,6 +47,8 @@ export type WorkspaceInvitation = {
 export type WorkspaceDomain = {
   id: string;
   domain: string;
+  /** The first domain of the workspace is the primary one. */
+  primary?: boolean;
   status: string;
   method?: string | null;
   dnsRecords: Array<Record<string, unknown>>;
@@ -180,9 +182,15 @@ export const workspaceApi = {
     request<{ success: boolean; domains: WorkspaceDomain[] }>('/company/domains'),
 
   createDomain: (payload: { domain: string }) =>
-    request<{ success: boolean; id: string; domain: string; verificationToken: string }>(
+    request<{ success: boolean; id: string; domain: string; verificationToken: string; existing?: boolean }>(
       '/company/domains',
       { method: 'POST', body: JSON.stringify(payload) },
+    ),
+
+  deleteDomain: (id: string) =>
+    request<{ success: boolean; domain: string }>(
+      `/company/domains/${encodeURIComponent(id)}`,
+      { method: 'DELETE' },
     ),
 
   /**

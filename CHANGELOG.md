@@ -1,5 +1,28 @@
 # Changelog
 
+## v5.1.0 - Guided Setup & Live Readiness Gate
+
+### Added
+- **Guided setup wizard**: a single responsive screen at `/business` shows every remaining setup item, explains the fix, and advances one verification step at a time.
+- **Automatic unlock**: the dashboard and Control Plane stay blocked while setup is incomplete and open by themselves as soon as every live check passes.
+- **Domain management API**: list, add, verify, and delete domains for the current workspace, with the oldest domain marked as primary.
+- **Guided DNS records**: the wizard lists the exact MX, SPF, DKIM, DMARC, and ownership TXT values to publish, with copy actions and live match status.
+
+### Changed
+- Setup readiness now reflects the live DNS report instead of stale session flags; the backend repairs an outdated `verification_status` when the records are already correct.
+- `/business-setup` redirects to `/business`, and the old page is removed.
+- Dashboard data hooks only mount after readiness passes, so incomplete workspaces cannot load dashboard data.
+- Workspace domain actions use the backend API; local placeholder domains and fake verification success were removed.
+
+### Fixed
+- **Multiple domains per workspace**: adding a second domain no longer gets blocked or moved between tenants.
+- Ownership TXT records are published at `_velismail-verify` consistently.
+- DMARC conflict detection explains which duplicate record to keep.
+- Deleting the active domain selects a valid remaining domain.
+- Infrastructure provider credentials save before a verification run, so DNS checks see fresh settings.
+
+---
+
 ## v5.0.0 - Resend-only Email & Dependency Modernization
 
 ### Changed

@@ -45,7 +45,7 @@ export default function SettingsPage() {
       navigate('/login');
       return;
     } else if (!isBusinessSetupReady(session)) {
-      navigate('/business-setup');
+      navigate('/business');
       return;
     }
     setUser(session);
@@ -297,7 +297,7 @@ export default function SettingsPage() {
   };
 
   if (!user) return <Navigate to="/login" replace />;
-  if (!isBusinessSetupReady(user)) return <Navigate to="/business-setup" replace />;
+  if (!isBusinessSetupReady(user)) return <Navigate to="/business" replace />;
 
   const primaryMailbox = user.businessMailboxAddress || user.email;
 
