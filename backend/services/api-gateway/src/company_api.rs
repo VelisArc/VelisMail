@@ -1318,11 +1318,20 @@ pub async fn dns_requirements(
         .and_then(Value::as_str)
         .unwrap_or("resend")
         .to_string();
-    let api_key = settings
+    // The domain may be served by the customer's own provider account or by
+    // the platform provider. Both are looked up so the records always match
+    // the account that actually sends the mail.
+    let customer_key = settings
         .get("businessApiKey")
         .and_then(Value::as_str)
         .unwrap_or("")
+        .trim()
         .to_string();
+    let api_key = if customer_key.is_empty() {
+        state.config.platform_resend_api_key.trim().to_string()
+    } else {
+        customer_key
+    };
 
     let (sending_domain, records) =
         crate::domain_dns::requirements(&state.http_client, &provider, &api_key, &domain).await;

@@ -25,6 +25,9 @@ pub struct GatewayConfig {
     // External APIs
     pub razorpay_key_id: String,
     pub razorpay_key_secret: String,
+    /// The platform's own mail provider key. It is used to look up the DNS
+    /// records of a domain that is served by the platform provider.
+    pub platform_resend_api_key: String,
     // Optional DB for gateway persistence (team invites, inbound routes)
     pub db_url: Option<String>,
     // Optional JWT validation for gateway-owned protected routes.
@@ -108,6 +111,9 @@ impl GatewayConfig {
                 .unwrap_or_else(|_| "http://delivery-engine:3005".to_string()),
             razorpay_key_id: std::env::var("RAZORPAY_KEY_ID").unwrap_or_default(),
             razorpay_key_secret: std::env::var("RAZORPAY_KEY_SECRET").unwrap_or_default(),
+            platform_resend_api_key: std::env::var("PLATFORM_RESEND_API_KEY")
+                .or_else(|_| std::env::var("RESEND_API_KEY"))
+                .unwrap_or_default(),
             db_url: std::env::var("DATABASE_URL")
                 .ok()
                 .filter(|v| !v.trim().is_empty()),

@@ -199,7 +199,8 @@ pub async fn requirements(
         purpose: "Enable receiving - inbound mail for this domain".to_string(),
         status: "pending".to_string(),
         actual: String::new(),
-        match_mode: "exact".to_string(),
+        // Any Resend inbound host of the right region is accepted.
+        match_mode: "resend_inbound".to_string(),
     });
 
     // DMARC tells receivers what to do with mail that fails SPF and DKIM.
@@ -288,7 +289,15 @@ pub async fn verify(
             answers.join(", ")
         };
 
-        if record.record_type == "MX" {
+        if record.record_type == "MX" && record.match_mode == "resend_inbound" {
+            // The inbound host depends on the region, so any Resend inbound MX
+            // of the domain counts as enabled receiving.
+            let found = answers.iter().any(|answer| {
+                let host = normalize(answer.split_whitespace().last().unwrap_or(answer));
+                host.starts_with("inbound-smtp.") && host.ends_with(".amazonaws.com")
+            });
+            record.status = if found { "verified" } else { "mismatch" }.to_string();
+        } else if record.record_type == "MX" {
             let expected = normalize(
                 record
                     .value

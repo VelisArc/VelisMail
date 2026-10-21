@@ -197,10 +197,6 @@ pub fn api_v1_routes(_state: &AppState) -> Router<AppState> {
             get(company_api::dns_requirements),
         )
         .route(
-            "/company/domains/dns-requirements",
-            get(company_api::dns_requirements),
-        )
-        .route(
             "/company/mailboxes",
             get(company_api::list_mailboxes).post(company_api::create_mailbox),
         )
