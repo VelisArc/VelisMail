@@ -459,8 +459,10 @@ export default function PlatformAdminPanel({ section, onSectionChange, state }: 
     () => broadcastExtra.split(/[\s,;]+/).map((value) => value.trim()).filter((value) => value.includes('@')),
     [broadcastExtra],
   );
-  const broadcastTargetCount = broadcastSelected.length + broadcastExtraEmails.length;
   const broadcastAudienceSize = broadcastRecipients.length;
+  const broadcastTargetCount = broadcastSelected.length > 0
+    ? broadcastSelected.length + broadcastExtraEmails.length
+    : (broadcastExtraEmails.length > 0 ? broadcastExtraEmails.length : broadcastAudienceSize);
 
   const toggleBroadcastRecipient = useCallback((id: string) => {
     setBroadcastSelected((current) => (
@@ -471,10 +473,10 @@ export default function PlatformAdminPanel({ section, onSectionChange, state }: 
   const sendBroadcast = useCallback(() => {
     const subject = broadcastSubject.trim();
     const body = broadcastBody.trim();
-    const targetCount = broadcastSelected.length || broadcastAudienceSize;
+    const targetCount = broadcastTargetCount;
     confirm({
       title: 'Send platform broadcast',
-      message: `"${subject}" is delivered privately to ${targetCount + broadcastExtraEmails.length} recipient(s) as a ${broadcastCategory} message. Every recipient receives their own copy and nobody sees the other addresses.`,
+      message: `"${subject}" is delivered privately to ${targetCount} recipient(s) as a ${broadcastCategory} message. Every recipient receives their own copy on their recovery address, and nobody sees the other addresses.`,
       confirmLabel: 'Send now',
       tone: 'danger',
       onConfirm: async () => {
@@ -510,12 +512,12 @@ export default function PlatformAdminPanel({ section, onSectionChange, state }: 
     });
   }, [
     broadcastAudience,
-    broadcastAudienceSize,
     broadcastBody,
     broadcastCategory,
     broadcastExtraEmails,
     broadcastSelected,
     broadcastSubject,
+    broadcastTargetCount,
     confirm,
     load,
     notify,
@@ -1180,11 +1182,18 @@ export default function PlatformAdminPanel({ section, onSectionChange, state }: 
                     value={broadcastExtra}
                     onChange={(event) => setBroadcastExtra(event.target.value)}
                   />
+                  <span className="form-hint">
+                    {broadcastSelected.length === 0 && broadcastExtraEmails.length > 0
+                      ? 'Only these addresses receive the message - nobody else is contacted.'
+                      : 'These addresses are added to the recipients below.'}
+                  </span>
                 </div>
 
                 <div className="admin-broadcast-summary">
                   <span>Recipients from selection: <strong>{number(broadcastSelected.length)}</strong></span>
-                  <span>Total private deliveries: <strong>{number(broadcastTargetCount || broadcastAudienceSize)}</strong></span>
+                  <span>Custom addresses: <strong>{number(broadcastExtraEmails.length)}</strong></span>
+                  <span>Total private deliveries: <strong>{number(broadcastTargetCount)}</strong></span>
+                  <span>Delivered to the recovery address, never to the company mailbox.</span>
                 </div>
 
                 {broadcastResult && (
@@ -1200,12 +1209,12 @@ export default function PlatformAdminPanel({ section, onSectionChange, state }: 
                 <button
                   type="button"
                   className="btn btn-primary w-full"
-                  disabled={broadcastSending || broadcastSubject.trim().length < 4 || broadcastBody.trim().length < 10}
+                  disabled={broadcastSending || broadcastSubject.trim().length < 4 || broadcastBody.trim().length < 10 || broadcastTargetCount === 0}
                   onClick={sendBroadcast}
                 >
                   {broadcastSending
                     ? <LoadingSpinner size="sm" label="Sending" />
-                    : <><Send size={15} /> Send to {number(broadcastTargetCount || broadcastAudienceSize)} recipients</>}
+                    : <><Send size={15} /> Send to {number(broadcastTargetCount)} recipient{broadcastTargetCount === 1 ? '' : 's'}</>}
                 </button>
               </section>
             </div>

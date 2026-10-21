@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Navigate, useNavigate, useLocation } from 'react-router-dom';
-import { Building2, Crown } from 'lucide-react';
+import { Building2, Crown, Globe, Plus } from 'lucide-react';
 import { auth, connections, domains, fetchAPI, fetchAuthenticatedProfile, isBusinessSetupReady, mail, saveDB, signatures, contacts, STORAGE_KEYS, type BusinessAuditEntry, type BusinessGroup, type BusinessMailbox, type BusinessTeamMember, type BusinessTemplate, type ConnectionUsage, type CustomDomain, type Email, type PlatformAdminUserRecord, type DomainCheck, type TeamAccessInvite, type Signature, type Contact, type ActiveSession } from '../api/client';
 import { platformAdminApi } from '../api/admin';
 import Sidebar from '../components/dashboard/Sidebar';
@@ -691,8 +691,7 @@ export default function BusinessDashboard() {
       <Sidebar
         activeBizTab={activeBizTab} setActiveBizTab={setActiveBizTab}
         activeFolder={activeFolder} setActiveFolder={setActiveFolder}
-        onCompose={() => openComposeWith()} user={user}
-        onLogout={() => setShowLogoutConfirm(true)} sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen}
+        user={user}        onLogout={() => setShowLogoutConfirm(true)} sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen}
         hasRoleAccess={hasRoleAccess} isPlatformOwner={isPlatformOwner}
         viewMode={viewMode}
         platformSection={platformSection} onPlatformSectionChange={setPlatformSection}
@@ -701,24 +700,54 @@ export default function BusinessDashboard() {
       />
 
       <main className="dash-main">
-        {canAccessPlatformAdmin && (
-          <div className="dash-view-switch" role="group" aria-label="Dashboard view">
-            <button
-              type="button"
-              className={`dash-view-switch-btn ${viewMode === 'workspace' ? 'active' : ''}`}
-              onClick={() => switchView('workspace')}
-            >
-              <Building2 size={14} /> Workspace
-            </button>
-            <button
-              type="button"
-              className={`dash-view-switch-btn ${viewMode === 'control-plane' ? 'active' : ''}`}
-              onClick={() => switchView('control-plane')}
-            >
-              <Crown size={14} /> Control Plane
-            </button>
+        <header className="dash-topbar">
+          <div className="dash-topbar-left">
+            {canAccessPlatformAdmin && (
+              <button
+                type="button"
+                className="dash-view-toggle"
+                onClick={() => switchView(viewMode === 'workspace' ? 'control-plane' : 'workspace')}
+                title={viewMode === 'workspace' ? 'Open the platform control plane' : 'Back to your workspace'}
+              >
+                {viewMode === 'workspace'
+                  ? (<><Crown size={15} /> Control Plane</>)
+                  : (<><Building2 size={15} /> Workspace</>)}
+              </button>
+            )}
           </div>
-        )}
+
+          <div className="dash-topbar-right">
+            {viewMode === 'workspace' && domainsList.length > 0 && (
+              <label className="dash-domain-picker">
+                <Globe size={14} />
+                <span className="dash-domain-picker-label">Active domain</span>
+                <select
+                  className="input input-sm"
+                  value={activeDomainName}
+                  onChange={(event) => {
+                    const domName = event.target.value;
+                    setActiveDomain(domName);
+                    const matched = domainsList.find((domain) => domain.domain === domName);
+                    if (matched) domains.setPrimary(matched.id);
+                    showToast(`Switched active domain to ${domName}`);
+                  }}
+                  aria-label="Active domain"
+                >
+                  {domainsList.map((domain) => (
+                    <option key={domain.id} value={domain.domain}>
+                      {domain.domain} ({domain.status})
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+            {viewMode === 'workspace' && (
+              <button type="button" className="btn btn-primary btn-sm" onClick={() => openComposeWith()}>
+                <Plus size={15} /> New Message
+              </button>
+            )}
+          </div>
+        </header>
 
         {viewMode === 'control-plane' && (
           <ErrorBoundary>

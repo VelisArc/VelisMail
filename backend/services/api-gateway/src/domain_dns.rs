@@ -221,11 +221,7 @@ pub async fn requirements(
             actual: String::new(),
             match_mode: "spf".to_string(),
         });
-        let selector = if dkim_selector.trim().is_empty() {
-            "resend".to_string()
-        } else {
-            dkim_selector.trim().to_string()
-        };
+        let selector = discover_dkim_selector(client, &domain, dkim_selector).await;
         records.push(DnsRequirement {
             record_type: "TXT".to_string(),
             name: format!("{selector}._domainkey"),
@@ -304,6 +300,51 @@ async fn sending_mx_host(client: &reqwest::Client, host: &str) -> Option<String>
                 .to_string()
         })
         .find(|value| value.contains("feedback-smtp."))
+}
+
+/// Find the DKIM selector that is actually published for the domain.
+///
+/// The selector is chosen by whoever published the record, so the common ones
+/// are tried before the platform default is used.
+async fn discover_dkim_selector(
+    client: &reqwest::Client,
+    domain: &str,
+    configured: &str,
+) -> String {
+    let mut candidates: Vec<String> = Vec::new();
+    if !configured.trim().is_empty() {
+        candidates.push(configured.trim().to_string());
+    }
+    for candidate in [
+        "resend",
+        "google",
+        "k1",
+        "mail",
+        "default",
+        "selector1",
+        "selector2",
+        "dkim",
+    ] {
+        if !candidates.iter().any(|value| value == candidate) {
+            candidates.push(candidate.to_string());
+        }
+    }
+    for candidate in candidates {
+        let host = format!("{candidate}._domainkey.{domain}");
+        if let Ok(answers) = query(client, &host, "TXT").await {
+            if answers.iter().any(|answer| {
+                let value = answer.to_lowercase();
+                value.contains("p=") || value.starts_with("v=dkim1")
+            }) {
+                return candidate;
+            }
+        }
+    }
+    if configured.trim().is_empty() {
+        "resend".to_string()
+    } else {
+        configured.trim().to_string()
+    }
 }
 
 /// Fetch a domain entry from the Resend API.

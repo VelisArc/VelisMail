@@ -1,7 +1,6 @@
 import { Link } from 'react-router-dom';
-import { LogOut, Mail, Layers, Server, Globe, Inbox, Users, Shield, BarChart3, Activity, Settings, CreditCard, Crown, Plus, User, Contact as ContactIcon, Building2, FileText, LifeBuoy, Flag, Gauge, Send } from 'lucide-react';
+import { LogOut, Mail, Layers, Server, Globe, Inbox, Users, Shield, BarChart3, Activity, Settings, CreditCard, Crown, User, Contact as ContactIcon, Building2, FileText, LifeBuoy, Flag, Gauge, Send } from 'lucide-react';
 import type { User as UserType } from '../../api/client';
-import { domains } from '../../api/client';
 import { BIZ_FOLDERS } from './constants';
 import type { BizTab, BizFolder } from './constants';
 import type { DashboardState } from './types';
@@ -12,7 +11,6 @@ interface SidebarProps {
   setActiveBizTab: (tab: BizTab) => void;
   activeFolder: string;
   setActiveFolder: (f: string) => void;
-  onCompose: () => void;
   user: UserType | null;
   onLogout: () => void;
   sidebarOpen: boolean;
@@ -82,7 +80,6 @@ export default function Sidebar({
   setActiveBizTab,
   activeFolder,
   setActiveFolder,
-  onCompose,
   user,
   onLogout,
   sidebarOpen,
@@ -122,38 +119,6 @@ export default function Sidebar({
             </div>
           </Link>
         </div>
-        {!isControlPlane && state && state.domainsList.length > 0 && (
-          <div className="side-domain-select-container" style={{ padding: '4px 12px 8px 12px', borderBottom: '1px solid var(--border-primary)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-            <span className="side-section-label" style={{ padding: 0 }}>Active Domain</span>
-            <select
-              className="input input-sm"
-              value={state.activeDomainName}
-              onChange={(e) => {
-                const domName = e.target.value;
-                state.setActiveDomain(domName);
-                const matched = state.domainsList.find(d => d.domain === domName);
-                if (matched) {
-                  domains.setPrimary(matched.id);
-                }
-                state.showToast(`Switched active domain to ${domName}`);
-              }}
-              style={{ fontSize: '11px', height: '28px', padding: '4px 8px', width: '100%' }}
-            >
-              {state.domainsList.map(dom => (
-                <option key={dom.id} value={dom.domain}>
-                  {dom.domain} ({dom.status})
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
-
-        {!isControlPlane && (
-          <button type="button" className="btn btn-primary side-compose" onClick={onCompose}>
-            <Plus size={16} /> New Message
-          </button>
-        )}
-
         {isControlPlane && (
           <div className="side-mode-hint">
             <Crown size={14} />

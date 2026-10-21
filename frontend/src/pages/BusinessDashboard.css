@@ -2377,6 +2377,103 @@
   border: 1px solid var(--border-primary);
 }
 
+/* ─── Dashboard top bar ───
+   The workspace and the control plane are two sides of the same console, so
+   they share one bar: the switch on the left, the active domain and the
+   compose action on the right. */
+.dash-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  min-height: 58px;
+  padding: var(--space-3) var(--space-6);
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border-primary);
+  flex-shrink: 0;
+}
+
+.dash-topbar-left,
+.dash-topbar-right {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.dash-topbar-right {
+  justify-content: flex-end;
+}
+
+.dash-view-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-4);
+  background: var(--primary);
+  border: 1px solid var(--primary);
+  color: var(--text-inverted);
+  font-size: var(--text-xs);
+  font-weight: var(--font-weight-bold);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wide);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.dash-view-toggle:hover {
+  background: var(--primary-600);
+  border-color: var(--primary-600);
+}
+
+.dash-domain-picker {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 0 var(--space-3) 0 var(--space-3);
+  height: 32px;
+  background: var(--bg-surface-2);
+  border: 1px solid var(--border-primary);
+  color: var(--text-muted);
+  min-width: 0;
+}
+
+.dash-domain-picker-label {
+  font-size: 0.66rem;
+  font-weight: var(--font-weight-bold);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.dash-domain-picker .input {
+  min-height: 26px;
+  height: 26px;
+  padding: 0 var(--space-2);
+  font-size: var(--text-xs);
+  background: transparent;
+  border: none;
+  color: var(--text-primary);
+  font-weight: var(--font-weight-semibold);
+  max-width: 220px;
+}
+
+@media (max-width: 900px) {
+  .dash-topbar {
+    padding: var(--space-3) var(--space-4);
+  }
+
+  .dash-domain-picker-label {
+    display: none;
+  }
+
+  .dash-domain-picker .input {
+    max-width: 130px;
+  }
+}
+
 .dash-view-switch-btn {
   display: inline-flex;
   align-items: center;
