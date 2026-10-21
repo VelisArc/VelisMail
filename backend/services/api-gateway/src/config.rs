@@ -28,6 +28,10 @@ pub struct GatewayConfig {
     /// The platform's own mail provider key. It is used to look up the DNS
     /// records of a domain that is served by the platform provider.
     pub platform_resend_api_key: String,
+    /// The platform's SPF policy and DKIM selector, used to tell a customer
+    /// which records to publish.
+    pub spf_record: String,
+    pub dkim_selector: String,
     // Optional DB for gateway persistence (team invites, inbound routes)
     pub db_url: Option<String>,
     // Optional JWT validation for gateway-owned protected routes.
@@ -114,6 +118,8 @@ impl GatewayConfig {
             platform_resend_api_key: std::env::var("PLATFORM_RESEND_API_KEY")
                 .or_else(|_| std::env::var("RESEND_API_KEY"))
                 .unwrap_or_default(),
+            spf_record: std::env::var("SPF_RECORD").unwrap_or_default(),
+            dkim_selector: std::env::var("DKIM_SELECTOR").unwrap_or_default(),
             db_url: std::env::var("DATABASE_URL")
                 .ok()
                 .filter(|v| !v.trim().is_empty()),

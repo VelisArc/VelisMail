@@ -3590,7 +3590,9 @@ async fn resolve_broadcast_recipients(
         _ => "all",
     };
     let rows = sqlx::query(
-        "SELECT u.email, COALESCE(u.display_name, '') AS display_name
+        "SELECT COALESCE(NULLIF(u.recovery_email, ''), u.email) AS email,
+                u.email AS account_email,
+                COALESCE(u.display_name, '') AS display_name
          FROM users u
          WHERE ($1::uuid[] IS NULL OR u.id = ANY($1::uuid[]))
            AND ($2 = '' OR LOWER(u.email) LIKE '%' || LOWER($2) || '%'
@@ -3622,6 +3624,21 @@ async fn resolve_broadcast_recipients(
             )
         })
         .collect())
+}
+
+/// Collect the extra addresses that were typed into the composer.
+fn collect_additional_emails(values: Vec<String>) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for value in values {
+        let email = value.trim().to_lowercase();
+        if email.is_empty() || !email.contains('@') {
+            continue;
+        }
+        if !out.contains(&email) {
+            out.push(email);
+        }
+    }
+    out
 }
 
 /// Deliver one message to one recipient. The mail service is called per
@@ -3722,16 +3739,26 @@ pub async fn platform_broadcast(
         .clamp(1, BROADCAST_HARD_LIMIT);
     let search = payload.search.unwrap_or_default().trim().to_string();
     let selected = payload.recipient_ids.unwrap_or_default();
-    // An empty selection means "the whole audience", so the filter is not
-    // narrowed down to a list of ids.
-    let recipient_ids: Option<Vec<Uuid>> = if selected.is_empty() {
-        None
+    let extra = collect_additional_emails(payload.additional_emails.unwrap_or_default());
+
+    // Who receives the message:
+    //
+    // * a selection of accounts - exactly those accounts,
+    // * otherwise custom addresses only - a one to one send, never the whole
+    //   audience,
+    // * otherwise everyone that matches the audience filter.
+    let lookup = if !selected.is_empty() {
+        (String::new(), "all".to_string(), Some(selected.clone()))
+    } else if !extra.is_empty() {
+        (String::new(), "all".to_string(), Some(Vec::new()))
     } else {
-        Some(selected)
+        (search.clone(), audience.clone(), None)
     };
 
-    let mut recipients =
-        match resolve_broadcast_recipients(db, &search, &audience, recipient_ids.as_deref(), limit)
+    let mut recipients = if lookup.2.as_deref() == Some(&[][..]) {
+        Vec::new()
+    } else {
+        match resolve_broadcast_recipients(db, &lookup.0, &lookup.1, lookup.2.as_deref(), limit)
             .await
         {
             Ok(rows) => rows,
@@ -3742,26 +3769,19 @@ pub async fn platform_broadcast(
                     "Unable to resolve the broadcast recipients.",
                 );
             }
-        };
-
-    // Extra addresses that are not accounts on the platform.
-    let mut extra: Vec<String> = Vec::new();
-    for value in payload.additional_emails.unwrap_or_default() {
-        let email = value.trim().to_lowercase();
-        if email.is_empty() || !email.contains('@') {
-            continue;
         }
+    };
+
+    let account_count = recipients.len();
+    for email in &extra {
         if recipients
             .iter()
-            .any(|(existing, _)| existing.eq_ignore_ascii_case(&email))
+            .any(|(existing, _)| existing.eq_ignore_ascii_case(email))
         {
             continue;
         }
-        extra.push(email);
+        recipients.push((email.clone(), String::new()));
     }
-
-    let account_count = recipients.len();
-    recipients.extend(extra.iter().map(|email| (email.clone(), String::new())));
 
     if recipients.is_empty() {
         return fail(

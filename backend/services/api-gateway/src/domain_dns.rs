@@ -110,20 +110,24 @@ pub fn resend_inbound_mx_for(sending_mx: &str) -> Option<String> {
 
 /// Build the list of records a domain has to publish.
 ///
-/// The provider is the source of truth for SPF, DKIM and the sending MX. The
-/// inbound MX (receiving) and the DMARC policy are added on top, because both
-/// are required for a complete, deliverable setup.
+/// The provider is the source of truth while a domain is still being set up.
+/// Once the provider reports the domain as verified it stops returning the
+/// records, so the requirements are then discovered from the live DNS and from
+/// the platform's own sending configuration.
 pub async fn requirements(
     client: &reqwest::Client,
     provider: &str,
     api_key: &str,
     domain: &str,
+    platform_spf: &str,
+    dkim_selector: &str,
 ) -> (String, Vec<DnsRequirement>) {
     let domain = domain.trim().trim_end_matches('.').to_ascii_lowercase();
     let mut records: Vec<DnsRequirement> = Vec::new();
 
     let mut inbound_mx: Option<String> = None;
     let mut sending_domain = domain.clone();
+    let mut provider_records = 0usize;
 
     if provider.eq_ignore_ascii_case("resend") && !api_key.trim().is_empty() {
         if let Ok(Some(entry)) = fetch_resend_domain(client, api_key, &domain).await {
@@ -158,6 +162,7 @@ pub async fn requirements(
                 if value.is_empty() {
                     continue;
                 }
+                provider_records += 1;
                 let purpose = match record.get("tag").and_then(Value::as_str).unwrap_or("") {
                     "SPF" => "Authorises the sending server for this domain",
                     "DKIM" => "Signs outgoing mail so receivers can verify it",
@@ -180,10 +185,58 @@ pub async fn requirements(
                     purpose: purpose.to_string(),
                     status: "pending".to_string(),
                     actual: String::new(),
-                    match_mode: "exact".to_string(),
+                    match_mode: if record_type == "TXT" && purpose.starts_with("Authorises") {
+                        "spf".to_string()
+                    } else {
+                        "exact".to_string()
+                    },
                 });
             }
         }
+    }
+
+    // The provider no longer returns the records for a verified domain, so the
+    // requirements are discovered from the live DNS instead.
+    if provider_records == 0 {
+        let (host, name) = discover_sending_host(client, &domain).await;
+        sending_domain = host.clone();
+        if let Some(mx_host) = sending_mx_host(client, &host).await {
+            if let Some(inbound) = resend_inbound_mx_for(&mx_host) {
+                inbound_mx = Some(inbound);
+            }
+        }
+        let spf_value = if platform_spf.trim().is_empty() {
+            "v=spf1 include:amazonses.com ~all".to_string()
+        } else {
+            platform_spf.trim().to_string()
+        };
+        records.push(DnsRequirement {
+            record_type: "TXT".to_string(),
+            name: name.clone(),
+            host: host.clone(),
+            value: spf_value,
+            ttl: 3600,
+            purpose: "Authorises the sending server for this domain".to_string(),
+            status: "pending".to_string(),
+            actual: String::new(),
+            match_mode: "spf".to_string(),
+        });
+        let selector = if dkim_selector.trim().is_empty() {
+            "resend".to_string()
+        } else {
+            dkim_selector.trim().to_string()
+        };
+        records.push(DnsRequirement {
+            record_type: "TXT".to_string(),
+            name: format!("{selector}._domainkey"),
+            host: format!("{selector}._domainkey.{domain}"),
+            value: String::new(),
+            ttl: 3600,
+            purpose: "Signs outgoing mail so receivers can verify it".to_string(),
+            status: "pending".to_string(),
+            actual: String::new(),
+            match_mode: "exists".to_string(),
+        });
     }
 
     // Receiving. Without this the domain can send but never receive.
@@ -219,6 +272,38 @@ pub async fn requirements(
     });
 
     (sending_domain, records)
+}
+
+/// Find the host that actually sends the mail for this domain.
+async fn discover_sending_host(client: &reqwest::Client, domain: &str) -> (String, String) {
+    for name in ["send", "@"] {
+        let host = host_for(domain, name);
+        if let Ok(answers) = query(client, &host, "MX").await {
+            let has_provider_mx = answers.iter().any(|answer| {
+                let mx_host = answer.split_whitespace().last().unwrap_or(answer);
+                mx_host.contains("feedback-smtp.")
+            });
+            if has_provider_mx {
+                return (host, name.to_string());
+            }
+        }
+    }
+    (domain.to_string(), "@".to_string())
+}
+
+/// The sending MX host of a domain, when it is published.
+async fn sending_mx_host(client: &reqwest::Client, host: &str) -> Option<String> {
+    let answers = query(client, host, "MX").await.ok()?;
+    answers
+        .iter()
+        .map(|answer| {
+            answer
+                .split_whitespace()
+                .last()
+                .unwrap_or(answer)
+                .to_string()
+        })
+        .find(|value| value.contains("feedback-smtp."))
 }
 
 /// Fetch a domain entry from the Resend API.
@@ -324,6 +409,20 @@ pub async fn verify(
                 "mismatch"
             }
             .to_string();
+        } else if record.match_mode == "exists" {
+            record.status = if answers.is_empty() {
+                "mismatch".to_string()
+            } else {
+                "verified".to_string()
+            };
+        } else if record.match_mode == "spf" {
+            // SPF: a policy that starts with v=spf1 and authorises the
+            // sending service. The exact value may differ, the policy may not.
+            let found = answers.iter().any(|answer| {
+                let value = answer.to_lowercase();
+                value.starts_with("v=spf1") && value.contains("amazonses")
+            });
+            record.status = if found { "verified" } else { "mismatch" }.to_string();
         } else {
             let expected = normalize(&record.value);
             let found = answers

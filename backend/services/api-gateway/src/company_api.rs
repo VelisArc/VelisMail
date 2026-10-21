@@ -1333,8 +1333,15 @@ pub async fn dns_requirements(
         customer_key
     };
 
-    let (sending_domain, records) =
-        crate::domain_dns::requirements(&state.http_client, &provider, &api_key, &domain).await;
+    let (sending_domain, records) = crate::domain_dns::requirements(
+        &state.http_client,
+        &provider,
+        &api_key,
+        &domain,
+        &state.config.spf_record,
+        &state.config.dkim_selector,
+    )
+    .await;
     let records = crate::domain_dns::verify(&state.http_client, records).await;
     let complete = crate::domain_dns::is_complete(&records);
     let missing: Vec<String> = records
