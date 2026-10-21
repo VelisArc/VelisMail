@@ -130,7 +130,7 @@ export default function DeliverabilityPanel({ state }: DeliverabilityPanelProps)
         </button>
         <h3><Shield size={16} /> Deliverability Score</h3>
         {activeDomain && (
-          <button type="button" className="btn btn-ghost btn-sm" onClick={handleVerify} title="Verify Records">
+          <button type="button" className="btn btn-ghost btn-sm" onClick={() => void handleVerify()} title="Verify Records">
             <RefreshCcw size={12} /> Verify
           </button>
         )}

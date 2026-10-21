@@ -797,7 +797,10 @@ export default function BusinessDashboard() {
   // depend on the workspace, so the owner can still open it.
   const controlPlaneOpen = viewMode === 'control-plane' && canAccessPlatformAdmin;
   const sessionReady = isBusinessSetupReady(user);
-  if (!controlPlaneOpen && !sessionReady) {
+  // A member that signed in with a workspace API key works in the workspace
+  // the owner configured, so the setup does not belong to them.
+  const invitedMember = Boolean(user.teamAccessRole);
+  if (!controlPlaneOpen && !invitedMember && !sessionReady) {
     return (
       <SetupRequired
         user={user}
@@ -807,7 +810,7 @@ export default function BusinessDashboard() {
       />
     );
   }
-  if (!controlPlaneOpen && readiness.loading) {
+  if (!controlPlaneOpen && !invitedMember && readiness.loading) {
     return (
       <div className="setup-required">
         <div className="setup-required-card setup-required-loading">
@@ -817,7 +820,7 @@ export default function BusinessDashboard() {
       </div>
     );
   }
-  if (!controlPlaneOpen && !readiness.ready) {
+  if (!controlPlaneOpen && !invitedMember && !readiness.ready) {
     return (
       <SetupRequired
         user={user}
