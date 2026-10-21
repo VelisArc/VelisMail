@@ -1116,7 +1116,7 @@ export default function PlatformAdminPanel({ section, onSectionChange, state }: 
                         <span className="avatar avatar-sm">{(user.displayName || user.email).charAt(0).toUpperCase()}</span>
                         <span>
                           <strong>{user.displayName || user.email}</strong>
-                          <span>{user.email} · {user.plan}</span>
+                          <span>{(user.recoveryEmail || user.email)} · {user.plan}</span>
                         </span>
                       </span>
                       <Badge value={user.status}>{user.status}</Badge>

@@ -302,7 +302,57 @@ async fn sending_mx_host(client: &reqwest::Client, host: &str) -> Option<String>
         .find(|value| value.contains("feedback-smtp."))
 }
 
-/// Find the DKIM selector that is actually published for the domain.
+/// Rebuild the requirements from the records the customer published earlier.
+///
+/// The provider stops returning the records once a domain is verified, so the
+/// copy that was stored when the domain was added is used instead.
+pub fn from_stored(dns_records: &Value, mx_records: &Value, domain: &str) -> Vec<DnsRequirement> {
+    let mut records: Vec<DnsRequirement> = Vec::new();
+    for (list, record_type) in [(dns_records, "TXT"), (mx_records, "MX")] {
+        let Some(entries) = list.as_array() else {
+            continue;
+        };
+        for entry in entries {
+            let name = entry
+                .get("name")
+                .and_then(Value::as_str)
+                .unwrap_or("@")
+                .to_string();
+            let value = entry
+                .get("value")
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .trim()
+                .to_string();
+            if value.is_empty() {
+                continue;
+            }
+            let ttl = entry.get("ttl").and_then(Value::as_u64).unwrap_or(3600) as u32;
+            let purpose = match record_type {
+                "MX" => "Routes mail for this domain",
+                _ => "Required for mail delivery",
+            };
+            records.push(DnsRequirement {
+                record_type: record_type.to_string(),
+                name: name.clone(),
+                host: host_for(domain, &name),
+                value,
+                ttl,
+                purpose: purpose.to_string(),
+                status: "pending".to_string(),
+                actual: String::new(),
+                match_mode: if record_type == "MX" {
+                    "resend_inbound".to_string()
+                } else {
+                    "exact".to_string()
+                },
+            });
+        }
+    }
+    records
+}
+
+/// The DKIM selector that is actually published for the domain.
 ///
 /// The selector is chosen by whoever published the record, so the common ones
 /// are tried before the platform default is used.

@@ -3,7 +3,6 @@ import { LogOut, Mail, Layers, Server, Globe, Inbox, Users, Shield, BarChart3, A
 import type { User as UserType } from '../../api/client';
 import { BIZ_FOLDERS } from './constants';
 import type { BizTab, BizFolder } from './constants';
-import type { DashboardState } from './types';
 import type { PlatformSection } from './panels/PlatformAdminPanel';
 
 interface SidebarProps {
@@ -22,7 +21,6 @@ interface SidebarProps {
   platformSection: PlatformSection;
   onPlatformSectionChange: (section: PlatformSection) => void;
   onProfileClick?: () => void;
-  state?: DashboardState;
 }
 
 const PLATFORM_NAV: Array<{ group: string; items: Array<{ id: PlatformSection; label: string; icon: typeof Activity; ownerOnly?: boolean }> }> = [
@@ -90,7 +88,6 @@ export default function Sidebar({
   platformSection,
   onPlatformSectionChange,
   onProfileClick,
-  state,
 }: SidebarProps) {
   const folderBadge = (f: BizFolder) => f.badge;
   const isControlPlane = viewMode === 'control-plane';

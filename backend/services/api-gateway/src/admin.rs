@@ -2208,7 +2208,8 @@ pub async fn list_platform_users(
                  FROM custom_domains d WHERE d.tenant_id = u.tenant_id) AS domain_list,
                 (SELECT COUNT(*)::bigint FROM delivery_queue q WHERE q.sender = u.email) AS sent_count,
                 (SELECT COUNT(*)::bigint FROM sessions s WHERE s.user_id = u.id AND s.is_active AND s.expires_at > NOW()) AS active_sessions,
-                (SELECT COUNT(*)::bigint FROM failed_login_attempts f WHERE f.user_id = u.id AND f.attempted_at > NOW() - INTERVAL '30 days') AS failed_logins
+                (SELECT COUNT(*)::bigint FROM failed_login_attempts f WHERE f.user_id = u.id AND f.attempted_at > NOW() - INTERVAL '30 days') AS failed_logins,
+                 COALESCE(NULLIF(u.recovery_email, ''), u.email) AS recovery_email
          FROM users u
          LEFT JOIN tenants t ON t.id = u.tenant_id
          WHERE ($1 = '' OR LOWER(u.email) LIKE '%' || $1 || '%' OR LOWER(u.display_name) LIKE '%' || $1 || '%')
@@ -2245,6 +2246,7 @@ pub async fn list_platform_users(
             json!({
                 "id": row.try_get::<Uuid, _>("id").map(|v| v.to_string()).unwrap_or_default(),
                 "email": row.try_get::<String, _>("email").unwrap_or_default(),
+                "recoveryEmail": row.try_get::<String, _>("recovery_email").unwrap_or_default(),
                 "displayName": row.try_get::<String, _>("display_name").unwrap_or_default(),
                 "status": user_status,
                 "tenantId": row.try_get::<Option<Uuid>, _>("tenant_id").ok().flatten().map(|v| v.to_string()),

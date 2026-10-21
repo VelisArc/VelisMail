@@ -696,7 +696,6 @@ export default function BusinessDashboard() {
         viewMode={viewMode}
         platformSection={platformSection} onPlatformSectionChange={setPlatformSection}
         onProfileClick={() => navigate('/settings')}
-        state={dashboardState}
       />
 
       <main className="dash-main">

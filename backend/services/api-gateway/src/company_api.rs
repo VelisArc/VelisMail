@@ -1333,7 +1333,7 @@ pub async fn dns_requirements(
         customer_key
     };
 
-    let (sending_domain, records) = crate::domain_dns::requirements(
+    let (sending_domain, mut records) = crate::domain_dns::requirements(
         &state.http_client,
         &provider,
         &api_key,
@@ -1342,6 +1342,34 @@ pub async fn dns_requirements(
         &state.config.dkim_selector,
     )
     .await;
+
+    // A verified domain no longer returns its records from the provider, so
+    // the copy that was stored when the domain was added is used instead.
+    if records.len() <= 2 {
+        let stored = sqlx::query(
+            "SELECT dns_records, mx_records FROM custom_domains
+             WHERE tenant_id = $1 AND LOWER(domain_name) = LOWER($2) LIMIT 1",
+        )
+        .bind(context.tenant_id)
+        .bind(&domain)
+        .fetch_optional(db)
+        .await
+        .ok()
+        .flatten();
+        if let Some(row) = stored {
+            let dns_records: Value = row.try_get("dns_records").unwrap_or_else(|_| json!([]));
+            let mx_records: Value = row.try_get("mx_records").unwrap_or_else(|_| json!([]));
+            let mut stored_records =
+                crate::domain_dns::from_stored(&dns_records, &mx_records, &domain);
+            stored_records.retain(|record| {
+                !records.iter().any(|existing| {
+                    existing.host == record.host && existing.record_type == record.record_type
+                })
+            });
+            records.append(&mut stored_records);
+        }
+    }
+
     let records = crate::domain_dns::verify(&state.http_client, records).await;
     let complete = crate::domain_dns::is_complete(&records);
     let missing: Vec<String> = records

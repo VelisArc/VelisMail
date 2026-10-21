@@ -285,6 +285,9 @@ export type CompanyMember = {
 export type PlatformUser = {
   id: string;
   email: string;
+  /** The address the account is reached on. Alerts go here, never to the
+   * company mailbox. */
+  recoveryEmail?: string;
   displayName: string;
   status: string;
   tenantId?: string | null;
