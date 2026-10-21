@@ -243,7 +243,21 @@ pub async fn requirements(
         });
     }
 
-    // Receiving. Without this the domain can send but never receive.
+    // Receiving. Without this the domain can send but never receive. The
+    // region is read from whatever is already published, so the console shows
+    // the host that actually has to stay in place instead of a default.
+    if inbound_mx.is_none() {
+        if let Ok(answers) = query(client, &domain, "MX").await {
+            inbound_mx = answers.iter().find_map(|answer| {
+                let host = normalize(answer.split_whitespace().last().unwrap_or(answer));
+                if host.starts_with("inbound-smtp.") && host.ends_with(".amazonaws.com") {
+                    Some(host)
+                } else {
+                    None
+                }
+            });
+        }
+    }
     let inbound_host = inbound_mx
         .clone()
         .unwrap_or_else(|| "inbound-smtp.us-east-1.amazonaws.com".to_string());
@@ -338,25 +352,52 @@ pub fn from_stored(dns_records: &Value, mx_records: &Value, domain: &str) -> Vec
                 continue;
             }
             let ttl = entry.get("ttl").and_then(Value::as_u64).unwrap_or(3600) as u32;
-            let purpose = match record_type {
-                "MX" => "Routes mail for this domain",
+            let lower_name = name.to_ascii_lowercase();
+            // The ownership proof is not a mail record: it is a token we gave
+            // to the customer, so it never belongs to the deliverability list.
+            if record_type == "TXT" && lower_name.contains("velismail-verif") {
+                continue;
+            }
+            // A stored name can be relative ("send") or the full host
+            // ("_dmarc.example.com"). Both have to end up on the same host.
+            let suffix = format!(".{}", domain.to_ascii_lowercase());
+            let (name, host) = if lower_name.ends_with(&suffix) {
+                (
+                    lower_name[..lower_name.len() - suffix.len()].to_string(),
+                    lower_name.clone(),
+                )
+            } else {
+                (name.clone(), host_for(domain, &name))
+            };
+            let match_mode = if record_type == "MX" {
+                "resend_inbound"
+            } else if lower_name == "_dmarc" || lower_name.starts_with("_dmarc.") {
+                "prefix"
+            } else if lower_name.contains("_domainkey") {
+                "exists"
+            } else if lower_name.is_empty() || lower_name == "@" || lower_name == "send" {
+                "spf"
+            } else {
+                "exact"
+            };
+            let purpose = match (record_type, match_mode) {
+                ("MX", _) => "Enable receiving - inbound mail for this domain",
+                (_, "spf") => "Authorises the sending server for this domain",
+                (_, "exists") => "Signs outgoing mail so receivers can verify it",
+                (_, "prefix") => "Policy for receivers when a message fails SPF or DKIM",
                 _ => "Required for mail delivery",
             };
             records.push(DnsRequirement {
                 record_type: record_type.to_string(),
-                name: name.clone(),
-                host: host_for(domain, &name),
+                name,
+                host,
                 value,
                 ttl,
                 purpose: purpose.to_string(),
                 status: "pending".to_string(),
                 actual: String::new(),
                 detail: String::new(),
-                match_mode: if record_type == "MX" {
-                    "resend_inbound".to_string()
-                } else {
-                    "exact".to_string()
-                },
+                match_mode: match_mode.to_string(),
             });
         }
     }
@@ -538,9 +579,30 @@ pub async fn verify(
                 record.value = policies[0].clone();
                 record.detail = String::new();
             } else if policies.len() > 1 {
-                // The first policy is the one to keep, the extra one has to go.
-                record.value = policies[0].clone();
-                record.detail = "Two DMARC records are published for this name. A domain may only have one policy - delete the extra record, otherwise receivers ignore the policy.".to_string();
+                // Keep one policy; call out a placeholder explicitly because
+                // that is the record customers usually forgot to delete.
+                let placeholder = policies.iter().find(|policy| {
+                    let value = policy.to_ascii_lowercase();
+                    value.contains("your_monitored_email")
+                        || value.contains("example.com")
+                        || value.contains("change_me")
+                });
+                record.value = policies
+                    .iter()
+                    .find(|policy| Some(*policy) != placeholder)
+                    .cloned()
+                    .unwrap_or_else(|| policies[0].clone());
+                record.detail = match placeholder {
+                    Some(policy) => format!(
+                        "{} DMARC records are published for this name. A domain may only have one policy. Delete the placeholder record first: {}. Receivers ignore the policy while two records exist.",
+                        policies.len(),
+                        policy.trim()
+                    ),
+                    None => format!(
+                        "{} DMARC records are published for this name. A domain may only have one policy. Delete all but one record, otherwise receivers ignore the policy.",
+                        policies.len()
+                    ),
+                };
             } else {
                 record.detail =
                     "Add this DMARC record so receivers know what to do with mail that fails SPF or DKIM.".to_string();

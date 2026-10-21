@@ -277,8 +277,7 @@ pub async fn create_business(
     let domain_result = sqlx::query(
         "INSERT INTO custom_domains (tenant_id, domain_name, verification_status, verification_method, dns_records, mx_records)
          VALUES ($1, $2, 'pending', 'dns', $3, '[]'::jsonb)
-         ON CONFLICT (domain_name) DO UPDATE
-         SET tenant_id = EXCLUDED.tenant_id, verification_status = 'pending'
+         ON CONFLICT (domain_name) DO NOTHING
          RETURNING id",
     )
     .bind(tenant_id)
@@ -286,7 +285,7 @@ pub async fn create_business(
     .bind(json!([
         {
             "type": "TXT",
-            "name": "_velismail-verification",
+            "name": "_velismail-verify",
             "value": verification_token,
             "ttl": 300
         }
@@ -298,6 +297,19 @@ pub async fn create_business(
     }
     let domain_id = match domain_result {
         Ok(Some(row)) => row.try_get::<Uuid, _>("id").ok(),
+        Ok(None) => {
+            // Another request claimed the domain between the check above and
+            // the insert. Do not steal it: undo the business that was just
+            // created and tell the caller.
+            let _ = sqlx::query("UPDATE tenants SET deleted_at = NOW() WHERE id = $1")
+                .bind(tenant_id)
+                .execute(db)
+                .await;
+            return Err(fail(
+                StatusCode::CONFLICT,
+                "That domain is already connected to another business.",
+            ));
+        }
         _ => None,
     };
 

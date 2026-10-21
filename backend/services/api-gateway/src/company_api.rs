@@ -1383,30 +1383,29 @@ async fn build_dns_report(
     .await;
 
     // A verified domain no longer returns its records from the provider, so
-    // the copy that was stored when the domain was added is used instead.
-    if records.len() <= 2 {
-        let stored = sqlx::query(
-            "SELECT dns_records, mx_records FROM custom_domains
-             WHERE tenant_id = $1 AND LOWER(domain_name) = LOWER($2) LIMIT 1",
-        )
-        .bind(tenant_id)
-        .bind(domain)
-        .fetch_optional(db)
-        .await
-        .ok()
-        .flatten();
-        if let Some(row) = stored {
-            let dns_records: Value = row.try_get("dns_records").unwrap_or_else(|_| json!([]));
-            let mx_records: Value = row.try_get("mx_records").unwrap_or_else(|_| json!([]));
-            let mut stored_records =
-                crate::domain_dns::from_stored(&dns_records, &mx_records, domain);
-            stored_records.retain(|record| {
-                !records.iter().any(|existing| {
-                    existing.host == record.host && existing.record_type == record.record_type
-                })
-            });
-            records.append(&mut stored_records);
-        }
+    // the copy that was stored when the domain was added is merged in. The
+    // live DNS check below still decides whether each record is active.
+    let stored = sqlx::query(
+        "SELECT dns_records, mx_records FROM custom_domains
+         WHERE tenant_id = $1 AND LOWER(domain_name) = LOWER($2) LIMIT 1",
+    )
+    .bind(tenant_id)
+    .bind(domain)
+    .fetch_optional(db)
+    .await
+    .ok()
+    .flatten();
+    if let Some(row) = stored {
+        let dns_records: Value = row.try_get("dns_records").unwrap_or_else(|_| json!([]));
+        let mx_records: Value = row.try_get("mx_records").unwrap_or_else(|_| json!([]));
+        let mut stored_records = crate::domain_dns::from_stored(&dns_records, &mx_records, domain);
+        stored_records.retain(|record| {
+            !records.iter().any(|existing| {
+                existing.host.eq_ignore_ascii_case(&record.host)
+                    && existing.record_type == record.record_type
+            })
+        });
+        records.append(&mut stored_records);
     }
 
     let records = crate::domain_dns::verify(&state.http_client, records).await;
@@ -1462,7 +1461,7 @@ pub async fn dns_requirements(
     }
 
     let report = build_dns_report(&state, db, context.tenant_id, &domain).await;
-    let domain_status: String = sqlx::query_scalar(
+    let mut domain_status: String = sqlx::query_scalar(
         "SELECT verification_status FROM custom_domains
          WHERE tenant_id = $1 AND LOWER(domain_name) = LOWER($2) LIMIT 1",
     )
@@ -1473,6 +1472,23 @@ pub async fn dns_requirements(
     .ok()
     .flatten()
     .unwrap_or_else(|| "pending".to_string());
+
+    // Read-through repair: if the published records are already complete the
+    // stored status is simply out of date. Without this the setup gate can
+    // keep a fully configured workspace closed until someone presses verify.
+    if report.complete && domain_status != "verified" {
+        let _ = sqlx::query(
+            "UPDATE custom_domains
+             SET verification_status = 'verified',
+                 verified_at = COALESCE(verified_at, NOW())
+             WHERE tenant_id = $1 AND LOWER(domain_name) = LOWER($2)",
+        )
+        .bind(context.tenant_id)
+        .bind(&domain)
+        .execute(db)
+        .await;
+        domain_status = "verified".to_string();
+    }
 
     ok(report.to_json(&domain, &domain_status))
 }
@@ -1600,6 +1616,82 @@ pub async fn verify_domain(
     .await;
 
     ok(report.to_json(&domain, status))
+}
+
+/// Remove a domain from the workspace.
+///
+/// The domain row and the mailboxes that belonged to it are removed together,
+/// so a deleted domain never reappears in the console after the next refresh.
+pub async fn delete_domain(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(path): Path<DomainIdPath>,
+) -> ApiResult {
+    let context = workspace_context(&state, &headers).await?;
+    context.require_manage()?;
+    let db = db_pool(&state)?;
+
+    let domain: Option<String> = sqlx::query_scalar(
+        "SELECT domain_name FROM custom_domains
+         WHERE tenant_id = $1 AND id::text = $2 LIMIT 1",
+    )
+    .bind(context.tenant_id)
+    .bind(&path.id)
+    .fetch_optional(db)
+    .await
+    .ok()
+    .flatten();
+    let Some(domain) = domain else {
+        return Err(fail(
+            StatusCode::NOT_FOUND,
+            "That domain is not connected to your company.",
+        ));
+    };
+
+    let result = sqlx::query("DELETE FROM custom_domains WHERE tenant_id = $1 AND id::text = $2")
+        .bind(context.tenant_id)
+        .bind(&path.id)
+        .execute(db)
+        .await;
+    match result {
+        Ok(done) if done.rows_affected() > 0 => {
+            let _ = sqlx::query(
+                "DELETE FROM business_mailboxes WHERE tenant_id = $1 AND LOWER(domain) = LOWER($2)",
+            )
+            .bind(context.tenant_id)
+            .bind(&domain)
+            .execute(db)
+            .await;
+            let _ = sqlx::query(
+                "DELETE FROM business_mail_groups WHERE tenant_id = $1 AND LOWER(domain) = LOWER($2)",
+            )
+            .bind(context.tenant_id)
+            .bind(&domain)
+            .execute(db)
+            .await;
+
+            audit(
+                db,
+                &context.email,
+                &context.role,
+                "company.domain_deleted",
+                "domain",
+                Some(&path.id),
+                context.tenant_id,
+                json!({ "domain": domain }),
+            )
+            .await;
+            ok(json!({ "success": true, "domain": domain }))
+        }
+        Ok(_) => Err(fail(
+            StatusCode::NOT_FOUND,
+            "That domain is not connected to your company.",
+        )),
+        Err(_) => Err(fail(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Unable to delete the domain.",
+        )),
+    }
 }
 
 /// Whether a domain may send mail right now.
