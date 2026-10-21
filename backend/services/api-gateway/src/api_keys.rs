@@ -97,6 +97,8 @@ pub fn required_scope(method: &str, path: &str) -> Option<&'static str> {
         ("DELETE", p) if p.starts_with("/team/invitations") => Some("team.write"),
         ("GET", "/domains") => Some("domains.read"),
         ("POST", "/domains") => Some("domains.write"),
+        ("GET", "/domains/dns-requirements") => Some("domains.read"),
+        ("POST", p) if p.starts_with("/domains/") && p.ends_with("/verify") => Some("domains.write"),
         ("GET", "/mailboxes") => Some("mailboxes.read"),
         ("POST", "/mailboxes") => Some("mailboxes.write"),
         ("DELETE", "/mailboxes") => Some("mailboxes.write"),

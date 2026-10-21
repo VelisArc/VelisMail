@@ -56,26 +56,11 @@ export type PlatformSection =
 
 interface PlatformAdminPanelProps {
   section: PlatformSection;
-  onSectionChange: (section: PlatformSection) => void;
   state: DashboardState;
 }
 
 type Banner = { tone: 'success' | 'error'; message: string } | null;
 
-const SECTIONS: Array<{ id: PlatformSection; label: string }> = [
-  { id: 'overview', label: 'Overview' },
-  { id: 'companies', label: 'Companies' },
-  { id: 'users', label: 'Users' },
-  { id: 'investigations', label: 'Investigations' },
-  { id: 'usage', label: 'Usage & Load' },
-  { id: 'revenue', label: 'Revenue' },
-  { id: 'support', label: 'Support' },
-  { id: 'broadcast', label: 'Broadcast' },
-  { id: 'team', label: 'Platform Team' },
-  { id: 'audit', label: 'Audit Trail' },
-  { id: 'config', label: 'Configuration' },
-  { id: 'health', label: 'System Health' },
-];
 
 function number(value?: number | null): string {
   return new Intl.NumberFormat('en-IN').format(value || 0);
@@ -256,7 +241,7 @@ const USER_ACTION_CONFIRM: Record<string, ConfirmSpec> = {
   },
 };
 
-export default function PlatformAdminPanel({ section, onSectionChange, state }: PlatformAdminPanelProps) {
+export default function PlatformAdminPanel({ section, state }: PlatformAdminPanelProps) {
   const [loading, setLoading] = useState(true);
   const [banner, setBanner] = useState<Banner>(null);
   const [denied, setDenied] = useState('');
@@ -579,21 +564,6 @@ export default function PlatformAdminPanel({ section, onSectionChange, state }: 
         <button className="btn btn-ghost btn-sm" onClick={() => void load()} title="Refresh section">
           <RefreshCw size={14} />
         </button>
-      </div>
-
-      <div className="admin-view-switch" role="tablist" aria-label="Control plane sections">
-        {SECTIONS.map((item) => (
-          <button
-            key={item.id}
-            type="button"
-            role="tab"
-            aria-selected={section === item.id}
-            className={`admin-view-switch-btn ${section === item.id ? 'active' : ''}`}
-            onClick={() => onSectionChange(item.id)}
-          >
-            {item.label}
-          </button>
-        ))}
       </div>
 
       <div className="dash-body">

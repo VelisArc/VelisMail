@@ -2,6 +2,7 @@
 
 use crate::admin;
 use crate::company_api;
+use crate::company_businesses;
 use crate::state::AppState;
 use axum::{
     body::{Body, Bytes},
@@ -181,6 +182,14 @@ pub fn api_v1_routes(_state: &AppState) -> Router<AppState> {
         // queue, audit trail, templates, contacts, signatures).
         .route("/company/team", get(company_api::list_team))
         .route(
+            "/company/businesses",
+            get(company_businesses::list_businesses).post(company_businesses::create_business),
+        )
+        .route(
+            "/company/businesses/switch",
+            post(company_businesses::switch_business),
+        )
+        .route(
             "/company/team/invitations",
             post(company_api::create_invitation),
         )
@@ -195,6 +204,10 @@ pub fn api_v1_routes(_state: &AppState) -> Router<AppState> {
         .route(
             "/company/domains/dns-requirements",
             get(company_api::dns_requirements),
+        )
+        .route(
+            "/company/domains/{id}/verify",
+            post(company_api::verify_domain),
         )
         .route(
             "/company/mailboxes",

@@ -30,7 +30,10 @@ pub struct DnsRequirement {
     pub status: String,
     /// What the DNS currently returns.
     pub actual: String,
-    /// How the published value is compared: `exact` or `prefix`.
+    /// What the customer has to do to make this record active.
+    pub detail: String,
+    /// How the published value is compared: `exact`, `prefix`, `exists`,
+    /// `spf` or `resend_inbound`.
     pub match_mode: String,
 }
 
@@ -185,6 +188,7 @@ pub async fn requirements(
                     purpose: purpose.to_string(),
                     status: "pending".to_string(),
                     actual: String::new(),
+                    detail: String::new(),
                     match_mode: if record_type == "TXT" && purpose.starts_with("Authorises") {
                         "spf".to_string()
                     } else {
@@ -341,6 +345,7 @@ pub fn from_stored(dns_records: &Value, mx_records: &Value, domain: &str) -> Vec
                 purpose: purpose.to_string(),
                 status: "pending".to_string(),
                 actual: String::new(),
+                detail: String::new(),
                 match_mode: if record_type == "MX" {
                     "resend_inbound".to_string()
                 } else {
@@ -443,6 +448,10 @@ async fn fetch_resend_domain(
 }
 
 /// Check every requirement against the live DNS.
+///
+/// Every record ends up with a status and a plain instruction, so the console
+/// can tell the customer exactly what to publish - with the name and the
+/// value - instead of only reporting a failure.
 pub async fn verify(
     client: &reqwest::Client,
     mut records: Vec<DnsRequirement>,
@@ -453,16 +462,16 @@ pub async fn verify(
             Err(err) => {
                 record.status = "unknown".to_string();
                 record.actual = err;
+                record.detail =
+                    "The DNS could not be read. Check the record again in a few minutes.".to_string();
                 continue;
             }
         };
-        record.actual = if answers.is_empty() {
-            format!(
-                "No {} record found for {}.",
-                record.record_type, record.host
-            )
-        } else {
+        let published = !answers.is_empty();
+        record.actual = if published {
             answers.join(", ")
+        } else {
+            format!("No {} record found for {}.", record.record_type, record.host)
         };
 
         if record.record_type == "MX" && record.match_mode == "resend_inbound" {
@@ -472,7 +481,14 @@ pub async fn verify(
                 let host = normalize(answer.split_whitespace().last().unwrap_or(answer));
                 host.starts_with("inbound-smtp.") && host.ends_with(".amazonaws.com")
             });
-            record.status = if found { "verified" } else { "mismatch" }.to_string();
+            record.status = if found { "verified" } else { "missing" }.to_string();
+            record.detail = if found {
+                String::new()
+            } else if published {
+                "The MX record points somewhere else. Replace it with the value below so inbound mail reaches this domain.".to_string()
+            } else {
+                "Add this MX record to enable receiving. Without it the domain cannot receive mail.".to_string()
+            };
         } else if record.record_type == "MX" {
             let expected = normalize(
                 record
@@ -485,27 +501,51 @@ pub async fn verify(
                 let host = answer.split_whitespace().last().unwrap_or(answer);
                 normalize(host) == expected
             });
-            record.status = if found { "verified" } else { "mismatch" }.to_string();
+            record.status = if found { "verified" } else { "missing" }.to_string();
+            record.detail = if found {
+                String::new()
+            } else {
+                "Add this MX record with the value below.".to_string()
+            };
         } else if record.match_mode == "prefix" {
             // DMARC: any valid policy is accepted, but a second record on the
             // same host makes the policy ambiguous, so the extra answer is
             // reported as a mismatch.
-            let policies = answers
+            let policies: Vec<String> = answers
                 .iter()
                 .filter(|answer| answer.to_lowercase().starts_with("v=dmarc1"))
-                .count();
-            record.status = if policies == 1 {
-                "verified"
-            } else {
-                "mismatch"
-            }
-            .to_string();
-        } else if record.match_mode == "exists" {
-            record.status = if answers.is_empty() {
-                "mismatch".to_string()
-            } else {
-                "verified".to_string()
+                .cloned()
+                .collect();
+            record.status = match policies.len() {
+                1 => "verified".to_string(),
+                0 => "missing".to_string(),
+                _ => "mismatch".to_string(),
             };
+            if policies.len() == 1 {
+                // Show what is actually published, that is what the customer
+                // has to keep.
+                record.value = policies[0].clone();
+                record.detail = String::new();
+            } else if policies.len() > 1 {
+                record.detail = "Two DMARC records are published for this name. A domain may only have one policy - delete the extra record, otherwise receivers ignore the policy.".to_string();
+            } else {
+                record.detail =
+                    "Add this DMARC record so receivers know what to do with mail that fails SPF or DKIM.".to_string();
+            }
+        } else if record.match_mode == "exists" {
+            // DKIM: the public key is generated by the mail provider, so the
+            // published key is shown as the value.
+            record.status = if published {
+                "verified".to_string()
+            } else {
+                "missing".to_string()
+            };
+            if published {
+                record.value = answers[0].clone();
+                record.detail = String::new();
+            } else {
+                record.detail = "Add the DKIM public key from your mail provider as a TXT record with this name.".to_string();
+            }
         } else if record.match_mode == "spf" {
             // SPF: a policy that starts with v=spf1 and authorises the
             // sending service. The exact value may differ, the policy may not.
@@ -513,13 +553,27 @@ pub async fn verify(
                 let value = answer.to_lowercase();
                 value.starts_with("v=spf1") && value.contains("amazonses")
             });
-            record.status = if found { "verified" } else { "mismatch" }.to_string();
+            record.status = if found { "verified" } else { "missing" }.to_string();
+            record.detail = if found {
+                String::new()
+            } else if published {
+                "The published SPF record does not authorise the sending service. Replace it with the value below.".to_string()
+            } else {
+                "Add this SPF record so receivers accept the mail sent from this domain.".to_string()
+            };
         } else {
             let expected = normalize(&record.value);
             let found = answers
                 .iter()
                 .any(|answer| answer == &expected || answer.contains(&expected));
-            record.status = if found { "verified" } else { "mismatch" }.to_string();
+            record.status = if found { "verified" } else { "missing" }.to_string();
+            record.detail = if found {
+                String::new()
+            } else if published {
+                "The published value does not match. Replace it with the value below.".to_string()
+            } else {
+                "Add this record with the value below.".to_string()
+            };
         }
     }
     records

@@ -112,7 +112,43 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return (response.data ?? ({} as T)) as T;
 }
 
+export type WorkspaceBusiness = {
+  id: string;
+  name: string;
+  email: string;
+  plan: string;
+  status: string;
+  role: string;
+  primaryDomain?: string | null;
+  members: number;
+  createdAt: string;
+};
+
 export const workspaceApi = {
+  businesses: () =>
+    request<{
+      success: boolean;
+      businesses: WorkspaceBusiness[];
+      activeBusinessId: string;
+    }>('/company/businesses'),
+
+  createBusiness: (payload: { name: string; domain: string; plan?: string }) =>
+    request<{
+      success: boolean;
+      business: WorkspaceBusiness;
+      domain: string;
+      verificationToken: string;
+    }>('/company/businesses', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+
+  switchBusiness: (businessId: string) =>
+    request<{ success: boolean; business: WorkspaceBusiness; role: string }>(
+      '/company/businesses/switch',
+      { method: 'POST', body: JSON.stringify({ businessId }) },
+    ),
+
   team: () =>
     request<{
       success: boolean;

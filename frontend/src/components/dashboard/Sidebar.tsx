@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { LogOut, Mail, Layers, Server, Globe, Inbox, Users, Shield, BarChart3, Activity, Settings, CreditCard, Crown, User, Contact as ContactIcon, Building2, FileText, LifeBuoy, Flag, Gauge, Send } from 'lucide-react';
+import { LogOut, Mail, Layers, Server, Globe, Inbox, Users, Shield, BarChart3, Activity, Settings, CreditCard, Crown, Plus, User, Contact as ContactIcon, Building2, FileText, LifeBuoy, Flag, Gauge, Send } from 'lucide-react';
 import type { User as UserType } from '../../api/client';
 import { BIZ_FOLDERS } from './constants';
 import type { BizTab, BizFolder } from './constants';
@@ -21,6 +21,7 @@ interface SidebarProps {
   platformSection: PlatformSection;
   onPlatformSectionChange: (section: PlatformSection) => void;
   onProfileClick?: () => void;
+  onCompose: () => void;
 }
 
 const PLATFORM_NAV: Array<{ group: string; items: Array<{ id: PlatformSection; label: string; icon: typeof Activity; ownerOnly?: boolean }> }> = [
@@ -88,6 +89,7 @@ export default function Sidebar({
   platformSection,
   onPlatformSectionChange,
   onProfileClick,
+  onCompose,
 }: SidebarProps) {
   const folderBadge = (f: BizFolder) => f.badge;
   const isControlPlane = viewMode === 'control-plane';
@@ -116,6 +118,12 @@ export default function Sidebar({
             </div>
           </Link>
         </div>
+        {!isControlPlane && (
+          <button type="button" className="btn btn-primary side-compose" onClick={onCompose}>
+            <Plus size={16} /> New Message
+          </button>
+        )}
+
         {isControlPlane && (
           <div className="side-mode-hint">
             <Crown size={14} />

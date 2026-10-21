@@ -30,16 +30,16 @@ pub type ApiError = (StatusCode, Json<Value>);
 /// Handlers return a `Result` so `?` can be used for the shared helpers.
 pub type ApiResult = Result<(StatusCode, Json<Value>), ApiError>;
 
-fn ok(value: Value) -> ApiResult {
+pub(crate) fn ok(value: Value) -> ApiResult {
     Ok((StatusCode::OK, Json(value)))
 }
 
-fn fail(status: StatusCode, message: &str) -> ApiError {
+pub(crate) fn fail(status: StatusCode, message: &str) -> ApiError {
     (status, Json(json!({ "success": false, "error": message })))
 }
 
 /// The gateway database. Workspace endpoints refuse to run without it.
-fn db_pool(state: &AppState) -> Result<&PgPool, ApiError> {
+pub(crate) fn db_pool(state: &AppState) -> Result<&PgPool, ApiError> {
     state.db.as_ref().ok_or_else(|| {
         (
             StatusCode::SERVICE_UNAVAILABLE,
@@ -570,7 +570,7 @@ pub async fn create_domain(
         "INSERT INTO custom_domains (tenant_id, domain_name, verification_status, verification_method, dns_records, mx_records)
          VALUES ($1, $2, 'pending', 'dns', $3, '[]'::jsonb)
          ON CONFLICT (domain_name) DO UPDATE
-         SET tenant_id = EXCLUDED.tenant_id, verification_status = 'pending', updated_at = NOW()
+         SET tenant_id = EXCLUDED.tenant_id, verification_status = 'pending'
          RETURNING id",
     )
     .bind(context.tenant_id)
@@ -1275,26 +1275,45 @@ pub struct DomainQuery {
     pub domain: String,
 }
 
-/// The exact DNS records a domain has to publish, with the live status of
-/// each one. The console uses this to tell the customer what is missing
-/// instead of guessing.
-pub async fn dns_requirements(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-    Query(query): Query<DomainQuery>,
-) -> ApiResult {
-    let context = workspace_context(&state, &headers).await?;
-    let db = db_pool(&state)?;
+#[derive(Debug, Deserialize)]
+pub struct DomainIdPath {
+    pub id: String,
+}
 
-    let domain = query
-        .domain
-        .trim()
-        .trim_end_matches('.')
-        .to_ascii_lowercase();
-    if domain.is_empty() {
-        return Err(fail(StatusCode::BAD_REQUEST, "A domain is required."));
+/// Everything the console needs to know about the DNS of one domain.
+struct DnsReport {
+    provider: String,
+    sending_domain: String,
+    records: Vec<crate::domain_dns::DnsRequirement>,
+    complete: bool,
+    missing: Vec<String>,
+    message: String,
+}
+
+impl DnsReport {
+    fn to_json(&self, domain: &str, domain_status: &str) -> Value {
+        json!({
+            "success": true,
+            "domain": domain,
+            "provider": self.provider,
+            "sendingDomain": self.sending_domain,
+            "domainStatus": domain_status,
+            "complete": self.complete,
+            "records": self.records,
+            "missing": self.missing,
+            "message": self.message,
+        })
     }
+}
 
+/// Read the DNS of a domain and check every record against the live DNS.
+async fn build_dns_report(
+    state: &AppState,
+    db: &PgPool,
+    tenant_id: Uuid,
+    email: &str,
+    domain: &str,
+) -> DnsReport {
     // The provider credentials live on the account that owns the workspace.
     let row = sqlx::query(
         "SELECT u.settings FROM users u
@@ -1302,8 +1321,8 @@ pub async fn dns_requirements(
          WHERE LOWER(cm.email) = LOWER($2)
          LIMIT 1",
     )
-    .bind(context.tenant_id)
-    .bind(&context.email)
+    .bind(tenant_id)
+    .bind(email)
     .fetch_optional(db)
     .await
     .ok()
@@ -1337,7 +1356,7 @@ pub async fn dns_requirements(
         &state.http_client,
         &provider,
         &api_key,
-        &domain,
+        domain,
         &state.config.spf_record,
         &state.config.dkim_selector,
     )
@@ -1350,8 +1369,8 @@ pub async fn dns_requirements(
             "SELECT dns_records, mx_records FROM custom_domains
              WHERE tenant_id = $1 AND LOWER(domain_name) = LOWER($2) LIMIT 1",
         )
-        .bind(context.tenant_id)
-        .bind(&domain)
+        .bind(tenant_id)
+        .bind(domain)
         .fetch_optional(db)
         .await
         .ok()
@@ -1360,7 +1379,7 @@ pub async fn dns_requirements(
             let dns_records: Value = row.try_get("dns_records").unwrap_or_else(|_| json!([]));
             let mx_records: Value = row.try_get("mx_records").unwrap_or_else(|_| json!([]));
             let mut stored_records =
-                crate::domain_dns::from_stored(&dns_records, &mx_records, &domain);
+                crate::domain_dns::from_stored(&dns_records, &mx_records, domain);
             stored_records.retain(|record| {
                 !records.iter().any(|existing| {
                     existing.host == record.host && existing.record_type == record.record_type
@@ -1382,24 +1401,180 @@ pub async fn dns_requirements(
             )
         })
         .collect();
+    let message = if complete {
+        "Every DNS record is published and active. The domain can send and receive mail.".to_string()
+    } else {
+        format!(
+            "{} DNS record(s) still need attention. Publish them and run the check again.",
+            missing.len()
+        )
+    };
 
-    ok(json!({
-        "success": true,
-        "domain": domain,
-        "provider": provider,
-        "sendingDomain": sending_domain,
-        "complete": complete,
-        "records": records,
-        "missing": missing,
-        "message": if complete {
-            "Every DNS record is published and active. The domain can send and receive mail.".to_string()
-        } else {
-            format!(
-                "{} DNS record(s) still need attention. Publish them and run the check again.",
-                missing.len()
-            )
+    DnsReport {
+        provider,
+        sending_domain,
+        records,
+        complete,
+        missing,
+        message,
+    }
+}
+
+/// The exact DNS records a domain has to publish, with the live status of
+/// each one. The console uses this to tell the customer what is missing
+/// instead of guessing.
+pub async fn dns_requirements(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<DomainQuery>,
+) -> ApiResult {
+    let context = workspace_context(&state, &headers).await?;
+    let db = db_pool(&state)?;
+
+    let domain = query
+        .domain
+        .trim()
+        .trim_end_matches('.')
+        .to_ascii_lowercase();
+    if domain.is_empty() {
+        return Err(fail(StatusCode::BAD_REQUEST, "A domain is required."));
+    }
+
+    let report = build_dns_report(&state, db, context.tenant_id, &context.email, &domain).await;
+    let domain_status: String = sqlx::query_scalar(
+        "SELECT verification_status FROM custom_domains
+         WHERE tenant_id = $1 AND LOWER(domain_name) = LOWER($2) LIMIT 1",
+    )
+    .bind(context.tenant_id)
+    .bind(&domain)
+    .fetch_optional(db)
+    .await
+    .ok()
+    .flatten()
+    .unwrap_or_else(|| "pending".to_string());
+
+    ok(report.to_json(&domain, &domain_status))
+}
+
+/// Check a domain against the live DNS and store the result.
+///
+/// The domain only counts as verified when every record - the sending
+/// records, the receiving MX and the DMARC policy - is published and active.
+pub async fn verify_domain(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(path): Path<DomainIdPath>,
+) -> ApiResult {
+    let context = workspace_context(&state, &headers).await?;
+    context.require_manage()?;
+    let db = db_pool(&state)?;
+
+    let row = sqlx::query(
+        "SELECT domain_name FROM custom_domains WHERE tenant_id = $1 AND id::text = $2 LIMIT 1",
+    )
+    .bind(context.tenant_id)
+    .bind(&path.id)
+    .fetch_optional(db)
+    .await
+    .ok()
+    .flatten();
+    let domain = match row {
+        Some(row) => row
+            .try_get::<String, _>("domain_name")
+            .unwrap_or_default()
+            .to_ascii_lowercase(),
+        None => {
+            return Err(fail(
+                StatusCode::NOT_FOUND,
+                "That domain is not connected to your company.",
+            ))
         }
-    }))
+    };
+
+    let report = build_dns_report(&state, db, context.tenant_id, &context.email, &domain).await;
+
+    // Store what is published, so the console and the deliverability score
+    // show the real records instead of an empty state.
+    let spf = report
+        .records
+        .iter()
+        .find(|record| record.match_mode == "spf" && record.status == "verified")
+        .map(|record| record.actual.clone());
+    let dkim = report
+        .records
+        .iter()
+        .find(|record| record.match_mode == "exists" && record.status == "verified")
+        .map(|record| record.value.clone());
+    let dmarc = report
+        .records
+        .iter()
+        .find(|record| record.match_mode == "prefix" && record.status == "verified")
+        .map(|record| record.value.clone());
+    let mx: Vec<Value> = report
+        .records
+        .iter()
+        .filter(|record| record.record_type == "MX")
+        .map(|record| {
+            json!({
+                "type": "MX",
+                "name": record.name,
+                "value": record.actual,
+                "ttl": record.ttl,
+                "status": record.status,
+            })
+        })
+        .collect();
+    let dns: Vec<Value> = report
+        .records
+        .iter()
+        .filter(|record| record.record_type == "TXT")
+        .map(|record| {
+            json!({
+                "type": "TXT",
+                "name": record.name,
+                "value": record.actual,
+                "ttl": record.ttl,
+                "status": record.status,
+            })
+        })
+        .collect();
+
+    let status = if report.complete { "verified" } else { "pending" };
+    let _ = sqlx::query(
+        "UPDATE custom_domains
+         SET verification_status = $1,
+             verified_at = CASE WHEN $1 = 'verified' THEN NOW() ELSE verified_at END,
+             spf_record = COALESCE($2, spf_record),
+             dkim_record = COALESCE($3, dkim_record),
+             dmarc_record = COALESCE($4, dmarc_record),
+             dns_records = $5,
+             mx_records = $6
+         WHERE tenant_id = $7 AND id::text = $8",
+    )
+    .bind(status)
+    .bind(spf)
+    .bind(dkim)
+    .bind(dmarc)
+    .bind(json!(dns))
+    .bind(json!(mx))
+    .bind(context.tenant_id)
+    .bind(&path.id)
+    .execute(db)
+    .await;
+
+    audit(
+        db,
+        &context.email,
+        &context.role,
+        "company.domain_verified",
+        "domain",
+        Some(&path.id),
+        context.tenant_id,
+        json!({ "domain": domain, "complete": report.complete, "missing": report.missing }),
+    )
+    .await;
+
+    ok(report.to_json(&domain, status))
 }
 
 // ---------------------------------------------------------------------------

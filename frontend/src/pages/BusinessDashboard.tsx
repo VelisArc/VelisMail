@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Navigate, useNavigate, useLocation } from 'react-router-dom';
-import { Building2, Crown, Globe, Plus } from 'lucide-react';
+import { Building2, Check, ChevronDown, ChevronUp, Crown, Globe, Plus, X } from 'lucide-react';
 import { auth, connections, domains, fetchAPI, fetchAuthenticatedProfile, isBusinessSetupReady, mail, saveDB, signatures, contacts, STORAGE_KEYS, type BusinessAuditEntry, type BusinessGroup, type BusinessMailbox, type BusinessTeamMember, type BusinessTemplate, type ConnectionUsage, type CustomDomain, type Email, type PlatformAdminUserRecord, type DomainCheck, type TeamAccessInvite, type Signature, type Contact, type ActiveSession } from '../api/client';
 import { platformAdminApi } from '../api/admin';
 import Sidebar from '../components/dashboard/Sidebar';
@@ -20,7 +20,7 @@ import CompanyAdminPanel from '../components/dashboard/panels/CompanyAdminPanel'
 import SetupRequired from '../components/dashboard/SetupRequired';
 import PlatformAdminPanel, { type PlatformSection } from '../components/dashboard/panels/PlatformAdminPanel';
 import { platformOwnerUids, platformOwnerEmails } from '../lib/firebase';
-import { toAuditEntry, toQueueItem, toTeamMember, toTemplate, workspaceApi } from '../api/company';
+import { toAuditEntry, toQueueItem, toTeamMember, toTemplate, workspaceApi, type WorkspaceBusiness } from '../api/company';
 import { companyAdminApi } from '../api/admin';
 import TemplatesPanel from '../components/dashboard/panels/TemplatesPanel';
 import SettingsPanel from '../components/dashboard/panels/SettingsPanel';
@@ -33,6 +33,9 @@ import './BusinessDashboard.css';
 import './Pricing.css';
 import ContactsPage from './Contacts';
 import DeliverabilityPanel from '../components/dashboard/panels/DeliverabilityPanel';
+
+/** Sentinel option that opens the "add a domain" dialog. */
+const ADD_DOMAIN_VALUE = '__add_domain__';
 
 
 function toDomainRecord(domain: CustomDomain): DomainRecord {
@@ -68,6 +71,13 @@ export default function BusinessDashboard() {
   );
   const [platformSection, setPlatformSection] = useState<PlatformSection>('overview');
   const [isPlatformOwner, setIsPlatformOwner] = useState(false);
+  // Business switcher
+  const [businesses, setBusinesses] = useState<WorkspaceBusiness[]>([]);
+  const [activeBusinessId, setActiveBusinessId] = useState('');
+  const [businessMenuOpen, setBusinessMenuOpen] = useState(false);
+  const [newBusinessOpen, setNewBusinessOpen] = useState(false);
+  const [newBusiness, setNewBusiness] = useState({ name: '', domain: '', plan: 'free' });
+  const [creatingBusiness, setCreatingBusiness] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [composeOpen, setComposeOpen] = useState(false);
   const [composeTo, setComposeTo] = useState('');
@@ -247,6 +257,14 @@ export default function BusinessDashboard() {
     return () => { cancelled = true; };
   }, [canAccessPlatformAdmin]);
 
+  // The control plane is only for platform staff. Without the access the
+  // console never switches into it, not even through the URL.
+  useEffect(() => {
+    if (!canAccessPlatformAdmin && viewMode === 'control-plane') {
+      setViewMode('workspace');
+    }
+  }, [canAccessPlatformAdmin, viewMode]);
+
   const switchView = useCallback((next: 'workspace' | 'control-plane') => {
     setViewMode(next);
     if (next === 'control-plane') {
@@ -400,6 +418,92 @@ export default function BusinessDashboard() {
     void refreshMailboxes();
     refreshGroups();
   }, [activeDomainName, refreshDomains, refreshTeam, refreshQueue, refreshAudit, refreshTemplates, refreshConnectionUsage, refreshMailboxes, refreshGroups]);
+
+  // ─── Businesses ───
+  // An account can run more than one business. They all live in the same
+  // storage, each in its own part, and switching re-scopes the whole console
+  // to the complete details of that business.
+  const refreshBusinesses = useCallback(async () => {
+    try {
+      const result = await workspaceApi.businesses();
+      setBusinesses(result.businesses);
+      setActiveBusinessId(result.activeBusinessId);
+    } catch (error) {
+      console.error('refresh businesses failed', error);
+    }
+  }, []);
+
+  useEffect(() => { void refreshBusinesses(); }, [refreshBusinesses]);
+
+  const activeBusiness = useMemo(
+    () => businesses.find((business) => business.id === activeBusinessId) || null,
+    [businesses, activeBusinessId],
+  );
+
+  const handleSwitchBusiness = useCallback(async (businessId: string) => {
+    setBusinessMenuOpen(false);
+    try {
+      const result = await workspaceApi.switchBusiness(businessId);
+      setActiveBusinessId(result.business.id);
+      const domain = result.business.primaryDomain;
+      if (domain) {
+        setActiveDomain(domain);
+        const matched = domains.getAll().find((entry) => entry.domain === domain);
+        if (matched) domains.setPrimary(matched.id);
+      }
+      setActiveBizTab('mail');
+      setActiveFolder('inbox');
+      await Promise.all([
+        refreshDomains(),
+        refreshTeam(),
+        refreshQueue(),
+        refreshAudit(),
+        refreshTemplates(),
+        refreshMailboxes(),
+        refreshGroups(),
+        refreshContacts(),
+      ]);
+      showToast(`Switched to ${result.business.name}`);
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Unable to switch business.', 'error');
+    }
+  }, [
+    refreshAudit,
+    refreshContacts,
+    refreshDomains,
+    refreshGroups,
+    refreshMailboxes,
+    refreshQueue,
+    refreshTeam,
+    refreshTemplates,
+    showToast,
+  ]);
+
+  const handleCreateBusiness = useCallback(async () => {
+    const name = newBusiness.name.trim();
+    const domain = newBusiness.domain.trim();
+    if (name.length < 2) {
+      showToast('Enter the name of the business.', 'error');
+      return;
+    }
+    if (!domain.includes('.')) {
+      showToast('Enter a valid domain, for example acme.com.', 'error');
+      return;
+    }
+    setCreatingBusiness(true);
+    try {
+      const result = await workspaceApi.createBusiness({ name, domain, plan: newBusiness.plan });
+      setNewBusinessOpen(false);
+      setNewBusiness({ name: '', domain: '', plan: 'free' });
+      await refreshBusinesses();
+      await handleSwitchBusiness(result.business.id);
+      showToast(`${name} is ready. Publish the DNS records to start sending.`);
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Unable to create the business.', 'error');
+    } finally {
+      setCreatingBusiness(false);
+    }
+  }, [handleSwitchBusiness, newBusiness, refreshBusinesses, showToast]);
 
   useEffect(() => {
     if (domainMailboxes.length === 0) {
@@ -696,6 +800,7 @@ export default function BusinessDashboard() {
         viewMode={viewMode}
         platformSection={platformSection} onPlatformSectionChange={setPlatformSection}
         onProfileClick={() => navigate('/settings')}
+        onCompose={() => openComposeWith()}
       />
 
       <main className="dash-main">
@@ -716,43 +821,169 @@ export default function BusinessDashboard() {
           </div>
 
           <div className="dash-topbar-right">
-            {viewMode === 'workspace' && domainsList.length > 0 && (
-              <label className="dash-domain-picker">
-                <Globe size={14} />
-                <span className="dash-domain-picker-label">Active domain</span>
-                <select
-                  className="input input-sm"
-                  value={activeDomainName}
-                  onChange={(event) => {
-                    const domName = event.target.value;
-                    setActiveDomain(domName);
-                    const matched = domainsList.find((domain) => domain.domain === domName);
-                    if (matched) domains.setPrimary(matched.id);
-                    showToast(`Switched active domain to ${domName}`);
-                  }}
-                  aria-label="Active domain"
-                >
-                  {domainsList.map((domain) => (
-                    <option key={domain.id} value={domain.domain}>
-                      {domain.domain} ({domain.status})
-                    </option>
-                  ))}
-                </select>
-              </label>
-            )}
             {viewMode === 'workspace' && (
-              <button type="button" className="btn btn-primary btn-sm" onClick={() => openComposeWith()}>
-                <Plus size={15} /> New Message
-              </button>
+              <>
+                {domainsList.length > 0 && (
+                  <label className="dash-domain-picker">
+                    <Globe size={14} />
+                    <span className="dash-domain-picker-label">Active domain</span>
+                    <select
+                      className="input input-sm"
+                      value={activeDomainName}
+                      onChange={(event) => {
+                        const domName = event.target.value;
+                        if (domName === ADD_DOMAIN_VALUE) {
+                          // Jump to the domain console with the add form open.
+                          setActiveBizTab('domains');
+                          setShowAddDomain(true);
+                          return;
+                        }
+                        setActiveDomain(domName);
+                        const matched = domainsList.find((domain) => domain.domain === domName);
+                        if (matched) domains.setPrimary(matched.id);
+                        showToast(`Switched active domain to ${domName}`);
+                      }}
+                      aria-label="Active domain"
+                    >
+                      {domainsList.map((domain) => (
+                        <option key={domain.id} value={domain.domain}>
+                          {domain.domain} ({domain.status})
+                        </option>
+                      ))}
+                      <option value={ADD_DOMAIN_VALUE}>+ Add a new domain</option>
+                    </select>
+                  </label>
+                )}
+
+                <div className="dash-business-switcher">
+                  <button
+                    type="button"
+                    className="dash-business-trigger"
+                    onClick={() => setBusinessMenuOpen((open) => !open)}
+                    aria-haspopup="menu"
+                    aria-expanded={businessMenuOpen}
+                    aria-label="Switch business"
+                  >
+                    <Building2 size={15} />
+                    <span className="dash-business-trigger-name">
+                      {activeBusiness?.name || 'Workspace'}
+                    </span>
+                    {businessMenuOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                  </button>
+
+                  {businessMenuOpen && (
+                    <>
+                      <div className="dash-business-scrim" onClick={() => setBusinessMenuOpen(false)} />
+                      <div className="dash-business-menu" role="menu">
+                        <span className="dash-business-menu-label">Your businesses</span>
+                        {businesses.length === 0 && (
+                          <p className="dash-business-empty">No business yet.</p>
+                        )}
+                        {businesses.map((business) => (
+                          <button
+                            key={business.id}
+                            type="button"
+                            role="menuitem"
+                            className={`dash-business-item ${business.id === activeBusinessId ? 'active' : ''}`}
+                            onClick={() => { void handleSwitchBusiness(business.id); }}
+                          >
+                            <span className="dash-business-item-main">
+                              <strong>{business.name}</strong>
+                              <span>{business.primaryDomain || business.email} · {business.plan}</span>
+                            </span>
+                            {business.id === activeBusinessId
+                              ? <Check size={14} />
+                              : <span className="dash-business-item-role">{business.role}</span>}
+                          </button>
+                        ))}
+                        <button
+                          type="button"
+                          role="menuitem"
+                          className="dash-business-item dash-business-add"
+                          onClick={() => { setBusinessMenuOpen(false); setNewBusinessOpen(true); }}
+                        >
+                          <Plus size={14} />
+                          <span className="dash-business-item-main">
+                            <strong>Add a business</strong>
+                            <span>New domain, new mailboxes, same platform</span>
+                          </span>
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              </>
             )}
           </div>
         </header>
+
+        {newBusinessOpen && (
+          <div className="modal-overlay" onClick={() => setNewBusinessOpen(false)} role="dialog" aria-modal="true" aria-label="Add a business">
+            <div className="biz-form-modal glass" onClick={(event) => event.stopPropagation()}>
+              <div className="compose-header">
+                <div>
+                  <h3><Building2 size={16} /> Add a business</h3>
+                  <p>A new business lives in the same platform, with its own domain, mailboxes and team.</p>
+                </div>
+                <button type="button" className="btn btn-ghost btn-icon" onClick={() => setNewBusinessOpen(false)}><X size={16} /></button>
+              </div>
+              <div className="admin-form">
+                <div className="form-group">
+                  <label htmlFor="new-business-name">Business name</label>
+                  <input
+                    id="new-business-name"
+                    className="input"
+                    placeholder="Acme Inc"
+                    value={newBusiness.name}
+                    onChange={(event) => setNewBusiness((current) => ({ ...current, name: event.target.value }))}
+                    autoFocus
+                  />
+                </div>
+                <div className="form-group">
+                  <label htmlFor="new-business-domain">Business domain</label>
+                  <input
+                    id="new-business-domain"
+                    className="input"
+                    placeholder="acme.com"
+                    value={newBusiness.domain}
+                    onChange={(event) => setNewBusiness((current) => ({ ...current, domain: event.target.value }))}
+                  />
+                  <span className="form-hint">This domain sends and receives the business mail. Publish the DNS records to activate it.</span>
+                </div>
+                <div className="form-group">
+                  <label htmlFor="new-business-plan">Plan</label>
+                  <select
+                    id="new-business-plan"
+                    className="input"
+                    value={newBusiness.plan}
+                    onChange={(event) => setNewBusiness((current) => ({ ...current, plan: event.target.value }))}
+                  >
+                    <option value="free">Free</option>
+                    <option value="starter">Starter</option>
+                    <option value="business">Business</option>
+                    <option value="enterprise">Enterprise</option>
+                  </select>
+                </div>
+                <div className="admin-modal-actions">
+                  <button type="button" className="btn btn-ghost btn-sm" onClick={() => setNewBusinessOpen(false)}>Cancel</button>
+                  <button
+                    type="button"
+                    className="btn btn-primary btn-sm"
+                    onClick={() => { void handleCreateBusiness(); }}
+                    disabled={creatingBusiness}
+                  >
+                    {creatingBusiness ? 'Creating...' : 'Create business'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {viewMode === 'control-plane' && (
           <ErrorBoundary>
             <PlatformAdminPanel
               section={platformSection}
-              onSectionChange={setPlatformSection}
               state={dashboardState}
             />
           </ErrorBoundary>

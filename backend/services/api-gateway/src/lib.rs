@@ -1,6 +1,7 @@
 mod admin;
 mod api_keys;
 mod company_api;
+mod company_businesses;
 mod config;
 mod domain_dns;
 mod middleware;
