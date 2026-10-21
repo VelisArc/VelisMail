@@ -392,7 +392,13 @@ export type PlatformTeam = {
     description: string;
     permissions: string[];
     isSystem: boolean;
+    /** Only the platform owner may hand this role out. */
+    ownerOnly?: boolean;
   }>;
+  /** The role the signed-in staff member holds. */
+  viewerRole?: string;
+  /** True when the signed-in staff member is the platform owner. */
+  isOwner?: boolean;
 };
 
 export type FeatureFlag = {
