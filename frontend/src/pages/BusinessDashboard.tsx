@@ -18,6 +18,7 @@ import AnalyticsPanel from '../components/dashboard/panels/AnalyticsPanel';
 import AuditPanel from '../components/dashboard/panels/AuditPanel';
 import CompanyAdminPanel from '../components/dashboard/panels/CompanyAdminPanel';
 import SetupRequired from '../components/dashboard/SetupRequired';
+import useWorkspaceReadiness from '../components/dashboard/useWorkspaceReadiness';
 import PlatformAdminPanel, { type PlatformSection } from '../components/dashboard/panels/PlatformAdminPanel';
 import { platformOwnerUids, platformOwnerEmails } from '../lib/firebase';
 import { toAuditEntry, toQueueItem, toTeamMember, toTemplate, workspaceApi, type WorkspaceBusiness } from '../api/company';
@@ -63,6 +64,9 @@ export default function BusinessDashboard() {
   const navigation = useNavigation();
   const { updateNavigation } = useSessionActions();
   const queryClient = useQueryClient();
+  // The live state of the setup. The dashboard only opens when every step of
+  // the setup is done.
+  const readiness = useWorkspaceReadiness(user);
 
   const [activeBizTab, setActiveBizTab] = useState<BizTab>(() => (navigation?.activeTab as BizTab) || 'mail');
   const [activeFolder, setActiveFolder] = useState(navigation?.activeFolder || 'inbox');
@@ -785,10 +789,21 @@ export default function BusinessDashboard() {
   }), [activeBizTab, activeFolder, searchQuery, composeOpen, composeTo, composeSubject, composeBody, composeReplyQuote, sending, selectedFromAddress, activeMailboxAddress, annual, loadingPayment, toast, showLogoutConfirm, confirmRevokeId, pendingRoleChange, confirmAction, domainsList, activeDomain, domainMailboxes, domainGroups, teamMembers, mailQueue, auditLog, templates, connectionUsage, adminUsers, sortOrder, selectedEmails, mailStatusFilter, notificationEnabled, soundEnabled, showQueueFilters, queueStatusFilter, templateSearch, showAddDomain, newDomainInput, teamFilter, auditFilter, adminSearch, adminPlanFilter, adminStatusFilter, adminRiskFilter, adminPage, sidebarOpen, user, inviteOpen, inviteName, inviteEmail, inviteRole, inviteExpiresHours, issuedInvite, templateEditorOpen, templateName, templateSubject, templateBody, previewTemplate, selectedAdminUser, adminStatusConfirm, domainDetails, mailboxDetails, groupDetails, mailboxLocalPart, mailboxDisplayName, mailboxKind, groupName, groupLocalPart, groupMembers, verifyingDomainId, domainVerifyOpen, domainVerifySteps, domainVerifyProviderRecords, copiedField, signaturesList, contactsList, contactsSearch, activeSessions, signatureEditorOpen, signatureEditorName, signatureEditorContent, editingSignatureId, contactEditorOpen, contactEditorName, contactEditorEmail, contactEditorPhone, contactEditorCompany, editingContactId, showToast, activeDomainName, canAccessPlatformAdmin, handleLogout, handleSendEmail, hasRoleAccess, refreshAdminUsers, refreshAudit, refreshConnectionUsage, refreshContacts, refreshGroups, refreshMailboxes, refreshQueue, refreshSessions, refreshSignatures, refreshTeam, refreshTemplates]);
 
   if (!user) return <Navigate to="/login" replace />;
-  // The product needs a database, a mail API key, a verified domain and a mail
-  // provider. Until the workspace is configured the dashboard explains what is
-  // missing instead of showing screens that cannot work.
-  if (!isBusinessSetupReady(user)) return <SetupRequired user={user} />;
+  // The product needs a database, a mail API key, a mail provider with its
+  // inbound webhook, a verified domain and every DNS record published and
+  // active. Until all of that is done the dashboard stays closed and the
+  // setup panel names every missing step. The platform control plane does not
+  // depend on the workspace, so the owner can still open it.
+  const controlPlaneOpen = viewMode === 'control-plane' && canAccessPlatformAdmin;
+  if (!controlPlaneOpen && (!isBusinessSetupReady(user) || !readiness.ready)) {
+    return (
+      <SetupRequired
+        user={user}
+        canOpenControlPlane={canAccessPlatformAdmin}
+        onOpenControlPlane={() => switchView('control-plane')}
+      />
+    );
+  }
 
   return (
     <div className="biz-dash">

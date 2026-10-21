@@ -77,6 +77,8 @@ export type DnsRequirement = {
   actual: string;
   /** What the customer has to do to make the record active. */
   detail: string;
+  /** How the value is compared: exact, prefix, exists, spf or resend_inbound. */
+  matchMode: string;
 };
 
 export type DnsRequirements = {

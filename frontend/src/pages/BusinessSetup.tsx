@@ -15,12 +15,11 @@ import {
   mergeDnsRecords,
   normalizeProviderDnsRecords,
   providerEndpointForRequest,
-  saveUserDB,
-  STORAGE_KEYS,
   type DnsRecord,
   type User,
 } from '../api/client';
 import LoadingSpinner from '../components/LoadingSpinner';
+import { workspaceApi, type DnsRequirement } from '../api/company';
 import {
   DATABASE_PROVIDERS,
   MAIL_PROVIDERS,
@@ -73,23 +72,6 @@ type ProviderDnsRecord = {
 
 function providerRecordType(record: ProviderDnsRecord): string {
   return String(record.recordType || record.record_type || 'TXT').toUpperCase();
-}
-
-function mapCheckToStep(check: RemoteVerificationCheck): VerifyStep {
-  const iconByKey = {
-    txt: Shield,
-    mx: Mail,
-    spf: Lock,
-    dkim: Zap,
-    dmarc: Server,
-  };
-
-  return {
-    label: check.label,
-    icon: iconByKey[check.key],
-    status: check.status === 'verified' ? 'success' : check.status === 'failed' ? 'error' : 'pending',
-    detail: check.actual || check.expected,
-  };
 }
 
 function mapRuntimeCheckToStep(check: RuntimeVerificationCheck): VerifyStep {
@@ -147,11 +129,35 @@ export default function BusinessSetup() {
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [verifySteps, setVerifySteps] = useState<VerifyStep[]>([]);
   const [providerDnsRecords, setProviderDnsRecords] = useState<ProviderDnsRecord[]>([]);
+  const [liveDnsRecords, setLiveDnsRecords] = useState<DnsRequirement[]>([]);
 
   const handleLogout = () => {
     auth.logout();
     navigate('/login');
   };
+
+  // While the domain is being prepared the live DNS is read, so the exact
+  // records - including the inbound MX that enables receiving - are on screen.
+  useEffect(() => {
+    if (step !== 2) return;
+    const domain = domainInput.trim().toLowerCase();
+    if (!domain.includes('.')) {
+      setLiveDnsRecords([]);
+      return;
+    }
+    let cancelled = false;
+    workspaceApi
+      .dnsRequirements(domain)
+      .then((result) => {
+        if (!cancelled) setLiveDnsRecords(result.records);
+      })
+      .catch(() => {
+        if (!cancelled) setLiveDnsRecords([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [domainInput, step]);
 
   useEffect(() => {
     const session = auth.getSession();
@@ -433,100 +439,86 @@ export default function BusinessSetup() {
 
       const responseData = response.data;
       if (!response.ok || !responseData?.success) {
-        console.warn('Backend verification unavailable. Completing setup in offline mode.');
-        
-        const offlineVerificationChecks: RemoteVerificationCheck[] = [
-          { key: 'txt', label: 'Ownership TXT', status: 'verified', expected: currentDomain?.verificationToken || '', actual: currentDomain?.verificationToken },
-          { key: 'mx', label: 'Inbound MX', status: 'verified', expected: 'mx.velismail.online', actual: 'mx.velismail.online' },
-          { key: 'spf', label: 'Provider SPF', status: 'verified', expected: 'v=spf1 include:send.velismail.online ~all', actual: 'v=spf1 include:send.velismail.online ~all' },
-          { key: 'dkim', label: 'Provider DKIM', status: 'verified', expected: 'v=DKIM1', actual: 'v=DKIM1' },
-          { key: 'dmarc', label: 'DMARC', status: 'verified', expected: 'v=DMARC1', actual: 'v=DMARC1' },
-        ];
-        
-        const offlineRuntimeChecks: RuntimeVerificationCheck[] = [
-          { key: 'database', label: 'Database Config', status: 'verified', detail: 'Database connection verified' },
-          { key: 'mailProvider', label: 'Mail Provider Config', status: 'verified', detail: 'Provider API key verified' },
-          { key: 'providerDomain', label: 'Domain Activation', status: 'verified', detail: 'Active' },
-        ];
-
-        setVerifySteps([
-          ...offlineVerificationChecks.map(mapCheckToStep),
-          ...offlineRuntimeChecks.map(mapRuntimeCheckToStep),
-          { label: 'Domain Activation', icon: CheckCircle2, status: 'success', detail: domain },
-        ]);
-
-        const verifiedDomain = domains.runVerification(currentDomainId, offlineVerificationChecks);
-        if (verifiedDomain) {
-          verifiedDomain.status = 'verified';
-          const all = domains.getAll();
-          const idx = all.findIndex(d => d.id === currentDomainId);
-          if (idx >= 0) {
-            all[idx] = verifiedDomain;
-            saveUserDB(STORAGE_KEYS.domains, all);
-          }
-        }
-
-        const updateResult = auth.updateSettings({
-          recoveryEmail: user.recoveryEmail || user.email,
-          isBusinessSetupComplete: true,
-          businessDomainVerified: true,
-          businessDomain: domain,
-          dkimStatus: 'verified',
-          spfStatus: 'verified',
-          dmarcStatus: 'verified',
-          businessProfile: {
-            ...user?.businessProfile,
-            domain: domain,
-            dbUrl: customDbUrl,
-            apiKey,
-            mailProvider: apiProvider,
-            mailProviderEndpoint: providerEndpointForRequest(apiProvider, customApiUrl),
-            mailWebhookSecret: apiProvider === 'resend' ? webhookSecret.trim() : undefined,
-            verified: true,
-            dkimStatus: 'verified',
-            spfStatus: 'verified',
-            dmarcStatus: 'verified',
-          },
-        });
-        if (!updateResult.success || !updateResult.user) {
-          throw new Error(updateResult.error || 'Business mailbox activation failed.');
-        }
-        setUser(updateResult.user);
-        setStep(4);
-        return;
+        throw new Error(responseData?.message || 'The setup could not be verified.');
       }
-      const elapsed = Math.max(1, Math.round(performance.now() - verificationStartedAt));
-      const remoteChecks = Array.isArray(responseData.checks) ? responseData.checks as RemoteVerificationCheck[] : [];
-      const runtimeChecks = Array.isArray(responseData.runtimeChecks) ? responseData.runtimeChecks as RuntimeVerificationCheck[] : [];
-      const providerDns = Array.isArray(responseData.providerRecords) ? responseData.providerRecords as ProviderDnsRecord[] : [];
-      const remoteSteps = remoteChecks.map(mapCheckToStep);
-      const runtimeSteps = runtimeChecks.map(mapRuntimeCheckToStep);
-      const domainPassed = remoteChecks.length > 0 && remoteChecks.every((check) => check.status === 'verified');
-      const runtimePassed = runtimeChecks.every((check) => check.status === 'verified');
-      const configStatus: VerifyStep['status'] = domainPassed && runtimePassed ? 'success' : 'error';
 
+      const runtimeChecks = Array.isArray(responseData.runtimeChecks)
+        ? (responseData.runtimeChecks as RuntimeVerificationCheck[])
+        : [];
+      const providerDns = Array.isArray(responseData.providerRecords)
+        ? (responseData.providerRecords as ProviderDnsRecord[])
+        : [];
+      const runtimePassed = runtimeChecks.every((check) => check.status === 'verified');
+
+      // The live DNS decides whether the domain may be used: every record has
+      // to be published and active before the workspace is complete.
+      const domainList = await workspaceApi.domains();
+      let storedId = domainList.domains.find((entry) => entry.domain === domain)?.id;
+      if (!storedId) {
+        // The domain was added before the workspace knew it. Connect it now.
+        const created = await workspaceApi.createDomain({ domain });
+        storedId = created.id;
+      }
+      const live = await workspaceApi.verifyDomain(storedId);
+      setLiveDnsRecords(live.records);
+      const liveSteps: VerifyStep[] = live.records.map((record) => ({
+        label: `${record.purpose} (${record.recordType})`,
+        icon: record.recordType === 'MX'
+          ? Mail
+          : record.matchMode === 'prefix'
+            ? Server
+            : record.matchMode === 'exists'
+              ? Zap
+              : Lock,
+        status: record.status === 'verified' ? 'success' : 'error',
+        detail: record.status === 'verified'
+          ? `${record.name} is active`
+          : `${record.name} - ${record.detail}`,
+      }));
+
+      const elapsed = Math.max(1, Math.round(performance.now() - verificationStartedAt));
+      const dnsPassed = live.complete;
       setVerifySteps([
-        ...remoteSteps.map((stepItem) => ({ ...stepItem, ms: elapsed })),
-        ...runtimeSteps.map((stepItem) => ({ ...stepItem, ms: elapsed })),
-        { label: 'Domain Activation', icon: CheckCircle2, status: configStatus, detail: domain, ms: elapsed },
+        ...runtimeChecks.map((check) => ({ ...mapRuntimeCheckToStep(check), ms: elapsed })),
+        ...liveSteps.map((stepItem) => ({ ...stepItem, ms: elapsed })),
+        {
+          label: 'Domain Activation',
+          icon: CheckCircle2,
+          status: dnsPassed && runtimePassed ? 'success' : 'error',
+          detail: domain,
+          ms: elapsed,
+        },
       ]);
       setProviderDnsRecords(providerDns);
-      const mergedRecords = mergeDnsRecords(dnsRecords, normalizeProviderDnsRecords(providerDns, domain));
+      const mergedRecords = mergeDnsRecords(
+        dnsRecords,
+        normalizeProviderDnsRecords(providerDns, domain),
+      );
       setDnsRecords(mergedRecords);
       domains.updateDnsRecords(currentDomainId, mergedRecords);
 
-      if (!domainPassed || !runtimePassed) {
-        const failedCheck = remoteChecks.find((check) => check.status !== 'verified');
+      if (!dnsPassed) {
+        const missing = live.records.filter((record) => record.status !== 'verified');
+        throw new Error(
+          `${missing.length} DNS record(s) are not active yet: ${missing
+            .map((record) => `${record.recordType} ${record.name}`)
+            .join(', ')}. Publish them and run the verification again.`,
+        );
+      }
+      if (!runtimePassed) {
         const failedRuntime = runtimeChecks.find((check) => check.status !== 'verified');
         throw new Error(
-          failedRuntime?.detail ||
-          failedCheck?.actual ||
-          failedCheck?.expected ||
-          'DNS verification is still incomplete.',
+          failedRuntime?.detail || 'The database or the mail provider is not ready yet.',
         );
       }
 
-      const verifiedDomain = domains.runVerification(currentDomainId, remoteChecks);
+      const verifiedDomain = domains.runVerification(currentDomainId, [
+        { key: 'txt', status: 'verified' },
+        { key: 'mx', status: 'verified' },
+        { key: 'spf', status: 'verified' },
+        { key: 'dkim', status: 'verified' },
+        { key: 'dmarc', status: 'verified' },
+      ]);
       if (!verifiedDomain || verifiedDomain.status !== 'verified') {
         throw new Error('Domain verification state could not be saved.');
       }
@@ -557,71 +549,14 @@ export default function BusinessSetup() {
         throw new Error(updateResult.error || 'Business mailbox activation failed.');
       }
       setUser(updateResult.user);
+      setStep(4);
     } catch (err) {
-      console.warn('Domain verification error. Completing setup in offline mode.', err);
-      
-      const offlineVerificationChecks: RemoteVerificationCheck[] = [
-        { key: 'txt', label: 'Ownership TXT', status: 'verified', expected: currentDomain?.verificationToken || '', actual: currentDomain?.verificationToken },
-        { key: 'mx', label: 'Inbound MX', status: 'verified', expected: 'mx.velismail.online', actual: 'mx.velismail.online' },
-        { key: 'spf', label: 'Provider SPF', status: 'verified', expected: 'v=spf1 include:send.velismail.online ~all', actual: 'v=spf1 include:send.velismail.online ~all' },
-        { key: 'dkim', label: 'Provider DKIM', status: 'verified', expected: 'v=DKIM1', actual: 'v=DKIM1' },
-        { key: 'dmarc', label: 'DMARC', status: 'verified', expected: 'v=DMARC1', actual: 'v=DMARC1' },
-      ];
-      
-      const offlineRuntimeChecks: RuntimeVerificationCheck[] = [
-        { key: 'database', label: 'Database Config', status: 'verified', detail: 'Database connection verified' },
-        { key: 'mailProvider', label: 'Mail Provider Config', status: 'verified', detail: 'Provider API key verified' },
-        { key: 'providerDomain', label: 'Domain Activation', status: 'verified', detail: 'Active' },
-      ];
-
-      setVerifySteps([
-        ...offlineVerificationChecks.map(mapCheckToStep),
-        ...offlineRuntimeChecks.map(mapRuntimeCheckToStep),
-        { label: 'Domain Activation', icon: CheckCircle2, status: 'success', detail: domain },
-      ]);
-
-      const verifiedDomain = domains.runVerification(currentDomainId, offlineVerificationChecks);
-      if (verifiedDomain) {
-        verifiedDomain.status = 'verified';
-        const all = domains.getAll();
-        const idx = all.findIndex(d => d.id === currentDomainId);
-        if (idx >= 0) {
-          all[idx] = verifiedDomain;
-          saveUserDB(STORAGE_KEYS.domains, all);
-        }
-      }
-
-      const updateResult = auth.updateSettings({
-        recoveryEmail: user.recoveryEmail || user.email,
-        isBusinessSetupComplete: true,
-        businessDomainVerified: true,
-        businessDomain: domain,
-        dkimStatus: 'verified',
-        spfStatus: 'verified',
-        dmarcStatus: 'verified',
-        businessProfile: {
-          ...user?.businessProfile,
-          domain: domain,
-          dbUrl: customDbUrl,
-          apiKey,
-          mailProvider: apiProvider,
-          mailProviderEndpoint: providerEndpointForRequest(apiProvider, customApiUrl),
-          mailWebhookSecret: apiProvider === 'resend' ? webhookSecret.trim() : undefined,
-          verified: true,
-          dkimStatus: 'verified',
-          spfStatus: 'verified',
-          dmarcStatus: 'verified',
-        },
-      });
-      if (updateResult.success && updateResult.user) {
-        setUser(updateResult.user);
-        setStep(4);
-      } else {
-        setError(updateResult.error || 'Business mailbox activation failed.');
-      }
+      const message =
+        err instanceof Error ? err.message : 'The setup could not be completed.';
+      console.warn('Domain verification failed.', err);
+      setError(message);
+      setStep(3);
     }
-
-    setStep(4);
   };
 
   if (!user) return <Navigate to="/login" replace />;
@@ -847,6 +782,77 @@ export default function BusinessSetup() {
                     );
                   })}
                 </div>
+                {liveDnsRecords.length > 0 && (
+                  <>
+                    <p className="dns-instruction-text">
+                      Live DNS of this domain. Publish every record below - the inbound MX record is
+                      the one that enables receiving:
+                    </p>
+                    <div className="dns-records-table">
+                      <div className="dns-table-header">
+                        <span className="dns-col-type">Type</span>
+                        <span className="dns-col-name">Host / Name</span>
+                        <span className="dns-col-value">Value / Points To</span>
+                        <span className="dns-col-priority">TTL</span>
+                        <span className="dns-col-ttl">Status</span>
+                      </div>
+                      {liveDnsRecords.map((rec, i) => {
+                        const recordKey = `live-setup-${i}`;
+                        const recordType = String(rec.recordType).toUpperCase();
+                        const active = rec.status === 'verified';
+                        return (
+                          <div key={recordKey} className="dns-table-row">
+                            <span className="dns-col-type">
+                              <span className={`dns-type-badge dns-type-${recordType.toLowerCase()}`}>
+                                {recordType}
+                              </span>
+                            </span>
+                            <span className="dns-col-name">
+                              <code className="dns-field-value">{rec.name}</code>
+                              <button
+                                className="dns-copy-btn"
+                                onClick={() => handleCopy(rec.name)}
+                                title="Copy host name"
+                              >
+                                {copiedValue === rec.name ? (
+                                  <Check size={12} color="var(--success)" />
+                                ) : (
+                                  <Copy size={12} />
+                                )}
+                              </button>
+                            </span>
+                            <span className="dns-col-value">
+                              <code className="dns-field-value">{rec.value || 'publish the record'}</code>
+                              {rec.value && (
+                                <button
+                                  className="dns-copy-btn"
+                                  onClick={() => handleCopy(rec.value)}
+                                  title="Copy value"
+                                >
+                                  {copiedValue === rec.value ? (
+                                    <Check size={12} color="var(--success)" />
+                                  ) : (
+                                    <Copy size={12} />
+                                  )}
+                                </button>
+                              )}
+                            </span>
+                            <span className="dns-col-priority">
+                              <code className="dns-field-value">{rec.ttl}</code>
+                            </span>
+                            <span className="dns-col-ttl">
+                              <span
+                                className={`badge badge-sm ${active ? 'badge-accent' : 'badge-secondary'}`}
+                              >
+                                {active ? 'active' : rec.status}
+                              </span>
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </>
+                )}
                 <div className="bsetup-dns-actions">
                   <button className="btn btn-primary" onClick={handleDomainVerify}>
                     <CheckCircle2 size={16} /> Verify Domain Manually
@@ -927,6 +933,84 @@ export default function BusinessSetup() {
                     );
                   })}
                 </div>
+              </div>
+            )}
+            {liveDnsRecords.length > 0 && (
+              <div className="bsetup-dns bsetup-provider-dns">
+                <p className="dns-instruction-text">
+                  Live DNS of this domain - every record has to be published and active before the
+                  workspace is opened:
+                </p>
+                <div className="dns-records-table">
+                  <div className="dns-table-header">
+                    <span className="dns-col-type">Type</span>
+                    <span className="dns-col-name">Host / Name</span>
+                    <span className="dns-col-value">Value / Points To</span>
+                    <span className="dns-col-priority">TTL</span>
+                    <span className="dns-col-ttl">Status</span>
+                  </div>
+                  {liveDnsRecords.map((rec, i) => {
+                    const recordKey = `live-${i}`;
+                    const recordType = String(rec.recordType).toUpperCase();
+                    const active = rec.status === 'verified';
+                    return (
+                      <div key={recordKey} className="dns-table-row">
+                        <span className="dns-col-type">
+                          <span className={`dns-type-badge dns-type-${recordType.toLowerCase()}`}>
+                            {recordType}
+                          </span>
+                        </span>
+                        <span className="dns-col-name">
+                          <code className="dns-field-value">{rec.name}</code>
+                          <button
+                            className="dns-copy-btn"
+                            onClick={() => handleCopy(rec.name)}
+                            title="Copy name"
+                          >
+                            {copiedValue === rec.name ? (
+                              <Check size={12} color="var(--success)" />
+                            ) : (
+                              <Copy size={12} />
+                            )}
+                          </button>
+                        </span>
+                        <span className="dns-col-value">
+                          <code className="dns-field-value">{rec.value || 'publish the record'}</code>
+                          {rec.value && (
+                            <button
+                              className="dns-copy-btn"
+                              onClick={() => handleCopy(rec.value)}
+                              title="Copy value"
+                            >
+                              {copiedValue === rec.value ? (
+                                <Check size={12} color="var(--success)" />
+                              ) : (
+                                <Copy size={12} />
+                              )}
+                            </button>
+                          )}
+                        </span>
+                        <span className="dns-col-priority">
+                          <code className="dns-field-value">{rec.ttl}</code>
+                        </span>
+                        <span className="dns-col-ttl">
+                          <span
+                            className={`badge badge-sm ${active ? 'badge-accent' : 'badge-secondary'}`}
+                          >
+                            {active ? 'active' : rec.status}
+                          </span>
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+                {liveDnsRecords
+                  .filter((rec) => rec.status !== 'verified' && rec.detail)
+                  .map((rec, i) => (
+                    <p key={`live-detail-${i}`} className="dns-instruction-text">
+                      {rec.recordType} {rec.name}: {rec.detail}
+                    </p>
+                  ))}
               </div>
             )}
             <div className="bsetup-verif-actions">

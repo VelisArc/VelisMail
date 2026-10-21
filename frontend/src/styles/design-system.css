@@ -477,17 +477,55 @@
   margin-bottom: var(--space-3);
 }
 
+.dns-requirements-message {
+  font-size: var(--text-2xs);
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+.dns-record-state {
+  flex-shrink: 0;
+  padding: 2px 8px;
+  font-size: var(--text-2xs);
+  font-weight: var(--font-weight-bold);
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+}
+
+.dns-record-state.ok {
+  background: var(--success-glow);
+  color: var(--success-600);
+}
+
+.dns-record-state.todo {
+  background: var(--danger-glow);
+  color: var(--danger-600);
+}
+
+.dns-record-detail {
+  font-size: var(--text-2xs);
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+.dns-record-current {
+  font-size: var(--text-2xs);
+  line-height: 1.5;
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+
 .dns-record-meta {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-3);
   font-size: var(--text-2xs);
-  color: var(--text-muted);
+  color: var(--text-secondary);
   margin-bottom: var(--space-2);
 }
 
 .dns-record-meta strong {
-  color: var(--text-secondary);
+  color: var(--text-primary);
   margin-right: 4px;
 }
 

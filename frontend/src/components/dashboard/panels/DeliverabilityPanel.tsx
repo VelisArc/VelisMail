@@ -50,10 +50,21 @@ export default function DeliverabilityPanel({ state }: DeliverabilityPanelProps)
   const scoreMetrics = useMemo(() => {
     if (!activeDomain) return { score: 0, rating: 'critical', desc: 'No domain selected.' };
 
-    const spfVerified = activeDomain.spfVerified;
-    const dkimVerified = activeDomain.dkimVerified;
-    const dmarcVerified = activeDomain.dmarcVerified;
-    const mxVerified = activeDomain.mxVerified;
+    // The live DNS is the truth. The stored flags are only used while the
+    // records are being read.
+    const live = (mode: string) => dns.records.find((record) => record.matchMode === mode);
+    const liveSpf = live('spf');
+    const liveDkim = live('exists');
+    const liveDmarc = live('prefix');
+    const liveMx = dns.records.find(
+      (record) => record.recordType === 'MX' && record.purpose.toLowerCase().includes('receiv'),
+    );
+    const useLive = dns.records.length > 0;
+
+    const spfVerified = useLive ? liveSpf?.status === 'verified' : Boolean(activeDomain.spfVerified);
+    const dkimVerified = useLive ? liveDkim?.status === 'verified' : Boolean(activeDomain.dkimVerified);
+    const dmarcVerified = useLive ? liveDmarc?.status === 'verified' : Boolean(activeDomain.dmarcVerified);
+    const mxVerified = useLive ? liveMx?.status === 'verified' : Boolean(activeDomain.mxVerified);
 
     let total = 30; // base score representing bounce rate and system infrastructure
     if (spfVerified) total += 20;
@@ -77,20 +88,36 @@ export default function DeliverabilityPanel({ state }: DeliverabilityPanelProps)
       dmarcVerified,
       mxVerified,
     };
-  }, [activeDomain]);
+  }, [activeDomain, dns.records]);
 
   // Circumference for stroke-dasharray (r = 55 -> 2 * PI * 55 = 345.5)
   const strokeDashoffset = activeDomain ? 345.5 - (345.5 * scoreMetrics.score) / 100 : 345.5;
 
-  const handleVerify = () => {
-    if (activeDomain) {
-      state.setVerifyingDomainId(activeDomain.id);
-      // Re-read the live DNS and refresh the domain list.
-      void loadDns();
-      setTimeout(() => {
-        state.refreshDomains();
-        state.showToast('Deliverability records checked');
-      }, 800);
+  const handleVerify = async () => {
+    if (!activeDomain) return;
+    state.setVerifyingDomainId(activeDomain.id);
+    try {
+      const result = await workspaceApi.verifyDomain(activeDomain.id);
+      setDns({ loading: false, records: result.records, message: result.message });
+      state.refreshDomains();
+      state.showToast(
+        result.complete
+          ? 'Every DNS record is published and active.'
+          : `${result.records.filter((record) => record.status !== 'verified').length} record(s) still missing.`,
+        result.complete ? 'success' : 'error',
+      );
+    } catch (error) {
+      setDns({
+        loading: false,
+        records: [],
+        message: error instanceof Error ? error.message : 'Unable to check the DNS records.',
+      });
+      state.showToast(
+        error instanceof Error ? error.message : 'Unable to check the DNS records.',
+        'error',
+      );
+    } finally {
+      state.setVerifyingDomainId('');
     }
   };
 
@@ -230,7 +257,7 @@ export default function DeliverabilityPanel({ state }: DeliverabilityPanelProps)
                   <div className="dns-requirements-head">
                     <div>
                       <h4 className="recommendations-title">Required DNS records</h4>
-                      <p className="text-xs text-muted">
+                      <p className="dns-requirements-message">
                         {dns.loading
                           ? 'Checking the live DNS for this domain...'
                           : dns.message}
@@ -239,42 +266,50 @@ export default function DeliverabilityPanel({ state }: DeliverabilityPanelProps)
                     <button
                       type="button"
                       className="btn btn-ghost btn-sm"
-                      onClick={() => void loadDns()}
+                      onClick={() => void handleVerify()}
                       disabled={dns.loading}
                     >
                       <RefreshCcw size={12} /> Check DNS
                     </button>
                   </div>
 
-                  {dns.records.map((record) => (
-                    <div key={`${record.recordType}-${record.name}-${record.value}`} className="dns-instruction-box">
-                      <div className="dns-instruction-header">
-                        <span className="dns-instruction-type">
-                          {record.purpose} ({record.recordType})
-                        </span>
-                        <span className={`badge badge-${record.status === 'verified' ? 'success' : 'danger'}`}>
-                          {record.status === 'verified' ? 'active' : record.status}
-                        </span>
-                        <button
-                          type="button"
-                          className="btn btn-ghost btn-sm"
-                          title="Copy value"
-                          onClick={() => { navigator.clipboard.writeText(record.value); state.showToast('Value copied'); }}
-                        >
-                          <Copy size={12} />
-                        </button>
+                  {dns.records.map((record) => {
+                    const active = record.status === 'verified';
+                    return (
+                      <div
+                        key={`${record.recordType}-${record.name}-${record.value}`}
+                        className={`dns-instruction-box ${active ? 'ok' : 'todo'}`}
+                      >
+                        <div className="dns-instruction-header">
+                          <span className="dns-instruction-type">
+                            {record.purpose} ({record.recordType})
+                          </span>
+                          <span className={`dns-record-state ${active ? 'ok' : 'todo'}`}>
+                            {active ? 'active' : record.status}
+                          </span>
+                          {record.value && (
+                            <button
+                              type="button"
+                              className="btn btn-ghost btn-sm"
+                              title="Copy value"
+                              onClick={() => { navigator.clipboard.writeText(record.value); state.showToast('Value copied'); }}
+                            >
+                              <Copy size={12} />
+                            </button>
+                          )}
+                        </div>
+                        <div className="dns-record-meta">
+                          <span><strong>Name</strong> {record.name}</span>
+                          <span><strong>TTL</strong> {record.ttl}</span>
+                        </div>
+                        {record.value && <div className="dns-code-block">{record.value}</div>}
+                        {record.detail && <p className="dns-record-detail">{record.detail}</p>}
+                        {record.actual && !active && (
+                          <p className="dns-record-current">Published now: {record.actual}</p>
+                        )}
                       </div>
-                      <div className="dns-record-meta">
-                        <span><strong>Name</strong> {record.name}</span>
-                        <span><strong>Host</strong> {record.host}</span>
-                        <span><strong>TTL</strong> {record.ttl}</span>
-                      </div>
-                      <div className="dns-code-block">{record.value}</div>
-                      {record.actual && record.status !== 'verified' && (
-                        <p className="text-xs text-muted">Currently: {record.actual}</p>
-                      )}
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </>

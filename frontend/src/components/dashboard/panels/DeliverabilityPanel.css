@@ -193,6 +193,10 @@
   padding: var(--space-4);
 }
 
+.dns-instruction-box.todo {
+  border-color: var(--danger-200);
+}
+
 .dns-instruction-header {
   display: flex;
   align-items: center;
