@@ -88,29 +88,50 @@
       })();
     </script>
     <style>
+      /* Same comet-arc loader the app uses, inlined because the bundle has
+         not been parsed yet when this screen is painted. */
       .boot-spinner {
+        --boot-size: 26px;
+        --boot-thickness: 2px;
         display: inline-block;
-        width: 28px;
-        height: 28px;
+        vertical-align: -0.2em;
+        width: var(--boot-size);
+        height: var(--boot-size);
         border-radius: 50%;
-        border: 3px solid rgba(82,82,82,0.06);
-        border-top-color: #f59e0b;
-        border-right-color: #ef4444;
-        animation: bootSpin 0.65s cubic-bezier(0.4, 0.15, 0.3, 0.85) infinite;
-        vertical-align: -0.18em;
+        background:
+          conic-gradient(
+            from 0deg,
+            transparent 0deg,
+            #0f172a 52deg,
+            rgba(15, 23, 42, 0.42) 96deg,
+            rgba(15, 23, 42, 0.1) 136deg,
+            transparent 168deg,
+            transparent 360deg
+          ),
+          #e2e8f0;
+        -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - var(--boot-thickness)), #000 calc(100% - var(--boot-thickness)));
+        mask: radial-gradient(farthest-side, transparent calc(100% - var(--boot-thickness)), #000 calc(100% - var(--boot-thickness)));
+        animation: bootArc 0.8s linear infinite;
       }
-      @keyframes bootSpin { to { transform: rotate(360deg); } }
+      @keyframes bootArc { to { transform: rotate(360deg); } }
+      @keyframes bootPulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.32; }
+      }
       @media (prefers-reduced-motion: reduce) {
-        .boot-spinner { animation-duration: 1.6s; }
+        .boot-spinner { animation: bootPulse 1.6s ease-in-out infinite; }
       }
     </style>
   </head>
   <body>
     <div id="root">
-      <div class="boot-loading-screen" style="position:fixed;inset:0;display:grid;place-items:center;z-index:9999;">
-        <div style="display:flex;align-items:center;gap:14px;padding:16px 18px;background:var(--bg-elevated,#fff);border:1px solid var(--border-primary,rgba(0,0,0,.08));border-radius:8px;font-family:Manrope,system-ui,sans-serif;color:var(--text-secondary,#525252);font-size:0.88rem;font-weight:700;">
+      <div class="boot-loading-screen" style="position:fixed;inset:0;display:grid;place-items:center;z-index:9999;background:rgba(255,255,255,0.86);backdrop-filter:blur(10px);">
+        <div style="display:flex;align-items:center;gap:20px;padding:26px 32px;background:#fff;border:1px solid #e2e8f0;border-radius:0;font-family:Manrope,system-ui,sans-serif;">
           <span class="boot-spinner"></span>
-          <span>Loading</span>
+          <span style="display:flex;flex-direction:column;gap:3px;">
+            <strong style="font-size:0.92rem;font-weight:800;letter-spacing:0.06em;text-transform:uppercase;color:#0f172a;">VelisMail</strong>
+            <em style="font-style:normal;font-size:0.72rem;font-weight:500;color:#64748b;">Preparing your workspace</em>
+          </span>
         </div>
       </div>
     </div>

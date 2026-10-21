@@ -774,39 +774,65 @@ textarea.input {
   color: var(--warning-500);
 }
 
-/* ─── Loading ─── */
+/* ─── Loading ───
+   One loader for the whole product: a comet arc that travels a faint
+   track ring. It is drawn with a conic gradient and a radial mask, so it
+   stays crisp at every size and only `transform` is animated. */
 .spinner {
   --spinner-size: 24px;
-  width: var(--spinner-size);
-  height: var(--spinner-size);
-  border: 2.5px solid rgba(0, 0, 0, 0.06);
-  border-top-color: #f59e0b;
-  border-right-color: #ef4444;
-  border-radius: 50%;
-  animation: spin 0.65s cubic-bezier(0.4, 0.15, 0.3, 0.85) infinite;
+  --spinner-thickness: 2px;
+  --spinner-track: var(--border-primary);
+  --spinner-arc: var(--text-primary);
   display: inline-block;
   vertical-align: middle;
+  width: var(--spinner-size);
+  height: var(--spinner-size);
+  border-radius: 50%;
+  background:
+    conic-gradient(
+      from 0deg,
+      transparent 0deg,
+      var(--spinner-arc) 52deg,
+      color-mix(in srgb, var(--spinner-arc) 42%, transparent) 96deg,
+      color-mix(in srgb, var(--spinner-arc) 10%, transparent) 136deg,
+      transparent 168deg,
+      transparent 360deg
+    ),
+    var(--spinner-track);
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - var(--spinner-thickness)), #000 calc(100% - var(--spinner-thickness)));
+  mask: radial-gradient(farthest-side, transparent calc(100% - var(--spinner-thickness)), #000 calc(100% - var(--spinner-thickness)));
+  animation: velismail-arc 0.8s linear infinite;
 }
 
 [data-theme='dark'] .spinner {
-  border-color: rgba(255, 255, 255, 0.06);
-  border-top-color: #fbbf24;
-  border-right-color: #f87171;
+  --spinner-track: rgba(255, 255, 255, 0.12);
+  --spinner-arc: #ffffff;
 }
 
 .spinner-sm {
-  --spinner-size: 14px;
-  border-width: 1.8px;
+  --spinner-size: 16px;
+  --spinner-thickness: 1.5px;
 }
 
 .spinner-md {
   --spinner-size: 24px;
-  border-width: 2.5px;
+  --spinner-thickness: 2px;
 }
 
 .spinner-lg {
   --spinner-size: 40px;
-  border-width: 3.5px;
+  --spinner-thickness: 3px;
+}
+
+@keyframes velismail-arc {
+  to { transform: rotate(360deg); }
+}
+
+/* Reduced-motion fallback: the loader keeps communicating "busy" without
+   moving anything on screen. */
+@keyframes velismail-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.32; }
 }
 
 @keyframes spin {
@@ -865,22 +891,41 @@ textarea.input {
   z-index: var(--z-toast);
   display: grid;
   place-items: center;
-  background: rgba(0, 0, 0, 0.3);
-  backdrop-filter: blur(8px);
+  background: color-mix(in srgb, var(--bg-body) 84%, transparent);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
 }
 
 .loading-screen .loading-card {
   display: flex;
   align-items: center;
-  gap: 16px;
-  padding: 20px 28px;
+  gap: 20px;
+  padding: 26px 32px;
   background: var(--bg-surface);
   border: 1px solid var(--border-primary);
   border-radius: 0;
   box-shadow: none;
-  font-size: var(--text-sm);
-  font-weight: var(--font-weight-semibold);
-  color: var(--text-secondary);
+}
+
+.loading-card-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.loading-card-copy strong {
+  font-size: var(--text-base);
+  font-weight: var(--font-weight-extrabold);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-primary);
+}
+
+.loading-card-copy em {
+  font-style: normal;
+  font-size: var(--text-xs);
+  font-weight: var(--font-weight-medium);
+  color: var(--text-muted);
 }
 
 /* ─── Layout Utilities ─── */
@@ -1035,11 +1080,10 @@ textarea.input {
   animation: fadeIn 0.2s ease-out;
 }
 .loading-overlay .spinner {
-  width: 40px; height: 40px;
-  border: 3px solid rgba(255,255,255,0.15);
-  border-top-color: var(--accent);
-  border-radius: 0;
-  animation: spin 0.8s linear infinite;
+  --spinner-size: 40px;
+  --spinner-thickness: 3px;
+  --spinner-track: rgba(255, 255, 255, 0.18);
+  --spinner-arc: #ffffff;
 }
 
 /* Skeleton loading for email list */
@@ -1111,7 +1155,7 @@ textarea.input {
   }
 
   .spinner {
-    animation-duration: 1.4s !important;
+    animation: velismail-pulse 1.6s ease-in-out infinite !important;
   }
 }
 
