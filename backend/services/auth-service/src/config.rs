@@ -66,10 +66,13 @@ impl AuthConfig {
             host: std::env::var("AUTH_HOST").unwrap_or_else(|_| "0.0.0.0".to_string()),
             port,
             jwt_secret: required_env("JWT_SECRET")?,
+            // Access tokens last 24 hours. The dashboard also rotates them with
+            // the refresh token, so a long-lived token does not remove the
+            // ability to revoke a session.
             jwt_expiry_seconds: std::env::var("JWT_EXPIRY_SECONDS")
                 .ok()
                 .and_then(|p| p.parse().ok())
-                .unwrap_or(3600),
+                .unwrap_or(86_400),
             refresh_token_expiry_days: std::env::var("REFRESH_TOKEN_EXPIRY_DAYS")
                 .ok()
                 .and_then(|p| p.parse().ok())
