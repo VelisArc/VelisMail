@@ -132,18 +132,15 @@ impl TenantService {
 
     /// Get tenant by ID with isolation enforcement
     pub async fn get_tenant(&self, tenant_id: Uuid) -> Result<Option<Tenant>> {
-        // Set tenant context for RLS
-        sqlx::query("SELECT set_tenant_context($1)")
-            .bind(tenant_id)
-            .execute(&self.pool)
-            .await
-            .context("Failed to set tenant context")?;
+        // The context and the query share one connection, so the row level
+        // security policies always see this workspace.
+        let mut connection = self.tenant_connection(tenant_id).await?;
 
         let tenant = sqlx::query_as::<_, Tenant>(
             "SELECT * FROM tenants WHERE id = $1 AND deleted_at IS NULL",
         )
         .bind(tenant_id)
-        .fetch_optional(&self.pool)
+        .fetch_optional(&mut *connection)
         .await
         .context("Failed to fetch tenant")?;
 
@@ -242,12 +239,8 @@ impl TenantService {
         tenant_id: Uuid,
         request: AddDomainRequest,
     ) -> Result<CustomDomain> {
-        // Set tenant context for RLS
-        sqlx::query("SELECT set_tenant_context($1)")
-            .bind(tenant_id)
-            .execute(&self.pool)
-            .await
-            .context("Failed to set tenant context")?;
+        // The context and the query share one connection.
+        let mut connection = self.tenant_connection(tenant_id).await?;
 
         // Validate domain format according to RFC standards
         if !Self::validate_domain_format(&request.domain_name) {
@@ -298,7 +291,7 @@ impl TenantService {
         .bind(request.verification_method.as_deref())
         .bind(&dns_records)
         .bind(now)
-        .fetch_one(&self.pool)
+        .fetch_one(&mut *connection)
         .await
         .context("Failed to add custom domain")?;
 
@@ -331,12 +324,8 @@ impl TenantService {
         let period_start = Self::current_period_start();
         let period_end = period_start + Duration::days(1);
 
-        // Set tenant context for RLS
-        sqlx::query("SELECT set_tenant_context($1)")
-            .bind(tenant_id)
-            .execute(&self.pool)
-            .await
-            .context("Failed to set tenant context")?;
+        // The context and the query share one connection.
+        let mut connection = self.tenant_connection(tenant_id).await?;
 
         // Update resource usage with conflict handling
         let update_field = match resource_type {
@@ -366,7 +355,7 @@ impl TenantService {
         .bind(period_start)
         .bind(period_end)
         .bind(amount)
-        .execute(&self.pool)
+        .execute(&mut *connection)
         .await
         .context("Failed to track resource usage")?;
 
@@ -375,12 +364,8 @@ impl TenantService {
 
     /// Check if tenant has exceeded resource limits
     pub async fn check_resource_limits(&self, tenant_id: Uuid) -> Result<Option<String>> {
-        // Set tenant context for RLS
-        sqlx::query("SELECT set_tenant_context($1)")
-            .bind(tenant_id)
-            .execute(&self.pool)
-            .await
-            .context("Failed to set tenant context")?;
+        // The context and the query share one connection.
+        let mut connection = self.tenant_connection(tenant_id).await?;
 
         // Get tenant limits
         let tenant = self
@@ -399,7 +384,7 @@ impl TenantService {
         )
         .bind(tenant_id)
         .bind(period_start)
-        .fetch_optional(&self.pool)
+        .fetch_optional(&mut *connection)
         .await
         .context("Failed to fetch resource usage")?;
 
@@ -429,12 +414,8 @@ impl TenantService {
 
     /// Get tenant statistics
     pub async fn get_tenant_stats(&self, tenant_id: Uuid) -> Result<TenantStats> {
-        // Set tenant context for RLS
-        sqlx::query("SELECT set_tenant_context($1)")
-            .bind(tenant_id)
-            .execute(&self.pool)
-            .await
-            .context("Failed to set tenant context")?;
+        // The context and the query share one connection.
+        let mut connection = self.tenant_connection(tenant_id).await?;
 
         let period_start = Self::current_period_start();
 
@@ -444,7 +425,7 @@ impl TenantService {
         )
         .bind(tenant_id)
         .bind(period_start)
-        .fetch_optional(&self.pool)
+        .fetch_optional(&mut *connection)
         .await
         .context("Failed to fetch resource usage")?;
 
@@ -463,17 +444,21 @@ impl TenantService {
         .await
         .context("Failed to fetch domain counts")?;
 
-        // Get user counts (this would need user service integration)
-        // Get user counts safely with fallbacks
-        let total_users = sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM users")
-            .fetch_one(&self.pool)
-            .await
-            .unwrap_or(0) as u32;
-        let active_users =
-            sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM users WHERE is_active = true")
+        // The user counts belong to this workspace. A tenant never learns how
+        // many accounts the platform has.
+        let total_users =
+            sqlx::query_scalar::<_, i64>("SELECT COUNT(*)::bigint FROM users WHERE tenant_id = $1")
+                .bind(tenant_id)
                 .fetch_one(&self.pool)
                 .await
                 .unwrap_or(0) as u32;
+        let active_users = sqlx::query_scalar::<_, i64>(
+            "SELECT COUNT(*)::bigint FROM users WHERE tenant_id = $1 AND status = 'active'",
+        )
+        .bind(tenant_id)
+        .fetch_one(&self.pool)
+        .await
+        .unwrap_or(0) as u32;
 
         let stats = TenantStats {
             total_users,
@@ -540,6 +525,28 @@ impl TenantService {
             .await
             .context("Failed to set tenant context")?;
         Ok(())
+    }
+
+    /// A connection with the tenant context of the workspace.
+    ///
+    /// The context is set on the very connection that runs the queries. With a
+    /// pool the setting would otherwise land on a different connection, and
+    /// the row level security policies would then see the wrong tenant.
+    async fn tenant_connection(
+        &self,
+        tenant_id: Uuid,
+    ) -> Result<sqlx::pool::PoolConnection<sqlx::Postgres>> {
+        let mut connection = self
+            .pool
+            .acquire()
+            .await
+            .context("Failed to get a database connection")?;
+        sqlx::query("SELECT set_config('velismail.tenant_id', $1, false)")
+            .bind(tenant_id)
+            .execute(&mut *connection)
+            .await
+            .context("Failed to set tenant context")?;
+        Ok(connection)
     }
 
     /// Check if current context has admin privileges

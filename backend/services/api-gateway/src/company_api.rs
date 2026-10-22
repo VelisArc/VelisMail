@@ -214,12 +214,7 @@ pub(crate) async fn workspace_context(
         )
     })?;
     let email = normalize_email(&email);
-    let settings: Value = user.try_get("settings").unwrap_or_else(|_| json!({}));
-    let plan = settings
-        .get("plan")
-        .and_then(Value::as_str)
-        .unwrap_or("Free")
-        .to_string();
+    let _settings: Value = user.try_get("settings").unwrap_or_else(|_| json!({}));
 
     // The tenant stored on the account is authoritative; the JWT tenant is
     // only a fallback for accounts that were provisioned before the tenant
@@ -234,6 +229,16 @@ pub(crate) async fn workspace_context(
             "This account is not attached to a company workspace yet.",
         ));
     }
+
+    // The plan belongs to the workspace. It is never read from the account
+    // settings, because a client can write those.
+    let plan: String = sqlx::query_scalar("SELECT plan_tier FROM tenants WHERE id = $1")
+        .bind(tenant_id)
+        .fetch_optional(db)
+        .await
+        .ok()
+        .flatten()
+        .unwrap_or_else(|| "free".to_string());
 
     let membership = sqlx::query(
         "SELECT role, status FROM company_members
@@ -346,18 +351,27 @@ pub async fn list_team(State(state): State<AppState>, headers: HeaderMap) -> Api
     let members: Vec<Value> = members
         .iter()
         .map(|row| {
-            let settings: Value = row.try_get("settings").unwrap_or_else(|_| json!({}));
+            let member_status: String = row
+                .try_get::<String, _>("status")
+                .unwrap_or_else(|_| "active".to_string());
             json!({
                 "id": row.try_get::<Uuid, _>("id").map(|v| v.to_string()).unwrap_or_default(),
                 "userId": row.try_get::<Option<Uuid>, _>("user_id").ok().flatten().map(|v| v.to_string()),
                 "email": row.try_get::<String, _>("email").unwrap_or_default(),
                 "name": row.try_get::<String, _>("display_name").unwrap_or_default(),
                 "role": row.try_get::<String, _>("role").unwrap_or_else(|_| "member".to_string()),
-                "status": row.try_get::<String, _>("status").unwrap_or_else(|_| "active".to_string()),
+                // The console speaks in pending, active, expired and revoked.
+                "status": match member_status.as_str() {
+                    "active" => "active",
+                    "invited" => "pending",
+                    "suspended" => "expired",
+                    "removed" => "revoked",
+                    other => other,
+                },
                 "invitedBy": row.try_get::<Option<String>, _>("invited_by").ok().flatten(),
                 "joinedAt": row.try_get::<Option<DateTime<Utc>>, _>("joined_at").ok().flatten().map(|v| v.to_rfc3339()),
                 "lastActiveAt": row.try_get::<Option<DateTime<Utc>>, _>("last_active_at").ok().flatten().map(|v| v.to_rfc3339()),
-                "plan": settings.get("plan").and_then(Value::as_str).unwrap_or("Free"),
+                "plan": context.plan,
             })
         })
         .collect();
@@ -433,6 +447,29 @@ pub async fn create_invitation(
 
     let expires_at =
         Utc::now() + chrono::Duration::hours(payload.expires_in_hours.unwrap_or(168).clamp(1, 720));
+
+    // The seat limit of the workspace is enforced. An invitation is refused
+    // when the seats are used up.
+    let allowance = crate::admin::tenant_allowance(db, context.tenant_id, &context.plan).await;
+    if allowance.seats > 0 {
+        let seats_used: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*)::bigint FROM company_members
+             WHERE tenant_id = $1 AND status IN ('active', 'invited')",
+        )
+        .bind(context.tenant_id)
+        .fetch_one(db)
+        .await
+        .unwrap_or(0);
+        if seats_used >= allowance.seats {
+            return Err(fail(
+                StatusCode::CONFLICT,
+                &format!(
+                    "All {} seats of this workspace are in use. Remove a member or raise the seat limit first.",
+                    allowance.seats
+                ),
+            ));
+        }
+    }
 
     let result = sqlx::query(
         "INSERT INTO workspace_invitations (tenant_id, email, role, invited_by, status, expires_at)
@@ -561,7 +598,7 @@ pub async fn create_domain(
     // A workspace can own several domains. An existing domain may only be
     // re-used by the same workspace - it is never moved away from its owner.
     let existing = sqlx::query(
-        "SELECT id, tenant_id FROM custom_domains
+        "SELECT id, tenant_id, dns_records FROM custom_domains
          WHERE LOWER(domain_name) = LOWER($1) LIMIT 1",
     )
     .bind(&domain)
@@ -578,11 +615,30 @@ pub async fn create_domain(
             ));
         }
         let domain_id: Option<Uuid> = row.try_get("id").ok();
+        // The ownership proof is stored with the domain, so it can be shown
+        // again instead of an empty value.
+        let stored_records: Value = row.try_get("dns_records").unwrap_or_else(|_| json!([]));
+        let verification_token = stored_records
+            .as_array()
+            .and_then(|records| {
+                records
+                    .iter()
+                    .find(|record| {
+                        record
+                            .get("name")
+                            .and_then(Value::as_str)
+                            .map(|name| name.to_lowercase().contains("velismail-verif"))
+                            .unwrap_or(false)
+                    })
+                    .and_then(|record| record.get("value").and_then(Value::as_str))
+                    .map(|value| value.to_string())
+            })
+            .unwrap_or_default();
         return ok(json!({
             "success": true,
             "id": domain_id.map(|value| value.to_string()),
             "domain": domain,
-            "verificationToken": "",
+            "verificationToken": verification_token,
             "existing": true,
         }));
     }
@@ -714,13 +770,28 @@ pub async fn list_mailboxes(State(state): State<AppState>, headers: HeaderMap) -
     let mailboxes: Vec<Value> = rows
         .iter()
         .map(|row| {
+            // The aliases are stored as text, so they are parsed instead of
+            // being read as a document.
+            let aliases: Value = row
+                .try_get::<Option<String>, _>("aliases")
+                .ok()
+                .flatten()
+                .and_then(|value| serde_json::from_str::<Value>(&value).ok())
+                .unwrap_or_else(|| json!([]));
+            let kind: String = row
+                .try_get::<String, _>("kind")
+                .unwrap_or_else(|_| "mailbox".to_string());
             json!({
                 "id": row.try_get::<String, _>("id").unwrap_or_default(),
                 "domain": row.try_get::<String, _>("domain").unwrap_or_default(),
                 "address": row.try_get::<String, _>("address").unwrap_or_default(),
                 "displayName": row.try_get::<String, _>("display_name").unwrap_or_default(),
-                "kind": row.try_get::<String, _>("kind").unwrap_or_else(|_| "user".to_string()),
-                "aliases": row.try_get::<Value, _>("aliases").unwrap_or_else(|_| json!([])),
+                // The console knows primary, mailbox, alias and shared.
+                "kind": match kind.as_str() {
+                    "primary" | "alias" | "shared" => kind.clone(),
+                    _ => "mailbox".to_string(),
+                },
+                "aliases": aliases,
                 "active": row.try_get::<bool, _>("active").unwrap_or(true),
                 "source": row.try_get::<String, _>("source").unwrap_or_else(|_| "custom".to_string()),
                 "createdAt": row.try_get::<Option<String>, _>("created_at").ok().flatten(),
@@ -788,10 +859,11 @@ pub async fn create_mailbox(
     }
 
     let id = format!("mbx_{}", Uuid::new_v4().simple());
+    let aliases = serde_json::to_string(&payload.aliases).unwrap_or_else(|_| "[]".to_string());
     let result = sqlx::query(
         "INSERT INTO business_mailboxes
          (id, tenant_id, domain, address, display_name, kind, aliases, active, source, created_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'custom', NOW())
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'custom', $9)
          ON CONFLICT (domain, address) DO UPDATE
          SET display_name = EXCLUDED.display_name,
              kind = EXCLUDED.kind,
@@ -805,16 +877,45 @@ pub async fn create_mailbox(
     .bind(&address)
     .bind(payload.display_name.trim())
     .bind(payload.kind.trim())
-    .bind(payload.aliases.clone())
+    .bind(&aliases)
     .bind(payload.active)
+    .bind(crate::business_mailboxes::now_string())
     .execute(db)
     .await;
 
-    if result.is_err() {
+    if let Err(err) = result {
+        tracing::warn!("mailbox insert failed for {address}: {err}");
         return Err(fail(
             StatusCode::INTERNAL_SERVER_ERROR,
-            "Unable to create the mailbox.",
+            &format!("Unable to create the mailbox: {err}"),
         ));
+    }
+
+    // The mail path reads the mailbox from the business database of the
+    // company. Without it the mailbox shows up in the console but cannot send.
+    if let Some(business_db) = tenant_business_db_url(db, context.tenant_id).await {
+        match crate::routes::business_mailbox_pool(&business_db).await {
+            Ok(pool) => {
+                let mailbox = crate::business_mailboxes::MailboxValues {
+                    id: &id,
+                    domain: &domain,
+                    address: &address,
+                    display_name: payload.display_name.trim(),
+                    kind: payload.kind.trim(),
+                    aliases: &aliases,
+                    active: payload.active,
+                    source: "custom",
+                };
+                if let Err(err) = crate::business_mailboxes::upsert(&pool, &mailbox).await {
+                    tracing::warn!(
+                        "mailbox {address} was not written to the business database: {err}"
+                    );
+                }
+            }
+            Err(err) => {
+                tracing::warn!("business database unreachable for {address}: {err}");
+            }
+        }
     }
 
     audit(
@@ -884,6 +985,29 @@ pub async fn delete_mailbox(
 // Delivery queue
 // ---------------------------------------------------------------------------
 
+/// The console speaks in queued, sending, sent, failed and deferred.
+fn queue_status_to_console(status: &str) -> &'static str {
+    match status.trim().to_ascii_lowercase().as_str() {
+        "pending" | "queued" => "queued",
+        "processing" | "sending" => "sending",
+        "retry" | "deferred" => "deferred",
+        "delivered" | "sent" => "sent",
+        _ => "failed",
+    }
+}
+
+/// The database states that belong to a console filter.
+fn queue_status_filter_to_db(value: &str) -> Vec<&'static str> {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "queued" => vec!["pending", "queued"],
+        "sending" => vec!["processing", "sending"],
+        "sent" => vec!["delivered", "sent"],
+        "deferred" => vec!["retry", "deferred"],
+        "failed" => vec!["failed", "dead_letter"],
+        _ => Vec::new(),
+    }
+}
+
 pub async fn list_queue(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -893,6 +1017,7 @@ pub async fn list_queue(
     let db = db_pool(&state)?;
 
     let status = params.get("status").cloned().unwrap_or_default();
+    let status_states = queue_status_filter_to_db(&status);
     let limit: i64 = params
         .get("limit")
         .and_then(|value| value.parse().ok())
@@ -905,12 +1030,13 @@ pub async fn list_queue(
          FROM delivery_queue q
          JOIN users u ON LOWER(u.email) = LOWER(q.sender)
          WHERE u.tenant_id = $1
-           AND ($2 = '' OR q.status = $2)
+           AND ($2 = '' OR q.status = ANY($3))
          ORDER BY q.created_at DESC
-         LIMIT $3",
+         LIMIT $4",
     )
     .bind(context.tenant_id)
     .bind(&status)
+    .bind(&status_states)
     .bind(limit)
     .fetch_all(db)
     .await
@@ -919,13 +1045,16 @@ pub async fn list_queue(
     let items: Vec<Value> = rows
         .iter()
         .map(|row| {
+            let queue_status: String = row
+                .try_get::<String, _>("status")
+                .unwrap_or_else(|_| "pending".to_string());
             json!({
                 "id": row.try_get::<Uuid, _>("id").map(|v| v.to_string()).unwrap_or_default(),
                 "messageId": row.try_get::<String, _>("message_id").unwrap_or_default(),
                 "from": row.try_get::<String, _>("sender").unwrap_or_default(),
                 "to": row.try_get::<String, _>("recipient").unwrap_or_default(),
                 "subject": row.try_get::<String, _>("subject").unwrap_or_default(),
-                "status": row.try_get::<String, _>("status").unwrap_or_default(),
+                "status": queue_status_to_console(&queue_status),
                 "priority": row.try_get::<String, _>("priority").unwrap_or_default(),
                 "retries": row.try_get::<i32, _>("retry_count").unwrap_or(0),
                 "maxRetries": row.try_get::<i32, _>("max_retries").unwrap_or(0),
@@ -1567,7 +1696,7 @@ pub async fn verify_domain(
             })
         })
         .collect();
-    let dns: Vec<Value> = report
+    let mut dns: Vec<Value> = report
         .records
         .iter()
         .filter(|record| record.record_type == "TXT")
@@ -1581,6 +1710,31 @@ pub async fn verify_domain(
             })
         })
         .collect();
+
+    // The ownership proof stays with the domain. It is the token the customer
+    // published, so it is never replaced by the live mail records.
+    let stored_records: Value = sqlx::query_scalar(
+        "SELECT dns_records FROM custom_domains WHERE tenant_id = $1 AND id::text = $2",
+    )
+    .bind(context.tenant_id)
+    .bind(&path.id)
+    .fetch_optional(db)
+    .await
+    .ok()
+    .flatten()
+    .unwrap_or_else(|| json!([]));
+    if let Some(entries) = stored_records.as_array() {
+        for entry in entries {
+            let is_ownership = entry
+                .get("name")
+                .and_then(Value::as_str)
+                .map(|name| name.to_lowercase().contains("velismail-verif"))
+                .unwrap_or(false);
+            if is_ownership {
+                dns.push(entry.clone());
+            }
+        }
+    }
 
     let status = if report.complete {
         "verified"
@@ -1608,6 +1762,46 @@ pub async fn verify_domain(
     .bind(&path.id)
     .execute(db)
     .await;
+
+    // A verified domain gets its sending mailboxes, in the central index and
+    // in the business database, so the first mail is accepted.
+    if report.complete {
+        for (address, kind, display_name) in [
+            (format!("admin@{domain}"), "primary", "VelisMail"),
+            (format!("postmaster@{domain}"), "user", "Postmaster"),
+        ] {
+            let mailbox_id = format!("mbx_{}", Uuid::new_v4().simple());
+            let mailbox = crate::business_mailboxes::MailboxValues {
+                id: &mailbox_id,
+                domain: &domain,
+                address: &address,
+                display_name,
+                kind,
+                aliases: "[]",
+                active: true,
+                source: "system",
+            };
+            if let Err(err) =
+                crate::business_mailboxes::upsert_central(db, context.tenant_id, &mailbox).await
+            {
+                tracing::warn!("mailbox {address} was not indexed: {err}");
+            }
+            if let Some(business_db) = tenant_business_db_url(db, context.tenant_id).await {
+                match crate::routes::business_mailbox_pool(&business_db).await {
+                    Ok(pool) => {
+                        if let Err(err) = crate::business_mailboxes::upsert(&pool, &mailbox).await {
+                            tracing::warn!(
+                                "mailbox {address} was not written to the business database: {err}"
+                            );
+                        }
+                    }
+                    Err(err) => {
+                        tracing::warn!("business database unreachable for {address}: {err}");
+                    }
+                }
+            }
+        }
+    }
 
     audit(
         db,
@@ -1745,6 +1939,31 @@ pub(crate) async fn domain_send_readiness(
     Some((false, report.missing, report.message))
 }
 
+/// The business database of a company.
+///
+/// The database is configured on the account that owns the workspace, so the
+/// owner of the company is asked first.
+async fn tenant_business_db_url(db: &PgPool, tenant_id: Uuid) -> Option<String> {
+    let row = sqlx::query(
+        "SELECT u.settings FROM users u
+         JOIN company_members cm ON cm.user_id = u.id AND cm.tenant_id = $1 AND cm.status = 'active'
+         ORDER BY (cm.role = 'owner') DESC, cm.created_at ASC
+         LIMIT 1",
+    )
+    .bind(tenant_id)
+    .fetch_optional(db)
+    .await
+    .ok()
+    .flatten()?;
+
+    let settings: Value = row.try_get::<Value, _>("settings").ok()?;
+    settings
+        .get("businessDbUrl")
+        .and_then(Value::as_str)
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+}
+
 // ---------------------------------------------------------------------------
 // Contacts
 // ---------------------------------------------------------------------------
@@ -1803,9 +2022,9 @@ pub async fn list_contacts(
         .collect();
 
     let groups = sqlx::query(
-        "SELECT name, COUNT(*)::bigint AS count
+        "SELECT group_name AS name, COUNT(*)::bigint AS count
          FROM business_contacts WHERE tenant_id = $1
-         GROUP BY name ORDER BY name",
+         GROUP BY group_name ORDER BY group_name",
     )
     .bind(context.tenant_id)
     .fetch_all(db)

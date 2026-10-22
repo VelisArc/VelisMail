@@ -5009,6 +5009,14 @@ pub async fn query_business_mailboxes(
 ///
 /// A verified domain always gets its sending mailbox, otherwise the first
 /// mail would fail with "sender mailbox is not registered".
+/// Open the business database of a company.
+///
+/// The pool is cached, so repeated calls for the same database reuse one
+/// connection set.
+pub(crate) async fn business_mailbox_pool(db_url: &str) -> Result<PgPool, String> {
+    get_tenant_pool(db_url).await
+}
+
 async fn ensure_business_mailbox(
     db_url: &str,
     domain: &str,
@@ -5020,9 +5028,11 @@ async fn ensure_business_mailbox(
     ensure_business_mailboxes_table(&pool).await?;
     let aliases = serde_json::to_string(&Vec::<String>::new()).unwrap_or_else(|_| "[]".to_string());
     let id = format!("mbx_{}", uuid::Uuid::new_v4().simple());
+    // The timestamp column of the mailbox index is text, so the value has to
+    // be a string. A database timestamp is rejected by the column type.
     sqlx::query(
         "INSERT INTO business_mailboxes (id, domain, address, display_name, kind, aliases, active, source, created_at, last_used_at)
-         VALUES ($1, $2, $3, $4, $5, $6, TRUE, 'system', NOW(), NULL)
+         VALUES ($1, $2, $3, $4, $5, $6, TRUE, 'system', $7, NULL)
          ON CONFLICT (domain, address) DO UPDATE SET
             display_name = EXCLUDED.display_name,
             kind = EXCLUDED.kind,
@@ -5034,6 +5044,7 @@ async fn ensure_business_mailbox(
     .bind(display_name)
     .bind(kind)
     .bind(&aliases)
+    .bind(crate::business_mailboxes::now_string())
     .execute(&pool)
     .await
     .map(|_| ())

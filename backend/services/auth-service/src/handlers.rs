@@ -471,10 +471,9 @@ pub async fn register(
 
     let password_hash = hash_password(&request.password)?;
     let user_id = Uuid::new_v4();
-    let tenant_id = match request.tenant_id {
-        Some(tenant_id) => tenant_id,
-        None => resolve_or_create_tenant(&state, &email, "otp").await?,
-    };
+    // The workspace of a new account is never taken from the request. A
+    // client-supplied tenant id would let anyone join another company.
+    let tenant_id = resolve_or_create_tenant(&state, &email, "otp").await?;
 
     let member_count: i64 =
         sqlx::query_scalar("SELECT COUNT(*)::bigint FROM users WHERE tenant_id = $1")
@@ -676,7 +675,7 @@ async fn login_password_inner(
     .bind(&device_id)
     .bind(&device_id)
     .bind(expires_at)
-    .bind("0.0.0.0")
+    .bind(&ip_address)
     .execute(&state.db)
     .await;
 
@@ -1041,6 +1040,7 @@ pub struct RefreshTokenRequest {
 
 pub async fn refresh_token(
     State(state): State<AuthState>,
+    headers: HeaderMap,
     Json(request): Json<RefreshTokenRequest>,
 ) -> Result<Json<TokenPairResponse>, StatusCode> {
     let token_hash = crate::jwt::JwtManager::hash_refresh_token(&request.refresh_token);
@@ -1059,12 +1059,14 @@ pub async fn refresh_token(
         .try_get("user_id")
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    let user = sqlx::query("SELECT email, tenant_id FROM users WHERE id = $1")
-        .bind(user_id)
-        .fetch_optional(&state.db)
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-        .ok_or(StatusCode::UNAUTHORIZED)?;
+    // A suspended, deactivated or deleted account never gets a new token.
+    let user =
+        sqlx::query("SELECT email, tenant_id FROM users WHERE id = $1 AND status = 'active'")
+            .bind(user_id)
+            .fetch_optional(&state.db)
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+            .ok_or(StatusCode::UNAUTHORIZED)?;
     let email: String = user
         .try_get("email")
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
@@ -1104,7 +1106,7 @@ pub async fn refresh_token(
     .bind(&request.device_id)
     .bind(&request.device_id)
     .bind(expires_at)
-    .bind("0.0.0.0")
+    .bind(request_ip(&headers))
     .execute(&state.db)
     .await
     .ok();
@@ -1282,6 +1284,38 @@ pub async fn get_current_user(
     })))
 }
 
+/// The account settings a client may change on its own.
+///
+/// The role, the platform flag, the plan and the tenant belong to the
+/// platform. A browser that could write them would be able to promote itself
+/// to a platform administrator, so they are never taken from the request.
+const WRITABLE_SETTINGS: &[&str] = &[
+    "displayName",
+    "profileImageUrl",
+    "emailLogoUrl",
+    "recoveryEmail",
+    "recoveryEmailVerified",
+    "pendingRecoveryEmail",
+    "businessProfile",
+    "businessDbUrl",
+    "businessApiKey",
+    "businessMailProvider",
+    "businessMailProviderEndpoint",
+    "businessMailWebhookSecret",
+    "businessDomain",
+    "businessDomainVerified",
+    "businessMailboxAddress",
+    "isBusinessSetupComplete",
+    "dkimStatus",
+    "spfStatus",
+    "dmarcStatus",
+    "customDomain",
+    "mailProvider",
+    "mailProviderEndpoint",
+    "apiKey",
+    "isSetupComplete",
+];
+
 pub async fn update_account(
     State(state): State<AuthState>,
     Extension(claims): Extension<velismail_common::Claims>,
@@ -1289,7 +1323,23 @@ pub async fn update_account(
 ) -> Result<Json<serde_json::Value>, StatusCode> {
     let user_id = claims.sub.0;
 
-    let settings_json = serde_json::to_string(&request).unwrap_or_else(|_| "{}".to_string());
+    // Only the known settings are written. Everything else in the request is
+    // dropped instead of being merged into the account.
+    let allowed = request
+        .as_object()
+        .ok_or(StatusCode::BAD_REQUEST)?
+        .iter()
+        .filter(|(key, _)| WRITABLE_SETTINGS.contains(&key.as_str()))
+        .map(|(key, value)| (key.clone(), value.clone()))
+        .collect::<serde_json::Map<String, serde_json::Value>>();
+    if allowed.is_empty() {
+        return Ok(Json(json!({
+            "success": true,
+            "message": "Nothing to update."
+        })));
+    }
+    let settings_json = serde_json::to_string(&serde_json::Value::Object(allowed))
+        .unwrap_or_else(|_| "{}".to_string());
 
     sqlx::query("UPDATE users SET settings = COALESCE(settings, '{}'::jsonb) || $1::jsonb, updated_at = NOW() WHERE id = $2")
         .bind(settings_json)

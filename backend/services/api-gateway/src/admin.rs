@@ -533,11 +533,34 @@ async fn authorize_company(
     let company_status: String = tenant
         .try_get("status")
         .unwrap_or_else(|_| "active".to_string());
-    if company_status == "suspended" || company_status == "deleted" {
-        return Err(platform_api_error(
-            StatusCode::FORBIDDEN,
-            "This workspace is suspended. Contact VelisMail support.",
-        ));
+    // A workspace that is not running cannot be administered: suspended,
+    // disabled, deleted and a workspace that never finished the verification.
+    match company_status.as_str() {
+        "suspended" => {
+            return Err(platform_api_error(
+                StatusCode::FORBIDDEN,
+                "This workspace is suspended. Contact VelisMail support.",
+            ))
+        }
+        "disabled" => {
+            return Err(platform_api_error(
+                StatusCode::FORBIDDEN,
+                "This workspace is disabled. Contact VelisMail support.",
+            ))
+        }
+        "pending_verification" => {
+            return Err(platform_api_error(
+                StatusCode::FORBIDDEN,
+                "This workspace has not finished its verification yet.",
+            ))
+        }
+        "deleted" => {
+            return Err(platform_api_error(
+                StatusCode::FORBIDDEN,
+                "This workspace has been deleted.",
+            ))
+        }
+        _ => {}
     }
 
     let membership = sqlx::query(
@@ -988,7 +1011,7 @@ pub async fn platform_overview(State(state): State<AppState>, headers: HeaderMap
     let investigations: Vec<Value> = investigations.iter().map(investigation_json).collect();
 
     let audit_rows = sqlx::query(
-        "SELECT id, actor_email, action, category, severity, resource_type, created_at
+        "SELECT id, actor_email, action, category, severity, resource_type, details, created_at
          FROM platform_audit_logs ORDER BY created_at DESC LIMIT 8",
     )
     .fetch_all(db)
@@ -1004,6 +1027,7 @@ pub async fn platform_overview(State(state): State<AppState>, headers: HeaderMap
                 "category": row.try_get::<String, _>("category").unwrap_or_default(),
                 "severity": row.try_get::<String, _>("severity").unwrap_or_else(|_| "info".to_string()),
                 "resourceType": row.try_get::<String, _>("resource_type").unwrap_or_default(),
+                "details": row.try_get::<Value, _>("details").unwrap_or_else(|_| json!({})),
                 "createdAt": row.try_get::<DateTime<Utc>, _>("created_at").map(|v| v.to_rfc3339()).unwrap_or_default(),
             })
         })
@@ -1749,7 +1773,27 @@ pub async fn company_action(
                     "Seat limit must be between 1 and 100000.",
                 );
             }
+            // The seat limit belongs to the allowance of the workspace, so it
+            // is written to the limits of the tenant. The profile keeps a copy
+            // for the console.
             let result = sqlx::query(
+                "UPDATE tenants
+                 SET limits = COALESCE(limits, '{}'::jsonb) || jsonb_build_object('max_users', $2::int),
+                     updated_at = NOW()
+                 WHERE id = $1",
+            )
+            .bind(tenant_id)
+            .bind(seats)
+            .execute(db)
+            .await;
+            if let Err(err) = result {
+                tracing::error!("seat limit update failed for {tenant_id}: {err}");
+                return fail(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "Unable to update the seat limit.",
+                );
+            }
+            let profile = sqlx::query(
                 "INSERT INTO tenant_profiles (tenant_id, seat_limit) VALUES ($1, $2)
                  ON CONFLICT (tenant_id) DO UPDATE SET seat_limit = EXCLUDED.seat_limit",
             )
@@ -1757,7 +1801,7 @@ pub async fn company_action(
             .bind(seats)
             .execute(db)
             .await;
-            match result {
+            match profile {
                 Ok(done) => done.rows_affected(),
                 Err(_) => {
                     return fail(
@@ -2078,6 +2122,20 @@ pub async fn update_company(
             StatusCode::INTERNAL_SERVER_ERROR,
             "Unable to update company.",
         );
+    }
+
+    // A seat limit that was changed here also belongs to the allowance of the
+    // workspace, otherwise the seat counter and the limit disagree.
+    if let Some(seat_limit) = payload.seat_limit {
+        let _ = sqlx::query(
+            "UPDATE tenants
+             SET limits = COALESCE(limits, '{}'::jsonb) || jsonb_build_object('max_users', $2::int)
+             WHERE id = $1",
+        )
+        .bind(tenant_id)
+        .bind(seat_limit)
+        .execute(db)
+        .await;
     }
 
     let _ = sqlx::query(
@@ -4525,6 +4583,7 @@ pub async fn company_overview(State(state): State<AppState>, headers: HeaderMap)
                 "sent30d": row.try_get::<i64, _>("sent30").unwrap_or(0),
                 "queueDepth": row.try_get::<i64, _>("queue_depth").unwrap_or(0),
                 "failed30d": row.try_get::<i64, _>("failed30").unwrap_or(0),
+                "apiRequests30": row.try_get::<i64, _>("api_requests30").unwrap_or(0),
             })
         })
         .unwrap_or_else(|_| json!({}));
@@ -4760,9 +4819,11 @@ pub async fn company_members(State(state): State<AppState>, headers: HeaderMap) 
         })
         .collect();
 
+    // The workspace API writes the invitations of a company, so the console
+    // reads the same table. Otherwise the two views disagree.
     let invitations = sqlx::query(
         "SELECT id, email, role, status, invited_by, expires_at, created_at
-         FROM company_invitations WHERE tenant_id = $1 ORDER BY created_at DESC LIMIT 100",
+         FROM workspace_invitations WHERE tenant_id = $1 ORDER BY created_at DESC LIMIT 100",
     )
     .bind(actor.tenant_id)
     .fetch_all(db)
@@ -5358,10 +5419,19 @@ pub async fn list_company_api_keys(State(state): State<AppState>, headers: Heade
             })
         })
         .collect();
+    // The feature flag of the platform decides whether the keys are offered.
+    let api_keys_enabled: bool =
+        sqlx::query_scalar("SELECT enabled FROM feature_flags WHERE key = 'company.api_keys'")
+            .fetch_optional(db)
+            .await
+            .ok()
+            .flatten()
+            .unwrap_or(true);
+
     ok(json!({
         "success": true,
         "keys": keys,
-        "apiKeysEnabled": true,
+        "apiKeysEnabled": api_keys_enabled,
         "scopes": crate::api_keys::scope_catalog(),
         "presets": crate::api_keys::key_presets(),
     }))

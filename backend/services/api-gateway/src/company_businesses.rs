@@ -332,21 +332,26 @@ pub async fn create_business(
             "user",
         ),
     ] {
-        let _ = sqlx::query(
+        let mailbox_id = format!("mbx_{}", Uuid::new_v4().simple());
+        let result = sqlx::query(
             "INSERT INTO business_mailboxes
              (id, tenant_id, domain, address, display_name, kind, aliases, active, source, created_at)
-             VALUES ($1, $2, $3, $4, $5, $6, '[]'::jsonb, TRUE, 'custom', NOW())
+             VALUES ($1, $2, $3, $4, $5, $6, '[]', TRUE, 'custom', $7)
              ON CONFLICT (domain, address) DO UPDATE
              SET display_name = EXCLUDED.display_name, kind = EXCLUDED.kind, tenant_id = EXCLUDED.tenant_id",
         )
-        .bind(format!("mbx_{}", Uuid::new_v4().simple()))
+        .bind(&mailbox_id)
         .bind(tenant_id)
         .bind(&domain)
         .bind(&address)
         .bind(&display_name)
         .bind(kind)
+        .bind(crate::business_mailboxes::now_string())
         .execute(db)
         .await;
+        if let Err(err) = result {
+            tracing::warn!("mailbox {address} was not indexed: {err}");
+        }
     }
 
     // The creator owns the new business.

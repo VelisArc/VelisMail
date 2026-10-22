@@ -1,5 +1,6 @@
 mod admin;
 mod api_keys;
+mod business_mailboxes;
 mod company_api;
 mod company_businesses;
 mod config;
