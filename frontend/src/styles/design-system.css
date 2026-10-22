@@ -274,6 +274,14 @@
 
 .quota-track.warn i { background: var(--warning-500); }
 .quota-track.over i { background: var(--danger-500); }
+/* A plan that does not cap this allowance gets a neutral, full track. */
+.quota-track.uncapped i {
+  background: repeating-linear-gradient(
+    135deg,
+    var(--border-primary) 0 6px,
+    var(--bg-surface-2) 6px 12px
+  );
+}
 
 .quota-foot {
   display: flex;
@@ -302,11 +310,87 @@
   background: var(--bg-surface-2);
 }
 
+/* The risk of a scope, so a permission is never a surprise. */
+.scope-card.scope-low { border-left: 2px solid var(--success-500); }
+.scope-card.scope-medium { border-left: 2px solid var(--warning-500); }
+.scope-card.scope-high { border-left: 2px solid var(--danger-500); }
+
 .scope-card strong {
   font-size: var(--text-xs);
   font-weight: var(--font-weight-bold);
   color: var(--text-primary);
   font-family: var(--font-mono, monospace);
+}
+
+/* ─── API key templates ────────────────────────────────────────────── */
+
+.key-preset-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: var(--space-3);
+}
+
+.key-preset {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  text-align: left;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-primary);
+  cursor: pointer;
+  transition: border-color var(--transition-fast), background var(--transition-fast);
+}
+
+.key-preset:hover:not(:disabled) {
+  border-color: var(--text-muted);
+  background: var(--bg-surface-2);
+}
+
+.key-preset:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.key-preset.active {
+  border-color: var(--primary);
+  box-shadow: inset 0 0 0 1px var(--primary);
+}
+
+.key-preset-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.key-preset-head strong {
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-bold);
+  color: var(--text-primary);
+}
+
+.key-preset-summary {
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.key-preset-scopes {
+  font-size: var(--text-2xs);
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.key-preset-note {
+  margin-bottom: var(--space-2);
+}
+
+.admin-key-scopes {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
 }
 
 .setup-inline-note {

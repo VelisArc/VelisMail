@@ -4231,22 +4231,12 @@ pub async fn update_platform_setting(
 // Company control plane
 // ---------------------------------------------------------------------------
 
+/// The allowance of a plan, in the shape the console shows it.
+///
+/// The numbers live in the shared crate so the console can never show a
+/// limit that differs from the one the tenant service enforces.
 fn plan_limits(plan: &str) -> Value {
-    match plan.to_lowercase().as_str() {
-        "starter" => {
-            json!({ "seats": 25, "emailsPerMonth": 25_000, "storageBytes": 10 * 1024 * 1024 * 1024i64, "apiRequestsPerMonth": 100_000 })
-        }
-        "business" => {
-            json!({ "seats": 100, "emailsPerMonth": 100_000, "storageBytes": 50 * 1024 * 1024 * 1024i64, "apiRequestsPerMonth": 1_000_000 })
-        }
-        "enterprise" => {
-            json!({ "seats": 1000, "emailsPerMonth": 1_000_000, "storageBytes": 500 * 1024 * 1024 * 1024i64, "apiRequestsPerMonth": 25_000_000 })
-        }
-        _ => {
-            // Free trial: 500 MB of database storage and 100 mail API sends.
-            json!({ "seats": 5, "emailsPerMonth": 100, "storageBytes": 500 * 1024 * 1024i64, "apiRequestsPerMonth": 1_000 })
-        }
-    }
+    velismail_common::plans::plan_allowance(plan).to_console_limits()
 }
 
 /// Seat allowance for a plan, used by the workspace API as well.
@@ -4387,12 +4377,25 @@ pub async fn company_overview(State(state): State<AppState>, headers: HeaderMap)
         })
         .collect();
 
-    let limits = plan_limits(&actor.plan);
+    // The limits the tenant actually runs with. A tenant that was provisioned
+    // with its own allowance keeps it, every other tenant gets the allowance
+    // of its plan - the same numbers the tenant service enforces. Nothing is
+    // invented here, so the console can never show a limit that is not real.
+    let stored_limits: Value = sqlx::query_scalar("SELECT limits FROM tenants WHERE id = $1")
+        .bind(tenant_id)
+        .fetch_optional(db)
+        .await
+        .ok()
+        .flatten()
+        .unwrap_or_else(|| json!({}));
+    let allowance =
+        velismail_common::plans::effective_allowance(&actor.plan, &stored_limits);
+    let limits = allowance.to_console_limits();
     let sent_used = counts.get("sent30d").and_then(Value::as_i64).unwrap_or(0);
     let email_limit = limits
         .get("emailsPerMonth")
         .and_then(Value::as_i64)
-        .unwrap_or(1);
+        .unwrap_or(0);
     let storage_used = counts
         .get("storageBytes")
         .and_then(Value::as_i64)
@@ -4400,21 +4403,23 @@ pub async fn company_overview(State(state): State<AppState>, headers: HeaderMap)
     let storage_limit = limits
         .get("storageBytes")
         .and_then(Value::as_i64)
-        .unwrap_or(1);
+        .unwrap_or(0);
     let api_requests_used = counts
         .get("apiRequests30")
         .and_then(Value::as_i64)
         .unwrap_or(0);
     let api_requests_limit = limits
-        .get("apiRequestsPerMonth")
+        .get("apiRequestsPerMinute")
         .and_then(Value::as_i64)
-        .unwrap_or(1);
+        .unwrap_or(0);
     let seats_used = counts.get("members").and_then(Value::as_i64).unwrap_or(0);
-    let seats_limit = limits.get("seats").and_then(Value::as_i64).unwrap_or(5);
+    let seats_limit = limits.get("seats").and_then(Value::as_i64).unwrap_or(0);
     let is_free_trial = actor.plan.eq_ignore_ascii_case("free");
 
     // Every allowance the workspace has, with the real consumption, so the
     // customer can see what is included, what is used and what to buy next.
+    // A limit of zero means the plan does not cap it, and the console says so
+    // instead of showing a made up number.
     let quotas = json!([
         {
             "key": "emails",
@@ -4431,16 +4436,16 @@ pub async fn company_overview(State(state): State<AppState>, headers: HeaderMap)
             "used": storage_used,
             "limit": storage_limit,
             "unit": "bytes",
-            "period": "per month",
+            "period": "",
             "source": "Object storage attached to this workspace"
         },
         {
             "key": "apiRequests",
-            "label": "Mail API requests",
+            "label": "API request rate",
             "used": api_requests_used,
             "limit": api_requests_limit,
             "unit": "requests",
-            "period": "per month",
+            "period": "per minute",
             "source": "Requests made with your API keys"
         },
         {
@@ -4449,7 +4454,7 @@ pub async fn company_overview(State(state): State<AppState>, headers: HeaderMap)
             "used": seats_used,
             "limit": seats_limit,
             "unit": "seats",
-            "period": "per month",
+            "period": "",
             "source": "People with access to this workspace"
         }
     ]);
@@ -5113,7 +5118,13 @@ pub async fn list_company_api_keys(State(state): State<AppState>, headers: Heade
             })
         })
         .collect();
-    ok(json!({ "success": true, "keys": keys, "apiKeysEnabled": true }))
+    ok(json!({
+        "success": true,
+        "keys": keys,
+        "apiKeysEnabled": true,
+        "scopes": crate::api_keys::scope_catalog(),
+        "presets": crate::api_keys::key_presets(),
+    }))
 }
 
 #[derive(Debug, Deserialize)]

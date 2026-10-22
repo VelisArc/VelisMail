@@ -1,6 +1,6 @@
 import { CreditCard, Menu, Check } from 'lucide-react';
 import LoadingSpinner from '../../LoadingSpinner';
-import { PLANS } from '../constants';
+import { PLANS, PLAN_LIMITS } from '../constants';
 import type { DashboardState } from '../types';
 
 interface BillingPanelProps {
@@ -8,9 +8,22 @@ interface BillingPanelProps {
   handleBuyPlan: (planId: string) => Promise<void>;
 }
 
+function bytes(value?: number | null): string {
+  const size = value || 0;
+  if (size <= 0) return '0 B';
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  const index = Math.min(Math.floor(Math.log(size) / Math.log(1024)), units.length - 1);
+  return `${(size / Math.pow(1024, index)).toFixed(index === 0 ? 0 : 1)} ${units[index]}`;
+}
+
+function number(value?: number | null): string {
+  return new Intl.NumberFormat('en-IN').format(value || 0);
+}
+
 export default function BillingPanel({ state, handleBuyPlan }: BillingPanelProps) {
   const currentPlan = (state.user?.plan || 'Free').toLowerCase();
   const currentBilling = state.user?.billingCycle || 'monthly';
+  const planAllowance = PLAN_LIMITS[currentPlan] || PLAN_LIMITS.free;
 
   const purchasedAt = state.user?.paidPlanPurchasedAt 
     ? new Date(state.user.paidPlanPurchasedAt).toLocaleDateString()
@@ -45,6 +58,16 @@ export default function BillingPanel({ state, handleBuyPlan }: BillingPanelProps
             <div>
               <span className="text-xs text-muted" style={{ display: 'block', marginBottom: '2px' }}>Renewal / Expiration Date</span>
               <strong className="text-sm text-primary" style={{ fontWeight: '600' }}>{expiresAt}</strong>
+            </div>
+            <div>
+              <span className="text-xs text-muted" style={{ display: 'block', marginBottom: '2px' }}>Storage limit</span>
+              <strong className="text-sm text-primary" style={{ fontWeight: '600' }}>{planAllowance.storageBytes > 0 ? bytes(planAllowance.storageBytes) : 'Unlimited'}</strong>
+            </div>
+            <div>
+              <span className="text-xs text-muted" style={{ display: 'block', marginBottom: '2px' }}>Mail volume</span>
+              <strong className="text-sm text-primary" style={{ fontWeight: '600' }}>
+                {planAllowance.emailsPerMonth > 0 ? `${number(planAllowance.emailsPerMonth)} emails / month` : 'Unlimited'}
+              </strong>
             </div>
           </div>
         </div>

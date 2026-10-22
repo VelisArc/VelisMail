@@ -852,6 +852,22 @@ export const companyAdminApi = {
         createdAt: string;
       }>;
       apiKeysEnabled: boolean;
+      /** Every scope a key can carry, with what it unlocks. */
+      scopes: Array<{
+        id: string;
+        label: string;
+        detail: string;
+        risk: 'low' | 'medium' | 'high';
+      }>;
+      /** Ready made key templates. */
+      presets: Array<{
+        id: string;
+        name: string;
+        summary: string;
+        detail: string;
+        scopes: string[];
+        recommended: boolean;
+      }>;
     }>('/admin/company/api-keys'),
 
   createApiKey: (payload: { name: string; scopes?: string[]; expiresInDays?: number }) =>

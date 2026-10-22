@@ -41,27 +41,6 @@ import { normalizeQuotas } from './quotaList';
 
 type Tab = 'overview' | 'team' | 'domains' | 'mailboxes' | 'usage' | 'billing' | 'security' | 'api' | 'audit' | 'integrations';
 
-/** Every scope a workspace API key can carry, with what it unlocks. */
-const API_SCOPES: Array<{ id: string; detail: string }> = [
-  { id: 'admin.full', detail: 'Everything below, in one key' },
-  { id: 'mail.send', detail: 'Send transactional mail' },
-  { id: 'mail.read', detail: 'Read mailboxes and the delivery queue' },
-  { id: 'team.read', detail: 'List members and invitations' },
-  { id: 'team.write', detail: 'Invite, re-role and remove members' },
-  { id: 'domains.read', detail: 'List domains and DNS records' },
-  { id: 'domains.write', detail: 'Add and verify domains' },
-  { id: 'mailboxes.read', detail: 'List mailboxes' },
-  { id: 'mailboxes.write', detail: 'Create and remove mailboxes' },
-  { id: 'contacts.read', detail: 'List contacts and groups' },
-  { id: 'contacts.write', detail: 'Create and remove contacts' },
-  { id: 'templates.read', detail: 'List templates' },
-  { id: 'templates.write', detail: 'Create and edit templates' },
-  { id: 'signatures.read', detail: 'List signatures' },
-  { id: 'signatures.write', detail: 'Create and edit signatures' },
-  { id: 'audit.read', detail: 'Read the workspace audit trail' },
-  { id: 'analytics.read', detail: 'Read usage and analytics' },
-];
-
 const TABS: Array<{ id: Tab; label: string; icon: typeof Activity }> = [
   { id: 'overview', label: 'Overview', icon: BarChart3 },
   { id: 'team', label: 'Team', icon: Users },
@@ -153,9 +132,14 @@ export default function CompanyAdminPanel({ state }: { state: DashboardState }) 
   // explicit confirmation before it is sent to the API.
   const { confirm, dialog } = useAdminConfirm();
   const [keyOpen, setKeyOpen] = useState(false);
-  const [keyForm, setKeyForm] = useState({ name: '', scopes: ['mail.send'], expiresInDays: 365 });
+  const [keyForm, setKeyForm] = useState({ name: '', scopes: [] as string[], expiresInDays: 365, presetId: '' });
   const [newKey, setNewKey] = useState('');
   const [savingMember, setSavingMember] = useState('');
+
+  // The scope catalog and the key templates come from the API, so the
+  // console can never offer a permission the gateway does not know.
+  const apiScopes = keys?.scopes || [];
+  const keyPresets = keys?.presets || [];
 
   const canManage = state.user?.role === 'admin'
     || overview?.company.role === 'owner'
@@ -314,20 +298,33 @@ export default function CompanyAdminPanel({ state }: { state: DashboardState }) 
               )}
               <div className="quota-list">
                 {quotas.map((quota) => {
-                  const percent = quota.limit > 0 ? Math.min(100, (quota.used / quota.limit) * 100) : 0;
-                  const tone = percent >= 100 ? 'over' : percent >= 80 ? 'warn' : '';
+                  // A limit of zero means the plan does not cap it. The
+                  // console says that instead of showing a made up number.
+                  const capped = quota.limit > 0;
+                  const percent = capped ? Math.min(100, (quota.used / quota.limit) * 100) : 0;
+                  const tone = !capped ? 'uncapped' : percent >= 100 ? 'over' : percent >= 80 ? 'warn' : '';
                   const used = quota.unit === 'bytes' ? bytes(quota.used) : number(quota.used);
                   const limit = quota.unit === 'bytes' ? bytes(quota.limit) : number(quota.limit);
+                  const period = quota.period ? ` ${quota.period}` : '';
                   return (
                     <div key={quota.key} className="quota-row">
                       <div className="quota-row-head">
                         <strong>{quota.label}</strong>
-                        <span>{used} / {limit} {quota.unit !== 'bytes' ? quota.unit : ''}</span>
+                        <span>
+                          {used}{capped ? ` / ${limit}` : ''} {quota.unit !== 'bytes' ? quota.unit : ''}
+                          {capped ? period : ' · not capped by VelisMail'}
+                        </span>
                       </div>
-                      <div className={`quota-track ${tone}`}><i style={{ width: `${Math.max(1, percent)}%` }} /></div>
+                      <div className={`quota-track ${tone}`}>
+                        <i style={{ width: `${capped ? Math.max(1, percent) : 100}%` }} />
+                      </div>
                       <div className="quota-foot">
                         <span>{quota.source}</span>
-                        <span>{percent.toFixed(0)}% used{percent >= 80 ? ' · upgrade to keep going' : ''}</span>
+                        <span>
+                          {capped
+                            ? `${percent.toFixed(0)}% used${percent >= 80 ? ' · upgrade to keep going' : ''}`
+                            : 'no limit on this plan'}
+                        </span>
                       </div>
                     </div>
                   );
@@ -615,13 +612,64 @@ export default function CompanyAdminPanel({ state }: { state: DashboardState }) 
 
       {tab === 'api' && keys && (
         <>
-          <div className="admin-controls-bar"><span className="text-sm text-muted">{keys.keys.filter((key) => !key.revokedAt).length} active credentials</span><button type="button" className="btn btn-primary btn-sm btn btn-primary btn-sm" onClick={() => { setNewKey(''); setKeyOpen(true); }} disabled={!canManage}><Plus size={15} /> Create API key</button></div>
+          <div className="admin-controls-bar"><span className="text-sm text-muted">{keys.keys.filter((key) => !key.revokedAt).length} active credentials</span><button type="button" className="btn btn-primary btn-sm btn btn-primary btn-sm" onClick={() => { setNewKey(''); setKeyForm({ name: '', scopes: [], expiresInDays: 365, presetId: '' }); setKeyOpen(true); }} disabled={!canManage}><Plus size={15} /> Create API key</button></div>
           {!canManage && <p className="text-xs text-muted">Only owners and admins can create or revoke API keys.</p>}
+
           <section className="glass-card">
+            <div className="admin-card-head"><div><h3>Choose a starting point</h3><p>Pick what the key is for and the right permissions are filled in</p></div><KeyRound size={16} /></div>
+            <div className="key-preset-grid">
+              {keyPresets.map((preset) => (
+                <button
+                  key={preset.id}
+                  type="button"
+                  className={`key-preset ${keyForm.presetId === preset.id ? 'active' : ''}`}
+                  disabled={!canManage}
+                  onClick={() => {
+                    setKeyForm((current) => ({
+                      ...current,
+                      presetId: preset.id,
+                      name: current.name || preset.name,
+                      scopes: preset.scopes,
+                    }));
+                    setKeyOpen(true);
+                  }}
+                >
+                  <span className="key-preset-head">
+                    <strong>{preset.name}</strong>
+                    {preset.recommended && <span className="badge badge-primary">Recommended</span>}
+                  </span>
+                  <span className="key-preset-summary">{preset.summary}</span>
+                  <span className="key-preset-scopes">
+                    {preset.scopes.length} {preset.scopes.length === 1 ? 'permission' : 'permissions'}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </section>
+
+          <section className="glass-card">
+            <div className="admin-card-head"><div><h3>What a key can do</h3><p>Scopes are enforced by the API, not only in this console</p></div><KeyRound size={16} /></div>
+            <div className="scope-grid">
+              {apiScopes.map((scope) => (
+                <div key={scope.id} className={`scope-card scope-${scope.risk}`}>
+                  <strong>{scope.id}</strong>
+                  <span className="text-xs text-muted">{scope.detail}</span>
+                </div>
+              ))}
+            </div>
+            <p className="text-xs text-muted">
+              A key with <code>admin.full</code> can run the whole workspace - team, domains, mailboxes,
+              contacts, templates and audit - which is what an assistant or an automation needs. Secrets are
+              hashed in PostgreSQL and shown only once at creation.
+            </p>
+          </section>
+
+          <section className="glass-card">
+            <div className="admin-card-head"><div><h3>Your keys</h3><p>Every key is bound to this company only</p></div><KeyRound size={16} /></div>
             <div className="admin-table-wrap">
               <table className="admin-table">
-                <thead><tr><th>Name</th><th>Key prefix</th><th>Scopes</th><th>Created by</th><th>Last used</th><th>Expires</th><th>Status</th><th>Action</th></tr></thead>
-                <tbody>{keys.keys.map((key) => <tr key={key.id}><td><strong>{key.name}</strong></td><td className="admin-mono">{key.prefix}…</td><td>{key.scopes.join(', ')}</td><td>{key.createdBy}</td><td>{ago(key.lastUsedAt)}</td><td>{date(key.expiresAt)}</td><td>{key.revokedAt ? <Badge value="revoked">Revoked</Badge> : <Badge value="active">Active</Badge>}</td><td>{!key.revokedAt && canManage ? <button type="button" className="btn btn-primary btn-sm btn btn-danger btn-sm" onClick={() => {
+                <thead><tr><th>Name</th><th>Key prefix</th><th>Access</th><th>Created by</th><th>Created</th><th>Last used</th><th>Expires</th><th>Status</th><th>Action</th></tr></thead>
+                <tbody>{keys.keys.map((key) => <tr key={key.id}><td><strong>{key.name}</strong></td><td className="admin-mono">{key.prefix}…</td><td><span className="admin-key-scopes">{key.scopes.map((scope) => <span key={scope} className="badge badge-neutral">{scope}</span>)}</span></td><td>{key.createdBy}</td><td>{date(key.createdAt)}</td><td>{ago(key.lastUsedAt)}</td><td>{date(key.expiresAt)}</td><td>{key.revokedAt ? <Badge value="revoked">Revoked</Badge> : <Badge value="active">Active</Badge>}</td><td>{!key.revokedAt && canManage ? <button type="button" className="btn btn-primary btn-sm btn btn-danger btn-sm" onClick={() => {
                   confirm({
                     title: 'Revoke API key',
                     message: `"${key.name}" (${key.prefix}...) stops working immediately. Any integration that still uses it will fail.`,
@@ -634,22 +682,7 @@ export default function CompanyAdminPanel({ state }: { state: DashboardState }) 
               {keys.keys.length === 0 && <p className="admin-empty-state">No API keys yet. Create one for server-to-server mail sending.</p>}
             </div>
           </section>
-          <section className="glass-card">
-            <div className="admin-card-head"><div><h3>What a key can do</h3><p>Scopes are enforced by the API, not only in this console</p></div><KeyRound size={16} /></div>
-            <div className="scope-grid">
-              {API_SCOPES.map((scope) => (
-                <div key={scope.id} className="scope-card">
-                  <strong>{scope.id}</strong>
-                  <span className="text-xs text-muted">{scope.detail}</span>
-                </div>
-              ))}
-            </div>
-            <p className="text-xs text-muted">
-              A key with <code>admin.full</code> can run the whole workspace - team, domains, mailboxes,
-              contacts, templates and audit - which is what an assistant or an automation needs. Secrets are
-              hashed in PostgreSQL and shown only once at creation.
-            </p>
-          </section>
+
           <section className="glass-card">
             <div className="admin-card-head"><div><h3>API access</h3><p>Call the workspace API with a key</p></div><KeyRound size={16} /></div>
             <div className="admin-code-block">
@@ -733,15 +766,21 @@ export default function CompanyAdminPanel({ state }: { state: DashboardState }) 
                       />
                     </div>
                     <div className="form-field form-field-full">
-                      <span className="form-label">Scopes</span>
+                      <span className="form-label">Permissions</span>
+                      {keyForm.presetId && (
+                        <p className="text-xs text-muted key-preset-note">
+                          Based on the <strong>{keyPresets.find((preset) => preset.id === keyForm.presetId)?.name}</strong> template. Tick or untick anything below to fine tune it.
+                        </p>
+                      )}
                       <div className="check-grid">
-                        {API_SCOPES.map((scope) => (
+                        {apiScopes.map((scope) => (
                           <label key={scope.id} className="check-option">
                             <input
                               type="checkbox"
                               checked={keyForm.scopes.includes(scope.id)}
                               onChange={(event) => setKeyForm((current) => ({
                                 ...current,
+                                presetId: '',
                                 scopes: event.target.checked
                                   ? [...current.scopes, scope.id]
                                   : current.scopes.filter((item) => item !== scope.id),
@@ -783,7 +822,7 @@ export default function CompanyAdminPanel({ state }: { state: DashboardState }) 
                   <p className="text-xs text-muted">This secret cannot be retrieved again. If it is lost, revoke the key and create another.</p>
                 </div>
                 <div className="modal-footer">
-                  <button type="button" className="btn btn-primary btn-sm" onClick={() => { setNewKey(''); setKeyOpen(false); setKeyForm({ name: '', scopes: ['mail.send'], expiresInDays: 365 }); }}>Done</button>
+                  <button type="button" className="btn btn-primary btn-sm" onClick={() => { setNewKey(''); setKeyOpen(false); setKeyForm({ name: '', scopes: [], expiresInDays: 365, presetId: '' }); }}>Done</button>
                 </div>
               </>
             )}

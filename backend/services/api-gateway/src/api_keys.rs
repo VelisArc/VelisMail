@@ -119,6 +119,94 @@ pub fn required_scope(method: &str, path: &str) -> Option<&'static str> {
     }
 }
 
+/// Every scope a workspace key can carry, with what it unlocks.
+///
+/// This is the single source of truth: the console builds its scope picker
+/// from it, so an operator can always see exactly which permission a key
+/// needs instead of guessing.
+pub fn scope_catalog() -> Vec<serde_json::Value> {
+    use serde_json::json;
+    vec![
+        json!({ "id": "admin.full", "label": "Full workspace access", "detail": "Everything below in a single key. Use it for an assistant that runs the whole workspace.", "risk": "high" }),
+        json!({ "id": "team.read", "label": "Read the team", "detail": "List members and pending invitations.", "risk": "low" }),
+        json!({ "id": "team.write", "label": "Manage the team", "detail": "Invite, re-role and remove members.", "risk": "medium" }),
+        json!({ "id": "domains.read", "label": "Read domains", "detail": "List domains and their DNS records.", "risk": "low" }),
+        json!({ "id": "domains.write", "label": "Manage domains", "detail": "Add a domain and trigger its verification.", "risk": "medium" }),
+        json!({ "id": "mailboxes.read", "label": "Read mailboxes", "detail": "List the mailboxes of the workspace.", "risk": "low" }),
+        json!({ "id": "mailboxes.write", "label": "Manage mailboxes", "detail": "Create and remove mailboxes.", "risk": "medium" }),
+        json!({ "id": "mail.read", "label": "Read mail activity", "detail": "Read the delivery queue and the sent mail of the workspace.", "risk": "low" }),
+        json!({ "id": "audit.read", "label": "Read the audit trail", "detail": "Read every audited action of the workspace.", "risk": "low" }),
+        json!({ "id": "templates.read", "label": "Read templates", "detail": "List the saved templates.", "risk": "low" }),
+        json!({ "id": "templates.write", "label": "Manage templates", "detail": "Create, edit and delete templates.", "risk": "medium" }),
+        json!({ "id": "contacts.read", "label": "Read contacts", "detail": "List contacts and contact groups.", "risk": "low" }),
+        json!({ "id": "contacts.write", "label": "Manage contacts", "detail": "Create and delete contacts.", "risk": "medium" }),
+        json!({ "id": "signatures.read", "label": "Read signatures", "detail": "List the saved signatures.", "risk": "low" }),
+        json!({ "id": "signatures.write", "label": "Manage signatures", "detail": "Create and delete signatures.", "risk": "medium" }),
+    ]
+}
+
+/// Ready made key templates.
+///
+/// Picking a template is faster than picking fifteen scopes by hand, and it
+/// makes the intended access of a key obvious to everybody who reads it later.
+pub fn key_presets() -> Vec<serde_json::Value> {
+    use serde_json::json;
+    vec![
+        json!({
+            "id": "reporting",
+            "name": "Reporting",
+            "summary": "Read only access to everything, for a dashboard or an auditor.",
+            "detail": "The key can look at the team, domains, mailboxes, mail activity, templates, contacts, signatures and the audit trail. It cannot change anything.",
+            "scopes": [
+                "team.read", "domains.read", "mailboxes.read", "mail.read",
+                "audit.read", "templates.read", "contacts.read", "signatures.read"
+            ],
+            "recommended": true
+        }),
+        json!({
+            "id": "sending",
+            "name": "Sending assistant",
+            "summary": "Looks up what it needs to send mail on your behalf.",
+            "detail": "The key can read mailboxes, templates, contacts, signatures and the domains, plus the mail activity. It cannot change the workspace.",
+            "scopes": [
+                "mail.read", "mailboxes.read", "templates.read",
+                "contacts.read", "signatures.read", "domains.read"
+            ],
+            "recommended": true
+        }),
+        json!({
+            "id": "mailboxes",
+            "name": "Mailbox operations",
+            "summary": "Keeps the mailboxes and the domains in order.",
+            "detail": "The key can create and remove mailboxes, add and verify domains and read the team.",
+            "scopes": [
+                "mailboxes.read", "mailboxes.write", "domains.read", "domains.write", "team.read"
+            ],
+            "recommended": false
+        }),
+        json!({
+            "id": "workspace",
+            "name": "Workspace manager",
+            "summary": "Runs the workspace for you, without the owner rights.",
+            "detail": "Everything the reporting key can read, plus managing the team, templates, contacts, signatures and mailboxes. It cannot change plans, billing or the API keys.",
+            "scopes": [
+                "team.read", "team.write", "domains.read", "mailboxes.read", "mailboxes.write",
+                "mail.read", "audit.read", "templates.read", "templates.write",
+                "contacts.read", "contacts.write", "signatures.read", "signatures.write"
+            ],
+            "recommended": false
+        }),
+        json!({
+            "id": "full",
+            "name": "Full workspace access",
+            "summary": "One key that can do everything in the workspace.",
+            "detail": "Use it only for an assistant that really runs the whole workspace. Every action of the key is attributed to the company in the audit trail.",
+            "scopes": ["admin.full"],
+            "recommended": false
+        }),
+    ]
+}
+
 /// Remember when a key was last used so the console can show real usage.
 pub fn touch_last_used(state: &AppState, key_id: Uuid) {
     if let Some(db) = state.db.as_ref() {

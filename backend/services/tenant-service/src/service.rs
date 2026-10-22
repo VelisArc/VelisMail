@@ -44,65 +44,23 @@ impl TenantService {
             })
         });
 
-        // Default limits based on plan tier
+        // The allowance of the plan. It lives in one place for the whole
+        // platform, so the console can never show a limit that differs from
+        // the one enforced here.
         let plan_tier = request.plan_tier.unwrap_or_else(|| "free".to_string());
-        let limits = match plan_tier.as_str() {
-            "free" => json!({
-                "max_users": 3,
-                "max_storage_mb": 500,
-                "max_emails_per_day": 100,
-                "monthly_email_limit": 3000,
-                "max_attachment_size_mb": 5,
-                "api_rate_limit_per_minute": 30,
-                "max_domains": 1,
-                "max_templates": 3,
-                "audit_retention_days": 7
-            }),
-            "starter" => json!({
-                "max_users": 15,
-                "max_storage_mb": 10240,
-                "max_emails_per_day": 150000,
-                "monthly_email_limit": 150000,
-                "max_attachment_size_mb": 25,
-                "api_rate_limit_per_minute": 120,
-                "max_domains": 3,
-                "max_templates": 25,
-                "audit_retention_days": 30
-            }),
-            "business" => json!({
-                "max_users": 75,
-                "max_storage_mb": 51200,
-                "max_emails_per_day": 750000,
-                "monthly_email_limit": 750000,
-                "max_attachment_size_mb": 50,
-                "api_rate_limit_per_minute": 500,
-                "max_domains": 10,
-                "max_templates": 9999,
-                "audit_retention_days": 90
-            }),
-            "enterprise" => json!({
-                "max_users": 9999,
-                "max_storage_mb": 512000,
-                "max_emails_per_day": 3000000,
-                "monthly_email_limit": 3000000,
-                "max_attachment_size_mb": 100,
-                "api_rate_limit_per_minute": 2000,
-                "max_domains": 9999,
-                "max_templates": 9999,
-                "audit_retention_days": 365
-            }),
-            _ => json!({
-                "max_users": 3,
-                "max_storage_mb": 500,
-                "max_emails_per_day": 100,
-                "monthly_email_limit": 3000,
-                "max_attachment_size_mb": 5,
-                "api_rate_limit_per_minute": 30,
-                "max_domains": 1,
-                "max_templates": 3,
-                "audit_retention_days": 7
-            }),
-        };
+        let allowance = velismail_common::plans::plan_allowance(&plan_tier);
+        let mut limits = allowance.to_limits();
+        if let Some(object) = limits.as_object_mut() {
+            object.insert(
+                "audit_retention_days".to_string(),
+                json!(match plan_tier.to_lowercase().as_str() {
+                    "starter" => 30,
+                    "business" => 90,
+                    "enterprise" | "premium" => 365,
+                    _ => 7,
+                }),
+            );
+        }
 
         // Default billing info
         let billing_info = json!({

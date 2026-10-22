@@ -17,6 +17,20 @@ export const BIZ_FOLDERS: BizFolder[] = [
   { id: 'spam', label: 'Spam', icon: Shield },
 ];
 
+/**
+ * The allowance of every plan.
+ *
+ * The numbers mirror the shared backend table (crates/common/src/plans.rs),
+ * which is what the tenant service actually enforces. A limit of zero means
+ * the plan does not cap it.
+ */
+export const PLAN_LIMITS: Record<string, { seats: number; emailsPerMonth: number; storageBytes: number; apiRequestsPerMinute: number; maxDomains: number }> = {
+  free: { seats: 3, emailsPerMonth: 3_000, storageBytes: 500 * 1024 * 1024, apiRequestsPerMinute: 30, maxDomains: 1 },
+  starter: { seats: 15, emailsPerMonth: 150_000, storageBytes: 10 * 1024 * 1024 * 1024, apiRequestsPerMinute: 120, maxDomains: 3 },
+  business: { seats: 75, emailsPerMonth: 750_000, storageBytes: 50 * 1024 * 1024 * 1024, apiRequestsPerMinute: 500, maxDomains: 10 },
+  enterprise: { seats: 9_999, emailsPerMonth: 3_000_000, storageBytes: 500 * 1024 * 1024 * 1024, apiRequestsPerMinute: 2_000, maxDomains: 9_999 },
+};
+
 export const PLANS = [
   { id: 'free', name: 'Free', priceMonthly: 0, priceAnnual: 0, contactOnly: false, desc: '1 domain, 5 mailboxes', features: ['1 Custom Domain', '5 Mailboxes', 'Basic Queue', 'Community Support'] },
   { id: 'starter', name: 'Starter', priceMonthly: 299, priceAnnual: Math.round(299 * 12 * 0.84), contactOnly: false, desc: '3 domains, 25 mailboxes', features: ['3 Custom Domains', '25 Mailboxes', 'Queue Monitoring', 'Email Support', 'Basic Templates'] },
