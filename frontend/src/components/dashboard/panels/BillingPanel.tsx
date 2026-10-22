@@ -73,20 +73,39 @@ export default function BillingPanel({ state, handleBuyPlan }: BillingPanelProps
           <div key={plan.id} className={`billing-plan-card glass-card ${isCurrent ? 'featured' : ''}`}>
             <h3>{plan.name}</h3>
             <div className="pricing-amount">
-              <strong>₹{price.toLocaleString('en-IN')}</strong>
-              <span className="text-muted text-sm">/{state.annual ? 'year' : 'month'}</span>
+              {plan.contactOnly ? (
+                <strong>Custom</strong>
+              ) : (
+                <>
+                  <strong>₹{price.toLocaleString('en-IN')}</strong>
+                  <span className="text-muted text-sm">/{state.annual ? 'year' : 'month'}</span>
+                </>
+              )}
             </div>
             <p className="text-sm text-muted">{plan.desc}</p>
             <ul className="pricing-features">
               {plan.features.map(f => <li key={f}><Check size={14} /> {f}</li>)}
             </ul>
-            <button
-              className={`btn ${isCurrent ? 'btn-secondary' : 'btn-primary'} w-full`}
-              disabled={state.loadingPayment === plan.id || (isCurrent && isSelectedCurrentBilling)}
-              onClick={() => handleBuyPlan(plan.id)}
-            >
-              {state.loadingPayment === plan.id ? <LoadingSpinner size="sm" /> : isCurrent && isSelectedCurrentBilling ? 'Current Plan' : isCurrent ? 'Switch Billing' : 'Upgrade'}
-            </button>
+            {plan.contactOnly ? (
+              isCurrent ? (
+                <button className="btn btn-secondary w-full" disabled>Current Plan</button>
+              ) : (
+                <a
+                  className="btn btn-primary w-full"
+                  href="mailto:support@velismail.online?subject=Enterprise%20plan%20request"
+                >
+                  Contact Sales
+                </a>
+              )
+            ) : (
+              <button
+                className={`btn ${isCurrent ? 'btn-secondary' : 'btn-primary'} w-full`}
+                disabled={state.loadingPayment === plan.id || (isCurrent && isSelectedCurrentBilling)}
+                onClick={() => handleBuyPlan(plan.id)}
+              >
+                {state.loadingPayment === plan.id ? <LoadingSpinner size="sm" /> : isCurrent && isSelectedCurrentBilling ? 'Current Plan' : isCurrent ? 'Switch Billing' : 'Upgrade'}
+              </button>
+            )}
           </div>
         );
         })}

@@ -14,7 +14,7 @@ import {
   CheckCircle2,
   Menu,
 } from 'lucide-react';
-import { auth, isBusinessSetupReady } from '../api/client';
+import { auth, fetchApiResponse, isBusinessSetupReady } from '../api/client';
 import './Pricing.css';
 
 const plans = [
@@ -109,7 +109,7 @@ const plans = [
     monthlyPrice: 2499,
     annualPrice: Math.round(2499 * 12 * 0.84),
     popular: false,
-    cta: 'Start 14-Day Trial',
+    cta: 'Contact Now',
     ctaStyle: 'cta-primary',
     features: [
       { text: 'Unlimited emails', highlight: true },
@@ -185,12 +185,28 @@ function getDisplayedMonthlyPrice(plan: typeof plans[number], annualBilling: boo
   return annualBilling ? Math.round(plan.annualPrice / 12) : plan.monthlyPrice;
 }
 
+type EnterpriseContactForm = {
+  name: string;
+  email: string;
+  company: string;
+  message: string;
+};
+
 export default function Pricing() {
   const [annual, setAnnual] = useState(false);
   const [openFaq, setOpenFaq] = useState<number | null>(null);
   const [user] = useState(auth.getSession());
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
+  const [enterpriseOpen, setEnterpriseOpen] = useState(false);
+  const [enterpriseSending, setEnterpriseSending] = useState(false);
+  const [enterpriseState, setEnterpriseState] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [enterpriseForm, setEnterpriseForm] = useState<EnterpriseContactForm>({
+    name: user?.displayName || '',
+    email: user?.email || '',
+    company: '',
+    message: '',
+  });
 
   useEffect(() => {
     const handleScroll = () => setScrolled(window.scrollY > 24);
@@ -208,6 +224,55 @@ export default function Pricing() {
   const getDashboardText = () => {
     if (!user) return 'Get Started Free';
     return isBusinessSetupReady(user) ? 'Open Dashboard' : 'Continue Setup';
+  };
+
+  const openEnterpriseContact = () => {
+    setEnterpriseState(null);
+    setEnterpriseForm((current) => ({
+      ...current,
+      name: current.name || user?.displayName || '',
+      email: current.email || user?.email || '',
+    }));
+    setEnterpriseOpen(true);
+  };
+
+  const handleEnterpriseSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setEnterpriseSending(true);
+    setEnterpriseState(null);
+
+    const messageParts = ['Enterprise plan request'];
+    if (enterpriseForm.company.trim()) {
+      messageParts.push(`Company: ${enterpriseForm.company.trim()}`);
+    }
+    messageParts.push('', enterpriseForm.message.trim());
+
+    try {
+      await fetchApiResponse('/auth/feedback', {
+        method: 'POST',
+        body: JSON.stringify({
+          name: enterpriseForm.name.trim(),
+          email: enterpriseForm.email.trim(),
+          type: 'enterprise plan request',
+          message: messageParts.join('\n'),
+        }),
+      });
+      setEnterpriseState({
+        type: 'success',
+        message: 'Your request has been sent to the VelisMail team. We will reply to your email shortly.',
+      });
+      setEnterpriseForm((current) => ({ ...current, company: '', message: '' }));
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : '';
+      setEnterpriseState({
+        type: 'error',
+        message: detail
+          ? `Could not send your request: ${detail}`
+          : 'Could not send your request right now. Please email support@velismail.online.',
+      });
+    } finally {
+      setEnterpriseSending(false);
+    }
   };
 
   return (
@@ -292,6 +357,7 @@ export default function Pricing() {
           const price = getDisplayedMonthlyPrice(plan, annual);
           const originalMonthly = plan.monthlyPrice;
           const isFree = plan.monthlyPrice === 0;
+          const isEnterprise = plan.id === 'enterprise';
           const annualSavings = getAnnualSavings(plan);
           const annualSavingsPercent = getAnnualSavingsPercent(plan);
 
@@ -310,6 +376,11 @@ export default function Pricing() {
                 <>
                   <div className="price-free-label">Free</div>
                   <p className="price-annual-note">Forever free — no credit card required</p>
+                </>
+              ) : isEnterprise ? (
+                <>
+                  <div className="price-custom-label">Custom</div>
+                  <p className="price-annual-note">Tailored to your organization — talk to our team, no online checkout</p>
                 </>
               ) : (
                 <>
@@ -350,9 +421,15 @@ export default function Pricing() {
                 ))}
               </ul>
 
-              <Link to={getDashboardLink()} className={`plan-cta ${plan.ctaStyle}`}>
-                {user ? (isFree ? 'Go to Dashboard' : 'Start Trial in Dashboard') : plan.cta} <ArrowRight size={16} />
-              </Link>
+              {isEnterprise ? (
+                <button type="button" className={`plan-cta ${plan.ctaStyle}`} onClick={openEnterpriseContact} aria-haspopup="dialog">
+                  Contact Now <ArrowRight size={16} />
+                </button>
+              ) : (
+                <Link to={getDashboardLink()} className={`plan-cta ${plan.ctaStyle}`}>
+                  {user ? (isFree ? 'Go to Dashboard' : 'Start Trial in Dashboard') : plan.cta} <ArrowRight size={16} />
+                </Link>
+              )}
             </div>
           );
         })}
@@ -491,6 +568,101 @@ export default function Pricing() {
           </div>
         </div>
       </footer>
+
+      {enterpriseOpen && (
+        <div className="modal-overlay" onClick={() => setEnterpriseOpen(false)}>
+          <div
+            className="modal enterprise-contact-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="enterprise-contact-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="modal-header">
+              <div>
+                <h3 id="enterprise-contact-title"><Building2 size={16} /> Talk to the VelisMail team</h3>
+                <p>Tell us about your organization. Your request goes straight to our team — no checkout.</p>
+              </div>
+              <button type="button" className="btn btn-ghost btn-icon" onClick={() => setEnterpriseOpen(false)} aria-label="Close">
+                <X size={16} />
+              </button>
+            </div>
+
+            <form className="enterprise-contact-form" onSubmit={handleEnterpriseSubmit}>
+              <div className="modal-body">
+                <div className="form-grid">
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="enterprise-name">Name</label>
+                    <input
+                      id="enterprise-name"
+                      className="input"
+                      value={enterpriseForm.name}
+                      onChange={(event) => setEnterpriseForm((current) => ({ ...current, name: event.target.value }))}
+                      placeholder="Jane Doe"
+                      required
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="enterprise-email">Work email</label>
+                    <input
+                      id="enterprise-email"
+                      className="input"
+                      type="email"
+                      value={enterpriseForm.email}
+                      onChange={(event) => setEnterpriseForm((current) => ({ ...current, email: event.target.value }))}
+                      placeholder="jane@company.com"
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label" htmlFor="enterprise-company">Company / team size</label>
+                  <input
+                    id="enterprise-company"
+                    className="input"
+                    value={enterpriseForm.company}
+                    onChange={(event) => setEnterpriseForm((current) => ({ ...current, company: event.target.value }))}
+                    placeholder="Acme Inc · 50 people"
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label" htmlFor="enterprise-message">What do you need?</label>
+                  <textarea
+                    id="enterprise-message"
+                    className="input"
+                    rows={4}
+                    value={enterpriseForm.message}
+                    onChange={(event) => setEnterpriseForm((current) => ({ ...current, message: event.target.value }))}
+                    placeholder="Domains, mailboxes, compliance, migration, or anything else we should know."
+                    required
+                  />
+                </div>
+
+                {enterpriseState && (
+                  <div className={`inline-alert ${enterpriseState.type}`} role={enterpriseState.type === 'error' ? 'alert' : 'status'}>
+                    {enterpriseState.message}
+                  </div>
+                )}
+
+                <p className="enterprise-contact-fallback">
+                  Prefer email? <a href="mailto:support@velismail.online?subject=Enterprise%20plan%20request">support@velismail.online</a>
+                </p>
+              </div>
+
+              <div className="modal-footer">
+                <button type="button" className="btn btn-secondary" onClick={() => setEnterpriseOpen(false)}>
+                  Cancel
+                </button>
+                <button type="submit" className="btn btn-primary" disabled={enterpriseSending}>
+                  {enterpriseSending ? 'Sending…' : 'Send request'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

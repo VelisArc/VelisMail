@@ -44,7 +44,9 @@
   box-shadow: none;
 }
 
-.compose-header {
+/* The dark header belongs to the floating composer only. Other dialogs reuse
+   the .compose-header class and must keep their light modal styling. */
+.composer-container .compose-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -54,14 +56,24 @@
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 
-.compose-header h3 {
+.composer-container .compose-header h3 {
   font-size: var(--text-sm);
   font-weight: var(--font-weight-bold);
   letter-spacing: var(--tracking-wide);
   display: flex;
   align-items: center;
   gap: 8px;
+  color: var(--text-inverted);
   text-transform: uppercase;
+}
+
+.composer-container .compose-header .btn {
+  color: rgba(255, 255, 255, 0.78);
+}
+
+.composer-container .compose-header .btn:hover {
+  color: var(--text-inverted);
+  background: rgba(255, 255, 255, 0.1);
 }
 
 .compose-body {

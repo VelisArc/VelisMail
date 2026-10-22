@@ -116,6 +116,10 @@
   text-transform: uppercase;
 }
 
+.billing-toggle-wrap .billing-save-badge {
+  color: var(--text-inverted);
+}
+
 /* ─── Pricing Cards Grid ─── */
 .pricing-grid {
   display: grid;
@@ -249,6 +253,14 @@
   margin-bottom: var(--space-2);
 }
 
+.price-custom-label {
+  font-size: 2.2rem;
+  font-weight: var(--font-weight-extrabold);
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
+  margin-bottom: var(--space-2);
+}
+
 /* Feature Lists */
 .plan-features {
   list-style: none;
@@ -291,6 +303,7 @@
   gap: 8px;
   width: 100%;
   padding: 10px 16px;
+  font-family: inherit;
   font-size: var(--text-xs);
   font-weight: var(--font-weight-bold);
   cursor: pointer;
@@ -319,6 +332,43 @@
 
 .plan-cta.cta-primary:hover {
   background: var(--accent-500);
+}
+
+/* ─── Enterprise contact modal ─── */
+.enterprise-contact-modal {
+  max-width: 620px;
+  padding: 0;
+  gap: 0;
+}
+
+.enterprise-contact-form {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.enterprise-contact-modal .modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.enterprise-contact-modal .modal-footer {
+  gap: var(--space-2);
+}
+
+.enterprise-contact-fallback {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  margin: 0;
+}
+
+.enterprise-contact-fallback a {
+  color: var(--text-primary);
+  font-weight: var(--font-weight-semibold);
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 
 /* ─── Comparison Matrix Table ─── */

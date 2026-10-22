@@ -332,7 +332,7 @@ export default function Composer({
     <div className="composer-container">
       <div className="compose-header">
         <h3><Send size={14} style={{ color: 'var(--primary-400)' }} /> New Message</h3>
-        <button aria-label="Close composer" className="btn btn-ghost btn-icon btn-sm" style={{ color: 'var(--text-muted)', minHeight: 'auto', width: '28px', height: '28px' }} onClick={onClose} title="Close">
+        <button aria-label="Close composer" className="btn btn-ghost btn-icon btn-sm" style={{ minHeight: 'auto', width: '28px', height: '28px' }} onClick={onClose} title="Close">
           <X size={16} />
         </button>
       </div>

@@ -124,13 +124,6 @@ export default function Sidebar({
           </button>
         )}
 
-        {isControlPlane && (
-          <div className="side-mode-hint">
-            <Crown size={14} />
-            <span>You are in the platform control plane. Use the switch in the top bar to return to your workspace.</span>
-          </div>
-        )}
-
         <nav className="side-nav">
           {!isControlPlane && (
             <>

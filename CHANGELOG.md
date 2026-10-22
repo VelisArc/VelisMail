@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+- The floating composer is smaller and anchored to the bottom-right corner, leaving more of the inbox visible.
+- Enterprise is now a contact-only plan: no price or online checkout is shown. **Contact Now** opens a request form that sends directly to the VelisMail team, and Billing links to the same team instead of starting a purchase.
+- Removed the control-plane hint from the dashboard sidebar so navigation has more room.
+
+### Fixed
+- The composer header now uses white text and a visible close icon on its dark background.
+- Dark composer styling no longer leaks into every dialog that reuses `.compose-header`; those dialogs keep a light header with readable dark text.
+- The annual **Save 16%** badge on Pricing no longer inherits dark text on its black background.
+
+---
+
 ## v5.1.0 - Guided Setup & Live Readiness Gate
 
 ### Added

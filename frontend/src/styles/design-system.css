@@ -165,26 +165,6 @@
   max-width: 100%;
 }
 
-/* ─── Sidebar note (control plane) ─────────────────────────────────── */
-
-.side-mode-hint {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--space-2);
-  margin: 0 12px 12px;
-  padding: var(--space-3);
-  background: var(--bg-surface-2);
-  border: 1px solid var(--border-primary);
-  color: var(--text-secondary);
-  font-size: var(--text-2xs);
-  line-height: 1.5;
-}
-
-.side-mode-hint svg {
-  flex-shrink: 0;
-  margin-top: 1px;
-}
-
 /* The setup gate now lives in components/dashboard/SetupRequired.css. */
 
 .dns-requirements-head {
