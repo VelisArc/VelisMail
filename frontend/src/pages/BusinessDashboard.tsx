@@ -35,10 +35,6 @@ import './Pricing.css';
 import ContactsPage from './Contacts';
 import DeliverabilityPanel from '../components/dashboard/panels/DeliverabilityPanel';
 
-/** Sentinel option that opens the "add a domain" dialog. */
-const ADD_DOMAIN_VALUE = '__add_domain__';
-
-
 export default function BusinessDashboard() {
   const navigate = useNavigate();
   const [user, setUser] = useState(auth.getSession());
@@ -951,12 +947,6 @@ function WorkspaceDashboard({ user, setUser, reloadReadiness }: WorkspaceDashboa
                       value={activeDomainName}
                       onChange={(event) => {
                         const domName = event.target.value;
-                        if (domName === ADD_DOMAIN_VALUE) {
-                          // Jump to the domain console with the add form open.
-                          setActiveBizTab('domains');
-                          setShowAddDomain(true);
-                          return;
-                        }
                         setActiveDomain(domName);
                         showToast(`Switched active domain to ${domName}`);
                       }}
@@ -967,7 +957,6 @@ function WorkspaceDashboard({ user, setUser, reloadReadiness }: WorkspaceDashboa
                           {domain.domain} ({domain.status})
                         </option>
                       ))}
-                      <option value={ADD_DOMAIN_VALUE}>+ Add a new domain</option>
                     </select>
                   </label>
                 )}

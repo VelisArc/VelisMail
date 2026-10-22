@@ -14,6 +14,7 @@
 - Dashboard data hooks only mount after readiness passes, so incomplete workspaces cannot load dashboard data.
 - Workspace domain actions use the backend API; local placeholder domains and fake verification success were removed.
 - **Get Started Free** and pricing CTAs now open the account-creation form at `/login?mode=register`; the sign-in form remains at `/login`.
+- The top-bar domain picker only switches between connected domains; adding a domain stays in the Domains panel.
 
 ### Fixed
 - **Multiple domains per workspace**: adding a second domain no longer gets blocked or moved between tenants.
