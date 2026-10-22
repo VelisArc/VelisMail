@@ -3164,6 +3164,9 @@ fn public_team_invite(invite: &TeamInviteRecord) -> Value {
     })
 }
 
+// Retained for reference; team sign-in now authenticates with a password
+// instead of an emailed OTP.
+#[allow(dead_code)]
 fn verify_team_otp_token(
     state: &AppState,
     email: &str,
@@ -3351,19 +3354,79 @@ pub async fn validate_team_invite(
     )
 }
 
+/// Extract a client IP for the refresh-token audit column.
+fn gateway_request_ip(headers: &HeaderMap) -> String {
+    if let Some(value) = headers.get("x-forwarded-for").and_then(|v| v.to_str().ok()) {
+        if let Some(first) = value.split(',').next() {
+            let trimmed = first.trim();
+            if !trimmed.is_empty() {
+                return trimmed.to_string();
+            }
+        }
+    }
+    if let Some(value) = headers.get("x-real-ip").and_then(|v| v.to_str().ok()) {
+        let trimmed = value.trim();
+        if !trimmed.is_empty() {
+            return trimmed.to_string();
+        }
+    }
+    "127.0.0.1".to_string()
+}
+
+/// Hash a team-access password with the same Argon2 parameters the auth
+/// service uses, so a team account and a normal account verify identically.
+fn hash_team_password(raw: &str) -> Result<String, StatusCode> {
+    use argon2::password_hash::{rand_core::OsRng, PasswordHasher, SaltString};
+    use argon2::Argon2;
+    let salt = SaltString::generate(&mut OsRng);
+    Argon2::default()
+        .hash_password(raw.as_bytes(), &salt)
+        .map(|hash| hash.to_string())
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
+}
+
+fn verify_team_password(raw: &str, stored: &str) -> bool {
+    use argon2::password_hash::{PasswordHash, PasswordVerifier};
+    use argon2::Argon2;
+    PasswordHash::new(stored)
+        .and_then(|parsed| Argon2::default().verify_password(raw.as_bytes(), &parsed))
+        .is_ok()
+}
+
+/// SHA-256 hex digest, matching the auth service's refresh-token hashing.
+fn hash_refresh_token(token: &str) -> String {
+    use sha2::Digest;
+    let mut hasher = Sha256::new();
+    hasher.update(token.as_bytes());
+    hex::encode(hasher.finalize())
+}
+
+/// Complete a team-access sign-in with an email + password.
+///
+/// The invited member is created (or verified) inside the inviter's workspace
+/// so the issued session resolves to the invited company, and a real
+/// access + refresh token pair is returned. No separate setup is required.
 pub async fn complete_team_invite(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Json(payload): Json<CompleteTeamInviteRequest>,
 ) -> (StatusCode, Json<Value>) {
     let token = payload.token.trim();
     let email = normalize_team_email(&payload.email);
-    if token.is_empty() || email.is_empty() {
+    let password = payload.password.clone();
+    if token.is_empty() || email.is_empty() || password.len() < 8 {
         return (
             StatusCode::BAD_REQUEST,
             Json(json!({
                 "success": false,
-                "message": "Team access key and email are required."
+                "message": "Team access key, email, and a password of at least 8 characters are required."
             })),
+        );
+    }
+    if !email.contains('@') {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({ "success": false, "message": "Enter a valid email address." })),
         );
     }
 
@@ -3372,63 +3435,253 @@ pub async fn complete_team_invite(
         None => {
             return (
                 StatusCode::NOT_FOUND,
-                Json(json!({
-                    "success": false,
-                    "message": "Invalid team access key."
-                })),
+                Json(json!({ "success": false, "message": "Invalid team access key." })),
             )
         }
     };
-
     if invite.status == "revoked" {
         return (
             StatusCode::FORBIDDEN,
-            Json(json!({
-                "success": false,
-                "message": "This team access key was revoked."
-            })),
+            Json(json!({ "success": false, "message": "This team access key was revoked." })),
         );
     }
     if team_invite_expired(&invite) {
         set_team_invite_status(&state, token, "expired").await;
         return (
             StatusCode::GONE,
-            Json(json!({
-                "success": false,
-                "message": "This team access key has expired."
-            })),
+            Json(json!({ "success": false, "message": "This team access key has expired." })),
         );
     }
     if email != invite.email {
         return (
             StatusCode::FORBIDDEN,
-            Json(json!({
-                "success": false,
-                "message": "Team access key and email do not match."
-            })),
+            Json(json!({ "success": false, "message": "Team access key and email do not match." })),
         );
     }
 
-    if let Err(status) = verify_team_otp_token(&state, &email, &payload.verification_token) {
+    let db = match state.db.as_ref() {
+        Some(pool) => pool,
+        None => {
+            return (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(json!({ "success": false, "message": "The account database is not connected." })),
+            )
+        }
+    };
+
+    let admin_tenant = match uuid::Uuid::parse_str(&invite.workspace.tenant_id) {
+        Ok(value) if value != uuid::Uuid::nil() => value,
+        _ => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "success": false, "message": "The invite is missing its workspace. Ask the admin to generate a fresh access key." })),
+            )
+        }
+    };
+
+    let existing = sqlx::query(
+        "SELECT id, tenant_id, password_hash FROM users WHERE email = $1 AND status = 'active' LIMIT 1",
+    )
+    .bind(&email)
+    .fetch_optional(db)
+    .await;
+
+    let user_id = match existing {
+        Ok(Some(row)) => {
+            let uid: uuid::Uuid = match row.try_get("id") {
+                Ok(value) => value,
+                Err(_) => return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "success": false, "message": "Unable to load the account." }))),
+            };
+            let tenant: Option<uuid::Uuid> = row.try_get("tenant_id").ok().flatten();
+            let hash: Option<String> = row.try_get("password_hash").ok().flatten();
+            let stored = match hash {
+                Some(value) => value,
+                None => {
+                    return (
+                        StatusCode::UNAUTHORIZED,
+                        Json(json!({ "success": false, "message": "This email has no password set. Use Forgot Password first." })),
+                    )
+                }
+            };
+            if !verify_team_password(&password, &stored) {
+                return (
+                    StatusCode::UNAUTHORIZED,
+                    Json(json!({ "success": false, "message": "Incorrect password for this email." })),
+                );
+            }
+            if let Some(t) = tenant {
+                if t != admin_tenant {
+                    return (
+                        StatusCode::FORBIDDEN,
+                        Json(json!({ "success": false, "message": "This email already has its own VelisMail workspace. Ask the admin to invite a different email address." })),
+                    );
+                }
+            }
+            uid
+        }
+        Ok(None) => {
+            let hash = match hash_team_password(&password) {
+                Ok(value) => value,
+                Err(status) => {
+                    return (
+                        status,
+                        Json(json!({ "success": false, "message": "Unable to prepare the account." })),
+                    )
+                }
+            };
+            let inserted: Result<uuid::Uuid, _> = sqlx::query_scalar(
+                "INSERT INTO users (tenant_id, email, display_name, password_hash, status)
+                 VALUES ($1, $2, $3, $4, 'active')
+                 RETURNING id",
+            )
+            .bind(admin_tenant)
+            .bind(&email)
+            .bind(&invite.name)
+            .bind(&hash)
+            .fetch_one(db)
+            .await;
+            match inserted {
+                Ok(uid) => uid,
+                Err(err) => {
+                    tracing::warn!("team access user create failed for {email}: {err}");
+                    return (
+                        StatusCode::CONFLICT,
+                        Json(json!({ "success": false, "message": "Unable to create the team account. It may already exist with a different status." })),
+                    )
+                }
+            }
+        }
+        Err(err) => {
+            tracing::warn!("team access user lookup failed for {email}: {err}");
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "success": false, "message": "Unable to load the account." })),
+            )
+        }
+    };
+
+    let role = if valid_team_role(&invite.role) {
+        invite.role.clone()
+    } else {
+        "member".to_string()
+    };
+    let upsert = sqlx::query(
+        "INSERT INTO company_members (tenant_id, user_id, email, display_name, role, status)
+         VALUES ($1, $2, $3, $4, $5, 'active')
+         ON CONFLICT (tenant_id, email)
+         DO UPDATE SET user_id = EXCLUDED.user_id,
+                       display_name = EXCLUDED.display_name,
+                       role = EXCLUDED.role,
+                       status = 'active',
+                       updated_at = NOW()",
+    )
+    .bind(admin_tenant)
+    .bind(user_id)
+    .bind(&email)
+    .bind(&invite.name)
+    .bind(&role)
+    .execute(db)
+    .await;
+    if let Err(err) = upsert {
+        tracing::warn!("team access membership upsert failed for {email}: {err}");
         return (
-            status,
-            Json(json!({
-                "success": false,
-                "message": "OTP verification token is invalid or expired."
-            })),
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({ "success": false, "message": "Unable to add you to the company workspace." })),
         );
     }
 
     set_team_invite_status(&state, token, "accepted").await;
-    let mut accepted_invite = invite;
+    let mut accepted_invite = invite.clone();
     accepted_invite.status = "accepted".to_string();
     accepted_invite.accepted_at = Some(chrono::Utc::now().to_rfc3339());
+
+    let jwt_secret = state.config.jwt_secret.as_deref().unwrap_or_default();
+    if jwt_secret.is_empty() {
+        return (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(json!({ "success": false, "message": "Session signing is not configured." })),
+        );
+    }
+    let expiry_seconds: i64 = std::env::var("JWT_EXPIRY_SECONDS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(86400);
+    let now = chrono::Utc::now();
+    let device_id = "team-access".to_string();
+    let claims = velismail_common::Claims {
+        sub: velismail_common::types::UserId(user_id),
+        tenant_id: admin_tenant.to_string(),
+        email: email.clone(),
+        iat: now.timestamp(),
+        exp: (now + chrono::Duration::seconds(expiry_seconds)).timestamp(),
+        nbf: now.timestamp(),
+        jti: uuid::Uuid::new_v4().to_string(),
+        role: velismail_common::UserRole::User,
+        mfa_verified: false,
+        device_id: device_id.clone(),
+        security_level: velismail_common::SecurityLevel::Standard,
+        firebase_uid: None,
+    };
+    let access_token = match encode(
+        &jsonwebtoken::Header::default(),
+        &claims,
+        &EncodingKey::from_secret(jwt_secret.as_bytes()),
+    ) {
+        Ok(value) => value,
+        Err(_) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "success": false, "message": "Unable to sign the session." })),
+            )
+        }
+    };
+
+    let refresh_token = match velismail_crypto::random::random_token(64) {
+        Ok(value) => value,
+        Err(_) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "success": false, "message": "Unable to create the session." })),
+            )
+        }
+    };
+    let refresh_hash = hash_refresh_token(&refresh_token);
+    let refresh_days: i64 = std::env::var("REFRESH_TOKEN_EXPIRY_DAYS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(30);
+    let refresh_expiry = now + chrono::Duration::days(refresh_days);
+    let ip = gateway_request_ip(&headers);
+    let _ = sqlx::query(
+        r#"INSERT INTO refresh_tokens
+           (user_id, token_hash, device_id, device_fingerprint, expires_at, ip_address, mfa_verified)
+           VALUES ($1, $2, $3, $4, $5, $6::inet, false)"#,
+    )
+    .bind(user_id)
+    .bind(&refresh_hash)
+    .bind(&device_id)
+    .bind(&device_id)
+    .bind(refresh_expiry)
+    .bind(&ip)
+    .execute(db)
+    .await;
 
     (
         StatusCode::OK,
         Json(json!({
             "success": true,
-            "invite": accepted_invite
+            "accessToken": access_token,
+            "refreshToken": refresh_token,
+            "expiresIn": expiry_seconds,
+            "tokenType": "Bearer",
+            "invite": accepted_invite,
+            "user": {
+                "id": user_id.to_string(),
+                "email": email,
+                "displayName": accepted_invite.name,
+                "role": role,
+                "tenantId": admin_tenant.to_string(),
+            }
         })),
     )
 }

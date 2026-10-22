@@ -609,12 +609,12 @@ async fn login_password_inner(
     headers: HeaderMap,
     request: PasswordLoginRequest,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
-    let submitted_identifier = request.email.trim().to_lowercase();
-    let identifier = if submitted_identifier.contains('@') {
-        submitted_identifier
-    } else {
-        format!("admin@{}", submitted_identifier.trim_matches('.'))
-    };
+    let identifier = request.email.trim().to_lowercase();
+    // A full email address is required to sign in. The account may also be
+    // identified by its verified recovery email, but never by a bare name.
+    if !identifier.contains('@') || !identifier.contains('.') {
+        return Err(StatusCode::BAD_REQUEST);
+    }
     let ip_address = request_ip(&headers);
     let user_agent = request_user_agent(&headers);
 
