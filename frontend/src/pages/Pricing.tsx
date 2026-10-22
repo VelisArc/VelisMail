@@ -201,7 +201,7 @@ export default function Pricing() {
   const closeMobileMenu = () => setMobileMenuOpen(false);
 
   const getDashboardLink = () => {
-    if (!user) return '/login';
+    if (!user) return '/login?mode=register';
     return '/business';
   };
 
@@ -244,7 +244,7 @@ export default function Pricing() {
             {!user ? (
               <div className="nav-actions">
                 <Link to="/login" className="nav-link" onClick={closeMobileMenu}>Log In</Link>
-                <Link to="/login" className="btn btn-primary nav-cta" onClick={closeMobileMenu}>
+                <Link to="/login?mode=register" className="btn btn-primary nav-cta" onClick={closeMobileMenu}>
                   Get Started Free
                 </Link>
               </div>

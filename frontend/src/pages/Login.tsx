@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import {
   Mail,
   Lock,
@@ -40,7 +40,10 @@ function normalizeDomain(value: string) {
 }
 
 export default function Login() {
-  const [mode, setMode] = useState<Mode>('login');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [mode, setMode] = useState<Mode>(() =>
+    searchParams.get('mode') === 'register' ? 'register' : 'login',
+  );
   const [loginAccessMode, setLoginAccessMode] = useState<LoginAccessMode>('password');
   const [registerStep, setRegisterStep] = useState<RegisterStep>('form');
   const [forgotMode, setForgotMode] = useState(false);
@@ -77,6 +80,10 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const navigate = useNavigate();
+
+  useEffect(() => {
+    setMode(searchParams.get('mode') === 'register' ? 'register' : 'login');
+  }, [searchParams]);
   const businessDomainValue = normalizeDomain(regDomain);
   const defaultBusinessMailboxAddress = businessDomainValue ? `admin@${businessDomainValue}` : '';
   const otpTargetEmail = regRecoveryEmail.trim().toLowerCase();
@@ -390,6 +397,14 @@ export default function Login() {
     setTeamChallengeToken('');
     setTeamInvite(null);
     setTeamHint('');
+
+    const nextParams = new URLSearchParams(searchParams);
+    if (m === 'register') {
+      nextParams.set('mode', 'register');
+    } else {
+      nextParams.delete('mode');
+    }
+    setSearchParams(nextParams, { replace: true });
   };
 
   const startPasswordReset = () => {

@@ -13,6 +13,7 @@
 - `/business-setup` redirects to `/business`, and the old page is removed.
 - Dashboard data hooks only mount after readiness passes, so incomplete workspaces cannot load dashboard data.
 - Workspace domain actions use the backend API; local placeholder domains and fake verification success were removed.
+- **Get Started Free** and pricing CTAs now open the account-creation form at `/login?mode=register`; the sign-in form remains at `/login`.
 
 ### Fixed
 - **Multiple domains per workspace**: adding a second domain no longer gets blocked or moved between tenants.
