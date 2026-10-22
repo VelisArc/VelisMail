@@ -40,6 +40,7 @@ import type { DashboardState } from '../types';
 import { AdminConfirmSelect } from '../AdminConfirm';
 import { useAdminConfirm } from '../useAdminConfirm';
 import LoadingSpinner from '../../LoadingSpinner';
+import { loadBusinessMailboxes } from '../../../api/client';
 
 export type PlatformSection =
   | 'overview'
@@ -495,8 +496,38 @@ export default function PlatformAdminPanel({ section, state }: PlatformAdminPane
         source: mailbox.source,
       });
     });
+    // Inbox compose also uses the locally saved mailbox index. Some workspaces
+    // have their custom mailboxes there before the central index has synced,
+    // so include them instead of showing only the platform default.
+    try {
+      loadBusinessMailboxes().forEach((mailbox) => {
+        if (!mailbox.active) return;
+        add({
+          address: mailbox.address,
+          displayName: mailbox.displayName,
+          domain: mailbox.domain,
+          source: mailbox.source,
+        });
+      });
+    } catch {
+      // A blocked localStorage must not make the broadcast composer unusable.
+    }
+    // The verified primary mailbox is the system fallback used by Inbox even
+    // when no custom mailbox row exists yet.
+    const account = state.user;
+    if (account?.businessDomainVerified && account.businessDomain) {
+      const domain = account.businessDomain.trim().toLowerCase();
+      const preferred = account.businessMailboxAddress?.trim().toLowerCase();
+      const address = preferred?.endsWith(`@${domain}`) ? preferred : `admin@${domain}`;
+      add({
+        address,
+        displayName: account.displayName || 'Administrator',
+        domain,
+        source: 'system',
+      });
+    }
     return options.sort((left, right) => left.address.localeCompare(right.address));
-  }, [broadcastSenders, state.domainMailboxes]);
+  }, [broadcastSenders, state.domainMailboxes, state.user]);
 
   useEffect(() => {
     if (broadcastFrom && !broadcastSenderChoices.some((mailbox) => mailbox.address === broadcastFrom)) {

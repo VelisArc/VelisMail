@@ -3696,7 +3696,7 @@ pub async fn list_broadcast_senders(
     .await
     .unwrap_or_default();
 
-    let mailboxes: Vec<Value> = rows
+    let mut mailboxes: Vec<Value> = rows
         .iter()
         .map(|row| {
             json!({
@@ -3709,6 +3709,47 @@ pub async fn list_broadcast_senders(
             })
         })
         .collect();
+
+    // The table above is the synced mailbox index. A workspace can still have
+    // a verified primary mailbox before that index is populated (for example
+    // right after domain setup), so offer the signed-in owner's address when
+    // its domain is verified.
+    let owner_address = normalize_email(&actor.email);
+    let owner_domain = owner_address
+        .split('@')
+        .nth(1)
+        .unwrap_or_default()
+        .to_string();
+    let owner_domain_verified = sqlx::query_scalar::<_, bool>(
+        "SELECT EXISTS(
+             SELECT 1 FROM custom_domains
+             WHERE LOWER(domain_name) = $1 AND verification_status = 'verified'
+         )",
+    )
+    .bind(&owner_domain)
+    .fetch_one(db)
+    .await
+    .unwrap_or(false);
+    if owner_domain_verified
+        && !mailboxes.iter().any(|mailbox| {
+            mailbox
+                .get("address")
+                .and_then(Value::as_str)
+                .is_some_and(|address| address.eq_ignore_ascii_case(&owner_address))
+        })
+    {
+        mailboxes.insert(
+            0,
+            json!({
+                "address": owner_address,
+                "displayName": "Account mailbox",
+                "domain": owner_domain,
+                "company": "Your workspace",
+                "source": "system",
+                "domainStatus": "verified",
+            }),
+        );
+    }
 
     ok(json!({
         "success": true,
@@ -3853,10 +3894,40 @@ pub async fn platform_broadcast(
                 )
             }
             Ok(None) => {
-                return fail(
-                    StatusCode::BAD_REQUEST,
-                    "Choose an active mailbox as the sender, or leave it empty for the platform default.",
+                // A newly configured workspace may not have synced its mailbox
+                // index yet. Any address on a verified custom domain is still a
+                // real sender, so allow it and let the mail provider reject an
+                // address that does not exist.
+                let domain = requested_from
+                    .split('@')
+                    .nth(1)
+                    .unwrap_or_default()
+                    .to_string();
+                let domain_verified = sqlx::query_scalar::<_, bool>(
+                    "SELECT EXISTS(
+                         SELECT 1 FROM custom_domains
+                         WHERE LOWER(domain_name) = $1 AND verification_status = 'verified'
+                     )",
                 )
+                .bind(&domain)
+                .fetch_one(db)
+                .await;
+                match domain_verified {
+                    Ok(true) => (Some(requested_from), None),
+                    Ok(false) => {
+                        return fail(
+                            StatusCode::BAD_REQUEST,
+                            "Choose a sender on a verified domain, or leave it empty for the platform default.",
+                        )
+                    }
+                    Err(err) => {
+                        tracing::error!("broadcast sender domain lookup failed: {}", err);
+                        return fail(
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            "Unable to verify the sender domain.",
+                        );
+                    }
+                }
             }
             Err(err) => {
                 tracing::error!("broadcast sender lookup failed: {}", err);
