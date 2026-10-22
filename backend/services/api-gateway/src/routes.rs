@@ -136,6 +136,10 @@ pub fn api_v1_routes(_state: &AppState) -> Router<AppState> {
         )
         .route("/admin/platform/broadcast", post(admin::platform_broadcast))
         .route(
+            "/admin/platform/broadcast/senders",
+            get(admin::list_broadcast_senders),
+        )
+        .route(
             "/admin/platform/broadcasts",
             get(admin::list_platform_broadcasts),
         )
@@ -1695,7 +1699,7 @@ fn is_valid_domain(value: &str) -> bool {
     })
 }
 
-fn is_valid_email_address(value: &str) -> bool {
+pub(crate) fn is_valid_email_address(value: &str) -> bool {
     let address = value.trim().to_lowercase();
     if address.len() > 254 || address.contains("..") {
         return false;

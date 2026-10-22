@@ -29,6 +29,7 @@ import {
   type FeatureFlag,
   type Investigation,
   type PlatformBroadcast,
+  type PlatformBroadcastSender,
   type PlatformSetting,
   type PlatformTeam,
   type PlatformUser,
@@ -293,6 +294,12 @@ export default function PlatformAdminPanel({ section, state }: PlatformAdminPane
     status: string;
   } | null>(null);
   const [broadcastHistory, setBroadcastHistory] = useState<PlatformBroadcast[]>([]);
+  const [broadcastSenders, setBroadcastSenders] = useState<PlatformBroadcastSender[]>([]);
+  const [broadcastDefaultSender, setBroadcastDefaultSender] = useState({
+    address: 'no-reply@velismail.online',
+    name: 'VelisMail',
+  });
+  const [broadcastFrom, setBroadcastFrom] = useState('');
 
   const notify = useCallback((message: string, tone: 'success' | 'error' = 'success') => {
     setBanner({ tone, message });
@@ -341,16 +348,25 @@ export default function PlatformAdminPanel({ section, state }: PlatformAdminPane
       } else if (section === 'health') {
         setSystem(await platformAdminApi.system());
       } else if (section === 'broadcast') {
-        const [recipientResult, historyResult] = await Promise.all([
+        const [recipientResult, historyResult, senderResult] = await Promise.all([
           platformAdminApi.users({
             search: broadcastSearch || undefined,
             status: broadcastAudience === 'active' || broadcastAudience === 'suspended' ? broadcastAudience : undefined,
             plan: broadcastAudience === 'free' || broadcastAudience === 'paid' ? broadcastAudience : undefined,
           }),
           platformAdminApi.broadcasts(),
+          // Older gateways do not have the sender endpoint yet. The current
+          // workspace mailboxes are still offered as a fallback below.
+          platformAdminApi.broadcastSenders().catch(() => null),
         ]);
         setBroadcastRecipients(recipientResult.users);
         setBroadcastHistory(historyResult.broadcasts);
+        if (senderResult) {
+          setBroadcastSenders(senderResult.mailboxes || []);
+          if (senderResult.defaultSender?.address) {
+            setBroadcastDefaultSender(senderResult.defaultSender);
+          }
+        }
       }
     } catch (error) {
       if (error instanceof AdminApiError && error.status === 403) {
@@ -448,6 +464,45 @@ export default function PlatformAdminPanel({ section, state }: PlatformAdminPane
   const broadcastTargetCount = broadcastSelected.length > 0
     ? broadcastSelected.length + broadcastExtraEmails.length
     : (broadcastExtraEmails.length > 0 ? broadcastExtraEmails.length : broadcastAudienceSize);
+  const broadcastSubjectLength = broadcastSubject.trim().length;
+  const broadcastBodyLength = broadcastBody.trim().length;
+  const broadcastSenderChoices = useMemo(() => {
+    const seen = new Set<string>();
+    const options: PlatformBroadcastSender[] = [];
+    const add = (mailbox: Partial<PlatformBroadcastSender> & { address?: string }) => {
+      const address = (mailbox.address || '').trim().toLowerCase();
+      if (!address || seen.has(address)) return;
+      seen.add(address);
+      options.push({
+        address,
+        displayName: mailbox.displayName || '',
+        domain: mailbox.domain || address.split('@')[1] || '',
+        company: mailbox.company || '',
+        source: mailbox.source || 'custom',
+        domainStatus: mailbox.domainStatus || 'unknown',
+      });
+    };
+    broadcastSenders.forEach(add);
+    // The control plane already has the current workspace mailboxes loaded.
+    // Offering them here keeps the picker useful during a rolling backend
+    // deploy, before the dedicated sender endpoint is available.
+    (state.domainMailboxes || []).forEach((mailbox) => {
+      if (!mailbox.active) return;
+      add({
+        address: mailbox.address,
+        displayName: mailbox.displayName,
+        domain: mailbox.domain,
+        source: mailbox.source,
+      });
+    });
+    return options.sort((left, right) => left.address.localeCompare(right.address));
+  }, [broadcastSenders, state.domainMailboxes]);
+
+  useEffect(() => {
+    if (broadcastFrom && !broadcastSenderChoices.some((mailbox) => mailbox.address === broadcastFrom)) {
+      setBroadcastFrom('');
+    }
+  }, [broadcastFrom, broadcastSenderChoices]);
 
   const toggleBroadcastRecipient = useCallback((id: string) => {
     setBroadcastSelected((current) => (
@@ -459,9 +514,28 @@ export default function PlatformAdminPanel({ section, state }: PlatformAdminPane
     const subject = broadcastSubject.trim();
     const body = broadcastBody.trim();
     const targetCount = broadcastTargetCount;
+
+    // The button stays clickable whenever there is at least one recipient so
+    // the operator gets an explanation instead of a silent disabled control.
+    if (targetCount === 0) {
+      notify('Choose at least one recipient or add a custom email address.', 'error');
+      return;
+    }
+    if (subject.length < 4) {
+      notify('Add a subject with at least 4 characters.', 'error');
+      return;
+    }
+    if (body.length < 10) {
+      notify(`Add at least ${10 - body.length} more character(s) to the message.`, 'error');
+      return;
+    }
+
+    const senderLabel = broadcastFrom
+      ? broadcastFrom
+      : `${broadcastDefaultSender.name} (${broadcastDefaultSender.address})`;
     confirm({
       title: 'Send platform broadcast',
-      message: `"${subject}" is delivered privately to ${targetCount} recipient(s) as a ${broadcastCategory} message. Every recipient receives their own copy on their recovery address, and nobody sees the other addresses.`,
+      message: `"${subject}" is sent from ${senderLabel} privately to ${targetCount} recipient(s) as a ${broadcastCategory} message. Every recipient receives their own copy on their recovery address, and nobody sees the other addresses.`,
       confirmLabel: 'Send now',
       tone: 'danger',
       onConfirm: async () => {
@@ -475,6 +549,7 @@ export default function PlatformAdminPanel({ section, state }: PlatformAdminPane
             audience: broadcastAudience,
             recipientIds: broadcastSelected,
             additionalEmails: broadcastExtraEmails,
+            from: broadcastFrom || undefined,
           });
           setBroadcastResult({
             recipientCount: result.recipientCount || 0,
@@ -499,7 +574,9 @@ export default function PlatformAdminPanel({ section, state }: PlatformAdminPane
     broadcastAudience,
     broadcastBody,
     broadcastCategory,
+    broadcastDefaultSender,
     broadcastExtraEmails,
+    broadcastFrom,
     broadcastSelected,
     broadcastSubject,
     broadcastTargetCount,
@@ -1105,6 +1182,32 @@ export default function PlatformAdminPanel({ section, state }: PlatformAdminPane
                 </div>
 
                 <div className="admin-broadcast-field">
+                  <label htmlFor="broadcast-from">Send from</label>
+                  <select
+                    id="broadcast-from"
+                    className="input"
+                    value={broadcastFrom}
+                    onChange={(event) => setBroadcastFrom(event.target.value)}
+                  >
+                    <option value="">
+                      Platform default ({broadcastDefaultSender.address})
+                    </option>
+                    {broadcastSenderChoices.map((mailbox) => (
+                      <option key={mailbox.address} value={mailbox.address}>
+                        {mailbox.address}
+                        {mailbox.company ? ` · ${mailbox.company}` : ''}
+                        {mailbox.domainStatus && mailbox.domainStatus !== 'verified' && mailbox.domainStatus !== 'unknown'
+                          ? ` · domain ${mailbox.domainStatus}`
+                          : ''}
+                      </option>
+                    ))}
+                  </select>
+                  <span className="form-hint">
+                    Every delivery uses this From address, including custom recipients. Pick an active custom mailbox or keep the platform default.
+                  </span>
+                </div>
+
+                <div className="admin-broadcast-field">
                   <label htmlFor="broadcast-category">Category</label>
                   <select
                     id="broadcast-category"
@@ -1129,6 +1232,9 @@ export default function PlatformAdminPanel({ section, state }: PlatformAdminPane
                     value={broadcastSubject}
                     onChange={(event) => setBroadcastSubject(event.target.value)}
                   />
+                  <span className="form-hint">
+                    At least 4 characters - {broadcastSubjectLength}/4.
+                  </span>
                 </div>
 
                 <div className="admin-broadcast-field">
@@ -1141,6 +1247,9 @@ export default function PlatformAdminPanel({ section, state }: PlatformAdminPane
                     value={broadcastBody}
                     onChange={(event) => setBroadcastBody(event.target.value)}
                   />
+                  <span className="form-hint">
+                    At least 10 characters - {broadcastBodyLength}/10.
+                  </span>
                 </div>
 
                 <div className="admin-broadcast-field">
@@ -1160,10 +1269,12 @@ export default function PlatformAdminPanel({ section, state }: PlatformAdminPane
                 </div>
 
                 <div className="admin-broadcast-summary">
+                  <span>Send from: <strong>{broadcastFrom || broadcastDefaultSender.address}</strong></span>
                   <span>Recipients from selection: <strong>{number(broadcastSelected.length)}</strong></span>
                   <span>Custom addresses: <strong>{number(broadcastExtraEmails.length)}</strong></span>
                   <span>Total private deliveries: <strong>{number(broadcastTargetCount)}</strong></span>
-                  <span>Delivered to the recovery address, never to the company mailbox.</span>
+                  <span>Each address gets its own email. To and Cc never contain another recipient.</span>
+                  <span>Account recipients are delivered to their recovery address, never the company mailbox.</span>
                 </div>
 
                 {broadcastResult && (
@@ -1179,13 +1290,18 @@ export default function PlatformAdminPanel({ section, state }: PlatformAdminPane
                 <button
                   type="button"
                   className="btn btn-primary w-full"
-                  disabled={broadcastSending || broadcastSubject.trim().length < 4 || broadcastBody.trim().length < 10 || broadcastTargetCount === 0}
+                  disabled={broadcastSending || broadcastTargetCount === 0}
                   onClick={sendBroadcast}
                 >
                   {broadcastSending
                     ? <LoadingSpinner size="sm" label="Sending" />
                     : <><Send size={15} /> Send to {number(broadcastTargetCount)} recipient{broadcastTargetCount === 1 ? '' : 's'}</>}
                 </button>
+                {broadcastTargetCount === 0 && (
+                  <span className="form-hint">
+                    Choose at least one account or add a custom email address to enable sending.
+                  </span>
+                )}
               </section>
             </div>
 
@@ -1200,7 +1316,9 @@ export default function PlatformAdminPanel({ section, state }: PlatformAdminPane
                       <span className="admin-person">
                         <span>
                           <strong>{entry.subject}</strong>
-                          <span>{entry.category} · {entry.audience} · {dateTime(entry.createdAt)}</span>
+                          <span>
+                            {entry.category} · {entry.audience} · from {entry.fromAddress || 'platform default'} · {dateTime(entry.createdAt)}
+                          </span>
                         </span>
                       </span>
                       <Badge value={entry.status}>{entry.status}</Badge>

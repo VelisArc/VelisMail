@@ -122,7 +122,10 @@ pub fn effective_allowance(plan: &str, stored_limits: &Value) -> PlanAllowance {
         monthly_emails: read("monthly_email_limit", base.monthly_emails),
         emails_per_day: read("max_emails_per_day", base.emails_per_day),
         storage_mb: read("max_storage_mb", base.storage_mb),
-        api_rate_limit_per_minute: read("api_rate_limit_per_minute", base.api_rate_limit_per_minute),
+        api_rate_limit_per_minute: read(
+            "api_rate_limit_per_minute",
+            base.api_rate_limit_per_minute,
+        ),
         max_domains: read("max_domains", base.max_domains),
         max_templates: read("max_templates", base.max_templates),
         max_attachment_size_mb: read("max_attachment_size_mb", base.max_attachment_size_mb),

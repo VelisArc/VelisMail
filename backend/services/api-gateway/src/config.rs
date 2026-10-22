@@ -28,6 +28,10 @@ pub struct GatewayConfig {
     /// The platform's own mail provider key. It is used to look up the DNS
     /// records of a domain that is served by the platform provider.
     pub platform_resend_api_key: String,
+    /// The sender shown in the control plane when a broadcast does not pick a
+    /// custom mailbox. It mirrors the mail service default.
+    pub platform_from_email: String,
+    pub platform_from_name: String,
     /// The platform's SPF policy and DKIM selector, used to tell a customer
     /// which records to publish.
     pub spf_record: String,
@@ -69,6 +73,19 @@ impl GatewayConfig {
             .and_then(|value| value.parse::<usize>().ok())
             .unwrap_or(32)
             .clamp(1, 256);
+
+        let base_domain = std::env::var("BASE_DOMAIN")
+            .ok()
+            .filter(|value| !value.trim().is_empty())
+            .unwrap_or_else(|| "velismail.online".to_string());
+        let platform_from_email = std::env::var("PLATFORM_FROM_EMAIL")
+            .ok()
+            .filter(|value| !value.trim().is_empty())
+            .unwrap_or_else(|| format!("no-reply@{base_domain}"));
+        let platform_from_name = std::env::var("PLATFORM_FROM_NAME")
+            .ok()
+            .filter(|value| !value.trim().is_empty())
+            .unwrap_or_else(|| "VelisMail".to_string());
 
         Ok(Self {
             host: std::env::var("GATEWAY_HOST").unwrap_or_else(|_| "0.0.0.0".to_string()),
@@ -118,6 +135,8 @@ impl GatewayConfig {
             platform_resend_api_key: std::env::var("PLATFORM_RESEND_API_KEY")
                 .or_else(|_| std::env::var("RESEND_API_KEY"))
                 .unwrap_or_default(),
+            platform_from_email,
+            platform_from_name,
             spf_record: std::env::var("SPF_RECORD").unwrap_or_default(),
             dkim_selector: std::env::var("DKIM_SELECTOR").unwrap_or_default(),
             db_url: std::env::var("DATABASE_URL")

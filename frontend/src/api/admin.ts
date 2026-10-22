@@ -388,8 +388,18 @@ export type PlatformBroadcast = {
   deliveredCount: number;
   failedCount: number;
   status: string;
+  fromAddress?: string | null;
   createdBy: string;
   createdAt: string;
+};
+
+export type PlatformBroadcastSender = {
+  address: string;
+  displayName: string;
+  domain: string;
+  company: string;
+  source: string;
+  domainStatus: string;
 };
 
 export type PlatformTeam = {
@@ -601,6 +611,7 @@ export const platformAdminApi = {
     search?: string;
     recipientIds?: string[];
     additionalEmails?: string[];
+    from?: string;
     dryRun?: boolean;
     maxRecipients?: number;
   }) =>
@@ -616,6 +627,13 @@ export const platformAdminApi = {
       recipients?: Array<{ email: string; name: string }>;
       failures?: Array<{ email: string; error: string }>;
     }>('/admin/platform/broadcast', jsonBody(payload)),
+
+  broadcastSenders: () =>
+    call<{
+      success: boolean;
+      defaultSender: { address: string; name: string };
+      mailboxes: PlatformBroadcastSender[];
+    }>('/admin/platform/broadcast/senders'),
 
   broadcasts: () =>
     call<{ success: boolean; broadcasts: PlatformBroadcast[] }>('/admin/platform/broadcasts'),

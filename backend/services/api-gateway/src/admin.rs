@@ -3556,6 +3556,10 @@ pub struct BroadcastRequest {
     /// Extra addresses that are not accounts on the platform.
     #[serde(default)]
     pub additional_emails: Option<Vec<String>>,
+    /// The mailbox the broadcast is sent from. Empty keeps the platform
+    /// default sender configured on the mail service.
+    #[serde(default)]
+    pub from: Option<String>,
     /// Preview the recipients without sending anything.
     #[serde(default)]
     pub dry_run: Option<bool>,
@@ -3643,6 +3647,79 @@ fn collect_additional_emails(values: Vec<String>) -> Vec<String> {
     out
 }
 
+/// The mailboxes the platform owner can choose as the broadcast sender.
+///
+/// The list spans every active workspace mailbox so the control plane can use
+/// a real custom address (support@, announcements@, ...) instead of guessing
+/// which sender the mail service will pick. The platform default is always
+/// present, even before a customer domain has been configured.
+pub async fn list_broadcast_senders(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> ApiResult {
+    let actor = match authorize_platform(&state, &headers).await {
+        Ok(actor) => actor,
+        Err(response) => return response,
+    };
+    if !actor.is_configured_owner {
+        return fail(
+            StatusCode::FORBIDDEN,
+            "Only the platform owner can choose a broadcast sender.",
+        );
+    }
+    let db = match pool(&state) {
+        Ok(db) => db,
+        Err(response) => return response,
+    };
+
+    let rows = sqlx::query(
+        "SELECT bm.address,
+                bm.display_name,
+                bm.domain,
+                bm.source,
+                COALESCE(t.organization_name, '') AS company,
+                COALESCE((
+                    SELECT cd.verification_status
+                    FROM custom_domains cd
+                    WHERE cd.tenant_id = bm.tenant_id
+                      AND cd.domain_name = bm.domain
+                    ORDER BY cd.created_at DESC NULLS LAST, cd.id DESC
+                    LIMIT 1
+                ), 'unknown') AS domain_status
+         FROM business_mailboxes bm
+         LEFT JOIN tenants t ON t.id = bm.tenant_id
+         WHERE bm.active = TRUE
+         ORDER BY bm.domain, bm.address
+         LIMIT 500",
+    )
+    .fetch_all(db)
+    .await
+    .unwrap_or_default();
+
+    let mailboxes: Vec<Value> = rows
+        .iter()
+        .map(|row| {
+            json!({
+                "address": row.try_get::<String, _>("address").unwrap_or_default(),
+                "displayName": row.try_get::<String, _>("display_name").unwrap_or_default(),
+                "domain": row.try_get::<String, _>("domain").unwrap_or_default(),
+                "company": row.try_get::<String, _>("company").unwrap_or_default(),
+                "source": row.try_get::<String, _>("source").unwrap_or_else(|_| "custom".to_string()),
+                "domainStatus": row.try_get::<String, _>("domain_status").unwrap_or_else(|_| "unknown".to_string()),
+            })
+        })
+        .collect();
+
+    ok(json!({
+        "success": true,
+        "defaultSender": {
+            "address": state.config.platform_from_email,
+            "name": state.config.platform_from_name,
+        },
+        "mailboxes": mailboxes,
+    }))
+}
+
 /// Deliver one message to one recipient. The mail service is called per
 /// recipient so nobody sees another recipient's address.
 async fn deliver_broadcast(
@@ -3651,6 +3728,8 @@ async fn deliver_broadcast(
     to: &str,
     subject: &str,
     body: &str,
+    from: Option<&str>,
+    from_name: Option<&str>,
 ) -> Result<(), String> {
     let mut request = state
         .http_client
@@ -3659,6 +3738,8 @@ async fn deliver_broadcast(
             state.config.mail_service_url.trim_end_matches('/')
         ))
         .json(&json!({
+            // One request per recipient. The To header only ever contains the
+            // address that belongs to this delivery.
             "to": [to],
             "cc": Value::Null,
             "bcc": Value::Null,
@@ -3667,8 +3748,8 @@ async fn deliver_broadcast(
             "html_body": Value::Null,
             "attachment_ids": Value::Null,
             "schedule_send_at": Value::Null,
-            "from": Value::Null,
-            "from_name": Value::Null
+            "from": from,
+            "from_name": from_name
         }));
     if let Some(auth_header) = headers.get(axum::http::header::AUTHORIZATION) {
         request = request.header(axum::http::header::AUTHORIZATION, auth_header);
@@ -3733,6 +3814,58 @@ pub async fn platform_broadcast(
     let db = match pool(&state) {
         Ok(db) => db,
         Err(response) => return response,
+    };
+
+    // Resolve the sender once. The mail service keeps its configured default
+    // when `from` is empty, otherwise the address must be an active mailbox
+    // that really belongs to the platform. This prevents a typo from silently
+    // changing (or spoofing) the From header.
+    let requested_from = payload.from.unwrap_or_default().trim().to_lowercase();
+    let platform_default_from = state.config.platform_from_email.trim().to_lowercase();
+    let (sender_from, sender_name) = if requested_from.is_empty()
+        || requested_from == platform_default_from
+    {
+        (None, None)
+    } else {
+        if !crate::routes::is_valid_email_address(&requested_from) {
+            return fail(StatusCode::BAD_REQUEST, "Invalid sender mailbox address.");
+        }
+        let sender = sqlx::query(
+            "SELECT display_name
+             FROM business_mailboxes
+             WHERE LOWER(address) = $1 AND active = TRUE
+             LIMIT 1",
+        )
+        .bind(&requested_from)
+        .fetch_optional(db)
+        .await;
+        match sender {
+            Ok(Some(row)) => {
+                let display_name: String = row.try_get("display_name").unwrap_or_default();
+                let display_name = display_name.trim().to_string();
+                (
+                    Some(requested_from),
+                    if display_name.is_empty() {
+                        None
+                    } else {
+                        Some(display_name)
+                    },
+                )
+            }
+            Ok(None) => {
+                return fail(
+                    StatusCode::BAD_REQUEST,
+                    "Choose an active mailbox as the sender, or leave it empty for the platform default.",
+                )
+            }
+            Err(err) => {
+                tracing::error!("broadcast sender lookup failed: {}", err);
+                return fail(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "Unable to verify the sender mailbox.",
+                );
+            }
+        }
     };
 
     let limit = payload
@@ -3810,9 +3943,17 @@ pub async fn platform_broadcast(
     // Deliver in small private batches: one request per recipient so nobody
     // ever sees another recipient's address.
     for chunk in recipients.chunks(BROADCAST_CONCURRENCY) {
-        let pending = chunk
-            .iter()
-            .map(|recipient| deliver_broadcast(&state, &headers, &recipient.0, &subject, &body));
+        let pending = chunk.iter().map(|recipient| {
+            deliver_broadcast(
+                &state,
+                &headers,
+                &recipient.0,
+                &subject,
+                &body,
+                sender_from.as_deref(),
+                sender_name.as_deref(),
+            )
+        });
         let outcomes = futures::future::join_all(pending).await;
         for (recipient, outcome) in chunk.iter().zip(outcomes) {
             match outcome {
@@ -3828,10 +3969,13 @@ pub async fn platform_broadcast(
     let failed = failures.len();
     let status = if failed == 0 { "sent" } else { "partial" };
 
+    let recorded_from = sender_from
+        .as_deref()
+        .unwrap_or(&state.config.platform_from_email);
     if let Err(err) = sqlx::query(
         "INSERT INTO platform_broadcasts
-           (subject, body, category, audience, recipient_count, delivered_count, failed_count, status, created_by)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
+           (subject, body, category, audience, recipient_count, delivered_count, failed_count, status, from_address, created_by)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
     )
     .bind(&subject)
     .bind(&body)
@@ -3841,6 +3985,7 @@ pub async fn platform_broadcast(
     .bind(delivered as i32)
     .bind(failed as i32)
     .bind(status)
+    .bind(recorded_from)
     .bind(&actor.email)
     .execute(db)
     .await
@@ -3861,6 +4006,7 @@ pub async fn platform_broadcast(
             "subject": subject,
             "category": category,
             "audience": audience,
+            "from": recorded_from,
             "recipients": total,
             "delivered": delivered,
             "failed": failed,
@@ -3899,7 +4045,8 @@ pub async fn list_platform_broadcasts(
     };
     let rows = sqlx::query(
         "SELECT id, subject, body, category, audience, recipient_count, delivered_count,
-                failed_count, status, created_by, created_at
+                failed_count, status, COALESCE(from_address, '') AS from_address,
+                created_by, created_at
          FROM platform_broadcasts ORDER BY created_at DESC LIMIT 50",
     )
     .fetch_all(db)
@@ -3918,6 +4065,7 @@ pub async fn list_platform_broadcasts(
                 "deliveredCount": row.try_get::<i32, _>("delivered_count").unwrap_or_default(),
                 "failedCount": row.try_get::<i32, _>("failed_count").unwrap_or_default(),
                 "status": row.try_get::<String, _>("status").unwrap_or_default(),
+                "fromAddress": row.try_get::<String, _>("from_address").unwrap_or_default(),
                 "createdBy": row.try_get::<String, _>("created_by").unwrap_or_default(),
                 "createdAt": row.try_get::<DateTime<Utc>, _>("created_at")
                     .map(|value| value.to_rfc3339())
@@ -4388,8 +4536,7 @@ pub async fn company_overview(State(state): State<AppState>, headers: HeaderMap)
         .ok()
         .flatten()
         .unwrap_or_else(|| json!({}));
-    let allowance =
-        velismail_common::plans::effective_allowance(&actor.plan, &stored_limits);
+    let allowance = velismail_common::plans::effective_allowance(&actor.plan, &stored_limits);
     let limits = allowance.to_console_limits();
     let sent_used = counts.get("sent30d").and_then(Value::as_i64).unwrap_or(0);
     let email_limit = limits
