@@ -23,6 +23,7 @@ const policyLinks = [
   { to: '/aup', label: 'Acceptable Use' },
   { to: '/security', label: 'Security' },
   { to: '/refund', label: 'Refunds' },
+  { to: '/api-keys-policy', label: 'API Keys' },
 ];
 
 function PolicyLinks({ compact = false }: { compact?: boolean }) {
@@ -60,8 +61,8 @@ export default function LegalLayout({
   title,
   description,
   category = 'Legal',
-  effectiveDate = 'January 1, 2026',
-  lastUpdated = 'May 1, 2026',
+  effectiveDate,
+  lastUpdated,
   contactEmail,
   contactLabel,
   children,
@@ -97,14 +98,18 @@ export default function LegalLayout({
           <h1>{title}</h1>
           <p className="legal-hero-copy">{description}</p>
           <div className="legal-meta-grid" aria-label="Policy metadata">
-            <div>
-              <span>Effective</span>
-              <strong>{effectiveDate}</strong>
-            </div>
-            <div>
-              <span>Last Updated</span>
-              <strong>{lastUpdated}</strong>
-            </div>
+            {effectiveDate && (
+              <div>
+                <span>Effective</span>
+                <strong>{effectiveDate}</strong>
+              </div>
+            )}
+            {lastUpdated && (
+              <div>
+                <span>Last Updated</span>
+                <strong>{lastUpdated}</strong>
+              </div>
+            )}
             <div>
               <span>Contact</span>
               <strong>{contactEmail}</strong>

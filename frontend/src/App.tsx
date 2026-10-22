@@ -18,6 +18,7 @@ const About = lazy(() => import('./pages/About'));
 const Cookies = lazy(() => import('./pages/Cookies'));
 const AcceptableUse = lazy(() => import('./pages/AcceptableUse'));
 const SecurityPolicy = lazy(() => import('./pages/SecurityPolicy'));
+const ApiKeyPolicy = lazy(() => import('./pages/ApiKeyPolicy'));
 const Refund = lazy(() => import('./pages/Refund'));
 const Documentation = lazy(() => import('./pages/Documentation'));
 const Status = lazy(() => import('./pages/Status'));
@@ -77,6 +78,7 @@ const router = createBrowserRouter([
       { path: "/aup", element: <PageTransition><AcceptableUse /></PageTransition> },
       { path: "/security", element: <PageTransition><SecurityPolicy /></PageTransition> },
       { path: "/refund", element: <PageTransition><Refund /></PageTransition> },
+{ path: "/api-keys-policy", element: <PageTransition><ApiKeyPolicy /></PageTransition> },
       { path: "/about", element: <PageTransition><About /></PageTransition> },
       { path: "/docs", element: <PageTransition><Documentation /></PageTransition> },
       { path: "/status", element: <PageTransition><Status /></PageTransition> },
