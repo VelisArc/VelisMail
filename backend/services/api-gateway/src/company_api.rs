@@ -330,6 +330,118 @@ fn default_role() -> String {
     "member".to_string()
 }
 
+/// Submit a feedback note from a workspace to the control plane.
+pub async fn submit_feedback(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(payload): Json<Value>,
+) -> ApiResult {
+    let context = workspace_context(&state, &headers).await?;
+    let db = db_pool(&state)?;
+
+    let subject = payload
+        .get("subject")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .trim()
+        .to_string();
+    let body = payload
+        .get("body")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .trim()
+        .to_string();
+    if subject.is_empty() || body.is_empty() {
+        return Err(fail(StatusCode::BAD_REQUEST, "Subject and message are required."));
+    }
+    let category = payload
+        .get("category")
+        .and_then(|v| v.as_str())
+        .unwrap_or("general")
+        .to_string();
+    let priority = payload
+        .get("priority")
+        .and_then(|v| v.as_str())
+        .unwrap_or("medium")
+        .to_string();
+    let image = payload
+        .get("imageBase64")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string());
+    if let Some(img) = &image {
+        if img.len() > 7_000_000 {
+            return Err(fail(StatusCode::BAD_REQUEST, "Image is too large (max ~5 MB)."));
+        }
+    }
+
+    let result = sqlx::query(
+        "INSERT INTO feedback (tenant_id, user_id, user_email, subject, body, category, priority, image_base64)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+         RETURNING id",
+    )
+    .bind(context.tenant_id)
+    .bind(context.user_id)
+    .bind(&context.email)
+    .bind(&subject)
+    .bind(&body)
+    .bind(&category)
+    .bind(&priority)
+    .bind(&image)
+    .fetch_one(db)
+    .await;
+
+    match result {
+        Ok(row) => {
+            let id: Uuid = row.try_get("id").unwrap_or(Uuid::nil());
+            ok(json!({ "success": true, "id": id.to_string() }))
+        }
+        Err(_) => Err(fail(StatusCode::INTERNAL_SERVER_ERROR, "Could not save feedback.")),
+    }
+}
+
+/// List the feedback notes submitted by this workspace.
+pub async fn list_feedback(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> ApiResult {
+    let context = workspace_context(&state, &headers).await?;
+    let db = db_pool(&state)?;
+    let rows = sqlx::query(
+        "SELECT id, subject, body, category, priority, status, reply, has_image, created_at, updated_at, resolved_at
+         FROM (
+            SELECT id, subject, body, category, priority, status, reply,
+                   (image_base64 IS NOT NULL) AS has_image,
+                   created_at, updated_at, resolved_at
+            FROM feedback
+            WHERE tenant_id = $1
+         ) t
+         ORDER BY created_at DESC
+         LIMIT 100",
+    )
+    .bind(context.tenant_id)
+    .fetch_all(db)
+    .await
+    .unwrap_or_default();
+    let items: Vec<Value> = rows
+        .iter()
+        .map(|row| {
+            json!({
+                "id": row.try_get::<Uuid, _>("id").map(|v| v.to_string()).unwrap_or_default(),
+                "subject": row.try_get::<String, _>("subject").unwrap_or_default(),
+                "body": row.try_get::<String, _>("body").unwrap_or_default(),
+                "category": row.try_get::<String, _>("category").unwrap_or_else(|_| "general".to_string()),
+                "priority": row.try_get::<String, _>("priority").unwrap_or_else(|_| "medium".to_string()),
+                "status": row.try_get::<String, _>("status").unwrap_or_else(|_| "open".to_string()),
+                "reply": row.try_get::<Option<String>, _>("reply").ok().flatten(),
+                "hasImage": row.try_get::<bool, _>("has_image").unwrap_or(false),
+                "createdAt": row.try_get::<DateTime<Utc>, _>("created_at").map(|v| v.to_rfc3339()).unwrap_or_default(),
+                "updatedAt": row.try_get::<DateTime<Utc>, _>("updated_at").map(|v| v.to_rfc3339()).unwrap_or_default(),
+                "resolvedAt": row.try_get::<Option<DateTime<Utc>>, _>("resolved_at").ok().flatten().map(|v| v.to_rfc3339()),
+            })
+        })
+        .collect();
+    ok(json!({ "success": true, "feedback": items }))
+}
 pub async fn list_team(State(state): State<AppState>, headers: HeaderMap) -> ApiResult {
     let context = workspace_context(&state, &headers).await?;
     let db = db_pool(&state)?;

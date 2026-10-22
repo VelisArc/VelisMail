@@ -276,7 +276,28 @@ curl -X POST -H "Authorization: Bearer vsk_plat_…" -H "Content-Type: applicati
       </section>
 
       <section>
-        <h2>8. What to do when a key stops working</h2>
+        <h2>9. Admin roles and API key management</h2>
+        <p>
+          Only the <strong>platform owner</strong> can create or revoke platform keys. The platform team page
+          exposes roles with an <code>ownerOnly</code> flag — roles marked owner-only can only be handed out by
+          the owner. Every key action is attributed to its creator in the audit trail.
+        </p>
+        <div className="legal-table-wrap">
+          <table className="legal-table">
+            <thead><tr><th>Role</th><th>Can create workspace keys</th><th>Can create platform keys</th><th>Can revoke keys</th></tr></thead>
+            <tbody>
+              <tr><td>Platform owner</td><td>Yes</td><td>Yes</td><td>Yes (any key)</td></tr>
+              <tr><td>Platform admin (with keys.write)</td><td>Yes (own company)</td><td>No</td><td>Workspace keys only</td></tr>
+              <tr><td>Company owner / admin</td><td>Yes</td><td>No</td><td>Own company keys</td></tr>
+              <tr><td>Member / viewer</td><td>No</td><td>No</td><td>No</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p className="text-sm text-muted">
+          A key is always scoped to its creator's tenant. A platform key additionally requires
+          <code>platform.keys.write</code> and is owner-gated on the server.
+        </p>
+      </section>
         <ol>
           <li><code>401</code> → key expired or revoked. Create a new key.</li>
           <li><code>403 "missing the X scope"</code> → recreate the key with that scope, or switch to a broader preset.</li>

@@ -14,6 +14,7 @@ import {
   Globe,
   KeyRound,
   Menu,
+  MessageSquare,
   Plus,
   RefreshCw,
   Send,
@@ -58,7 +59,8 @@ export type PlatformSection =
   | 'config'
   | 'health'
   | 'broadcast'
-  | 'api-keys';
+  | 'api-keys'
+  | 'feedback';
 
 interface PlatformAdminPanelProps {
   section: PlatformSection;
@@ -274,6 +276,7 @@ export default function PlatformAdminPanel({ section, state }: PlatformAdminPane
   // Management API - the keys that run the control plane.
   const [apiKeys, setApiKeys] = useState<Awaited<ReturnType<typeof platformAdminApi.apiKeys>> | null>(null);
   const [canManageKeys, setCanManageKeys] = useState(false);
+  const [platformFeedback, setPlatformFeedback] = useState<Awaited<ReturnType<typeof platformAdminApi.feedback>> | null>(null);
   const [keyForm, setKeyForm] = useState({ name: '', scopes: [] as string[], expiresInDays: 365, presetId: '' });
   const [newKey, setNewKey] = useState('');
   const [keyOpen, setKeyOpen] = useState(false);
@@ -367,6 +370,8 @@ export default function PlatformAdminPanel({ section, state }: PlatformAdminPane
         // The keys are owner only, but the console should still show the
         // catalogue so everybody can see what a key can do.
         setCanManageKeys(Boolean(meResult?.owner));
+      } else if (section === 'feedback') {
+        setPlatformFeedback(await platformAdminApi.feedback());
       } else if (section === 'broadcast') {
         const [recipientResult, historyResult, senderResult] = await Promise.all([
           platformAdminApi.users({
@@ -1842,6 +1847,61 @@ export default function PlatformAdminPanel({ section, state }: PlatformAdminPane
               </p>
             </section>
           </>
+        )}
+        {section === 'feedback' && platformFeedback && (
+          <div className="admin-grid-1">
+            <div className="admin-controls-bar">
+              <span className="text-sm text-muted">{platformFeedback.counts.open} open of {platformFeedback.counts.total}</span>
+            </div>
+            <section className="glass-card">
+              <div className="admin-card-head"><div><h3>Workspace feedback</h3><p>Complaints, ideas and bugs submitted from workspaces.</p></div><MessageSquare size={16} /></div>
+              <div className="admin-table-wrap">
+                <table className="admin-table">
+                  <thead><tr><th>Subject</th><th>From</th><th>Category</th><th>Priority</th><th>Status</th><th>Submitted</th><th>Action</th></tr></thead>
+                  <tbody>
+                    {platformFeedback.feedback.map((f) => (
+                      <tr key={f.id}>
+                        <td><strong>{f.subject}</strong><br /><span className="text-xs text-muted">{f.body.slice(0, 60)}{f.body.length > 60 ? '…' : ''}</span>{f.hasImage && <span className="text-xs"> 📎</span>}</td>
+                        <td>{f.userEmail}</td>
+                        <td>{f.category}</td>
+                        <td><Badge value={f.priority}>{f.priority}</Badge></td>
+                        <td><Badge value={f.status}>{f.status}</Badge></td>
+                        <td>{dateTime(f.createdAt)}</td>
+                        <td>
+                          <div className="admin-row-actions">
+                            {f.status !== 'resolved' && f.status !== 'closed' && (
+                              <button type="button" className="btn btn-ghost btn-sm" onClick={async () => {
+                                try {
+                                  await platformAdminApi.updateFeedback(f.id, { status: 'resolved', reply: 'Noted and resolved.' });
+                                  setPlatformFeedback(await platformAdminApi.feedback());
+                                } catch (err) { setBanner({ tone: 'error', message: err instanceof Error ? err.message : 'Failed' }); }
+                              }}>Resolve</button>
+                            )}
+                            {f.status === 'open' && (
+                              <button type="button" className="btn btn-ghost btn-sm" onClick={async () => {
+                                try {
+                                  const r = await platformAdminApi.escalateFeedback(f.id);
+                                  setBanner({ tone: 'success', message: `Escalated to investigation ${r.caseNumber}.` });
+                                  setPlatformFeedback(await platformAdminApi.feedback());
+                                } catch (err) { setBanner({ tone: 'error', message: err instanceof Error ? err.message : 'Failed' }); }
+                              }}>Escalate</button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {platformFeedback.feedback.length === 0 && <p className="admin-empty-state">No feedback submitted yet.</p>}
+              </div>
+            </section>
+            {platformFeedback.feedback.filter((f) => f.imageBase64).map((f) => (
+              <section key={f.id + '-img'} className="glass-card">
+                <div className="admin-card-head"><div><h3>Screenshot — {f.subject}</h3><p>From {f.userEmail}</p></div></div>
+                <img src={`data:image/*;base64,${f.imageBase64}`} alt="feedback screenshot" style={{ maxWidth: '100%', borderRadius: 8 }} />
+              </section>
+            ))}
+          </div>
         )}
       </div>
 

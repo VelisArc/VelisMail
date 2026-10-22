@@ -732,6 +732,37 @@ export const platformAdminApi = {
 
   system: () => call<SystemInfo>('/admin/platform/system'),
 
+  /** Feedback / complaints submitted by workspaces. */
+  feedback: () =>
+    call<{
+      success: boolean;
+      feedback: Array<{
+        id: string;
+        tenantId?: string | null;
+        userId?: string | null;
+        userEmail: string;
+        subject: string;
+        body: string;
+        category: string;
+        priority: string;
+        hasImage: boolean;
+        imageBase64?: string | null;
+        status: string;
+        assigneeEmail?: string | null;
+        reply?: string | null;
+        createdAt: string;
+        updatedAt: string;
+        resolvedAt?: string | null;
+      }>;
+      counts: { total: number; open: number };
+    }>('/admin/platform/feedback'),
+
+  updateFeedback: (id: string, payload: { status?: string; priority?: string; assigneeEmail?: string; reply?: string }) =>
+    call<{ success: boolean }>(`/admin/platform/feedback/${encodeURIComponent(id)}`, patchBody(payload)),
+
+  escalateFeedback: (id: string) =>
+    call<{ success: boolean; caseNumber: string }>(`/admin/platform/feedback/${encodeURIComponent(id)}/escalate`, { method: 'POST' }),
+
   settings: () =>
     call<{ success: boolean; settings: PlatformSetting[] }>('/admin/platform/settings'),
 
@@ -1005,6 +1036,29 @@ export const companyAdminApi = {
         expiresAt?: string | null;
       }>;
     }>('/admin/company/announcements'),
+
+  /** Submit a feedback note / complaint to the control plane (optionally with a screenshot). */
+  submitFeedback: (payload: { subject: string; body: string; category?: string; priority?: string; imageBase64?: string }) =>
+    call<{ success: boolean; id: string }>('/admin/company/feedback', jsonBody(payload)),
+
+  /** List the feedback notes this workspace has submitted. */
+  feedback: () =>
+    call<{
+      success: boolean;
+      feedback: Array<{
+        id: string;
+        subject: string;
+        body: string;
+        category: string;
+        priority: string;
+        status: string;
+        reply?: string | null;
+        hasImage: boolean;
+        createdAt: string;
+        updatedAt: string;
+        resolvedAt?: string | null;
+      }>;
+    }>('/admin/company/feedback'),
 };
 
 // ---------------------------------------------------------------------------

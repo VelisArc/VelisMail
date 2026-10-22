@@ -4625,6 +4625,192 @@ pub async fn platform_system(State(state): State<AppState>, headers: HeaderMap) 
     }))
 }
 
+/// List every feedback note submitted from workspaces (platform control plane).
+pub async fn list_platform_feedback(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> ApiResult {
+    if let Err(response) = authorize_platform(&state, &headers).await {
+        return response;
+    }
+    let db = match pool(&state) {
+        Ok(db) => db,
+        Err(response) => return response,
+    };
+    let rows = sqlx::query(
+        "SELECT id, tenant_id, user_id, user_email, subject, body, category, priority,
+                image_base64, status, assignee_email, reply, created_at, updated_at, resolved_at
+         FROM feedback
+         ORDER BY created_at DESC
+         LIMIT 500",
+    )
+    .fetch_all(db)
+    .await
+    .unwrap_or_default();
+    let items: Vec<Value> = rows
+        .iter()
+        .map(|row| {
+            json!({
+                "id": row.try_get::<Uuid, _>("id").map(|v| v.to_string()).unwrap_or_default(),
+                "tenantId": row.try_get::<Option<Uuid>, _>("tenant_id").ok().flatten().map(|v| v.to_string()),
+                "userId": row.try_get::<Option<Uuid>, _>("user_id").ok().flatten().map(|v| v.to_string()),
+                "userEmail": row.try_get::<String, _>("user_email").unwrap_or_default(),
+                "subject": row.try_get::<String, _>("subject").unwrap_or_default(),
+                "body": row.try_get::<String, _>("body").unwrap_or_default(),
+                "category": row.try_get::<String, _>("category").unwrap_or_else(|_| "general".to_string()),
+                "priority": row.try_get::<String, _>("priority").unwrap_or_else(|_| "medium".to_string()),
+                "hasImage": row.try_get::<Option<String>, _>("image_base64").ok().flatten().is_some(),
+                "imageBase64": row.try_get::<Option<String>, _>("image_base64").ok().flatten(),
+                "status": row.try_get::<String, _>("status").unwrap_or_else(|_| "open".to_string()),
+                "assigneeEmail": row.try_get::<Option<String>, _>("assignee_email").ok().flatten(),
+                "reply": row.try_get::<Option<String>, _>("reply").ok().flatten(),
+                "createdAt": row.try_get::<DateTime<Utc>, _>("created_at").map(|v| v.to_rfc3339()).unwrap_or_default(),
+                "updatedAt": row.try_get::<DateTime<Utc>, _>("updated_at").map(|v| v.to_rfc3339()).unwrap_or_default(),
+                "resolvedAt": row.try_get::<Option<DateTime<Utc>>, _>("resolved_at").ok().flatten().map(|v| v.to_rfc3339()),
+            })
+        })
+        .collect();
+    let open = items.iter().filter(|i| i["status"] == "open").count();
+    ok(json!({ "success": true, "feedback": items, "counts": { "total": items.len(), "open": open } }))
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlatformFeedbackUpdate {
+    pub status: Option<String>,
+    pub priority: Option<String>,
+    pub assignee_email: Option<String>,
+    pub reply: Option<String>,
+}
+
+pub async fn update_platform_feedback(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Json(payload): Json<PlatformFeedbackUpdate>,
+) -> ApiResult {
+    let actor = match authorize_platform(&state, &headers).await {
+        Ok(actor) => actor,
+        Err(response) => return response,
+    };
+    let db = match pool(&state) {
+        Ok(db) => db,
+        Err(response) => return response,
+    };
+    let fid = match Uuid::parse_str(&id) {
+        Ok(v) => v,
+        Err(_) => return fail(StatusCode::BAD_REQUEST, "Invalid feedback id."),
+    };
+    let resolved_at = if payload.status.as_deref() == Some("resolved") || payload.status.as_deref() == Some("closed") {
+        Some(Utc::now())
+    } else {
+        None
+    };
+    let result = sqlx::query(
+        "UPDATE feedback
+         SET status = COALESCE($2, status),
+             priority = COALESCE($3, priority),
+             assignee_email = COALESCE($4, assignee_email),
+             reply = COALESCE($5, reply),
+             resolved_at = COALESCE($6, resolved_at),
+             updated_at = NOW()
+         WHERE id = $1",
+    )
+    .bind(fid)
+    .bind(&payload.status)
+    .bind(&payload.priority)
+    .bind(&payload.assignee_email)
+    .bind(&payload.reply)
+    .bind(resolved_at)
+    .execute(db)
+    .await;
+    match result {
+        Ok(r) if r.rows_affected() > 0 => {
+            audit(
+                db,
+                &actor.email,
+                &actor.role,
+                "feedback.updated",
+                "support",
+                "feedback",
+                Some(&id),
+                None,
+                json!({ "status": payload.status, "priority": payload.priority }),
+                "info",
+            )
+            .await;
+            ok(json!({ "success": true }))
+        }
+        Ok(_) => fail(StatusCode::NOT_FOUND, "Feedback not found."),
+        Err(_) => fail(StatusCode::INTERNAL_SERVER_ERROR, "Could not update feedback."),
+    }
+}
+
+/// Escalate a feedback note into a platform investigation.
+pub async fn escalate_feedback_to_investigation(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+) -> ApiResult {
+    let actor = match authorize_platform(&state, &headers).await {
+        Ok(actor) => actor,
+        Err(response) => return response,
+    };
+    let db = match pool(&state) {
+        Ok(db) => db,
+        Err(response) => return response,
+    };
+    let row = sqlx::query(
+        "SELECT subject, body, user_email, tenant_id, category, priority FROM feedback WHERE id = $1",
+    )
+    .bind(Uuid::parse_str(&id).unwrap_or(Uuid::nil()))
+    .fetch_optional(db)
+    .await
+    .ok()
+    .flatten();
+    let Some(row) = row else {
+        return fail(StatusCode::NOT_FOUND, "Feedback not found.");
+    };
+    let subject: String = row.try_get("subject").unwrap_or_default();
+    let body: String = row.try_get("body").unwrap_or_default();
+    let email: String = row.try_get("user_email").unwrap_or_default();
+    let tenant_id: Option<Uuid> = row.try_get("tenant_id").ok().flatten();
+    let category: String = row.try_get("category").unwrap_or_else(|_| "general".to_string());
+    let priority: String = row.try_get("priority").unwrap_or_else(|_| "medium".to_string());
+    let sev = if priority == "high" || priority == "urgent" { "high" } else { "medium" };
+    let case_priority = if priority == "high" || priority == "urgent" { "P2" } else { "P3" };
+    let now = Utc::now();
+    let case_number = format!("FB-{}", &id[..8]);
+    let result = sqlx::query(
+        "INSERT INTO investigations (case_number, title, type, severity, status, priority, tenant_id,
+            reporter_email, summary, description, tags, sla_due_at, created_by, created_at, updated_at, event_count)
+         VALUES ($1, $2, 'feedback', $3, 'open', $4, $5, $6, $7, $8, $9, $10, $11, $12, $12, 0)",
+    )
+    .bind(&case_number)
+    .bind(&subject)
+    .bind(sev)
+    .bind(case_priority)
+    .bind(tenant_id)
+    .bind(&email)
+    .bind(&body)
+    .bind(&body)
+    .bind(json!([category, "feedback"]))
+    .bind(now + chrono::Duration::days(7))
+    .bind(&actor.email)
+    .bind(now)
+    .execute(db)
+    .await;
+    match result {
+        Ok(_) => {
+            let _ = sqlx::query("UPDATE feedback SET status = 'escalated', updated_at = NOW() WHERE id = $1")
+                .bind(Uuid::parse_str(&id).unwrap_or(Uuid::nil()))
+                .execute(db)
+                .await;
+            ok(json!({ "success": true, "caseNumber": case_number }))
+        }
+        Err(e) => fail(StatusCode::INTERNAL_SERVER_ERROR, &format!("Could not create investigation: {}", e)),
+    }
+}
 pub async fn list_platform_settings(
     State(state): State<AppState>,
     headers: HeaderMap,

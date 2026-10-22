@@ -12,6 +12,7 @@ import {
   Globe2,
   KeyRound,
   Mail,
+  MessageSquare,
   Menu,
   Plus,
   RefreshCw,
@@ -38,8 +39,9 @@ import type { DashboardState } from '../types';
 import { AdminConfirmSelect } from '../AdminConfirm';
 import { useAdminConfirm } from '../useAdminConfirm';
 import { normalizeQuotas } from './quotaList';
+import { fileToBase64 } from '../utils';
 
-type Tab = 'overview' | 'team' | 'domains' | 'mailboxes' | 'usage' | 'billing' | 'security' | 'api' | 'audit' | 'integrations';
+type Tab = 'overview' | 'team' | 'domains' | 'mailboxes' | 'usage' | 'billing' | 'security' | 'api' | 'audit' | 'integrations' | 'feedback';
 
 const TABS: Array<{ id: Tab; label: string; icon: typeof Activity }> = [
   { id: 'overview', label: 'Overview', icon: BarChart3 },
@@ -52,6 +54,7 @@ const TABS: Array<{ id: Tab; label: string; icon: typeof Activity }> = [
   { id: 'api', label: 'API Keys', icon: KeyRound },
   { id: 'audit', label: 'Audit Log', icon: FileText },
   { id: 'integrations', label: 'Integrations', icon: Globe2 },
+  { id: 'feedback', label: 'Feedback', icon: MessageSquare },
 ];
 
 function number(value?: number | null): string {
@@ -127,6 +130,9 @@ export default function CompanyAdminPanel({ state }: { state: DashboardState }) 
   const [keys, setKeys] = useState<Awaited<ReturnType<typeof companyAdminApi.apiKeys>> | null>(null);
   const [audit, setAudit] = useState<Awaited<ReturnType<typeof companyAdminApi.audit>> | null>(null);
   const [integrations, setIntegrations] = useState<Awaited<ReturnType<typeof companyAdminApi.integrations>> | null>(null);
+  const [feedback, setFeedback] = useState<Awaited<ReturnType<typeof companyAdminApi.feedback>> | null>(null);
+  const [feedbackForm, setFeedbackForm] = useState({ subject: '', body: '', category: 'general', priority: 'medium', image: '' as string });
+  const [feedbackSending, setFeedbackSending] = useState(false);
   const [days, setDays] = useState(30);
   // Every state-changing action in the company console needs a second,
   // explicit confirmation before it is sent to the API.
@@ -172,6 +178,7 @@ export default function CompanyAdminPanel({ state }: { state: DashboardState }) 
       if (target === 'api') setKeys(await companyAdminApi.apiKeys());
       if (target === 'audit') setAudit(await companyAdminApi.audit());
       if (target === 'integrations') setIntegrations(await companyAdminApi.integrations());
+      if (target === 'feedback') setFeedback(await companyAdminApi.feedback());
     } catch (err) {
       if (err instanceof AdminApiError && (err.status === 401 || err.status === 403)) {
         setError('Your company admin session is not authorized. Sign in again with a company administrator account.');
@@ -730,6 +737,99 @@ export default function CompanyAdminPanel({ state }: { state: DashboardState }) 
             <section className="glass-card"><div className="admin-card-head"><div><h3>Connection status</h3><p>Mail infrastructure</p></div><Database size={16} /></div><div className="admin-kv-list"><div><span>Delivery engine</span><strong>{integrations.mailboxes.provider}</strong></div><div><span>Inbound routing</span><strong>{integrations.mailboxes.inboundConfigured ? 'Operational' : 'Not configured'}</strong></div><div><span>Outbound mail</span><strong>{integrations.mailboxes.outboundConfigured ? 'Operational' : 'Not configured'}</strong></div><div><span>Webhooks</span><strong>{integrations.webhooks.length} configured</strong></div><div><span>SMTP relay</span><strong>{integrations.smtp.enabled ? 'Enabled' : 'Disabled'}</strong></div></div></section>
           </div>
         </>
+      )}
+      {tab === 'feedback' && (
+        <div className="admin-grid-1">
+          <section className="glass-card">
+            <div className="admin-card-head"><div><h3>Send us a note</h3><p>Share a complaint, idea or bug with the control plane. Attach a screenshot if it helps.</p></div><MessageSquare size={16} /></div>
+            <div className="form-grid" style={{ padding: '8px 0' }}>
+              <div className="form-field">
+                <label>Subject</label>
+                <input className="input" value={feedbackForm.subject} onChange={(e) => setFeedbackForm((f) => ({ ...f, subject: e.target.value }))} placeholder="What is this about?" />
+              </div>
+              <div className="form-field">
+                <label>Category</label>
+                <select className="input" value={feedbackForm.category} onChange={(e) => setFeedbackForm((f) => ({ ...f, category: e.target.value }))}>
+                  <option value="general">General</option>
+                  <option value="bug">Bug</option>
+                  <option value="feature">Feature request</option>
+                  <option value="complaint">Complaint</option>
+                  <option value="billing">Billing</option>
+                  <option value="security">Security</option>
+                </select>
+              </div>
+              <div className="form-field">
+                <label>Priority</label>
+                <select className="input" value={feedbackForm.priority} onChange={(e) => setFeedbackForm((f) => ({ ...f, priority: e.target.value }))}>
+                  <option value="low">Low</option>
+                  <option value="medium">Medium</option>
+                  <option value="high">High</option>
+                  <option value="urgent">Urgent</option>
+                </select>
+              </div>
+              <div className="form-field form-field-full">
+                <label>Message</label>
+                <textarea className="input" rows={4} value={feedbackForm.body} onChange={(e) => setFeedbackForm((f) => ({ ...f, body: e.target.value }))} placeholder="Describe the issue or idea in detail…" />
+              </div>
+              <div className="form-field form-field-full">
+                <label>Screenshot (optional, max 3 MB)</label>
+                <input type="file" accept="image/*" className="input" onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  if (file.size > 3 * 1024 * 1024) { setError('Image must be under 3 MB.'); return; }
+                  const b64 = await fileToBase64(file);
+                  setFeedbackForm((f) => ({ ...f, image: b64 }));
+                }} />
+                {feedbackForm.image && <p className="text-xs text-muted">Image attached ({Math.round(feedbackForm.image.length / 1024)} KB).</p>}
+              </div>
+            </div>
+            <div className="admin-controls-bar">
+              <button type="button" className="btn btn-primary btn-sm" disabled={feedbackSending || feedbackForm.subject.trim().length < 3 || feedbackForm.body.trim().length < 5} onClick={async () => {
+                setFeedbackSending(true);
+                try {
+                  await companyAdminApi.submitFeedback({
+                    subject: feedbackForm.subject,
+                    body: feedbackForm.body,
+                    category: feedbackForm.category,
+                    priority: feedbackForm.priority,
+                    imageBase64: feedbackForm.image || undefined,
+                  });
+                  setFeedbackForm({ subject: '', body: '', category: 'general', priority: 'medium', image: '' });
+                  setNotice('Feedback sent to the control plane.');
+                  setFeedback(await companyAdminApi.feedback());
+                } catch (err) {
+                  setError(err instanceof Error ? err.message : 'Could not send feedback.');
+                } finally {
+                  setFeedbackSending(false);
+                }
+              }}>
+                {feedbackSending ? 'Sending…' : 'Send note'}
+              </button>
+            </div>
+          </section>
+
+          <section className="glass-card">
+            <div className="admin-card-head"><div><h3>Your feedback</h3><p>Track the status of notes you have submitted.</p></div><MessageSquare size={16} /></div>
+            <div className="admin-table-wrap">
+              <table className="admin-table">
+                <thead><tr><th>Subject</th><th>Category</th><th>Priority</th><th>Status</th><th>Submitted</th><th>Reply</th></tr></thead>
+                <tbody>
+                  {(feedback?.feedback || []).map((f) => (
+                    <tr key={f.id}>
+                      <td><strong>{f.subject}</strong><br /><span className="text-xs text-muted">{f.body.slice(0, 80)}{f.body.length > 80 ? '…' : ''}</span></td>
+                      <td>{f.category}</td>
+                      <td><Badge value={f.priority}>{f.priority}</Badge></td>
+                      <td><Badge value={f.status}>{f.status}</Badge></td>
+                      <td>{date(f.createdAt)}</td>
+                      <td>{f.reply ? f.reply : (f.hasImage ? 'image attached' : '—')}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {(feedback?.feedback || []).length === 0 && <p className="admin-empty-state">No feedback submitted yet.</p>}
+            </div>
+          </section>
+        </div>
       )}
       </div>
 

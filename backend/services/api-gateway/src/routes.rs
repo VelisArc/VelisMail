@@ -162,6 +162,15 @@ pub fn api_v1_routes(_state: &AppState) -> Router<AppState> {
             "/admin/platform/api-keys/{id}",
             delete(admin::revoke_platform_api_key),
         )
+        .route("/admin/platform/feedback", get(admin::list_platform_feedback))
+        .route(
+            "/admin/platform/feedback/{id}",
+            patch(admin::update_platform_feedback),
+        )
+        .route(
+            "/admin/platform/feedback/{id}/escalate",
+            post(admin::escalate_feedback_to_investigation),
+        )
         // Company control plane inside the business dashboard.
         .route("/admin/company/overview", get(admin::company_overview))
         .route("/admin/company/members", get(admin::company_members))
@@ -180,6 +189,10 @@ pub fn api_v1_routes(_state: &AppState) -> Router<AppState> {
         .route(
             "/admin/company/api-keys/{id}",
             delete(admin::revoke_company_api_key),
+        )
+        .route(
+            "/admin/company/feedback",
+            get(company_api::list_feedback).post(company_api::submit_feedback),
         )
         .route("/admin/company/billing", get(admin::company_billing))
         .route(
