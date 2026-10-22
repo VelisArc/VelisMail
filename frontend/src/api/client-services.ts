@@ -1279,7 +1279,7 @@ function stripHtmlTags(html: string): string {
   // Replace paragraph close tags with double newlines
   text = text.replace(/<\/p>/gi, '\n\n');
   // Replace list items with bullets
-  text = text.replace(/<li>/gi, '\n• ');
+  text = text.replace(/<li>/gi, '\nâ€¢ ');
   // Strip all other HTML tags
   text = text.replace(/<[^>]+>/g, '');
   // Decode common HTML entities
