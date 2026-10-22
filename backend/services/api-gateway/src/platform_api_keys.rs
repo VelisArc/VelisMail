@@ -136,6 +136,11 @@ pub fn required_scope(method: &str, path: &str) -> Option<&'static str> {
         ("GET", "/api-keys") => Some("platform.keys.read"),
         ("POST", "/api-keys") => Some("platform.keys.write"),
         ("DELETE", p) if p.starts_with("/api-keys/") => Some("platform.keys.write"),
+        // The feedback channel is part of the control plane, so a platform key
+        // has to be able to read, answer and escalate a complaint.
+        ("GET", "/feedback") => Some("platform.feedback.read"),
+        ("PATCH", p) if p.starts_with("/feedback") => Some("platform.feedback.write"),
+        ("POST", p) if p.starts_with("/feedback") => Some("platform.feedback.write"),
         _ => None,
     }
 }
@@ -171,6 +176,8 @@ pub fn scope_catalog() -> Vec<serde_json::Value> {
         json!({ "id": "platform.settings.write", "label": "Manage platform settings", "detail": "Change the settings of the control plane.", "risk": "high" }),
         json!({ "id": "platform.keys.read", "label": "Read platform keys", "detail": "See the platform keys, their scopes and when they were used last.", "risk": "medium" }),
         json!({ "id": "platform.keys.write", "label": "Manage platform keys", "detail": "Create and revoke the keys that run the control plane.", "risk": "high" }),
+        json!({ "id": "platform.feedback.read", "label": "Read the complaints", "detail": "Read the complaints and notes the workspaces sent to the control plane.", "risk": "low" }),
+        json!({ "id": "platform.feedback.write", "label": "Answer the complaints", "detail": "Answer a complaint, change its priority and escalate it into an investigation.", "risk": "medium" }),
     ]
 }
 

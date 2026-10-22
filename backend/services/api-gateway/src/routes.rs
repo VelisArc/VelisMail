@@ -725,6 +725,9 @@ pub struct SendMailPayload {
     to: Vec<String>,
     subject: String,
     body: String,
+    /// The formatted body. Without it the receiver only gets the plain text
+    /// version, so a mail that was written in the composer loses its layout.
+    pub html_body: Option<String>,
     from: Option<String>,
     from_name: Option<String>,
     provider: Option<String>,
@@ -2942,7 +2945,7 @@ pub async fn send_mail(
             "bcc": Value::Null,
             "subject": payload.subject.trim(),
             "body": payload.body,
-            "html_body": Value::Null,
+            "html_body": payload.html_body,
             "attachment_ids": Value::Null,
             "schedule_send_at": Value::Null,
             "from": payload.from,
@@ -5412,7 +5415,9 @@ pub struct CreateOrderRequest {
 }
 
 #[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
+// The field names are the ones Razorpay itself uses in the checkout callback
+// (razorpay_payment_id, razorpay_order_id, razorpay_signature). A camelCase
+// rename here would reject the very payload the gateway sends back.
 pub struct VerifyPaymentRequest {
     pub razorpay_payment_id: String,
     pub razorpay_order_id: String,
