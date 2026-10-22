@@ -286,6 +286,111 @@ export function clearBackendTokens() {
   localStorage.removeItem('velismail_refresh');
 }
 
+let backendRefreshInFlight: Promise<boolean> | null = null;
+
+const AUTH_ENDPOINTS_WITHOUT_REFRESH = [
+  '/auth/login',
+  '/auth/login/password',
+  '/auth/register',
+  '/auth/firebase',
+  '/auth/send-otp',
+  '/auth/otp/send',
+  '/auth/password-reset/request',
+  '/auth/verify-otp',
+  '/auth/otp/verify',
+  '/auth/reset-password',
+  '/auth/token/refresh',
+];
+
+function shouldRefreshForEndpoint(endpoint: string): boolean {
+  return !AUTH_ENDPOINTS_WITHOUT_REFRESH.some((path) => endpoint.startsWith(path));
+}
+
+/**
+ * Rotate the stored access token with the refresh token.
+ *
+ * Several dashboard calls can receive a 401 at the same time when the short
+ * lived access token expires. They all share one refresh promise so only one
+ * request rotates the refresh token; the rest wait for the new access token.
+ */
+export function refreshBackendSession(): Promise<boolean> {
+  if (backendRefreshInFlight) return backendRefreshInFlight;
+
+  const refreshToken = localStorage.getItem('velismail_refresh');
+  if (!refreshToken) return Promise.resolve(false);
+
+  const run = (async () => {
+    const bases = getApiBaseCandidates();
+    let rejected = false;
+
+    for (const base of bases) {
+      try {
+        const response = await fetch(`${base}/auth/token/refresh`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            refresh_token: refreshToken,
+            device_id: 'web',
+          }),
+        });
+
+        if (response.status === 401 || response.status === 403) {
+          rejected = true;
+          continue;
+        }
+        if (!response.ok) continue;
+
+        const data = await response.json() as {
+          access_token?: unknown;
+          refresh_token?: unknown;
+        };
+        if (typeof data.access_token !== 'string' || !data.access_token) continue;
+
+        localStorage.setItem('velismail_token', data.access_token);
+        if (typeof data.refresh_token === 'string' && data.refresh_token) {
+          localStorage.setItem('velismail_refresh', data.refresh_token);
+        }
+        return true;
+      } catch {
+        // Try the next API base before giving up.
+      }
+    }
+
+    if (rejected) clearBackendTokens();
+    return false;
+  })();
+
+  backendRefreshInFlight = run.finally(() => {
+    backendRefreshInFlight = null;
+  });
+  return backendRefreshInFlight;
+}
+
+async function fetchWithAuthRetry(
+  url: string,
+  options: RequestInit,
+  endpoint: string,
+  headers: Headers,
+): Promise<Response> {
+  let response = await fetch(url, { ...options, headers });
+  if (response.status !== 401 || !shouldRefreshForEndpoint(endpoint)) {
+    return response;
+  }
+
+  const refreshed = await refreshBackendSession();
+  if (!refreshed) return response;
+
+  const retryHeaders = new Headers(headers);
+  const token = localStorage.getItem('velismail_token');
+  if (token) {
+    retryHeaders.set('Authorization', `Bearer ${token}`);
+  } else {
+    retryHeaders.delete('Authorization');
+  }
+  response = await fetch(url, { ...options, headers: retryHeaders });
+  return response;
+}
+
 export async function fetchApiResponse(endpoint: string, options: RequestInit = {}) {
   const apiBaseCandidates = getApiBaseCandidates();
   if (apiBaseCandidates.length === 0) {
@@ -302,10 +407,7 @@ export async function fetchApiResponse(endpoint: string, options: RequestInit = 
     const baseUrl = apiBaseCandidates[index];
     let response: Response;
     try {
-      response = await fetch(`${baseUrl}${endpoint}`, {
-        ...options,
-        headers,
-      });
+      response = await fetchWithAuthRetry(`${baseUrl}${endpoint}`, options, endpoint, headers);
     } catch (error) {
       lastError = error instanceof Error ? error : new Error('Network request failed.');
       continue;
@@ -357,10 +459,7 @@ export async function fetchApiJsonDetailed<T = unknown>(endpoint: string, option
     const baseUrl = apiBaseCandidates[index];
     let response: Response;
     try {
-      response = await fetch(`${baseUrl}${endpoint}`, {
-        ...options,
-        headers,
-      });
+      response = await fetchWithAuthRetry(`${baseUrl}${endpoint}`, options, endpoint, headers);
     } catch (error) {
       lastError = error instanceof Error ? error : new Error('Network request failed.');
       continue;

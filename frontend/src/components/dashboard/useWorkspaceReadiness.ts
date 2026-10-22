@@ -62,6 +62,24 @@ export type WorkspaceReadiness = {
 
 const POLL_INTERVAL_MS = 15_000;
 
+function readableCheckError(error: unknown): string {
+  if (error instanceof Error && error.message.trim()) return error.message;
+  if (typeof error === 'string' && error.trim()) return error;
+  if (error && typeof error === 'object') {
+    const record = error as { message?: unknown; error?: unknown; detail?: unknown };
+    for (const value of [record.message, record.error, record.detail]) {
+      if (typeof value === 'string' && value.trim()) return value;
+    }
+    try {
+      const text = JSON.stringify(error);
+      if (text && text !== '{}') return text;
+    } catch {
+      // Fall through to the generic message.
+    }
+  }
+  return 'The setup could not be verified. Complete the setup and try again.';
+}
+
 /**
  * Read the live state of the workspace setup.
  *
@@ -132,11 +150,7 @@ export default function useWorkspaceReadiness(user: User | null): WorkspaceReadi
           );
         }
       } catch (err) {
-        setError(
-          err instanceof Error
-            ? err.message
-            : 'The setup could not be verified. Complete the setup and try again.',
-        );
+        setError(readableCheckError(err));
       } finally {
         inFlight.current = null;
         setLoading(false);

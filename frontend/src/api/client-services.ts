@@ -364,8 +364,9 @@ export const auth = {
     const session = loadDB<User | null>(STORAGE_KEYS.session, null);
     const normalizedSession = session ? normalizeSessionUser(session) : null;
     const backendToken = localStorage.getItem('velismail_token');
+    const refreshToken = localStorage.getItem('velismail_refresh');
     const hasAuthenticatedSession = Boolean(
-      normalizedSession?.teamAccessRole || isJwtLikelyUsable(backendToken),
+      normalizedSession?.teamAccessRole || isJwtLikelyUsable(backendToken) || Boolean(refreshToken),
     );
     if (normalizedSession && !hasAuthenticatedSession) {
       this.logout();
