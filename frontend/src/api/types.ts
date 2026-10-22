@@ -24,6 +24,12 @@ export type User = {
   recoveryEmail?: string;
   recoveryEmailVerified?: boolean;
   pendingRecoveryEmail?: string;
+  /** True when an authenticator app (TOTP) protects this account. */
+  totpEnabled?: boolean;
+  phoneCountryCode?: string;
+  phoneNumber?: string;
+  phoneE164?: string;
+  phoneVerified?: boolean;
   businessMailboxAddress?: string;
   profileImageUrl?: string;
   emailLogoUrl?: string;
@@ -56,13 +62,6 @@ export type User = {
     spfStatus?: 'pending' | 'verified' | 'failed';
     dmarcStatus?: 'pending' | 'verified' | 'failed';
   };
-  // TOTP Authenticator
-  totpEnabled?: boolean;
-  // Phone for future recovery
-  phoneCountryCode?: string;
-  phoneNumber?: string;
-  phoneE164?: string;
-  phoneVerified?: boolean;
 };
 
 export type Contact = {

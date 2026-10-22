@@ -1314,6 +1314,10 @@ export async function fetchAuthenticatedProfile(): Promise<Partial<User>> {
       ...(role ? { role } : {}),
       recoveryEmail: raw.recovery_email || raw.recoveryEmail || undefined,
       recoveryEmailVerified: Boolean(raw.recovery_email_verified ?? raw.recoveryEmailVerified ?? raw.recovery_email ?? raw.recoveryEmail),
+      totpEnabled: Boolean(raw.totp_enabled ?? raw.totpEnabled ?? false),
+      phoneCountryCode: raw.phone_country_code || raw.phoneCountryCode || undefined,
+      phoneNumber: raw.phone_number || raw.phoneNumber || undefined,
+      phoneVerified: Boolean(raw.phone_verified ?? raw.phoneVerified ?? false),
       createdAt: raw.created_at || raw.createdAt,
       businessDbUrl: settings.businessDbUrl || settings.business_db_url || raw.business_db_url || raw.businessDbUrl,
       businessApiKey: settings.businessApiKey || settings.business_api_key || raw.business_api_key || raw.businessApiKey,
@@ -1330,13 +1334,6 @@ export async function fetchAuthenticatedProfile(): Promise<Partial<User>> {
       // only uses it to decide whether the control plane switch is visible.
       firebaseUid: settings.firebaseUid || settings.firebase_uid || raw.firebase_uid || raw.firebaseUid || undefined,
       isPlatformAdmin: Boolean(settings.isPlatformAdmin ?? settings.is_platform_admin ?? raw.is_platform_admin ?? raw.isPlatformAdmin),
-      // TOTP Authenticator
-      totpEnabled: Boolean(raw.totp_enabled ?? raw.totpEnabled),
-      // Phone for future recovery
-      phoneCountryCode: raw.phone_country_code || raw.phoneCountryCode,
-      phoneNumber: raw.phone_number || raw.phoneNumber,
-      phoneE164: raw.phone_e164 || raw.phoneE164,
-      phoneVerified: Boolean(raw.phone_verified ?? raw.phoneVerified),
     };
   } catch {
     return {};
@@ -1379,6 +1376,10 @@ export function buildSessionUser(params: {
     customDomain: params.customDomain || params.existing?.customDomain,
     recoveryEmail: profile.recoveryEmail || params.recoveryEmail || params.existing?.recoveryEmail,
     recoveryEmailVerified: profile.recoveryEmailVerified ?? params.existing?.recoveryEmailVerified,
+    totpEnabled: profile.totpEnabled ?? params.existing?.totpEnabled ?? false,
+    phoneCountryCode: profile.phoneCountryCode || params.existing?.phoneCountryCode,
+    phoneNumber: profile.phoneNumber || params.existing?.phoneNumber,
+    phoneVerified: profile.phoneVerified ?? params.existing?.phoneVerified ?? false,
     isSetupComplete: profile.isSetupComplete ?? params.existing?.isSetupComplete ?? false,
     isBusinessSetupComplete: profile.isBusinessSetupComplete ?? params.existing?.isBusinessSetupComplete ?? false,
     businessDomain: profile.businessDomain || params.existing?.businessDomain || domain || undefined,
@@ -1394,13 +1395,7 @@ export function buildSessionUser(params: {
     spfStatus: params.existing?.spfStatus || 'pending',
     dmarcStatus: params.existing?.dmarcStatus || 'pending',
     createdAt: String(profile.createdAt || params.existing?.createdAt || new Date().toISOString()),
-    // TOTP Authenticator
-    totpEnabled: profile.totpEnabled ?? params.existing?.totpEnabled ?? false,
-    // Phone for future recovery
-    phoneCountryCode: profile.phoneCountryCode || params.existing?.phoneCountryCode,
-    phoneNumber: profile.phoneNumber || params.existing?.phoneNumber,
     phoneE164: profile.phoneE164 || params.existing?.phoneE164,
-    phoneVerified: profile.phoneVerified ?? params.existing?.phoneVerified ?? false,
   });
 }
 

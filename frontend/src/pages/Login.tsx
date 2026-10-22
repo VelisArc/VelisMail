@@ -14,17 +14,81 @@ import {
   ShieldCheck,
   AlertCircle,
   CheckCircle2,
+  HelpCircle,
 } from 'lucide-react';
+import { QRCodeSVG } from 'qrcode.react';
 import { auth, isBusinessSetupReady, teamAccess, type TeamAccessInvite, type User } from '../api/client';
 import LoadingSpinner from '../components/LoadingSpinner';
 import './Login.css';
 
 type Mode = 'login' | 'register';
-type RegisterStep = 'form' | 'otp';
+type RegisterStep = 'intro' | 'form' | 'otp';
 type LoginAccessMode = 'password' | 'team';
 type TeamAccessStep = 'key' | 'email' | 'otp';
+type MfaStep = 'none' | 'code' | 'recovery-email' | 'recovery-otp' | 'recovery-setup';
 
 const TEAM_STEP_ORDER: TeamAccessStep[] = ['key', 'email', 'otp'];
+
+// Common country codes for phone input
+const COUNTRY_CODES = [
+  { code: 'IN', label: 'India', dial: '+91' },
+  { code: 'US', label: 'United States', dial: '+1' },
+  { code: 'GB', label: 'United Kingdom', dial: '+44' },
+  { code: 'CA', label: 'Canada', dial: '+1' },
+  { code: 'AU', label: 'Australia', dial: '+61' },
+  { code: 'DE', label: 'Germany', dial: '+49' },
+  { code: 'FR', label: 'France', dial: '+33' },
+  { code: 'JP', label: 'Japan', dial: '+81' },
+  { code: 'CN', label: 'China', dial: '+86' },
+  { code: 'BR', label: 'Brazil', dial: '+55' },
+  { code: 'MX', label: 'Mexico', dial: '+52' },
+  { code: 'ES', label: 'Spain', dial: '+34' },
+  { code: 'IT', label: 'Italy', dial: '+39' },
+  { code: 'NL', label: 'Netherlands', dial: '+31' },
+  { code: 'SG', label: 'Singapore', dial: '+65' },
+  { code: 'AE', label: 'UAE', dial: '+971' },
+  { code: 'SA', label: 'Saudi Arabia', dial: '+966' },
+  { code: 'ZA', label: 'South Africa', dial: '+27' },
+  { code: 'NG', label: 'Nigeria', dial: '+234' },
+  { code: 'KE', label: 'Kenya', dial: '+254' },
+  { code: 'EG', label: 'Egypt', dial: '+20' },
+  { code: 'PK', label: 'Pakistan', dial: '+92' },
+  { code: 'BD', label: 'Bangladesh', dial: '+880' },
+  { code: 'PH', label: 'Philippines', dial: '+63' },
+  { code: 'ID', label: 'Indonesia', dial: '+62' },
+  { code: 'MY', label: 'Malaysia', dial: '+60' },
+  { code: 'TH', label: 'Thailand', dial: '+66' },
+  { code: 'VN', label: 'Vietnam', dial: '+84' },
+  { code: 'KR', label: 'South Korea', dial: '+82' },
+  { code: 'TW', label: 'Taiwan', dial: '+886' },
+  { code: 'HK', label: 'Hong Kong', dial: '+852' },
+  { code: 'NZ', label: 'New Zealand', dial: '+64' },
+  { code: 'CH', label: 'Switzerland', dial: '+41' },
+  { code: 'AT', label: 'Austria', dial: '+43' },
+  { code: 'BE', label: 'Belgium', dial: '+32' },
+  { code: 'SE', label: 'Sweden', dial: '+46' },
+  { code: 'NO', label: 'Norway', dial: '+47' },
+  { code: 'DK', label: 'Denmark', dial: '+45' },
+  { code: 'FI', label: 'Finland', dial: '+358' },
+  { code: 'PL', label: 'Poland', dial: '+48' },
+  { code: 'IE', label: 'Ireland', dial: '+353' },
+  { code: 'PT', label: 'Portugal', dial: '+351' },
+  { code: 'GR', label: 'Greece', dial: '+30' },
+  { code: 'CZ', label: 'Czech Republic', dial: '+420' },
+  { code: 'HU', label: 'Hungary', dial: '+36' },
+  { code: 'RO', label: 'Romania', dial: '+40' },
+  { code: 'IL', label: 'Israel', dial: '+972' },
+  { code: 'TR', label: 'Turkey', dial: '+90' },
+  { code: 'AR', label: 'Argentina', dial: '+54' },
+  { code: 'CL', label: 'Chile', dial: '+56' },
+  { code: 'CO', label: 'Colombia', dial: '+57' },
+  { code: 'PE', label: 'Peru', dial: '+51' },
+  { code: 'VE', label: 'Venezuela', dial: '+58' },
+  { code: 'EC', label: 'Ecuador', dial: '+593' },
+  { code: 'UY', label: 'Uruguay', dial: '+598' },
+  { code: 'CR', label: 'Costa Rica', dial: '+506' },
+  { code: 'PA', label: 'Panama', dial: '+507' },
+];
 
 function nextRouteForUser(user: User) {
   return isBusinessSetupReady(user) ? '/business?tab=inbox' : '/business';
@@ -71,18 +135,34 @@ export default function Login() {
   const [regPassword, setRegPassword] = useState('');
   const [showRegPassword, setShowRegPassword] = useState(false);
   const [regDomain, setRegDomain] = useState('');
+  const [regPhoneCountryCode, setRegPhoneCountryCode] = useState('+91');
+  const [regPhoneNumber, setRegPhoneNumber] = useState('');
 
   const [otp, setOtp] = useState('');
   const [otpChallengeToken, setOtpChallengeToken] = useState('');
   const [otpDeliveryHint, setOtpDeliveryHint] = useState('');
   const [verificationToken, setVerificationToken] = useState('');
 
+  // MFA Authenticator state
+  const [mfaStep, setMfaStep] = useState<MfaStep>('none');
+  const [mfaToken, setMfaToken] = useState('');
+  const [mfaCode, setMfaCode] = useState('');
+  const [mfaRecoveryEmail, setMfaRecoveryEmail] = useState('');
+  const [mfaRecoveryChallenge, setMfaRecoveryChallenge] = useState('');
+  const [mfaRecoveryOtp, setMfaRecoveryOtp] = useState('');
+  const [mfaRecoveryToken, setMfaRecoveryToken] = useState('');
+  const [mfaRecoverySetup, setMfaRecoverySetup] = useState<{ secret: string; otpauthUrl: string } | null>(null);
+
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const navigate = useNavigate();
 
   useEffect(() => {
-    setMode(searchParams.get('mode') === 'register' ? 'register' : 'login');
+    const nextMode = searchParams.get('mode') === 'register' ? 'register' : 'login';
+    setMode(nextMode);
+    if (nextMode === 'register') {
+      setRegisterStep('intro');
+    }
   }, [searchParams]);
   const businessDomainValue = normalizeDomain(regDomain);
   const defaultBusinessMailboxAddress = businessDomainValue ? `admin@${businessDomainValue}` : '';
@@ -96,6 +176,12 @@ export default function Login() {
     const res = await auth.login(loginIdentifier, loginPassword);
     if (res.success && res.user) {
       navigate(nextRouteForUser(res.user), { replace: true });
+    } else if (res.mfaRequired && res.mfaToken) {
+      setMfaToken(res.mfaToken);
+      setMfaRecoveryEmail(res.recoveryEmailMasked || '');
+      setMfaStep('code');
+      setLoading(false);
+      return;
     } else {
       setError(res.error || 'Login failed');
     }
@@ -108,10 +194,102 @@ export default function Login() {
     const res = await auth.loginWithGoogle();
     if (res.success && res.user) {
       navigate(nextRouteForUser(res.user), { replace: true });
+    } else if (res.mfaRequired && res.mfaToken) {
+      setMfaToken(res.mfaToken);
+      setMfaRecoveryEmail(res.recoveryEmailMasked || '');
+      setMfaStep('code');
+      setLoading(false);
+      return;
     } else {
       setError(res.error || 'Google sign-in failed');
     }
     setLoading(false);
+  };
+
+  // MFA Authenticator handlers
+  const handleMfaVerify = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+    try {
+      const res = await auth.verifyMfa(mfaToken, mfaCode);
+      if (res.success && res.user) {
+        navigate(nextRouteForUser(res.user), { replace: true });
+      } else {
+        setError(res.error || 'Invalid authenticator code');
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Invalid authenticator code');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleMfaRecoverySend = async () => {
+    if (!mfaToken) return;
+    setLoading(true);
+    setError('');
+    try {
+      const res = await auth.sendMfaRecoveryOtp(mfaToken);
+      setMfaRecoveryChallenge(res.challengeToken);
+      setMfaRecoveryEmail(res.maskedEmail);
+      setMfaStep('recovery-otp');
+      setError('');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to send recovery code');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleMfaRecoveryVerify = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!mfaToken || !mfaRecoveryChallenge || !mfaRecoveryOtp) return;
+    setLoading(true);
+    setError('');
+    try {
+      const res = await auth.verifyMfaRecovery(mfaToken, mfaRecoveryChallenge, mfaRecoveryOtp);
+      setMfaRecoveryToken(res.recoveryToken);
+      setMfaRecoverySetup({ secret: res.secret, otpauthUrl: res.otpauthUrl });
+      setMfaRecoveryEmail(res.recoveryEmail || '');
+      setMfaStep('recovery-setup');
+      setError('');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Invalid recovery code');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleMfaRecoveryComplete = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!mfaRecoveryToken || !mfaCode) return;
+    setLoading(true);
+    setError('');
+    try {
+      const res = await auth.completeMfaRecovery(mfaRecoveryToken, mfaCode);
+      if (res.success && res.user) {
+        navigate(nextRouteForUser(res.user), { replace: true });
+      } else {
+        setError(res.error || 'Failed to complete recovery');
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to complete recovery');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const cancelMfa = () => {
+    setMfaStep('none');
+    setMfaToken('');
+    setMfaCode('');
+    setMfaRecoveryEmail('');
+    setMfaRecoveryChallenge('');
+    setMfaRecoveryOtp('');
+    setMfaRecoveryToken('');
+    setMfaRecoverySetup(null);
+    setError('');
   };
 
   const handleTeamKeySubmit = async (e: React.FormEvent) => {
@@ -208,6 +386,8 @@ export default function Login() {
       accountType: 'business',
       customDomain: businessDomainValue,
       recoveryEmail: otpTargetEmail || undefined,
+      phoneCountryCode: regPhoneCountryCode || undefined,
+      phoneNumber: regPhoneNumber || undefined,
       verificationToken: verifiedToken || verificationToken || undefined,
     });
     if (res.success && res.user) {
@@ -365,10 +545,12 @@ export default function Login() {
     setOtpChallengeToken('');
     setOtpDeliveryHint('');
     setVerificationToken('');
-    setRegisterStep('form');
+    setRegisterStep(m === 'register' ? 'intro' : 'form');
     setRegRecoveryEmail('');
     setRegDomain('');
     setRegPassword('');
+    setRegPhoneCountryCode('+91');
+    setRegPhoneNumber('');
     setResetIdentifier('');
     setResetOtp('');
     setResetChallengeToken('');
@@ -496,7 +678,171 @@ export default function Login() {
 
               {!forgotMode ? (
                 <>
-                  <div className="access-mode-switch" role="tablist" aria-label="Sign-in method">
+                  {mfaStep !== 'none' ? (
+                    <>
+                      <div className="login-stepper" aria-label="MFA verification">
+                        <span className="login-stepper-label">
+                          {mfaStep === 'code' ? 'Step 1 of 2' : mfaStep === 'recovery-otp' ? 'Step 1 of 3' : mfaStep === 'recovery-setup' ? 'Step 2 of 3' : 'Step 2 of 2'}
+                        </span>
+                      </div>
+
+                      {mfaStep === 'code' && (
+                        <form onSubmit={handleMfaVerify} className="login-form login-form-stacked" autoComplete="off">
+                          <div className="login-card-header">
+                            <div className="login-icon-wrap"><ShieldCheck size={21} /></div>
+                            <h2>Two-Factor Authentication</h2>
+                            <p className="login-card-desc">
+                              Enter the 6-digit code from your authenticator app.
+                            </p>
+                          </div>
+
+                          {mfaRecoveryEmail && (
+                            <p className="form-hint">
+                              Recovery email: <strong>{mfaRecoveryEmail}</strong>
+                            </p>
+                          )}
+
+                          <div className="form-group">
+                            <label htmlFor="mfa-code">Verification Code</label>
+                            <input
+                              id="mfa-code"
+                              type="text"
+                              className="input login-otp-input"
+                              placeholder="000000"
+                              name="velismail-mfa-code"
+                              autoComplete="one-time-code"
+                              inputMode="numeric"
+                              maxLength={6}
+                              required
+                              value={mfaCode}
+                              onChange={e => setMfaCode(e.target.value.replace(/\D/g, ''))}
+                              autoFocus
+                            />
+                          </div>
+                          {renderError()}
+
+                          <button type="submit" className="btn btn-primary w-full login-submit" disabled={loading || !mfaCode.trim()}>
+                            {loading ? <LoadingSpinner size="sm" label="Verifying" /> : <>Verify &amp; Sign In <ArrowRight size={18} /></>}
+                          </button>
+
+                          <div className="login-card-footer">
+                            <button className="login-link" onClick={() => { setMfaStep('recovery-otp'); setError(''); }}>
+                              Can't use your authenticator? Use recovery email
+                            </button>
+                            <button className="login-link" onClick={cancelMfa}>
+                              Cancel
+                            </button>
+                          </div>
+                        </form>
+                      )}
+
+                      {mfaStep === 'recovery-otp' && (
+                        <form onSubmit={handleMfaRecoverySend} className="login-form login-form-stacked" autoComplete="off">
+                          <div className="login-card-header">
+                            <div className="login-icon-wrap"><Mail size={21} /></div>
+                            <h2>Recovery Email Verification</h2>
+                            <p className="login-card-desc">
+                              Send a verification code to your recovery email to reset your authenticator.
+                            </p>
+                          </div>
+
+                          <button type="submit" className="btn btn-primary w-full login-submit" disabled={loading || !mfaToken}>
+                            {loading ? <LoadingSpinner size="sm" label="Sending OTP" /> : <>Send Recovery OTP <ArrowRight size={18} /></>}
+                          </button>
+                          {mfaRecoveryChallenge && (
+                            <form onSubmit={handleMfaRecoveryVerify} className="login-form login-form-stacked" autoComplete="off" style={{ marginTop: '16px' }}>
+                              <div className="form-group">
+                                <label htmlFor="mfa-recovery-otp">Verification Code</label>
+                                <input
+                                  id="mfa-recovery-otp"
+                                  type="text"
+                                  className="input login-otp-input"
+                                  placeholder="000000"
+                                  name="velismail-mfa-recovery-otp"
+                                  autoComplete="one-time-code"
+                                  inputMode="numeric"
+                                  maxLength={6}
+                                  required
+                                  value={mfaRecoveryOtp}
+                                  onChange={e => setMfaRecoveryOtp(e.target.value.replace(/\D/g, ''))}
+                                  autoFocus
+                                />
+                              </div>
+                              {renderError()}
+                              <button type="submit" className="btn btn-primary w-full login-submit" disabled={loading || !mfaRecoveryOtp.trim()}>
+                                {loading ? <LoadingSpinner size="sm" label="Verifying" /> : <>Verify &amp; Continue <ArrowRight size={18} /></>}
+                              </button>
+                            </form>
+                          )}
+                          <div className="login-card-footer">
+                            <button className="login-link" onClick={() => { setMfaStep('code'); setError(''); }}>
+                              Back to authenticator code
+                            </button>
+                            <button className="login-link" onClick={cancelMfa}>
+                              Cancel
+                            </button>
+                          </div>
+                        </form>
+                      )}
+
+                      {mfaStep === 'recovery-setup' && (
+                        <form onSubmit={handleMfaRecoveryComplete} className="login-form login-form-stacked" autoComplete="off">
+                          <div className="login-card-header">
+                            <div className="login-icon-wrap"><ShieldCheck size={21} /></div>
+                            <h2>Set Up New Authenticator</h2>
+                            <p className="login-card-desc">
+                              Scan the QR code with your authenticator app, then enter the 6-digit code.
+                            </p>
+                          </div>
+
+                          {mfaRecoverySetup && (
+                            <div className="mfa-setup" style={{ textAlign: 'center', marginBottom: '20px' }}>
+                              <div className="mfa-qr" style={{ margin: '0 auto', display: 'inline-block' }}>
+                                <QRCodeSVG value={mfaRecoverySetup.otpauthUrl} size={200} />
+                              </div>
+                              <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '12px' }}>
+                                Scan with Google Authenticator, Authy, 1Password, or enter this key manually:
+                              </p>
+                              <code style={{ display: 'block', padding: '12px', background: 'var(--bg-elevated)', borderRadius: '8px', fontSize: '14px', letterSpacing: '2px', textAlign: 'center', wordBreak: 'break-all', marginBottom: '16px' }}>
+                                {mfaRecoverySetup.secret}
+                              </code>
+                            </div>
+                          )}
+
+                          <div className="form-group">
+                            <label htmlFor="mfa-recovery-code">6-Digit Code</label>
+                            <input
+                              id="mfa-recovery-code"
+                              type="text"
+                              className="input login-otp-input"
+                              placeholder="000000"
+                              name="velismail-mfa-recovery-code"
+                              autoComplete="one-time-code"
+                              inputMode="numeric"
+                              maxLength={6}
+                              required
+                              value={mfaCode}
+                              onChange={e => setMfaCode(e.target.value.replace(/\D/g, ''))}
+                              autoFocus
+                            />
+                          </div>
+                          {renderError()}
+
+                          <button type="submit" className="btn btn-primary w-full login-submit" disabled={loading || !mfaRecoveryToken || !mfaCode.trim()}>
+                            {loading ? <LoadingSpinner size="sm" label="Completing recovery" /> : <>Complete Recovery <ArrowRight size={18} /></>}
+                          </button>
+
+                          <div className="login-card-footer">
+                            <button className="login-link" onClick={cancelMfa}>
+                              Cancel
+                            </button>
+                          </div>
+                        </form>
+                      )}
+                    </>
+                  ) : (
+                    <>
+                    <div className="access-mode-switch" role="tablist" aria-label="Sign-in method">
                     <button
                       type="button"
                       role="tab"
@@ -692,6 +1038,8 @@ export default function Login() {
                       )}
                     </>
                   )}
+                    </>
+                  )}
 
                   <div className="login-card-footer login-card-footer-split">
                     <span>
@@ -798,9 +1146,44 @@ export default function Login() {
             </>
           )}
 
+          {mode === 'register' && registerStep === 'intro' && (
+            <>
+              <div className="login-card-header">
+                <div className="login-icon-wrap"><HelpCircle size={21} /></div>
+                <h2>Welcome to VelisMail</h2>
+                <p className="login-card-desc">
+                  Before you create your account, here's what you need to know:
+                </p>
+              </div>
+
+              <div className="login-form" style={{ textAlign: 'left' }}>
+                <div className="form-group" style={{ marginBottom: '16px', padding: '16px', background: 'var(--bg-elevated)', borderRadius: '8px', border: '1px solid var(--border-primary)' }}>
+                  <h3 style={{ marginTop: 0, marginBottom: '12px', fontSize: '14px' }}>How VelisMail Works</h3>
+                  <ul style={{ margin: 0, paddingLeft: '20px', fontSize: '13px', lineHeight: '1.8', color: 'var(--text-secondary)' }}>
+                    <li><strong>Bring your own domain:</strong> VelisMail does not sell domains. You can use a domain you already own, or buy one from any registrar (Namecheap, GoDaddy, Cloudflare, Porkbun, etc.).</li>
+                    <li><strong>DNS setup is guided:</strong> After adding your domain, we'll show you the exact DNS records to add (MX for mail delivery, SPF/DKIM/DMARC for authentication, and a TXT record for ownership verification).</li>
+                    <li><strong>No separate mail server needed:</strong> VelisMail handles all mail infrastructure. Once DNS is verified, you can create mailboxes like <code>you@yourdomain.com</code> and send/receive immediately.</li>
+                    <li><strong>Optional phone for recovery:</strong> Add a mobile number with country code for future account recovery via SMS (optional).</li>
+                  </ul>
+                </div>
+                <button
+                  type="button"
+                  className="btn btn-primary w-full login-submit"
+                  onClick={() => setRegisterStep('form')}
+                  style={{ marginTop: '20px' }}
+                >
+                  <CheckCircle2 size={16} /> I understand, continue to setup
+                </button>
+              </div>
+            </>
+          )}
+
           {mode === 'register' && registerStep === 'form' && (
             <>
               <div className="login-card-header">
+                <button type="button" className="back-step-btn" onClick={() => setRegisterStep('intro')}>
+                  <ArrowLeft size={16} /> Back
+                </button>
                 <div className="login-icon-wrap"><Building2 size={21} /></div>
                 <h2>Business Account</h2>
                 <p className="login-card-desc">
@@ -847,6 +1230,56 @@ export default function Login() {
                     {defaultBusinessMailboxAddress
                       ? <>Mailbox <strong>{defaultBusinessMailboxAddress}</strong> activates after DNS verification.</>
                       : 'Your mailbox is created after DNS verification succeeds.'}
+                  </span>
+                </div>
+
+                <div className="form-group">
+                  <label htmlFor="reg-recovery">Recovery Email *</label>
+                  <input
+                    id="reg-recovery"
+                    type="email"
+                    className="input"
+                    placeholder="you@gmail.com"
+                    name="velismail-new-account-recovery-contact"
+                    autoComplete="email"
+                    required
+                    value={regRecoveryEmail}
+                    onChange={e => setRegRecoveryEmail(e.target.value)}
+                  />
+                  <span className="form-hint">
+                    Required. Verification codes and recovery links are sent here.
+                  </span>
+                </div>
+
+                <div className="form-group">
+                  <label htmlFor="reg-phone">Mobile Number (optional)</label>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <select
+                      id="reg-phone-country"
+                      className="input"
+                      style={{ width: '110px', minWidth: '110px' }}
+                      value={regPhoneCountryCode}
+                      onChange={e => setRegPhoneCountryCode(e.target.value)}
+                    >
+                      {COUNTRY_CODES.map(c => (
+                        <option key={c.code} value={c.dial}>
+                          {c.dial} {c.label}
+                        </option>
+                      ))}
+                    </select>
+                    <input
+                      id="reg-phone"
+                      type="tel"
+                      className="input"
+                      placeholder="Phone number"
+                      name="velismail-new-account-phone"
+                      autoComplete="tel"
+                      value={regPhoneNumber}
+                      onChange={e => setRegPhoneNumber(e.target.value.replace(/\D/g, ''))}
+                    />
+                  </div>
+                  <span className="form-hint">
+                    Optional. Used for future account recovery via SMS.
                   </span>
                 </div>
 

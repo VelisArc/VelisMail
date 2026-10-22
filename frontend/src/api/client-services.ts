@@ -48,6 +48,8 @@ import type {
   Email, OtpSendResponse, OtpVerifyResponse,
   ActiveSession, Contact, Signature, AutoReply, Label, EmailRule,
   EmailRuleCondition, EmailRuleAction,
+  MfaSetupResponse, MfaEnableResponse, MfaDisableResponse,
+  MfaRecoverySendResponse, MfaRecoveryVerifyResponse,
 } from './types';
 import type { CreateTeamAccessInviteParams } from './client-core';
 import { signInWithGoogle, signOutFirebase } from '../lib/firebase';
@@ -144,6 +146,8 @@ export const auth = {
     accountType: 'business';
     customDomain?: string;
     recoveryEmail?: string;
+    phoneCountryCode?: string;
+    phoneNumber?: string;
     verificationToken?: string;
   }): Promise<{ success: boolean; error?: string; user?: User }> {
     const normalizedRecoveryEmail = normalizeMailbox(data.recoveryEmail || '');
@@ -153,17 +157,26 @@ export const auth = {
       return { success: false, error: 'A valid account email is required.' };
     }
 
+    // The phone is stored in E.164 so a later recovery message reaches the
+    // right number. A number that is too short is simply left out.
+    const phoneDigits = (data.phoneNumber || '').replace(/\D/g, '');
+    const phoneE164 = data.phoneCountryCode && phoneDigits.length >= 6
+      ? `${data.phoneCountryCode}${phoneDigits}`
+      : undefined;
+
     try {
       const existingLocal = scopedExistingSession(primaryEmail);
       await fetchAPI('/auth/register', {
         method: 'POST',
         body: JSON.stringify({
           email: primaryEmail,
-          display_name: data.displayName,
+          displayName: data.displayName,
           password: data.password,
-          custom_domain: data.customDomain || undefined,
-          recovery_email: normalizedRecoveryEmail || undefined,
-          verification_token: data.verificationToken || undefined,
+          customDomain: data.customDomain || undefined,
+          recoveryEmail: normalizedRecoveryEmail || undefined,
+          phoneCountryCode: data.phoneCountryCode || undefined,
+          phoneNumber: phoneE164 || undefined,
+          verificationToken: data.verificationToken || undefined,
         }),
       });
 
@@ -222,7 +235,7 @@ export const auth = {
     }
   },
 
-  async login(email: string, password: string): Promise<{ success: boolean; error?: string; user?: User }> {
+  async login(email: string, password: string): Promise<{ success: boolean; error?: string; user?: User; mfaRequired?: boolean; mfaToken?: string; recoveryEmailMasked?: string }> {
     let lastError = 'Login failed.';
     for (const candidate of loginIdentifierCandidates(email)) {
       try {
@@ -231,6 +244,17 @@ export const auth = {
           method: 'POST',
           body: JSON.stringify({ email: candidate, password }),
         });
+
+        // MFA challenge: the account has an authenticator app, so the server
+        // returns a challenge instead of tokens. The sign-in is not finished.
+        if (res && res.mfaRequired && typeof res.mfaToken === 'string') {
+          return {
+            success: true,
+            mfaRequired: true,
+            mfaToken: res.mfaToken,
+            recoveryEmailMasked: res.recoveryEmailMasked,
+          };
+        }
 
         if (!res || typeof res.access_token !== 'string') {
           return { success: false, error: 'Backend authentication failed.' };
@@ -268,7 +292,7 @@ export const auth = {
    * Firebase Google sign-in. The ID token is verified server-side by the auth
    * service; the browser never decides whether an account is valid.
    */
-  async loginWithGoogle(): Promise<{ success: boolean; error?: string; user?: User }> {
+  async loginWithGoogle(): Promise<{ success: boolean; error?: string; user?: User; mfaRequired?: boolean; mfaToken?: string; recoveryEmailMasked?: string; email?: string }> {
     try {
       const identity = await signInWithGoogle();
       if (!identity.idToken || !identity.email) {
@@ -279,6 +303,19 @@ export const auth = {
         method: 'POST',
         body: JSON.stringify({ idToken: identity.idToken, deviceId: 'google-web' }),
       });
+
+      // MFA challenge: the account has an authenticator app, so the server
+      // returns a challenge instead of tokens. The sign-in is not finished.
+      if (res && res.mfaRequired && typeof res.mfaToken === 'string') {
+        return {
+          success: true,
+          mfaRequired: true,
+          mfaToken: res.mfaToken,
+          recoveryEmailMasked: res.recoveryEmailMasked,
+          email: identity.email,
+        };
+      }
+
       if (!res || typeof res.access_token !== 'string') {
         return { success: false, error: 'Backend authentication failed.' };
       }
@@ -320,6 +357,151 @@ export const auth = {
         return { success: false, error: 'Google sign-in succeeded, but this account is not provisioned for VelisMail.' };
       }
       return { success: false, error: message };
+    }
+  },
+
+  // ---- MFA / TOTP Authenticator ----
+  // The auth service names these fields in snake_case, and it answers with
+  // snake_case too. The mapping happens here, once, so no caller has to know
+  // about the wire format.
+
+  /** Start the setup. Returns the secret and the otpauth URL for the QR code. */
+  async startMfaSetup(): Promise<MfaSetupResponse> {
+    const res = await fetchAPI('/auth/mfa/setup', { method: 'POST' });
+    if (!res || !res.success || typeof res.secret !== 'string') {
+      throw new Error('Unable to start the authenticator setup.');
+    }
+    return {
+      success: true,
+      secret: res.secret,
+      otpauthUrl: String(res.otpauth_url || res.otpauthUrl || ''),
+    };
+  },
+
+  /** Confirm the setup with the first 6-digit code from the authenticator. */
+  async enableMfa(code: string): Promise<MfaEnableResponse> {
+    const res = await fetchAPI('/auth/mfa/enable', {
+      method: 'POST',
+      body: JSON.stringify({ code }),
+    });
+    return {
+      success: Boolean(res?.success),
+      totpEnabled: Boolean(res?.totp_enabled ?? res?.totpEnabled),
+      access_token: String(res?.access_token || ''),
+      refresh_token: String(res?.refresh_token || ''),
+      expires_in: Number(res?.expires_in || 0),
+      token_type: String(res?.token_type || 'Bearer'),
+      mfa_required: Boolean(res?.mfa_required ?? res?.mfaRequired),
+    };
+  },
+
+  /** Turn the authenticator off. The password and a current code are required. */
+  async disableMfa(password: string | undefined, code: string): Promise<MfaDisableResponse> {
+    const res = await fetchAPI('/auth/mfa/disable', {
+      method: 'POST',
+      body: JSON.stringify({ password, code }),
+    });
+    return {
+      success: Boolean(res?.success),
+      totpEnabled: Boolean(res?.totp_enabled ?? res?.totpEnabled),
+      access_token: String(res?.access_token || ''),
+      refresh_token: String(res?.refresh_token || ''),
+      expires_in: Number(res?.expires_in || 0),
+      token_type: String(res?.token_type || 'Bearer'),
+      mfa_required: Boolean(res?.mfa_required ?? res?.mfaRequired),
+    };
+  },
+
+  /** Verify the 6-digit code of a sign-in challenge and finish the sign-in. */
+  async verifyMfa(mfaToken: string, code: string): Promise<{ success: boolean; error?: string; user?: User }> {
+    try {
+      const res = await fetchAPI('/auth/mfa/verify', {
+        method: 'POST',
+        body: JSON.stringify({ mfa_token: mfaToken, code, device_id: 'web' }),
+      });
+      if (!res || typeof res.access_token !== 'string') {
+        return { success: false, error: 'Invalid authenticator code.' };
+      }
+      localStorage.setItem('velismail_token', res.access_token);
+      if (typeof res.refresh_token === 'string') {
+        localStorage.setItem('velismail_refresh', res.refresh_token);
+      }
+      const profile = await fetchAuthenticatedProfile();
+      const safeUser = buildSessionUser({ token: res.access_token, email: '', profile });
+      if (safeUser.status === 'suspended' || safeUser.status === 'deactivated') {
+        this.logout();
+        return { success: false, error: 'This account is not active. Contact VelisMail support for review or recovery.' };
+      }
+      saveDB(STORAGE_KEYS.session, safeUser);
+      saveUserToPersistentStore(safeUser);
+      reloadAccountCaches();
+      return { success: true, user: safeUser };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Invalid authenticator code.' };
+    }
+  },
+
+  /** Send a recovery code to the verified recovery email. */
+  async sendMfaRecoveryOtp(mfaToken: string): Promise<MfaRecoverySendResponse> {
+    const res = await fetchAPI('/auth/mfa/recovery/send-otp', {
+      method: 'POST',
+      body: JSON.stringify({ mfa_token: mfaToken }),
+    });
+    if (!res || !res.success) {
+      throw new Error('Unable to send the recovery code.');
+    }
+    return {
+      success: true,
+      challengeToken: String(res.challenge_token || res.challengeToken || ''),
+      expiresIn: Number(res.expires_in || res.expiresIn || 0),
+      maskedEmail: String(res.masked_email || res.maskedEmail || ''),
+    };
+  },
+
+  /** Verify the recovery code and receive a fresh authenticator secret. */
+  async verifyMfaRecovery(mfaToken: string, challengeToken: string, otp: string): Promise<MfaRecoveryVerifyResponse> {
+    const res = await fetchAPI('/auth/mfa/recovery/verify', {
+      method: 'POST',
+      body: JSON.stringify({ mfa_token: mfaToken, challenge_token: challengeToken, otp }),
+    });
+    if (!res || !res.success) {
+      throw new Error('Invalid recovery code.');
+    }
+    return {
+      success: true,
+      recoveryToken: String(res.recovery_token || res.recoveryToken || ''),
+      secret: String(res.secret || ''),
+      otpauthUrl: String(res.otpauth_url || res.otpauthUrl || ''),
+      recoveryEmail: String(res.recovery_email || res.recoveryEmail || ''),
+    };
+  },
+
+  /** Confirm the new authenticator and finish the sign-in. */
+  async completeMfaRecovery(recoveryToken: string, code: string): Promise<{ success: boolean; error?: string; user?: User }> {
+    try {
+      const res = await fetchAPI('/auth/mfa/recovery/complete', {
+        method: 'POST',
+        body: JSON.stringify({ recovery_token: recoveryToken, code, device_id: 'web' }),
+      });
+      if (!res || typeof res.access_token !== 'string') {
+        return { success: false, error: 'Failed to complete the recovery.' };
+      }
+      localStorage.setItem('velismail_token', res.access_token);
+      if (typeof res.refresh_token === 'string') {
+        localStorage.setItem('velismail_refresh', res.refresh_token);
+      }
+      const profile = await fetchAuthenticatedProfile();
+      const safeUser = buildSessionUser({ token: res.access_token, email: '', profile });
+      if (safeUser.status === 'suspended' || safeUser.status === 'deactivated') {
+        this.logout();
+        return { success: false, error: 'This account is not active. Contact VelisMail support for review or recovery.' };
+      }
+      saveDB(STORAGE_KEYS.session, safeUser);
+      saveUserToPersistentStore(safeUser);
+      reloadAccountCaches();
+      return { success: true, user: safeUser };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Failed to complete the recovery.' };
     }
   },
 
