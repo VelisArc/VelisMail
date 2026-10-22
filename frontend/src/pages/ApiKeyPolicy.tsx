@@ -91,7 +91,7 @@ export default function ApiKeyPolicy() {
               <tr><td><strong>Prefix</strong></td><td><code>vsk_…</code></td><td><code>vsk_plat_…</code></td></tr>
               <tr><td><strong>Scope of power</strong></td><td>One company (tenant)</td><td>The whole platform</td></tr>
               <tr><td><strong>Who creates it</strong></td><td>Company owner / admin</td><td>Platform owner only</td></tr>
-              <tr><td><strong>Where used</strong></td><td>Business dashboard → API Keys</td><td>Platform control plane → Management API</td></tr>
+              <tr><td><strong>Where used</strong></td><td>Business dashboard  &rarr;  API Keys</td><td>Platform control plane  &rarr;  Management API</td></tr>
               <tr><td><strong>Typical caller</strong></td><td>Your app, your assistant, your integration</td><td>An AI/assistant that monitors or fixes accounts</td></tr>
               <tr><td><strong>Can send mail?</strong></td><td>Yes, with <code>mail.send</code></td><td>No — platform keys cannot call mail routes</td></tr>
             </tbody>
@@ -221,7 +221,7 @@ export default function ApiKeyPolicy() {
       <section>
         <h2>5. Usage roadmap — from zero to a working integration</h2>
         <ol>
-          <li><strong>Create the key.</strong> In the dashboard: Workspace → API Keys (or Platform → Management API for platform keys). Pick a preset, fine-tune scopes, set an expiry.</li>
+          <li><strong>Create the key.</strong> In the dashboard: Workspace  &rarr;  API Keys (or Platform  &rarr;  Management API for platform keys). Pick a preset, fine-tune scopes, set an expiry.</li>
           <li><strong>Copy the secret immediately.</strong> It is shown once. Store it in a secrets manager, never in source code.</li>
           <li><strong>Call the API.</strong> Send <code>Authorization: Bearer vsk_…</code> (or <code>vsk_plat_…</code>) on every request.</li>
           <li><strong>Handle 401/403.</strong> 401 = expired/revoked key. 403 = missing scope (the message names it) or off-platform route.</li>
@@ -300,11 +300,11 @@ curl -X POST -H "Authorization: Bearer vsk_plat_…" -H "Content-Type: applicati
       </section>
         <section>
           <ol>
-          <li><code>401</code> → key expired or revoked. Create a new key.</li>
-          <li><code>403 "missing the X scope"</code> → recreate the key with that scope, or switch to a broader preset.</li>
-          <li><code>403 "A platform API key cannot call this endpoint."</code> → you are using a platform key on a workspace route. Use a workspace key instead.</li>
-          <li><code>403 "This platform API key is missing the … scope."</code> → add the scope or use <code>platform.full</code>.</li>
-          <li><code>429</code> → rate limited; back off and retry.</li>
+          <li><code>401</code>  &rarr;  key expired or revoked. Create a new key.</li>
+          <li><code>403 "missing the platform.full scope"</code>  &rarr;  recreate the key with that scope, or switch to a broader preset.</li>
+          <li><code>403 "A platform API key cannot call this endpoint."</code>  &rarr;  you are using a platform key on a workspace route. Use a workspace key instead.</li>
+          <li><code>403 "This platform API key is missing the platform.full scope."</code>  &rarr;  add the scope or use <code>platform.full</code>.</li>
+          <li><code>429</code>  &rarr;  rate limited; back off and retry.</li>
         </ol>
       </section>
     </LegalLayout>
