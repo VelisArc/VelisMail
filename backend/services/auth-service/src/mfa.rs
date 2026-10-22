@@ -203,12 +203,12 @@ pub fn verify_totp_code(secret_b32: &str, code: &str, now: Option<u64>) -> bool 
         let counter = (time_step as i64 + offset) as u64;
         let expected = hotp(&secret, counter);
         let equal = expected.len() == code.len()
-        && expected
-            .as_bytes()
-            .iter()
-            .zip(code.as_bytes().iter())
-            .all(|(a, b)| a == b);
-    if equal {
+            && expected
+                .as_bytes()
+                .iter()
+                .zip(code.as_bytes().iter())
+                .all(|(a, b)| a == b);
+        if equal {
             return true;
         }
     }

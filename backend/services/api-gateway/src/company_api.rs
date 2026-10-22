@@ -352,7 +352,10 @@ pub async fn submit_feedback(
         .trim()
         .to_string();
     if subject.is_empty() || body.is_empty() {
-        return Err(fail(StatusCode::BAD_REQUEST, "Subject and message are required."));
+        return Err(fail(
+            StatusCode::BAD_REQUEST,
+            "Subject and message are required.",
+        ));
     }
     let category = payload
         .get("category")
@@ -370,7 +373,10 @@ pub async fn submit_feedback(
         .map(|s| s.to_string());
     if let Some(img) = &image {
         if img.len() > 7_000_000 {
-            return Err(fail(StatusCode::BAD_REQUEST, "Image is too large (max ~5 MB)."));
+            return Err(fail(
+                StatusCode::BAD_REQUEST,
+                "Image is too large (max ~5 MB).",
+            ));
         }
     }
 
@@ -395,15 +401,15 @@ pub async fn submit_feedback(
             let id: Uuid = row.try_get("id").unwrap_or(Uuid::nil());
             ok(json!({ "success": true, "id": id.to_string() }))
         }
-        Err(_) => Err(fail(StatusCode::INTERNAL_SERVER_ERROR, "Could not save feedback.")),
+        Err(_) => Err(fail(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Could not save feedback.",
+        )),
     }
 }
 
 /// List the feedback notes submitted by this workspace.
-pub async fn list_feedback(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-) -> ApiResult {
+pub async fn list_feedback(State(state): State<AppState>, headers: HeaderMap) -> ApiResult {
     let context = workspace_context(&state, &headers).await?;
     let db = db_pool(&state)?;
     let rows = sqlx::query(

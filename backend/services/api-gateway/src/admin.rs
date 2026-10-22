@@ -4671,7 +4671,9 @@ pub async fn list_platform_feedback(
         })
         .collect();
     let open = items.iter().filter(|i| i["status"] == "open").count();
-    ok(json!({ "success": true, "feedback": items, "counts": { "total": items.len(), "open": open } }))
+    ok(
+        json!({ "success": true, "feedback": items, "counts": { "total": items.len(), "open": open } }),
+    )
 }
 
 #[derive(Debug, Deserialize)]
@@ -4701,7 +4703,9 @@ pub async fn update_platform_feedback(
         Ok(v) => v,
         Err(_) => return fail(StatusCode::BAD_REQUEST, "Invalid feedback id."),
     };
-    let resolved_at = if payload.status.as_deref() == Some("resolved") || payload.status.as_deref() == Some("closed") {
+    let resolved_at = if payload.status.as_deref() == Some("resolved")
+        || payload.status.as_deref() == Some("closed")
+    {
         Some(Utc::now())
     } else {
         None
@@ -4742,7 +4746,10 @@ pub async fn update_platform_feedback(
             ok(json!({ "success": true }))
         }
         Ok(_) => fail(StatusCode::NOT_FOUND, "Feedback not found."),
-        Err(_) => fail(StatusCode::INTERNAL_SERVER_ERROR, "Could not update feedback."),
+        Err(_) => fail(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Could not update feedback.",
+        ),
     }
 }
 
@@ -4775,10 +4782,22 @@ pub async fn escalate_feedback_to_investigation(
     let body: String = row.try_get("body").unwrap_or_default();
     let email: String = row.try_get("user_email").unwrap_or_default();
     let tenant_id: Option<Uuid> = row.try_get("tenant_id").ok().flatten();
-    let category: String = row.try_get("category").unwrap_or_else(|_| "general".to_string());
-    let priority: String = row.try_get("priority").unwrap_or_else(|_| "medium".to_string());
-    let sev = if priority == "high" || priority == "urgent" { "high" } else { "medium" };
-    let case_priority = if priority == "high" || priority == "urgent" { "P2" } else { "P3" };
+    let category: String = row
+        .try_get("category")
+        .unwrap_or_else(|_| "general".to_string());
+    let priority: String = row
+        .try_get("priority")
+        .unwrap_or_else(|_| "medium".to_string());
+    let sev = if priority == "high" || priority == "urgent" {
+        "high"
+    } else {
+        "medium"
+    };
+    let case_priority = if priority == "high" || priority == "urgent" {
+        "P2"
+    } else {
+        "P3"
+    };
     let now = Utc::now();
     let case_number = format!("FB-{}", &id[..8]);
     let result = sqlx::query(
@@ -4802,13 +4821,18 @@ pub async fn escalate_feedback_to_investigation(
     .await;
     match result {
         Ok(_) => {
-            let _ = sqlx::query("UPDATE feedback SET status = 'escalated', updated_at = NOW() WHERE id = $1")
-                .bind(Uuid::parse_str(&id).unwrap_or(Uuid::nil()))
-                .execute(db)
-                .await;
+            let _ = sqlx::query(
+                "UPDATE feedback SET status = 'escalated', updated_at = NOW() WHERE id = $1",
+            )
+            .bind(Uuid::parse_str(&id).unwrap_or(Uuid::nil()))
+            .execute(db)
+            .await;
             ok(json!({ "success": true, "caseNumber": case_number }))
         }
-        Err(e) => fail(StatusCode::INTERNAL_SERVER_ERROR, &format!("Could not create investigation: {}", e)),
+        Err(e) => fail(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            &format!("Could not create investigation: {}", e),
+        ),
     }
 }
 pub async fn list_platform_settings(

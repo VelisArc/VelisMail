@@ -162,7 +162,10 @@ pub fn api_v1_routes(_state: &AppState) -> Router<AppState> {
             "/admin/platform/api-keys/{id}",
             delete(admin::revoke_platform_api_key),
         )
-        .route("/admin/platform/feedback", get(admin::list_platform_feedback))
+        .route(
+            "/admin/platform/feedback",
+            get(admin::list_platform_feedback),
+        )
         .route(
             "/admin/platform/feedback/{id}",
             patch(admin::update_platform_feedback),
