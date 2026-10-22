@@ -1445,7 +1445,8 @@ export const mail = {
         unread: false,
         starred: false,
         labels: ['scheduled'],
-        hasAttachment: attachments && attachments.length > 0 ? true : false,\n      pendingSync: true,
+        hasAttachment: attachments && attachments.length > 0 ? true : false,
+      pendingSync: true,
         scheduledAt: normalizedSchedule,
       };
       const scheduledCache = reloadEmailsCacheFromStorage();
@@ -1510,7 +1511,8 @@ export const mail = {
       body: plainBody, // Save plain body locally for clean rendering
       htmlBody,
       date: new Date().toISOString(),
-      folder: 'sent', unread: false, starred: false, labels: [], hasAttachment: attachments && attachments.length > 0 ? true : false,\n      pendingSync: true,
+      folder: 'sent', unread: false, starred: false, labels: [], hasAttachment: attachments && attachments.length > 0 ? true : false,
+      pendingSync: true,
     };
     const sendCache = reloadEmailsCacheFromStorage();
     const filteredCache = sendCache.filter(existing => existing.id !== email.id);
@@ -1549,7 +1551,8 @@ export const mail = {
         unread: true,
         starred: false,
         labels: ['internal'],
-        hasAttachment: attachments && attachments.length > 0 ? true : false,\n      pendingSync: true,
+        hasAttachment: attachments && attachments.length > 0 ? true : false,
+      pendingSync: true,
         messageId: email.messageId || email.id,
         threadId: email.threadId || email.messageId || email.id,
       }));
