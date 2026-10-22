@@ -4801,9 +4801,9 @@ pub async fn escalate_feedback_to_investigation(
     let now = Utc::now();
     let case_number = format!("FB-{}", &id[..8]);
     let result = sqlx::query(
-        "INSERT INTO investigations (case_number, title, type, severity, status, priority, tenant_id,
-            reporter_email, summary, description, tags, sla_due_at, created_by, created_at, updated_at, event_count)
-         VALUES ($1, $2, 'feedback', $3, 'open', $4, $5, $6, $7, $8, $9, $10, $11, $12, $12, 0)",
+        "INSERT INTO investigations (case_number, title, investigation_type, severity, status, priority, tenant_id,
+            reporter_email, summary, description, tags, sla_due_at, created_by, created_at, updated_at)
+         VALUES ($1, $2, 'feedback', $3, 'open', $4, $5, $6, $7, $8, $9, $10, $11, $12, $12)",
     )
     .bind(&case_number)
     .bind(&subject)
