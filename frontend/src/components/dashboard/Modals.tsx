@@ -2,7 +2,7 @@ import { X, UserCheck, CheckCircle2, Copy, Shield, AlertTriangle, LogOut, Mail, 
 import Composer from '../Composer';
 import type { DashboardState } from './types';
 import { providerRecordType } from './utils';
-import { connections } from '../../api/client';
+import { connections, teamAccess } from '../../api/client';
 import { workspaceApi } from '../../api/company';
 
 interface ModalsProps {
@@ -94,6 +94,27 @@ function InviteModal({ state }: { state: DashboardState }) {  return (
                   role: state.inviteRole,
                   expiresInHours: state.inviteExpiresHours,
                 });
+
+                // Also mint a Team Access Key (vmt_…) so the invitee can sign
+                // in through the Login → Team Access tab without any setup.
+                let accessKey = '';
+                if (state.user) {
+                  try {
+                    const teamInvite = await teamAccess.createInvite({
+                      issuer: state.user,
+                      email,
+                      name: state.inviteName.trim() || email.split('@')[0],
+                      role: state.inviteRole,
+                      expiresInHours: state.inviteExpiresHours,
+                    });
+                    accessKey = teamInvite.token;
+                  } catch {
+                    // The workspace invitation still succeeded; the key is
+                    // best-effort (it may be unavailable if the backend is
+                    // unreachable, but the email invitation was sent).
+                  }
+                }
+
                 state.setIssuedInvite({
                   id: invitation.id,
                   email: invitation.email,
@@ -101,6 +122,7 @@ function InviteModal({ state }: { state: DashboardState }) {  return (
                   invitedBy: state.user?.email || '',
                   status: 'pending',
                   expiresAt: invitation.expiresAt,
+                  accessKey,
                 });
                 state.showToast(`Invitation sent to ${invitation.email}`);
                 state.refreshTeam();
@@ -121,6 +143,33 @@ function InviteModal({ state }: { state: DashboardState }) {  return (
             <p className="text-xs text-muted invite-expiry">
               It is valid until {state.issuedInvite?.expiresAt ? new Date(state.issuedInvite.expiresAt).toLocaleString() : 'it expires'}.
             </p>
+
+            {state.issuedInvite?.accessKey && (
+              <div className="invite-access-key">
+                <p className="invite-access-key-label">
+                  <Shield size={14} /> Team Access Key
+                </p>
+                <p className="invite-access-key-hint">
+                  Share this key with <strong>{state.issuedInvite.email}</strong>. They enter it first on the Login page (Team Access tab), then their email, then the OTP — and they land in your workspace with <strong>{state.issuedInvite.role}</strong> access. No separate setup needed.
+                </p>
+                <div className="invite-access-key-row">
+                  <code className="invite-access-key-value" title="Team Access Key">{state.issuedInvite.accessKey}</code>
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    onClick={() => {
+                      navigator.clipboard.writeText(state.issuedInvite?.accessKey || '').then(
+                        () => state.showToast('Access key copied to clipboard.'),
+                        () => state.showToast('Unable to copy. Select the key manually.', 'error'),
+                      );
+                    }}
+                  >
+                    <Copy size={14} /> Copy
+                  </button>
+                </div>
+              </div>
+            )}
+
             <button className="btn btn-ghost btn-sm invite-done-btn" onClick={() => {
               state.setIssuedInvite(null);
               state.setInviteName('');

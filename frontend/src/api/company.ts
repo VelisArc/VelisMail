@@ -42,6 +42,8 @@ export type WorkspaceInvitation = {
   status: string;
   expiresAt?: string | null;
   createdAt?: string | null;
+  /** Team Access Key (vmt_…) the invitee enters first on the Login page. */
+  accessKey?: string;
 };
 
 export type WorkspaceDomain = {

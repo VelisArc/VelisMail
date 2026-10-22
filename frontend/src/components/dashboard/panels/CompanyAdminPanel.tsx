@@ -35,6 +35,7 @@ import {
   type WorkspaceInvitation,
 } from '../../../api/company';
 import type { BusinessMailbox } from '../../../api/types';
+import { loadTeamAccessInvites } from '../../../api/client-core';
 import type { DashboardState } from '../types';
 import { AdminConfirmSelect } from '../AdminConfirm';
 import { useAdminConfirm } from '../useAdminConfirm';
@@ -146,6 +147,19 @@ export default function CompanyAdminPanel({ state }: { state: DashboardState }) 
   // console can never offer a permission the gateway does not know.
   const apiScopes = keys?.scopes || [];
   const keyPresets = keys?.presets || [];
+
+  // Look up the Team Access Key (vmt_…) that was minted when this invitation
+  // was created. It lives in local/session storage on the issuer's browser.
+  const lookupAccessKey = (email: string): string => {
+    try {
+      const invite = loadTeamAccessInvites().find(
+        (entry) => entry.email.toLowerCase() === email.toLowerCase() && entry.status === 'pending',
+      );
+      return invite?.token || '';
+    } catch {
+      return '';
+    }
+  };
 
   const canManage = state.user?.role === 'admin'
     || overview?.company.role === 'owner'
@@ -444,21 +458,46 @@ export default function CompanyAdminPanel({ state }: { state: DashboardState }) 
           {invitations.length > 0 && (
             <>
               <div className="admin-card-head mt-16">
-                <div><h3>Pending invitations</h3><p>Invites that have not been accepted yet.</p></div>
+                <div><h3>Pending invitations</h3><p>Invites that have not been accepted yet. Share the Team Access Key so the invitee can sign in.</p></div>
               </div>
               <div className="admin-table-wrap">
                 <table className="admin-table">
-                  <thead><tr><th>Email</th><th>Role</th><th>Invited by</th><th>Expires</th><th>Status</th></tr></thead>
+                  <thead><tr><th>Email</th><th>Role</th><th>Team Access Key</th><th>Invited by</th><th>Expires</th><th>Status</th></tr></thead>
                   <tbody>
-                    {invitations.map((invitation) => (
-                      <tr key={invitation.id}>
-                        <td><strong>{invitation.email}</strong></td>
-                        <td>{invitation.role}</td>
-                        <td>{invitation.invitedBy}</td>
-                        <td>{date(invitation.expiresAt)}</td>
-                        <td><Badge value={invitation.status}>{invitation.status}</Badge></td>
-                      </tr>
-                    ))}
+                    {invitations.map((invitation) => {
+                      const accessKey = invitation.accessKey || lookupAccessKey(invitation.email);
+                      return (
+                        <tr key={invitation.id}>
+                          <td><strong>{invitation.email}</strong></td>
+                          <td>{invitation.role}</td>
+                          <td>
+                            {accessKey ? (
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                <code style={{ fontSize: '12px', fontFamily: 'monospace', maxWidth: '160px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={accessKey}>{accessKey}</code>
+                                <button
+                                  type="button"
+                                  className="btn btn-ghost btn-icon"
+                                  title="Copy access key"
+                                  onClick={() => {
+                                    navigator.clipboard.writeText(accessKey).then(
+                                      () => {},
+                                      () => {},
+                                    );
+                                  }}
+                                >
+                                  <Copy size={14} />
+                                </button>
+                              </div>
+                            ) : (
+                              <span className="text-xs text-muted">Not available</span>
+                            )}
+                          </td>
+                          <td>{invitation.invitedBy}</td>
+                          <td>{date(invitation.expiresAt)}</td>
+                          <td><Badge value={invitation.status}>{invitation.status}</Badge></td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
