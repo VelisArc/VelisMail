@@ -27,6 +27,7 @@
 - A domain with two DMARC records is no longer reported as missing. The console names the extra record that has to be deleted, because receivers ignore the policy while both exist.
 - The setup checklist no longer points the receiving step at the DKIM record, and a domain whose records are all active is not reported as pending any more.
 - Sending from a domain that was never verified returns a clear setup message instead of a generic failure.
+- Workspace API key scopes now also cover destructive domain and mailbox routes, business creation and switching, business mail, team invites and domain verification, so a read-only key cannot change the workspace.
 
 ---
 
