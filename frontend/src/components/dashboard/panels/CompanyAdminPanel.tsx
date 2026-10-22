@@ -37,6 +37,7 @@ import type { BusinessMailbox } from '../../../api/types';
 import type { DashboardState } from '../types';
 import { AdminConfirmSelect } from '../AdminConfirm';
 import { useAdminConfirm } from '../useAdminConfirm';
+import { normalizeQuotas } from './quotaList';
 
 type Tab = 'overview' | 'team' | 'domains' | 'mailboxes' | 'usage' | 'billing' | 'security' | 'api' | 'audit' | 'integrations';
 
@@ -128,23 +129,6 @@ function Stat({ label, value, hint, icon, tone }: { label: string; value: string
       {hint && <small>{hint}</small>}
     </div>
   );
-}
-
-type CompanyQuota = CompanyOverview['quotas'][number];
-
-/**
- * Older gateways returned quotas as an object keyed by allowance name. Accept
- * both shapes so a frontend deploy never crashes against an older backend.
- */
-function normalizeQuotas(value: unknown): CompanyQuota[] {
-  if (Array.isArray(value)) return value as CompanyQuota[];
-  if (value && typeof value === 'object') {
-    return Object.entries(value as Record<string, Omit<CompanyQuota, 'key'>>).map(([key, quota]) => ({
-      key,
-      ...quota,
-    }));
-  }
-  return [];
 }
 
 export default function CompanyAdminPanel({ state }: { state: DashboardState }) {

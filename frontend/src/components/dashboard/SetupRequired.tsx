@@ -263,6 +263,8 @@ export default function SetupRequired({
     // The domain step stays reachable at all times: it is where a domain is
     // attached, and the DNS records of a domain cannot exist before that.
     if (key === 'domain') return true;
+    // DNS and receiving only make sense once a domain is attached.
+    if ((key === 'dns' || key === 'receiving') && !primary) return false;
     // Once a domain is attached and the infrastructure is configured, the DNS
     // step is the actionable one even while the domain is still pending. It
     // must never be locked behind the domain's verification flag.

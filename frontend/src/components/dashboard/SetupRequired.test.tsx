@@ -48,20 +48,20 @@ const checks: SetupCheck[] = [
     detail: 'Configured',
   },
   {
-    key: 'domain',
-    label: 'Primary domain',
-    description: 'The domain your company sends from.',
-    icon: Globe,
-    done: false,
-    detail: 'velismail.online - waiting for DNS',
-  },
-  {
     key: 'dns',
     label: 'DNS records active',
     description: 'The records that make mail flow.',
     icon: AlertTriangle,
     done: false,
     detail: '3 of 4 records active — 1 needs attention',
+  },
+  {
+    key: 'domain',
+    label: 'Primary domain',
+    description: 'The domain your company sends from.',
+    icon: Globe,
+    done: false,
+    detail: 'velismail.online - waiting for DNS',
   },
   {
     key: 'receiving',
@@ -165,6 +165,30 @@ describe('setup gate', () => {
     expect(
       (screen.getByRole('button', { name: /DNS records active/i }) as HTMLButtonElement).disabled,
     ).toBe(false);
+  });
+
+  it('asks for a domain before showing DNS records when none is attached', async () => {
+    const noDomainChecks = checks.map((check) =>
+      check.key === 'dns' ? { ...check, detail: 'No records to check yet' } : check,
+    );
+
+    render(
+      <SetupRequired
+        user={{ ...user, businessDomain: '' }}
+        readiness={{
+          ...readiness,
+          checks: noDomainChecks,
+          records: [],
+          pending: [],
+          primaryDomain: null,
+        }}
+      />,
+    );
+
+    expect(await screen.findByRole('heading', { name: 'Primary domain' })).toBeTruthy();
+    expect(
+      (screen.getByRole('button', { name: /DNS records active/i }) as HTMLButtonElement).disabled,
+    ).toBe(true);
   });
 
   it('points the domain step at the exact DNS fix instead of a dead verify button', async () => {
