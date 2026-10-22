@@ -56,13 +56,20 @@ interface SetupRequiredProps {
   onLogout?: () => void;
 }
 
+/**
+ * The order of the setup steps.
+ *
+ * The DNS records come before the domain confirmation: the records have to be
+ * published before a domain can be verified, so the customer sees the records
+ * first and the domain turns green on its own afterwards.
+ */
 const STEP_ORDER: SetupCheckKey[] = [
   'database',
   'apiKey',
   'provider',
   'webhook',
-  'domain',
   'dns',
+  'domain',
   'receiving',
 ];
 
@@ -141,11 +148,21 @@ export default function SetupRequired({
   const displayedRecords = records.length > 0 ? records : lastResult;
   const dnsCheck = checks.find((check) => check.key === 'dns');
   const pendingRecords = displayedRecords.filter((record) => record.status !== 'verified');
+  const isInfraStep = INFRA_KEYS.includes(activeKey);
+  const infraDone = INFRA_KEYS.every(
+    (key) => checks.find((check) => check.key === key)?.done,
+  );
   // A domain that is attached is not automatically verified: the DNS step is
   // the place where the customer can see and fix the remaining records. Skip
   // the domain confirmation step while that is the real blocker.
   const dnsNeedsWork = Boolean(primary && dnsCheck && !dnsCheck.done);
-  const nextActionable = firstBlocked?.key === 'domain' && dnsNeedsWork ? dnsCheck : firstBlocked;
+  // Without a domain there are no records either, so the domain is attached
+  // first and the records are published afterwards.
+  const nextActionable = !primary && infraDone
+    ? checks.find((check) => check.key === 'domain')
+    : firstBlocked?.key === 'domain' && dnsNeedsWork
+      ? dnsCheck
+      : firstBlocked;
   // The progress line should say what to do, not repeat the status label.
   const nextActionLabel = nextActionable
     ? nextActionable.key === 'dns'
@@ -159,10 +176,6 @@ export default function SetupRequired({
           : `Finish ${nextActionable.label.toLowerCase()}`
     : null;
 
-  const isInfraStep = INFRA_KEYS.includes(activeKey);
-  const infraDone = INFRA_KEYS.every(
-    (key) => checks.find((check) => check.key === key)?.done,
-  );
   const currentDone = Boolean(current?.done);
 
   useEffect(() => {
@@ -247,6 +260,9 @@ export default function SetupRequired({
   const stepUnlocked = (key: SetupCheckKey) => {
     const check = checks.find((entry) => entry.key === key);
     if (check?.done) return true;
+    // The domain step stays reachable at all times: it is where a domain is
+    // attached, and the DNS records of a domain cannot exist before that.
+    if (key === 'domain') return true;
     // Once a domain is attached and the infrastructure is configured, the DNS
     // step is the actionable one even while the domain is still pending. It
     // must never be locked behind the domain's verification flag.

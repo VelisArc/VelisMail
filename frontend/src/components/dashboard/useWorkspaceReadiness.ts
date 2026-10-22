@@ -213,22 +213,6 @@ export default function useWorkspaceReadiness(user: User | null): WorkspaceReadi
             : 'Not needed for this provider',
       },
       {
-        key: 'domain',
-        label: 'Primary domain',
-        description: 'The domain your company sends from. It has to be verified.',
-        icon: Globe,
-        done: domainReady,
-        detail: primary
-          ? `${primary.domain} - ${
-              domainReady
-                ? 'verified'
-                : primary.status === 'failed'
-                  ? 'verification failed'
-                  : 'waiting for DNS'
-            }`
-          : 'No domain connected yet',
-      },
-      {
         key: 'dns',
         label: 'DNS records active',
         description: 'SPF, DKIM and DMARC have to be published and active before mail flows.',
@@ -243,6 +227,22 @@ export default function useWorkspaceReadiness(user: User | null): WorkspaceReadi
                   : ''
               }`
             : 'No records to check yet',
+      },
+      {
+        key: 'domain',
+        label: 'Primary domain',
+        description: 'The domain your company sends from. It has to be verified.',
+        icon: Globe,
+        done: domainReady,
+        detail: primary
+          ? `${primary.domain} - ${
+              domainReady
+                ? 'verified'
+                : primary.status === 'failed'
+                  ? 'verification failed'
+                  : 'waiting for DNS'
+            }`
+          : 'No domain connected yet',
       },
       {
         key: 'receiving',

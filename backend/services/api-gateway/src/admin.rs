@@ -4415,8 +4415,9 @@ pub async fn company_overview(State(state): State<AppState>, headers: HeaderMap)
 
     // Every allowance the workspace has, with the real consumption, so the
     // customer can see what is included, what is used and what to buy next.
-    let quotas = json!({
-        "emails": {
+    let quotas = json!([
+        {
+            "key": "emails",
             "label": "Mail volume",
             "used": sent_used,
             "limit": email_limit,
@@ -4424,7 +4425,8 @@ pub async fn company_overview(State(state): State<AppState>, headers: HeaderMap)
             "period": "per month",
             "source": "Delivery engine volume over the last 30 days"
         },
-        "storage": {
+        {
+            "key": "storage",
             "label": "Database storage",
             "used": storage_used,
             "limit": storage_limit,
@@ -4432,7 +4434,8 @@ pub async fn company_overview(State(state): State<AppState>, headers: HeaderMap)
             "period": "per month",
             "source": "Object storage attached to this workspace"
         },
-        "apiRequests": {
+        {
+            "key": "apiRequests",
             "label": "Mail API requests",
             "used": api_requests_used,
             "limit": api_requests_limit,
@@ -4440,7 +4443,8 @@ pub async fn company_overview(State(state): State<AppState>, headers: HeaderMap)
             "period": "per month",
             "source": "Requests made with your API keys"
         },
-        "seats": {
+        {
+            "key": "seats",
             "label": "Team seats",
             "used": seats_used,
             "limit": seats_limit,
@@ -4448,7 +4452,7 @@ pub async fn company_overview(State(state): State<AppState>, headers: HeaderMap)
             "period": "per month",
             "source": "People with access to this workspace"
         }
-    });
+    ]);
 
     ok(json!({
         "success": true,

@@ -130,6 +130,23 @@ function Stat({ label, value, hint, icon, tone }: { label: string; value: string
   );
 }
 
+type CompanyQuota = CompanyOverview['quotas'][number];
+
+/**
+ * Older gateways returned quotas as an object keyed by allowance name. Accept
+ * both shapes so a frontend deploy never crashes against an older backend.
+ */
+function normalizeQuotas(value: unknown): CompanyQuota[] {
+  if (Array.isArray(value)) return value as CompanyQuota[];
+  if (value && typeof value === 'object') {
+    return Object.entries(value as Record<string, Omit<CompanyQuota, 'key'>>).map(([key, quota]) => ({
+      key,
+      ...quota,
+    }));
+  }
+  return [];
+}
+
 export default function CompanyAdminPanel({ state }: { state: DashboardState }) {
   const [tab, setTab] = useState<Tab>('overview');
   const [loading, setLoading] = useState(true);
@@ -250,6 +267,7 @@ export default function CompanyAdminPanel({ state }: { state: DashboardState }) 
   };
 
   const status = overview?.company.status || state.user?.status || 'active';
+  const quotas = normalizeQuotas(overview?.quotas);
 
   return (
     <div className="dash-panel dash-panel-admin">
@@ -311,7 +329,7 @@ export default function CompanyAdminPanel({ state }: { state: DashboardState }) 
                 </div>
               )}
               <div className="quota-list">
-                {(overview.quotas || []).map((quota) => {
+                {quotas.map((quota) => {
                   const percent = quota.limit > 0 ? Math.min(100, (quota.used / quota.limit) * 100) : 0;
                   const tone = percent >= 100 ? 'over' : percent >= 80 ? 'warn' : '';
                   const used = quota.unit === 'bytes' ? bytes(quota.used) : number(quota.used);
