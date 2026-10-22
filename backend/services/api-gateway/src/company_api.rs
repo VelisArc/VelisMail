@@ -393,11 +393,17 @@ pub async fn list_team(State(state): State<AppState>, headers: HeaderMap) -> Api
         .filter(|member| member.get("status").and_then(Value::as_str) == Some("active"))
         .count();
 
+    let allowance = crate::admin::tenant_allowance(db, context.tenant_id, &context.plan).await;
+
     ok(json!({
         "success": true,
         "members": members,
         "invitations": invitations,
-        "seatLimit": { "used": active_members, "max": crate::admin::plan_seats(&context.plan) },
+        "seatLimit": {
+            "used": active_members,
+            "max": allowance.seats,
+            "capped": allowance.seats > 0,
+        },
     }))
 }
 

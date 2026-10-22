@@ -727,7 +727,7 @@ export type CompanyOverview = {
     seats: number;
     emailsPerMonth: number;
     storageBytes: number;
-    apiRequestsPerMonth: number;
+    apiRequestsPerMinute: number;
   };
   /** Every allowance of the plan with the real consumption. */
   quotas: Array<{
@@ -771,7 +771,7 @@ export const companyAdminApi = {
         expiresAt: string;
         createdAt: string;
       }>;
-      seatLimit: { used: number; max: number };
+      seatLimit: { used: number; max: number; capped: boolean };
     }>('/admin/company/members'),
 
   updateMember: (id: string, payload: { role?: string; status?: string }) =>
@@ -916,6 +916,10 @@ export const companyAdminApi = {
         name: string;
         monthlyPaise: number;
         annualPaise: number;
+        /** A plan that is only available on request. */
+        contactOnly: boolean;
+        /** A plan without published limits: the allowance is negotiated. */
+        negotiated: boolean;
         limits: CompanyOverview['limits'];
       }>;
       invoices: Invoice[];

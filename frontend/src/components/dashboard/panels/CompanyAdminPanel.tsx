@@ -120,7 +120,7 @@ export default function CompanyAdminPanel({ state }: { state: DashboardState }) 
   const [invitations, setInvitations] = useState<WorkspaceInvitation[]>([]);
   const [domains, setDomains] = useState<WorkspaceDomain[]>([]);
   const [mailboxes, setMailboxes] = useState<BusinessMailbox[]>([]);
-  const [seatLimit, setSeatLimit] = useState({ used: 0, max: 5 });
+  const [seatLimit, setSeatLimit] = useState({ used: 0, max: 5, capped: true });
   const [usage, setUsage] = useState<Awaited<ReturnType<typeof companyAdminApi.usage>> | null>(null);
   const [billing, setBilling] = useState<Awaited<ReturnType<typeof companyAdminApi.billing>> | null>(null);
   const [security, setSecurity] = useState<Awaited<ReturnType<typeof companyAdminApi.security>> | null>(null);
@@ -279,7 +279,7 @@ export default function CompanyAdminPanel({ state }: { state: DashboardState }) 
       {tab === 'overview' && overview && (
         <>
           <div className="admin-grid-4">
-            <Stat label="Team members" value={number(overview.counts.members)} hint={`Seat limit ${overview.limits.seats}`} icon={<Users size={17} />} />
+            <Stat label="Team members" value={number(overview.counts.members)} hint={overview.limits.seats > 0 ? `Seat limit ${overview.limits.seats}` : 'Seat limit not capped'} icon={<Users size={17} />} />
             <Stat label="Emails / 30d" value={number(overview.counts.sent30d)} hint={`${overview.usage.emailPercent.toFixed(1)}% of plan`} icon={<Mail size={17} />} />
             <Stat label="Queue" value={number(overview.counts.queueDepth)} hint={`${number(overview.counts.failed30d)} failed in 30d`} icon={<Activity size={17} />} tone={overview.counts.queueDepth > 0 ? 'warn' : undefined} />
             <Stat label="Storage" value={bytes(overview.counts.storageBytes)} hint={`${overview.usage.storagePercent.toFixed(1)}% of quota`} icon={<Database size={17} />} />
@@ -381,7 +381,7 @@ export default function CompanyAdminPanel({ state }: { state: DashboardState }) 
       {tab === 'team' && (
         <section className="glass-card">
           <div className="admin-card-head">
-            <div><h3>Workspace members</h3><p>{seatLimit.used} of {seatLimit.max} seats used</p></div>
+            <div><h3>Workspace members</h3><p>{seatLimit.used} of {seatLimit.capped === false ? 'unlimited' : seatLimit.max} seats used</p></div>
             <div className="panel-header-actions">
               <button type="button" className="btn btn-primary btn-sm btn btn-primary btn-sm" onClick={() => state.setActiveBizTab('team')}><UserPlus size={15} /> Invite teammate</button>
             </div>
@@ -531,8 +531,8 @@ export default function CompanyAdminPanel({ state }: { state: DashboardState }) 
             <Stat label="Sent" value={number(usage.totals.sent30d)} hint="Last 30 days" icon={<Mail size={17} />} />
             <Stat label="Delivered" value={number(usage.totals.delivered30d)} hint="Last 30 days" icon={<CheckCircle2 size={17} />} tone="good" />
             <Stat label="Failed" value={number(usage.totals.failed30d)} hint="Last 30 days" icon={<AlertTriangle size={17} />} tone={usage.totals.failed30d > 0 ? 'bad' : undefined} />
-            <Stat label="Storage" value={bytes(usage.totals.storageBytes)} hint={`${bytes(usage.limits.storageBytes)} plan limit`} icon={<Database size={17} />} />
-            <Stat label="Plan usage" value={`${usage.usagePercent.toFixed(1)}%`} hint={`${number(usage.limits.emailsPerMonth)} monthly quota`} icon={<Activity size={17} />} tone={usage.usagePercent > 85 ? 'warn' : 'good'} />
+            <Stat label="Storage" value={bytes(usage.totals.storageBytes)} hint={usage.limits.storageBytes > 0 ? `${bytes(usage.limits.storageBytes)} plan limit` : 'no limit on this plan'} icon={<Database size={17} />} />
+            <Stat label="Plan usage" value={`${usage.usagePercent.toFixed(1)}%`} hint={usage.limits.emailsPerMonth > 0 ? `${number(usage.limits.emailsPerMonth)} monthly quota` : 'no monthly quota'} icon={<Activity size={17} />} tone={usage.usagePercent > 85 ? 'warn' : 'good'} />
           </div>
           <section className="glass-card">
             <div className="admin-card-head"><div><h3>Mail volume</h3><p>Sent, delivered and failed by day</p></div><BarChart3 size={16} /></div>
@@ -564,16 +564,20 @@ export default function CompanyAdminPanel({ state }: { state: DashboardState }) 
       {tab === 'billing' && billing && (
         <>
           <div className="admin-billing-hero">
-            <div><span className="text-xs text-muted uppercase">Current subscription</span><h3>{billing.plan} <Badge value={billing.status}>{billing.status}</Badge></h3><p>{number(billing.limits.seats)} seats · {number(billing.limits.emailsPerMonth)} emails/month · {bytes(billing.limits.storageBytes)} storage</p></div>
+            <div><span className="text-xs text-muted uppercase">Current subscription</span><h3>{billing.plan} <Badge value={billing.status}>{billing.status}</Badge></h3><p>{billing.limits.seats > 0 ? `${number(billing.limits.seats)} seats · ${number(billing.limits.emailsPerMonth)} emails/month · ${bytes(billing.limits.storageBytes)} storage` : 'Custom allowance, negotiated per customer'}</p></div>
             <div className="admin-billing-total"><span>Total paid</span><strong>{money(billing.summary.totalPaidPaise)}</strong><small>{number(billing.summary.invoiceCount)} invoices</small></div>
           </div>
           <div className="admin-grid-4 admin-grid-4">
             {billing.catalog.map((plan) => (
               <div key={plan.key} className={`billing-plan-card ${plan.key === billing.plan.toLowerCase() ? 'current' : ''}`}>
                 <div><strong>{plan.name}</strong>{plan.key === billing.plan.toLowerCase() && <Badge value="active">Current</Badge>}</div>
-                <span>{money(plan.monthlyPaise)}<small>/mo</small></span>
-                <ul><li>{number(plan.limits.seats)} seats</li><li>{number(plan.limits.emailsPerMonth)} emails/mo</li><li>{bytes(plan.limits.storageBytes)} storage</li></ul>
-                {plan.key !== billing.plan.toLowerCase() && <button type="button" className="btn btn-primary btn-sm btn btn-ghost btn-sm" onClick={() => state.setActiveBizTab('billing')}>Change plan</button>}
+                <span>{plan.negotiated ? 'Custom' : <>{money(plan.monthlyPaise)}<small>/mo</small></>}</span>
+                <ul>{plan.negotiated
+                  ? <li>Unlimited domains &amp; users</li>
+                  : <><li>{number(plan.limits.seats)} seats</li><li>{number(plan.limits.emailsPerMonth)} emails/mo</li><li>{bytes(plan.limits.storageBytes)} storage</li></>}</ul>
+                {plan.key !== billing.plan.toLowerCase() && (plan.contactOnly
+                  ? <a className="btn btn-primary btn-sm btn btn-ghost btn-sm" href="mailto:support@velismail.online?subject=Enterprise%20plan%20request">Contact sales</a>
+                  : <button type="button" className="btn btn-primary btn-sm btn btn-ghost btn-sm" onClick={() => state.setActiveBizTab('billing')}>Change plan</button>)}
               </div>
             ))}
           </div>

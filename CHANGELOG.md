@@ -3,11 +3,18 @@
 ## Unreleased
 
 ### Changed
+- The dashboard now opens only when the setup is really complete. The live DNS is read on every start: the database, the mail key, the provider, the inbound webhook, the domain and every record - SPF, DKIM, DMARC and the receiving MX - have to be published and active. Anything missing keeps the dashboard closed and names the step that is not done yet.
+- The setup panel is small and sits in the corner of the screen. It shows the progress, every missing step and the exact DNS records that still have to be published, with the name, the value and a copy button.
+- The setup flow no longer falls back to an offline completion. A failed check leaves the workspace unfinished and explains what to fix, instead of marking everything as verified.
+- The DNS records in the console now come from the mail provider and from the live DNS. Every record shows its name, type, value, TTL and state, plus what has to be done when it is not active.
+- Sending mail is blocked while the sender domain is not completely set up, and the customer is told which record is missing instead of getting a bounce later.
 - The floating composer is smaller and anchored to the bottom-right corner, leaving more of the inbox visible.
 - Enterprise is now a contact-only plan: no price or online checkout is shown. **Contact Now** opens a request form that sends directly to the VelisMail team, and Billing links to the same team instead of starting a purchase.
+- Enterprise has no published allowance any more. It is a negotiated plan, so the console no longer invents a seat, mail or storage limit for it: a workspace gets exactly the allowance it was provisioned with, and a workspace without one is shown as not capped.
 - Removed the control-plane hint from the dashboard sidebar so navigation has more room.
 - Platform broadcasts now have a **Send from** picker. The platform owner can choose any active custom mailbox, and the chosen address is used for every delivery.
 - Broadcast history records the sender address so it is clear which mailbox reached the accounts.
+- Workspace API keys can send mail through the gateway. A new `mail.send` scope is available, and full-access keys work end-to-end for server-to-server sending.
 
 ### Fixed
 - The composer header now uses white text and a visible close icon on its dark background.
@@ -15,6 +22,11 @@
 - The annual **Save 16%** badge on Pricing no longer inherits dark text on its black background.
 - Broadcast delivery stays private: every recipient gets one email with only their own address in the headers, never one shared message with every address visible.
 - The broadcast send button stays usable with a selected audience and explains what is missing instead of silently staying disabled.
+- The DNS records no longer show a placeholder host that mixed up the sending subdomain with the domain itself.
+- The DKIM record shows the published key again. The value used to be lowercased, and a base64 key is case sensitive, so the value could not be used as it was.
+- A domain with two DMARC records is no longer reported as missing. The console names the extra record that has to be deleted, because receivers ignore the policy while both exist.
+- The setup checklist no longer points the receiving step at the DKIM record, and a domain whose records are all active is not reported as pending any more.
+- Sending from a domain that was never verified returns a clear setup message instead of a generic failure.
 
 ---
 

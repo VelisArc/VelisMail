@@ -164,7 +164,7 @@ export const workspaceApi = {
       success: boolean;
       members: WorkspaceMember[];
       invitations: WorkspaceInvitation[];
-      seatLimit: { used: number; max: number };
+      seatLimit: { used: number; max: number; capped: boolean };
     }>('/company/team'),
 
   invite: (payload: { email: string; role: string; expiresInHours?: number }) =>

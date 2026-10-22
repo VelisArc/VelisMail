@@ -4458,12 +4458,25 @@ fn plan_limits(plan: &str) -> Value {
     velismail_common::plans::plan_allowance(plan).to_console_limits()
 }
 
-/// Seat allowance for a plan, used by the workspace API as well.
-pub(crate) fn plan_seats(plan: &str) -> i64 {
-    plan_limits(plan)
-        .get("seats")
-        .and_then(Value::as_i64)
-        .unwrap_or(5)
+/// The allowance a tenant actually runs with.
+///
+/// A tenant that was provisioned with its own allowance keeps it, every other
+/// tenant gets the published allowance of its plan. A negotiated plan - which
+/// is only available on request - has no published allowance, so without a
+/// stored one it is not capped at all.
+pub(crate) async fn tenant_allowance(
+    db: &PgPool,
+    tenant_id: Uuid,
+    plan: &str,
+) -> velismail_common::plans::PlanAllowance {
+    let stored: Value = sqlx::query_scalar("SELECT limits FROM tenants WHERE id = $1")
+        .bind(tenant_id)
+        .fetch_optional(db)
+        .await
+        .ok()
+        .flatten()
+        .unwrap_or_else(|| json!({}));
+    velismail_common::plans::effective_allowance(plan, &stored)
 }
 
 pub async fn company_overview(State(state): State<AppState>, headers: HeaderMap) -> ApiResult {
@@ -4770,13 +4783,21 @@ pub async fn company_members(State(state): State<AppState>, headers: HeaderMap) 
         })
         .collect();
 
+    let allowance = tenant_allowance(db, actor.tenant_id, &actor.plan).await;
+    let seats_max = if allowance.seats > 0 {
+        allowance.seats
+    } else {
+        0
+    };
+
     ok(json!({
         "success": true,
         "members": members,
         "invitations": invitations,
         "seatLimit": {
             "used": members.iter().filter(|m| m.get("status").and_then(Value::as_str) == Some("active")).count(),
-            "max": plan_limits(&actor.plan).get("seats").and_then(Value::as_i64).unwrap_or(5),
+            "max": seats_max,
+            "capped": allowance.seats > 0,
         },
     }))
 }
@@ -5126,12 +5147,13 @@ pub async fn company_usage(
             })
         })
         .collect();
-    let limits = plan_limits(&actor.plan);
+    let allowance = tenant_allowance(db, actor.tenant_id, &actor.plan).await;
+    let limits = allowance.to_console_limits();
     let sent = totals.get("sent30d").and_then(Value::as_i64).unwrap_or(0);
     let email_limit = limits
         .get("emailsPerMonth")
         .and_then(Value::as_i64)
-        .unwrap_or(1);
+        .unwrap_or(0);
     ok(json!({
         "success": true,
         "rangeDays": days,
@@ -5559,11 +5581,12 @@ pub async fn company_billing(State(state): State<AppState>, headers: HeaderMap) 
                 .flatten()
         })
         .min();
+    let allowance = tenant_allowance(db, actor.tenant_id, &actor.plan).await;
     ok(json!({
         "success": true,
         "plan": actor.plan,
         "status": actor.company_status,
-        "limits": plan_limits(&actor.plan),
+        "limits": allowance.to_console_limits(),
         "summary": {
             "totalPaidPaise": total_paid,
             "invoiceCount": invoices.len(),
@@ -5571,10 +5594,10 @@ pub async fn company_billing(State(state): State<AppState>, headers: HeaderMap) 
             "currency": "INR",
         },
         "catalog": [
-            { "key": "free", "name": "Free", "monthlyPaise": 0, "annualPaise": 0, "limits": plan_limits("free") },
-            { "key": "starter", "name": "Starter", "monthlyPaise": 29900, "annualPaise": 301400, "limits": plan_limits("starter") },
-            { "key": "business", "name": "Business", "monthlyPaise": 99900, "annualPaise": 1007000, "limits": plan_limits("business") },
-            { "key": "enterprise", "name": "Enterprise", "monthlyPaise": 249900, "annualPaise": 2519000, "limits": plan_limits("enterprise") }
+            { "key": "free", "name": "Free", "monthlyPaise": 0, "annualPaise": 0, "contactOnly": false, "negotiated": false, "limits": plan_limits("free") },
+            { "key": "starter", "name": "Starter", "monthlyPaise": 29900, "annualPaise": 301400, "contactOnly": false, "negotiated": false, "limits": plan_limits("starter") },
+            { "key": "business", "name": "Business", "monthlyPaise": 99900, "annualPaise": 1007000, "contactOnly": false, "negotiated": false, "limits": plan_limits("business") },
+            { "key": "enterprise", "name": "Enterprise", "monthlyPaise": 249900, "annualPaise": 2519000, "contactOnly": true, "negotiated": true, "limits": plan_limits("enterprise") }
         ],
         "invoices": invoices,
         "paymentGateway": {

@@ -23,7 +23,9 @@ function number(value?: number | null): string {
 export default function BillingPanel({ state, handleBuyPlan }: BillingPanelProps) {
   const currentPlan = (state.user?.plan || 'Free').toLowerCase();
   const currentBilling = state.user?.billingCycle || 'monthly';
-  const planAllowance = PLAN_LIMITS[currentPlan] || PLAN_LIMITS.free;
+  // A plan without a published allowance (Enterprise) is negotiated per
+  // customer, so it has no numbers to show here.
+  const planAllowance = PLAN_LIMITS[currentPlan];
 
   const purchasedAt = state.user?.paidPlanPurchasedAt 
     ? new Date(state.user.paidPlanPurchasedAt).toLocaleDateString()
@@ -61,12 +63,18 @@ export default function BillingPanel({ state, handleBuyPlan }: BillingPanelProps
             </div>
             <div>
               <span className="text-xs text-muted" style={{ display: 'block', marginBottom: '2px' }}>Storage limit</span>
-              <strong className="text-sm text-primary" style={{ fontWeight: '600' }}>{planAllowance.storageBytes > 0 ? bytes(planAllowance.storageBytes) : 'Unlimited'}</strong>
+              <strong className="text-sm text-primary" style={{ fontWeight: '600' }}>
+                {!planAllowance ? 'Custom (negotiated)' : planAllowance.storageBytes > 0 ? bytes(planAllowance.storageBytes) : 'Unlimited'}
+              </strong>
             </div>
             <div>
               <span className="text-xs text-muted" style={{ display: 'block', marginBottom: '2px' }}>Mail volume</span>
               <strong className="text-sm text-primary" style={{ fontWeight: '600' }}>
-                {planAllowance.emailsPerMonth > 0 ? `${number(planAllowance.emailsPerMonth)} emails / month` : 'Unlimited'}
+                {!planAllowance
+                  ? 'Custom (negotiated)'
+                  : planAllowance.emailsPerMonth > 0
+                    ? `${number(planAllowance.emailsPerMonth)} emails / month`
+                    : 'Unlimited'}
               </strong>
             </div>
           </div>
