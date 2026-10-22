@@ -105,6 +105,7 @@ pub fn required_scope(method: &str, path: &str) -> Option<&'static str> {
         ("POST", "/mailboxes") => Some("mailboxes.write"),
         ("DELETE", "/mailboxes") => Some("mailboxes.write"),
         ("GET", "/queue") => Some("mail.read"),
+        ("POST", "/mail/send") => Some("mail.send"),
         ("GET", "/audit") => Some("audit.read"),
         ("GET", "/templates") => Some("templates.read"),
         ("POST", "/templates") => Some("templates.write"),
@@ -112,6 +113,9 @@ pub fn required_scope(method: &str, path: &str) -> Option<&'static str> {
         ("GET", "/contacts") => Some("contacts.read"),
         ("POST", "/contacts") => Some("contacts.write"),
         ("DELETE", p) if p.starts_with("/contacts") => Some("contacts.write"),
+        ("GET", "/groups") => Some("contacts.read"),
+        ("POST", "/groups") => Some("contacts.write"),
+        ("DELETE", p) if p.starts_with("/groups") => Some("contacts.write"),
         ("GET", "/signatures") => Some("signatures.read"),
         ("POST", "/signatures") => Some("signatures.write"),
         ("DELETE", p) if p.starts_with("/signatures") => Some("signatures.write"),
@@ -135,6 +139,7 @@ pub fn scope_catalog() -> Vec<serde_json::Value> {
         json!({ "id": "mailboxes.read", "label": "Read mailboxes", "detail": "List the mailboxes of the workspace.", "risk": "low" }),
         json!({ "id": "mailboxes.write", "label": "Manage mailboxes", "detail": "Create and remove mailboxes.", "risk": "medium" }),
         json!({ "id": "mail.read", "label": "Read mail activity", "detail": "Read the delivery queue and the sent mail of the workspace.", "risk": "low" }),
+        json!({ "id": "mail.send", "label": "Send mail", "detail": "Send mail on behalf of the workspace through the platform relay or a configured provider.", "risk": "high" }),
         json!({ "id": "audit.read", "label": "Read the audit trail", "detail": "Read every audited action of the workspace.", "risk": "low" }),
         json!({ "id": "templates.read", "label": "Read templates", "detail": "List the saved templates.", "risk": "low" }),
         json!({ "id": "templates.write", "label": "Manage templates", "detail": "Create, edit and delete templates.", "risk": "medium" }),
@@ -169,7 +174,7 @@ pub fn key_presets() -> Vec<serde_json::Value> {
             "summary": "Looks up what it needs to send mail on your behalf.",
             "detail": "The key can read mailboxes, templates, contacts, signatures and the domains, plus the mail activity. It cannot change the workspace.",
             "scopes": [
-                "mail.read", "mailboxes.read", "templates.read",
+                "mail.read", "mail.send", "mailboxes.read", "templates.read",
                 "contacts.read", "signatures.read", "domains.read"
             ],
             "recommended": true

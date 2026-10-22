@@ -8,7 +8,7 @@ use axum::{
     body::{Body, Bytes},
     extract::{
         ws::{WebSocket, WebSocketUpgrade},
-        ConnectInfo, Query, State,
+        ConnectInfo, Extension, Query, State,
     },
     http::{HeaderMap, HeaderValue, Method, Request, StatusCode, Uri},
     response::{IntoResponse, Response},
@@ -17,7 +17,7 @@ use axum::{
 };
 use base64::{engine::general_purpose, Engine as _};
 use hmac::{Hmac, Mac};
-use jsonwebtoken::{decode, DecodingKey, Validation};
+use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Validation};
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -2742,6 +2742,7 @@ pub async fn verify_domain(
 
 pub async fn send_mail(
     State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
     headers: HeaderMap,
     Json(payload): Json<SendMailPayload>,
 ) -> (StatusCode, Json<serde_json::Value>) {
@@ -2923,7 +2924,56 @@ pub async fn send_mail(
             "from_name": payload.from_name
         }));
 
-    if let Some(auth_header) = headers.get(axum::http::header::AUTHORIZATION) {
+    let bearer = headers
+        .get(axum::http::header::AUTHORIZATION)
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.strip_prefix("Bearer "))
+        .unwrap_or_default();
+    if bearer.starts_with(crate::api_keys::API_KEY_PREFIX) {
+        // The mail service only accepts a signed session JWT. Exchange the
+        // validated workspace key for a short-lived internal token so a key
+        // can actually send mail server-to-server. The token keeps the key's
+        // tenant and is never returned to the caller.
+        let Some(secret) = state.config.jwt_secret.as_deref() else {
+            return (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(json!({
+                    "success": false,
+                    "message": "Mail sending is not configured on this server."
+                })),
+            );
+        };
+        let token = match encode(
+            &jsonwebtoken::Header::default(),
+            &claims,
+            &EncodingKey::from_secret(secret.as_bytes()),
+        ) {
+            Ok(token) => token,
+            Err(err) => {
+                tracing::error!("API key mail session could not be signed: {}", err);
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(json!({
+                        "success": false,
+                        "message": "Unable to create the mail session."
+                    })),
+                );
+            }
+        };
+        let authorization = match HeaderValue::from_str(&format!("Bearer {token}")) {
+            Ok(value) => value,
+            Err(_) => {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(json!({
+                        "success": false,
+                        "message": "Unable to create the mail session."
+                    })),
+                );
+            }
+        };
+        request = request.header(axum::http::header::AUTHORIZATION, authorization);
+    } else if let Some(auth_header) = headers.get(axum::http::header::AUTHORIZATION) {
         request = request.header(axum::http::header::AUTHORIZATION, auth_header);
     }
 
