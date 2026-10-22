@@ -7,11 +7,11 @@ import type {
   ConnectionUsage,
   PlatformAdminUserRecord,
   User,
-  TeamAccessInvite,
   Signature,
   Contact,
   ActiveSession,
 } from '../../api/client';
+import type { WorkspaceInvitation } from '../../api/company';
 import type { BizTab } from './constants';
 
 export interface DashboardState {
@@ -118,10 +118,11 @@ export interface DashboardState {
   refreshTemplates: () => void;
   refreshMailboxes: () => void | Promise<void>;
   refreshGroups: () => void;
+  removeTeamMember: (email: string) => Promise<void>;
   refreshConnectionUsage: () => void;
   refreshAdminUsers: () => void | Promise<void>;
   handleLogout: () => void;
-  handleSendEmail: (to?: string, subject?: string, body?: string) => void;
+  handleSendEmail: (to?: string, subject?: string, body?: string, attachments?: File[], scheduledAt?: string) => void;
   openComposeWith: (to?: string, subject?: string, body?: string) => void;
   copyToClipboard: (text: string) => void;
   inviteOpen: boolean;
@@ -130,12 +131,14 @@ export interface DashboardState {
   setInviteName: (n: string) => void;
   inviteEmail: string;
   setInviteEmail: (e: string) => void;
-  inviteRole: 'admin' | 'member' | 'viewer' | 'user';
-  setInviteRole: (r: 'admin' | 'member' | 'viewer' | 'user') => void;
+  inviteRole: 'admin' | 'member' | 'viewer';
+  setInviteRole: (r: 'admin' | 'member' | 'viewer') => void;
+  inviteSending: boolean;
+  setInviteSending: (s: boolean) => void;
   inviteExpiresHours: number;
   setInviteExpiresHours: (h: number) => void;
-  issuedInvite: TeamAccessInvite | null;
-  setIssuedInvite: (i: TeamAccessInvite | null) => void;
+  issuedInvite: WorkspaceInvitation | null;
+  setIssuedInvite: (i: WorkspaceInvitation | null) => void;
   templateEditorOpen: boolean;
   setTemplateEditorOpen: (o: boolean) => void;
   templateName: string;
@@ -144,6 +147,8 @@ export interface DashboardState {
   setTemplateSubject: (s: string) => void;
   templateBody: string;
   setTemplateBody: (b: string) => void;
+  templateSaving: boolean;
+  setTemplateSaving: (s: boolean) => void;
   previewTemplate: BusinessTemplate | null;
   setPreviewTemplate: (t: BusinessTemplate | null) => void;
   selectedAdminUser: PlatformAdminUserRecord | null;

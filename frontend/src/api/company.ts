@@ -178,6 +178,12 @@ export const workspaceApi = {
       method: 'DELETE',
     }),
 
+  removeTeamMember: (email: string) =>
+    request<{ success: boolean; email: string }>('/company/team/remove', {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+    }),
+
   domains: () =>
     request<{ success: boolean; domains: WorkspaceDomain[] }>('/company/domains'),
 
@@ -298,6 +304,7 @@ export const workspaceApi = {
   },
 
   saveContact: (payload: {
+    id?: string;
     name: string;
     email: string;
     phone?: string;
@@ -319,7 +326,7 @@ export const workspaceApi = {
   signatures: () =>
     request<{ success: boolean; signatures: Signature[] }>('/company/signatures'),
 
-  saveSignature: (payload: { name: string; content: string; isDefault?: boolean }) =>
+  saveSignature: (payload: { id?: string; name: string; content: string; isDefault?: boolean }) =>
     request<{ success: boolean; id: string }>('/company/signatures', {
       method: 'POST',
       body: JSON.stringify(payload),

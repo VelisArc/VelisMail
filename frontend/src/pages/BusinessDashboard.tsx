@@ -1,13 +1,13 @@
 import { useState, useEffect, useCallback, useMemo, type Dispatch, type SetStateAction } from 'react';
 import { Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { Building2, Check, ChevronDown, ChevronUp, Crown, Globe, Plus, X } from 'lucide-react';
-import { auth, connections, fetchAPI, fetchAuthenticatedProfile, isBusinessSetupReady, mail, saveDB, signatures, contacts, STORAGE_KEYS, type BusinessAuditEntry, type BusinessGroup, type BusinessMailbox, type BusinessTeamMember, type BusinessTemplate, type ConnectionUsage, type Email, type PlatformAdminUserRecord, type TeamAccessInvite, type Signature, type Contact, type ActiveSession, type User } from '../api/client';
+import { auth, connections, fetchAPI, fetchAuthenticatedProfile, isBusinessSetupReady, mail, saveDB, signatures, contacts, STORAGE_KEYS, type BusinessAuditEntry, type BusinessGroup, type BusinessMailbox, type BusinessTeamMember, type BusinessTemplate, type ConnectionUsage, type Email, type PlatformAdminUserRecord, type Signature, type Contact, type ActiveSession, type User } from '../api/client';
 import { platformAdminApi } from '../api/admin';
 import Sidebar from '../components/dashboard/Sidebar';
 import { PLANS, ROLE_ALLOWED_TABS, type BizTab } from '../components/dashboard/constants';
 import EmailInbox from '../components/dashboard/EmailInbox';
 import ErrorBoundary from '../components/ErrorBoundary';
-import { copyToClipboard, loadRazorpayCheckout, buildReplyQuote } from '../components/dashboard/utils';
+import { copyToClipboard, loadRazorpayCheckout, buildReplyQuote, fileToBase64 } from '../components/dashboard/utils';
 import type { DashboardState, DomainRecord, DomainHealth, MailQueueItem } from '../components/dashboard/types';
 import DomainsPanel from '../components/dashboard/panels/DomainsPanel';
 import MailboxesPanel from '../components/dashboard/panels/MailboxesPanel';
@@ -21,7 +21,7 @@ import SetupRequired from '../components/dashboard/SetupRequired';
 import useWorkspaceReadiness from '../components/dashboard/useWorkspaceReadiness';
 import PlatformAdminPanel, { type PlatformSection } from '../components/dashboard/panels/PlatformAdminPanel';
 import { platformOwnerUids, platformOwnerEmails } from '../lib/firebase';
-import { toAuditEntry, toQueueItem, toTeamMember, toTemplate, workspaceApi, type WorkspaceBusiness } from '../api/company';
+import { toAuditEntry, toQueueItem, toTeamMember, toTemplate, workspaceApi, type WorkspaceBusiness, type WorkspaceInvitation } from '../api/company';
 import { companyAdminApi } from '../api/admin';
 import TemplatesPanel from '../components/dashboard/panels/TemplatesPanel';
 import SettingsPanel from '../components/dashboard/panels/SettingsPanel';
@@ -218,13 +218,15 @@ function WorkspaceDashboard({ user, setUser, reloadReadiness }: WorkspaceDashboa
   const [inviteOpen, setInviteOpen] = useState(false);
   const [inviteName, setInviteName] = useState('');
   const [inviteEmail, setInviteEmail] = useState('');
-  const [inviteRole, setInviteRole] = useState<'admin' | 'member' | 'viewer' | 'user'>('user');
+  const [inviteRole, setInviteRole] = useState<'admin' | 'member' | 'viewer'>('member');
   const [inviteExpiresHours, setInviteExpiresHours] = useState(48);
-  const [issuedInvite, setIssuedInvite] = useState<TeamAccessInvite | null>(null);
+  const [inviteSending, setInviteSending] = useState(false);
+  const [issuedInvite, setIssuedInvite] = useState<WorkspaceInvitation | null>(null);
   const [templateEditorOpen, setTemplateEditorOpen] = useState(false);
   const [templateName, setTemplateName] = useState('');
   const [templateSubject, setTemplateSubject] = useState('');
   const [templateBody, setTemplateBody] = useState('');
+  const [templateSaving, setTemplateSaving] = useState(false);
   const [previewTemplate, setPreviewTemplate] = useState<BusinessTemplate | null>(null);
   const [selectedAdminUser, setSelectedAdminUser] = useState<PlatformAdminUserRecord | null>(null);
   const [adminStatusConfirm, setAdminStatusConfirm] = useState<{ record: PlatformAdminUserRecord; status: string; step: number } | null>(null);
@@ -455,9 +457,13 @@ function WorkspaceDashboard({ user, setUser, reloadReadiness }: WorkspaceDashboa
       })));
     } catch (error) {
       console.error('refresh groups failed', error);
-      setDomainGroups([]);
+      showToast(error instanceof Error ? error.message : 'Unable to load groups.', 'error');
     }
-  }, [activeDomainName]);
+  }, [activeDomainName, showToast]);
+  const removeTeamMember = useCallback(async (email: string) => {
+    await workspaceApi.removeTeamMember(email);
+    await refreshTeam();
+  }, [refreshTeam]);
   const refreshConnectionUsage = useCallback(() => setConnectionUsage(connections.getUsage()), []);
   const refreshAdminUsers = useCallback(async () => {
     // Platform users live in the separate /admin control plane. The business
@@ -494,9 +500,11 @@ function WorkspaceDashboard({ user, setUser, reloadReadiness }: WorkspaceDashboa
     refreshConnectionUsage();
     void refreshMailboxes();
     refreshGroups();
-  }, [activeDomainName, refreshDomains, refreshTeam, refreshQueue, refreshAudit, refreshTemplates, refreshConnectionUsage, refreshMailboxes, refreshGroups]);
+    void refreshSignatures();
+    void refreshContacts();
+  }, [activeDomainName, refreshDomains, refreshTeam, refreshQueue, refreshAudit, refreshTemplates, refreshConnectionUsage, refreshMailboxes, refreshGroups, refreshSignatures, refreshContacts]);
 
-  // ─── Businesses ───
+  // --- Businesses ---
   // An account can run more than one business. They all live in the same
   // storage, each in its own part, and switching re-scopes the whole console
   // to the complete details of that business.
@@ -596,16 +604,38 @@ function WorkspaceDashboard({ user, setUser, reloadReadiness }: WorkspaceDashboa
     }
   }, [activeMailboxAddress, domainMailboxes, selectedFromAddress]);
 
-  const handleSendEmail = useCallback(async (to?: string, subject?: string, body?: string) => {
+  const handleSendEmail = useCallback(async (
+    to?: string,
+    subject?: string,
+    body?: string,
+    attachments?: File[],
+    scheduledAt?: string,
+  ) => {
     const finalTo = to !== undefined ? to : composeTo;
     const finalSubject = subject !== undefined ? subject : composeSubject;
     const finalBody = body !== undefined ? body : composeBody;
     if (!finalTo || !finalSubject) { showToast('Recipient and subject required', 'error'); return; }
     setSending(true);
     try {
-      await mail.sendBusiness(activeDomainName, finalTo.split(',').map(s => s.trim()).filter(Boolean), finalSubject, finalBody, selectedFromAddress || undefined);
+      // The attachments are read here, so the composer keeps working with the
+      // files the customer picked.
+      const prepared = await Promise.all((attachments || []).map(async (file) => ({
+        filename: file.name,
+        content: await fileToBase64(file),
+        contentType: file.type || 'application/octet-stream',
+      })));
+      await mail.sendBusiness(
+        activeDomainName,
+        finalTo.split(',').map(s => s.trim()).filter(Boolean),
+        finalSubject,
+        finalBody,
+        selectedFromAddress || undefined,
+        prepared.length ? prepared : undefined,
+        scheduledAt,
+      );
       queryClient.invalidateQueries({ queryKey: ['emails', activeDomainName] });
-      showToast('Email sent'); setComposeOpen(false);
+      showToast(scheduledAt ? 'Message scheduled' : 'Email sent');
+      setComposeOpen(false);
     }
     catch (e) { console.error('send failed', e); showToast(e instanceof Error ? e.message : 'Failed to send', 'error'); }
     finally { setSending(false); }
@@ -711,7 +741,7 @@ function WorkspaceDashboard({ user, setUser, reloadReadiness }: WorkspaceDashboa
     const isFromMe = myAddresses.has(email.from.toLowerCase());
     const replyToAddress = isFromMe ? (Array.isArray(email.to) ? email.to.join(', ') : email.to) : email.from;
     
-    // Open compose with empty body, quote stored separately for ••• toggle
+    // Open compose with empty body, quote stored separately for â€¢â€¢â€¢ toggle
     openComposeWith(replyToAddress, replySubject, '', replyQuote);
   };
 
@@ -866,13 +896,15 @@ function WorkspaceDashboard({ user, setUser, reloadReadiness }: WorkspaceDashboa
     adminRiskFilter, setAdminRiskFilter, adminPage, setAdminPage, sidebarOpen, setSidebarOpen, user,
     activeDomainName,
     hasRoleAccess, canAccessPlatformAdmin, refreshDomains, refreshTeam, refreshQueue,
-    refreshAudit, refreshTemplates, refreshMailboxes, refreshGroups, refreshConnectionUsage, refreshAdminUsers,
+    refreshAudit, refreshTemplates, refreshMailboxes, refreshGroups, removeTeamMember, refreshConnectionUsage, refreshAdminUsers,
     handleLogout, handleSendEmail, openComposeWith, copyToClipboard,
     inviteOpen, setInviteOpen, inviteName, setInviteName, inviteEmail, setInviteEmail,
     inviteRole, setInviteRole, inviteExpiresHours, setInviteExpiresHours,
+    inviteSending, setInviteSending,
     issuedInvite, setIssuedInvite,
     templateEditorOpen, setTemplateEditorOpen, templateName, setTemplateName,
     templateSubject, setTemplateSubject, templateBody, setTemplateBody,
+    templateSaving, setTemplateSaving,
     previewTemplate, setPreviewTemplate,
     selectedAdminUser, setSelectedAdminUser,
     adminStatusConfirm, setAdminStatusConfirm,
@@ -903,7 +935,7 @@ function WorkspaceDashboard({ user, setUser, reloadReadiness }: WorkspaceDashboa
     contactEditorPhone, setContactEditorPhone,
     contactEditorCompany, setContactEditorCompany,
     editingContactId, setEditingContactId,
-  }), [activeBizTab, activeFolder, searchQuery, composeOpen, composeTo, composeSubject, composeBody, composeReplyQuote, sending, selectedFromAddress, activeMailboxAddress, annual, loadingPayment, toast, showLogoutConfirm, confirmRevokeId, pendingRoleChange, confirmAction, domainsList, activeDomain, domainMailboxes, domainGroups, teamMembers, mailQueue, auditLog, templates, connectionUsage, adminUsers, sortOrder, selectedEmails, mailStatusFilter, notificationEnabled, soundEnabled, showQueueFilters, queueStatusFilter, templateSearch, showAddDomain, newDomainInput, teamFilter, auditFilter, adminSearch, adminPlanFilter, adminStatusFilter, adminRiskFilter, adminPage, sidebarOpen, user, inviteOpen, inviteName, inviteEmail, inviteRole, inviteExpiresHours, issuedInvite, templateEditorOpen, templateName, templateSubject, templateBody, previewTemplate, selectedAdminUser, adminStatusConfirm, domainDetails, mailboxDetails, groupDetails, mailboxLocalPart, mailboxDisplayName, mailboxKind, groupName, groupLocalPart, groupMembers, verifyingDomainId, domainVerifyOpen, domainVerifySteps, domainVerifyProviderRecords, copiedField, signaturesList, contactsList, contactsSearch, activeSessions, signatureEditorOpen, signatureEditorName, signatureEditorContent, editingSignatureId, contactEditorOpen, contactEditorName, contactEditorEmail, contactEditorPhone, contactEditorCompany, editingContactId, showToast, activeDomainName, canAccessPlatformAdmin, handleLogout, handleSendEmail, hasRoleAccess, refreshAdminUsers, refreshAudit, refreshConnectionUsage, refreshContacts, refreshGroups, refreshMailboxes, refreshQueue, refreshSessions, refreshSignatures, refreshTeam, refreshTemplates, refreshDomains]);
+  }), [activeBizTab, activeFolder, searchQuery, composeOpen, composeTo, composeSubject, composeBody, composeReplyQuote, sending, selectedFromAddress, activeMailboxAddress, annual, loadingPayment, toast, showLogoutConfirm, confirmRevokeId, pendingRoleChange, confirmAction, domainsList, activeDomain, domainMailboxes, domainGroups, teamMembers, mailQueue, auditLog, templates, connectionUsage, adminUsers, sortOrder, selectedEmails, mailStatusFilter, notificationEnabled, soundEnabled, showQueueFilters, queueStatusFilter, templateSearch, showAddDomain, newDomainInput, teamFilter, auditFilter, adminSearch, adminPlanFilter, adminStatusFilter, adminRiskFilter, adminPage, sidebarOpen, user, inviteOpen, inviteName, inviteEmail, inviteRole, inviteExpiresHours, issuedInvite, templateEditorOpen, templateName, templateSubject, templateBody, previewTemplate, selectedAdminUser, adminStatusConfirm, domainDetails, mailboxDetails, groupDetails, mailboxLocalPart, mailboxDisplayName, mailboxKind, groupName, groupLocalPart, groupMembers, verifyingDomainId, domainVerifyOpen, domainVerifySteps, domainVerifyProviderRecords, copiedField, signaturesList, contactsList, contactsSearch, activeSessions, signatureEditorOpen, signatureEditorName, signatureEditorContent, editingSignatureId, contactEditorOpen, contactEditorName, contactEditorEmail, contactEditorPhone, contactEditorCompany, editingContactId, showToast, activeDomainName, canAccessPlatformAdmin, handleLogout, handleSendEmail, hasRoleAccess, refreshAdminUsers, refreshAudit, refreshConnectionUsage, refreshContacts, refreshGroups, refreshMailboxes, refreshQueue, refreshSessions, refreshSignatures, refreshTeam, refreshTemplates, removeTeamMember, refreshDomains]);
 
   return (
     <div className="biz-dash">
@@ -995,7 +1027,7 @@ function WorkspaceDashboard({ user, setUser, reloadReadiness }: WorkspaceDashboa
                           >
                             <span className="dash-business-item-main">
                               <strong>{business.name}</strong>
-                              <span>{business.primaryDomain || business.email} · {business.plan}</span>
+                              <span>{business.primaryDomain || business.email} Â· {business.plan}</span>
                             </span>
                             {business.id === activeBusinessId
                               ? <Check size={14} />

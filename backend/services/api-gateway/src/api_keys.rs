@@ -94,6 +94,7 @@ pub fn required_scope(method: &str, path: &str) -> Option<&'static str> {
     match (method, route) {
         ("GET", "/team") => Some("team.read"),
         ("POST", "/team/invitations") => Some("team.write"),
+        ("POST", "/team/remove") => Some("team.write"),
         ("DELETE", p) if p.starts_with("/team/invitations") => Some("team.write"),
         ("GET", "/domains") => Some("domains.read"),
         ("POST", "/domains") => Some("domains.write"),

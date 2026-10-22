@@ -1,17 +1,59 @@
-import { useMemo } from 'react';
-import { Shield, Plus, Menu, User, KeyRound, X } from 'lucide-react';
-import { businessTeam, teamAccess } from '../../../api/client';
+import { useMemo, useState } from 'react';
+import { Shield, Plus, Menu, User, X } from 'lucide-react';
+import { ROLE_ALLOWED_TABS } from '../constants';
 import type { DashboardState } from '../types';
 
 interface TeamPanelProps {
   state: DashboardState;
 }
 
+/**
+ * The features of the console that every role can reach.
+ *
+ * The table is built from the same list the sidebar uses, so a role can never
+ * be described as more powerful than it is.
+ */
+const PERMISSION_ROWS: { label: string; tab: string }[] = [
+  { label: 'Send & Read Mail', tab: 'mail' },
+  { label: 'Manage Templates', tab: 'templates' },
+  { label: 'Queue Monitoring', tab: 'queue' },
+  { label: 'Domain Management', tab: 'domains' },
+  { label: 'Mailbox Management', tab: 'mailboxes' },
+  { label: 'Distribution Groups', tab: 'groups' },
+  { label: 'Team Management', tab: 'team' },
+  { label: 'Analytics', tab: 'analytics' },
+  { label: 'Audit Log', tab: 'audit' },
+  { label: 'Billing', tab: 'billing' },
+  { label: 'Settings', tab: 'settings' },
+];
+
 export default function TeamPanel({ state }: TeamPanelProps) {
+  const [removing, setRemoving] = useState('');
   const displayTeam = useMemo(() => {
     if (state.teamFilter === 'all') return state.teamMembers;
     return state.teamMembers.filter(m => m.role === state.teamFilter);
   }, [state.teamMembers, state.teamFilter]);
+
+  const handleRemove = async (email: string) => {
+    if (!confirm(`Remove ${email} and revoke access?`)) return;
+    setRemoving(email);
+    try {
+      // The member is removed in the database of the company, so the change
+      // is real and survives a refresh.
+      await state.removeTeamMember(email);
+      state.showToast('Member removed and access revoked');
+    } catch (error) {
+      state.showToast(
+        error instanceof Error ? error.message : 'Unable to remove the member.',
+        'error',
+      );
+    } finally {
+      setRemoving('');
+    }
+  };
+
+  const can = (role: string, tab: string) =>
+    (ROLE_ALLOWED_TABS[role] || []).includes(tab as never);
 
   return (
     <div className="dash-panel">
@@ -23,6 +65,9 @@ export default function TeamPanel({ state }: TeamPanelProps) {
           </button>
         ))}
       </div>
+      {displayTeam.length === 0 && (
+        <div className="empty-state"><User size={48} className="text-muted" /><h3>No team members</h3><p className="text-muted">Invite a member to share the workspace.</p></div>
+      )}
       {displayTeam.map(m => (
         <div key={m.email} className="team-member-row">
           <div className="avatar avatar-sm"><User size={14} /></div>
@@ -32,16 +77,7 @@ export default function TeamPanel({ state }: TeamPanelProps) {
           }}>
             <option value="admin">Admin</option><option value="member">Member</option><option value="viewer">Viewer</option>
           </select>
-          {m.apiKey && <button className="btn btn-ghost btn-sm" onClick={() => { state.copyToClipboard(m.apiKey!); state.showToast('API key copied'); }}><KeyRound size={12} /></button>}
-          <button className="btn btn-ghost btn-sm btn-danger" onClick={() => {
-            if (confirm(`Remove ${m.email} and revoke access?`)) {
-              businessTeam.remove(m.email);
-              if (m.apiKey) {
-                teamAccess.revoke(m.apiKey).catch(() => {});
-              }
-              state.refreshTeam(); state.showToast('Member removed and access revoked');
-            }
-          }}><X size={12} /> Revoke</button>
+          <button className="btn btn-ghost btn-sm btn-danger" disabled={removing === m.email} onClick={() => void handleRemove(m.email)}><X size={12} /> Revoke</button>
         </div>
       ))}
       <div className="roles-info-detailed">
@@ -51,15 +87,18 @@ export default function TeamPanel({ state }: TeamPanelProps) {
             <tr><th>Feature</th><th>Admin</th><th>Member</th><th>Viewer</th></tr>
           </thead>
           <tbody>
-            <tr><td>Send & Read Mail</td><td><span className="badge badge-success">✓</span></td><td><span className="badge badge-success">✓</span></td><td><span className="badge badge-success">✓</span></td></tr>
-            <tr><td>Manage Templates</td><td><span className="badge badge-success">✓</span></td><td><span className="badge badge-success">✓</span></td><td><span className="badge badge-neutral">—</span></td></tr>
-            <tr><td>Queue Monitoring</td><td><span className="badge badge-success">✓</span></td><td><span className="badge badge-success">✓</span></td><td><span className="badge badge-success">✓</span></td></tr>
-            <tr><td>Domain Management</td><td><span className="badge badge-success">✓</span></td><td><span className="badge badge-neutral">—</span></td><td><span className="badge badge-neutral">—</span></td></tr>
-            <tr><td>Mailbox Management</td><td><span className="badge badge-success">✓</span></td><td><span className="badge badge-neutral">—</span></td><td><span className="badge badge-neutral">—</span></td></tr>
-            <tr><td>Team Management</td><td><span className="badge badge-success">✓</span></td><td><span className="badge badge-neutral">—</span></td><td><span className="badge badge-neutral">—</span></td></tr>
-            <tr><td>Analytics</td><td><span className="badge badge-success">✓</span></td><td><span className="badge badge-success">✓</span></td><td><span className="badge badge-success">✓</span></td></tr>
-            <tr><td>Billing</td><td><span className="badge badge-success">✓</span></td><td><span className="badge badge-neutral">—</span></td><td><span className="badge badge-neutral">—</span></td></tr>
-            <tr><td>Settings</td><td><span className="badge badge-success">✓</span></td><td><span className="badge badge-success">✓</span></td><td><span className="badge badge-neutral">—</span></td></tr>
+            {PERMISSION_ROWS.map(row => (
+              <tr key={row.label}>
+                <td>{row.label}</td>
+                {['admin', 'member', 'viewer'].map(role => (
+                  <td key={role}>
+                    <span className={`badge ${can(role, row.tab) ? 'badge-success' : 'badge-neutral'}`}>
+                      {can(role, row.tab) ? '✓' : '—'}
+                    </span>
+                  </td>
+                ))}
+              </tr>
+            ))}
           </tbody>
         </table>
       </div>

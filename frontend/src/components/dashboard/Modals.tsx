@@ -2,8 +2,8 @@ import { X, UserCheck, CheckCircle2, Copy, Shield, AlertTriangle, LogOut, Mail, 
 import Composer from '../Composer';
 import type { DashboardState } from './types';
 import { copyToClipboard, providerRecordType } from './utils';
-import { businessTemplates, teamAccess, connections, businessTeam } from '../../api/client';
-import { safeRandomUUID } from '../../api/client-core';
+import { connections } from '../../api/client';
+import { workspaceApi } from '../../api/company';
 
 interface ModalsProps {
   state: DashboardState;
@@ -29,11 +29,11 @@ function ComposeModal({ state }: { state: DashboardState }) {
               )}
             </select>
           }
-          onSend={(to, subject, body) => {
+          onSend={(to, subject, body, attachments, scheduledAt) => {
             state.setComposeTo(to);
             state.setComposeSubject(subject);
             state.setComposeBody(body);
-            state.handleSendEmail(to, subject, body);
+            state.handleSendEmail(to, subject, body, attachments, scheduledAt);
           }}
           onClose={() => state.setComposeOpen(false)}
           sending={state.sending}
@@ -53,14 +53,12 @@ const INVITE_ROLE_LABELS: Record<string, string> = {
   admin: 'Workspace Admin',
   member: 'Member',
   viewer: 'Viewer',
-  user: 'User',
 };
 
 const INVITE_ROLE_ACCESS: Record<string, string> = {
   admin: 'Full workspace access: mailboxes, domains, groups, templates, team management, billing and audit log.',
   member: 'Sends and receives mail, manages templates and the queue, and can view domains, mailboxes, groups and the audit log.',
   viewer: 'Read-only access to mail, domains, mailboxes, groups, analytics, billing and the audit log. Cannot change anything.',
-  user: 'Only the personal mailbox and contacts. No workspace administration.',
 };
 
 function InviteModal({ state }: { state: DashboardState }) {  return (
@@ -71,8 +69,8 @@ function InviteModal({ state }: { state: DashboardState }) {  return (
           <div className="invite-form">
             <input className="input" placeholder="Full name" value={state.inviteName} onChange={e => state.setInviteName(e.target.value)} />
             <input className="input" placeholder="Email address" type="email" value={state.inviteEmail} onChange={e => state.setInviteEmail(e.target.value)} />
-            <select className="input" value={state.inviteRole} onChange={e => state.setInviteRole(e.target.value as 'admin' | 'member' | 'viewer' | 'user')}>
-              <option value="admin">Admin</option><option value="member">Member</option><option value="viewer">Viewer</option><option value="user">User</option>
+            <select className="input" value={state.inviteRole} onChange={e => state.setInviteRole(e.target.value as 'admin' | 'member' | 'viewer')}>
+              <option value="admin">Admin</option><option value="member">Member</option><option value="viewer">Viewer</option>
             </select>
             <div className="invite-role-access">
               <strong>{INVITE_ROLE_LABELS[state.inviteRole] || state.inviteRole}</strong>
@@ -81,45 +79,52 @@ function InviteModal({ state }: { state: DashboardState }) {  return (
             <select className="input" value={state.inviteExpiresHours} onChange={e => state.setInviteExpiresHours(Number(e.target.value))}>
               <option value={24}>24 hours</option><option value={48}>48 hours</option><option value={72}>72 hours</option><option value={168}>7 days</option>
             </select>
-            <button className="btn btn-primary" onClick={async () => {
-              try {
-                const invite = await teamAccess.createInvite({ issuer: state.user!, name: state.inviteName, email: state.inviteEmail, role: state.inviteRole, expiresInHours: state.inviteExpiresHours });
-                state.setIssuedInvite(invite);
-                state.showToast('Invite created');
-
-                // Automatically list the invited user in the team access panel
-                const currentTeam = businessTeam.getAll();
-                const newMember = {
-                  id: safeRandomUUID(),
-                  email: state.inviteEmail,
-                  name: state.inviteName,
-                  role: state.inviteRole as "admin" | "member" | "viewer" | "user",
-                  addedAt: new Date().toISOString(),
-                  lastActive: new Date().toISOString(),
-                  apiKey: invite.token
-                };
-                businessTeam.save([...currentTeam, newMember]);
-                state.refreshTeam();
-              } catch {
-                state.showToast('Failed to create invite', 'error');
+            <button className="btn btn-primary" disabled={state.inviteSending} onClick={async () => {
+              const email = state.inviteEmail.trim();
+              if (!email || !email.includes('@')) {
+                state.showToast('Enter a valid email address.', 'error');
+                return;
               }
-            }}>Generate Invite</button>
+              state.setInviteSending(true);
+              try {
+                // The invitation is stored with the company and the member
+                // receives it by mail.
+                const invitation = await workspaceApi.invite({
+                  email,
+                  role: state.inviteRole,
+                  expiresInHours: state.inviteExpiresHours,
+                });
+                state.setIssuedInvite({
+                  id: invitation.id,
+                  email: invitation.email,
+                  role: invitation.role,
+                  invitedBy: state.user?.email || '',
+                  status: 'pending',
+                  expiresAt: invitation.expiresAt,
+                });
+                state.showToast(`Invitation sent to ${invitation.email}`);
+                state.refreshTeam();
+              } catch (error) {
+                state.showToast(
+                  error instanceof Error ? error.message : 'Failed to create invite',
+                  'error',
+                );
+              } finally {
+                state.setInviteSending(false);
+              }
+            }}>{state.inviteSending ? 'Sending...' : 'Send invitation'}</button>
           </div>
         ) : (
           <div className="invite-success">
             <CheckCircle2 size={32} className="text-success invite-success-icon" />
-            <p className="text-sm">Share this link with your team member:</p>
-            <div className="invite-link-row">
-              <input className="input" readOnly value={state.issuedInvite!.token} onClick={e => (e.target as HTMLInputElement).select()} />
-              <button className="btn btn-primary btn-sm" onClick={() => { copyToClipboard(state.issuedInvite!.token); state.showToast('Copied'); }}><Copy size={14} /></button>
-            </div>
-            <p className="text-xs text-muted invite-expiry">Expires in {state.inviteExpiresHours} hours</p>
+            <p className="text-sm">The invitation was sent to {state.issuedInvite?.email}.</p>
+            <p className="text-xs text-muted invite-expiry">
+              It is valid until {state.issuedInvite?.expiresAt ? new Date(state.issuedInvite.expiresAt).toLocaleString() : 'it expires'}.
+            </p>
             <button className="btn btn-ghost btn-sm invite-done-btn" onClick={() => {
               state.setIssuedInvite(null);
-              // Reset the invite form for the next user
               state.setInviteName('');
               state.setInviteEmail('');
-              // We keep it open to allow inviting another member easily, or we can close it. Request says "so next user can be invited".
             }}>Invite Another</button>
           </div>
         )}
@@ -140,7 +145,29 @@ function TemplateEditorModal({ state }: { state: DashboardState }) {
             <input className="input" placeholder="Template name" value={state.templateName} onChange={e => state.setTemplateName(e.target.value)} />
             <input className="input" placeholder="Subject line" value={state.templateSubject} onChange={e => state.setTemplateSubject(e.target.value)} />
             <textarea className="input" rows={8} placeholder="Email body..." value={state.templateBody} onChange={e => state.setTemplateBody(e.target.value)} />
-            <button className="btn btn-primary" onClick={() => { const all = businessTemplates.getAll(); const newTemplate = { id: 'tpl_' + safeRandomUUID().split('-')[0], name: state.templateName, subject: state.templateSubject, body: state.templateBody, usageCount: 0 }; all.unshift(newTemplate); businessTemplates.save(all); state.refreshTemplates(); state.setTemplateEditorOpen(false); state.showToast('Template saved'); }}>Save Template</button>
+            <button className="btn btn-primary" disabled={state.templateSaving} onClick={async () => {
+              if (!state.templateName.trim() || !state.templateSubject.trim()) {
+                state.showToast('A template needs a name and a subject.', 'error');
+                return;
+              }
+              state.setTemplateSaving(true);
+              try {
+                // The template is stored with the company, so it is available
+                // on every device and after a refresh.
+                await workspaceApi.saveTemplate({
+                  name: state.templateName.trim(),
+                  subject: state.templateSubject.trim(),
+                  body: state.templateBody,
+                });
+                await state.refreshTemplates();
+                state.setTemplateEditorOpen(false);
+                state.showToast('Template saved');
+              } catch (error) {
+                state.showToast(error instanceof Error ? error.message : 'Failed to save the template', 'error');
+              } finally {
+                state.setTemplateSaving(false);
+              }
+            }}>{state.templateSaving ? 'Saving...' : 'Save Template'}</button>
           </div>
         )}
       </div>

@@ -3,7 +3,8 @@ import {
   Settings, Menu, X, Plus, Edit3, Star, Trash2, Copy, Shield, Search, Power,
   Bell, Users, RotateCcw, Tag, Sliders, Link
 } from 'lucide-react';
-import { signatures, contacts, auth, autoReply, labels, rules } from '../../../api/client';
+import { auth, autoReply, labels, rules } from '../../../api/client';
+import { workspaceApi } from '../../../api/company';
 import type { DashboardState } from '../types';
 import type { Signature, Contact, EmailRule, EmailRuleCondition, EmailRuleAction, Label } from '../../../api/client';
 
@@ -62,18 +63,23 @@ function SignatureEditor({ state, sig }: { state: DashboardState; sig?: Signatur
           <label className="text-xs font-semibold text-muted mt-4 mb-2 block">Content (HTML or Text)</label>
           <textarea className="input" rows={6} placeholder="Kind regards,&#10;John Doe" value={content} onChange={e => setContent(e.target.value)} />
           
-          <button className="btn btn-primary mt-6" onClick={() => {
+          <button className="btn btn-primary mt-6" onClick={async () => {
             try {
-              if (isEdit && state.editingSignatureId) {
-                signatures.update(state.editingSignatureId, { name, content });
-              } else {
-                signatures.add(name, content);
-              }
-              state.refreshSignatures();
+              // The signature is stored with the company, so it is available
+              // on every device and after a refresh.
+              await workspaceApi.saveSignature({
+                id: isEdit ? state.editingSignatureId || undefined : undefined,
+                name,
+                content,
+              });
+              await state.refreshSignatures();
               state.setSignatureEditorOpen(false);
               state.setEditingSignatureId(null);
               state.showToast(isEdit ? 'Signature updated' : 'Signature created');
-            } catch (e) { console.error('save signature failed', e); state.showToast('Failed to save signature', 'error'); }
+            } catch (e) {
+              console.error('save signature failed', e);
+              state.showToast(e instanceof Error ? e.message : 'Failed to save signature', 'error');
+            }
           }}>{isEdit ? 'Update' : 'Create'} Signature</button>
         </div>
       </div>
@@ -116,18 +122,30 @@ function ContactEditor({ state, contact }: { state: DashboardState; contact?: Co
           <input className="input" placeholder="Email address" type="email" value={email} onChange={e => setEmail(e.target.value)} />
           <input className="input" placeholder="Phone" value={phone} onChange={e => setPhone(e.target.value)} />
           <input className="input" placeholder="Company" value={company} onChange={e => setCompany(e.target.value)} />
-          <button className="btn btn-primary mt-4" onClick={() => {
+          <button className="btn btn-primary mt-4" onClick={async () => {
             try {
-              if (isEdit && state.editingContactId) {
-                contacts.update(state.editingContactId, { name, email, phone, company });
-              } else {
-                contacts.add({ name, email, phone, company, group: 'default' });
+              if (!name.trim() || !email.trim().includes('@')) {
+                state.showToast('A contact needs a name and a valid email address.', 'error');
+                return;
               }
-              state.refreshContacts();
+              // The contact is stored with the company, so the dashboard, the
+              // inbox and every other device see the same list.
+              await workspaceApi.saveContact({
+                id: isEdit ? state.editingContactId || undefined : undefined,
+                name: name.trim(),
+                email: email.trim(),
+                phone,
+                company,
+                group: 'General',
+              });
+              await state.refreshContacts();
               state.setContactEditorOpen(false);
               state.setEditingContactId(null);
               state.showToast(isEdit ? 'Contact updated' : 'Contact created');
-            } catch (e) { console.error('save contact failed', e); state.showToast('Failed to save contact', 'error'); }
+            } catch (e) {
+              console.error('save contact failed', e);
+              state.showToast(e instanceof Error ? e.message : 'Failed to save contact', 'error');
+            }
           }}>{isEdit ? 'Update' : 'Create'} Contact</button>
         </div>
       </div>
@@ -399,7 +417,7 @@ export default function SettingsPanel({ state }: SettingsPanelProps) {
               <div className="mt-6 max-w-md">
                 <h5 className="text-sm font-semibold text-primary mb-2">Default Sending Domain</h5>
                 <p className="text-xs text-muted mb-4">Choose which custom domain is selected by default in your composer.</p>
-                <select className="input" value={state.activeDomainName} onChange={e => state.setActiveDomain(state.domainsList.find(d => d.domain === e.target.value)?.id || '')}>
+                <select className="input" value={state.activeDomainName} onChange={e => state.setActiveDomain(e.target.value)}>
                   {state.domainsList.map(d => <option key={d.id} value={d.domain}>{d.domain}</option>)}
                 </select>
               </div>
@@ -447,10 +465,10 @@ export default function SettingsPanel({ state }: SettingsPanelProps) {
                         {sig.isDefault ? (
                           <span className="badge badge-success">Default</span>
                         ) : (
-                          <button className="btn btn-ghost btn-sm" title="Set as default" onClick={() => { signatures.setDefault(sig.id); state.refreshSignatures(); }}><Star size={12} /></button>
+                          <button className="btn btn-ghost btn-sm" title="Set as default" onClick={async () => { try { await workspaceApi.saveSignature({ id: sig.id, name: sig.name, content: sig.content, isDefault: true }); await state.refreshSignatures(); state.showToast('Default signature updated'); } catch (e) { state.showToast(e instanceof Error ? e.message : 'Update failed', 'error'); } }}><Star size={12} /></button>
                         )}
                         <button className="btn btn-ghost btn-sm" title="Edit" onClick={() => { state.setEditingSignatureId(sig.id); state.setSignatureEditorOpen(true); }}><Edit3 size={12} /></button>
-                        <button className="btn btn-ghost btn-sm btn-danger" title="Delete" onClick={() => { try { signatures.remove(sig.id); state.refreshSignatures(); state.showToast('Deleted signature'); } catch (e) { console.error('delete signature failed', e); state.showToast('Delete failed', 'error'); } }}><Trash2 size={12} /></button>
+                        <button className="btn btn-ghost btn-sm btn-danger" title="Delete" onClick={async () => { try { await workspaceApi.deleteSignature(sig.id); await state.refreshSignatures(); state.showToast('Deleted signature'); } catch (e) { console.error('delete signature failed', e); state.showToast(e instanceof Error ? e.message : 'Delete failed', 'error'); } }}><Trash2 size={12} /></button>
                       </div>
                     </div>
                   ))}
@@ -488,10 +506,10 @@ export default function SettingsPanel({ state }: SettingsPanelProps) {
                         <span className="text-xs text-muted">{c.email}{c.company ? ` · ${c.company}` : ''}</span>
                       </div>
                       <div className="flex items-center gap-1">
-                        <button className="btn btn-ghost btn-sm" onClick={() => { contacts.toggleFavorite(c.id); state.refreshContacts(); }}><Star size={12} className={c.favorite ? 'text-primary fill-primary' : 'text-muted'} /></button>
+                        <button className="btn btn-ghost btn-sm" onClick={async () => { try { await workspaceApi.saveContact({ id: c.id, name: c.name, email: c.email, phone: c.phone, company: c.company, group: c.group, favorite: !c.favorite }); await state.refreshContacts(); } catch (e) { state.showToast(e instanceof Error ? e.message : 'Update failed', 'error'); } }}><Star size={12} className={c.favorite ? 'text-primary fill-primary' : 'text-muted'} /></button>
                         <button className="btn btn-ghost btn-sm" onClick={() => { state.setEditingContactId(c.id); state.setContactEditorOpen(true); }}><Edit3 size={12} /></button>
                         <button className="btn btn-ghost btn-sm" title="Copy Address" onClick={() => { state.copyToClipboard(c.email); state.showToast('Email copied'); }}><Copy size={12} /></button>
-                        <button className="btn btn-ghost btn-sm btn-danger" onClick={() => { try { contacts.remove(c.id); state.refreshContacts(); state.showToast('Deleted contact'); } catch (e) { console.error('delete contact failed', e); state.showToast('Delete failed', 'error'); } }}><Trash2 size={12} /></button>
+                        <button className="btn btn-ghost btn-sm btn-danger" onClick={async () => { try { await workspaceApi.deleteContact(c.id); await state.refreshContacts(); state.showToast('Deleted contact'); } catch (e) { console.error('delete contact failed', e); state.showToast(e instanceof Error ? e.message : 'Delete failed', 'error'); } }}><Trash2 size={12} /></button>
                       </div>
                     </div>
                   ))}

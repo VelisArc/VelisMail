@@ -153,6 +153,15 @@ pub fn api_v1_routes(_state: &AppState) -> Router<AppState> {
             "/admin/platform/settings",
             get(admin::list_platform_settings).patch(admin::update_platform_setting),
         )
+        // Platform keys run the control plane. Only the owner creates them.
+        .route(
+            "/admin/platform/api-keys",
+            get(admin::list_platform_api_keys).post(admin::create_platform_api_key),
+        )
+        .route(
+            "/admin/platform/api-keys/{id}",
+            delete(admin::revoke_platform_api_key),
+        )
         // Company control plane inside the business dashboard.
         .route("/admin/company/overview", get(admin::company_overview))
         .route("/admin/company/members", get(admin::company_members))
@@ -200,6 +209,10 @@ pub fn api_v1_routes(_state: &AppState) -> Router<AppState> {
         .route(
             "/company/team/invitations/{id}",
             delete(company_api::revoke_invitation),
+        )
+        .route(
+            "/company/team/remove",
+            post(company_api::remove_team_member),
         )
         .route(
             "/company/domains",

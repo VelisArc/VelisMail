@@ -4315,6 +4315,218 @@ pub async fn update_support_ticket(
     }
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreatePlatformApiKeyRequest {
+    pub name: String,
+    pub scopes: Option<Vec<String>>,
+    pub expires_in_days: Option<i32>,
+}
+
+/// Every platform key, with the scope catalogue and the templates.
+///
+/// A platform key runs the whole control plane, so only the configured owner
+/// gets to see them.
+pub async fn list_platform_api_keys(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> ApiResult {
+    let actor = match authorize_platform(&state, &headers).await {
+        Ok(actor) => actor,
+        Err(response) => return response,
+    };
+    if !actor.is_configured_owner {
+        return fail(
+            StatusCode::FORBIDDEN,
+            "Only the platform owner can manage the platform API keys.",
+        );
+    }
+    let db = match pool(&state) {
+        Ok(db) => db,
+        Err(response) => return response,
+    };
+    let rows = sqlx::query(
+        "SELECT id, name, key_prefix, scopes, created_by, last_used_at, expires_at, revoked_at, created_at
+         FROM platform_api_keys ORDER BY created_at DESC LIMIT 200",
+    )
+    .fetch_all(db)
+    .await
+    .unwrap_or_default();
+    let keys: Vec<Value> = rows
+        .iter()
+        .map(|row| {
+            let scopes: Vec<String> = row.try_get("scopes").unwrap_or_default();
+            json!({
+                "id": row.try_get::<Uuid, _>("id").map(|v| v.to_string()).unwrap_or_default(),
+                "name": row.try_get::<String, _>("name").unwrap_or_default(),
+                "prefix": row.try_get::<String, _>("key_prefix").unwrap_or_default(),
+                "scopes": scopes,
+                "createdBy": row.try_get::<String, _>("created_by").unwrap_or_default(),
+                "lastUsedAt": row.try_get::<Option<DateTime<Utc>>, _>("last_used_at").ok().flatten().map(|v| v.to_rfc3339()),
+                "expiresAt": row.try_get::<Option<DateTime<Utc>>, _>("expires_at").ok().flatten().map(|v| v.to_rfc3339()),
+                "revokedAt": row.try_get::<Option<DateTime<Utc>>, _>("revoked_at").ok().flatten().map(|v| v.to_rfc3339()),
+                "createdAt": row.try_get::<DateTime<Utc>, _>("created_at").map(|v| v.to_rfc3339()).unwrap_or_default(),
+            })
+        })
+        .collect();
+    ok(json!({
+        "success": true,
+        "keys": keys,
+        "scopes": crate::platform_api_keys::scope_catalog(),
+        "presets": crate::platform_api_keys::key_presets(),
+    }))
+}
+
+/// Create a platform key.
+///
+/// The key can do everything the control plane allows, so it stays with the
+/// configured owner. Each scope is enforced on the API, not only here.
+pub async fn create_platform_api_key(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(payload): Json<CreatePlatformApiKeyRequest>,
+) -> ApiResult {
+    let actor = match authorize_platform(&state, &headers).await {
+        Ok(actor) => actor,
+        Err(response) => return response,
+    };
+    if !actor.is_configured_owner {
+        return fail(
+            StatusCode::FORBIDDEN,
+            "Only the platform owner can create a platform API key.",
+        );
+    }
+    let db = match pool(&state) {
+        Ok(db) => db,
+        Err(response) => return response,
+    };
+    let name = payload.name.trim();
+    if name.len() < 2 {
+        return fail(StatusCode::BAD_REQUEST, "API key name is required.");
+    }
+    let allowed = crate::platform_api_keys::allowed_scopes();
+    let scopes: Vec<String> = payload
+        .scopes
+        .unwrap_or_else(|| vec!["platform.full".to_string()])
+        .into_iter()
+        .filter(|scope| allowed.contains(scope))
+        .collect();
+    if scopes.is_empty() {
+        return fail(
+            StatusCode::BAD_REQUEST,
+            "Select at least one valid platform scope.",
+        );
+    }
+    let key = format!(
+        "{}{}{}",
+        crate::platform_api_keys::PLATFORM_API_KEY_PREFIX,
+        Uuid::new_v4().simple(),
+        Uuid::new_v4().simple()
+    );
+    let prefix: String = key.chars().take(20).collect();
+    let mut hasher = Sha256::new();
+    hasher.update(key.as_bytes());
+    let hash = format!("{:x}", hasher.finalize());
+    let expires_at = payload
+        .expires_in_days
+        .map(|days| Utc::now() + chrono::Duration::days(days.clamp(1, 3650) as i64));
+    let result = sqlx::query(
+        "INSERT INTO platform_api_keys (name, key_prefix, key_hash, scopes, created_by, expires_at)
+         VALUES ($1, $2, $3, $4, $5, $6)",
+    )
+    .bind(name)
+    .bind(&prefix)
+    .bind(&hash)
+    .bind(&scopes)
+    .bind(&actor.email)
+    .bind(expires_at)
+    .execute(db)
+    .await;
+    if let Err(err) = result {
+        tracing::error!("platform api key create failed: {}", err);
+        return fail(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Unable to create the platform API key.",
+        );
+    }
+    audit(
+        db,
+        &actor.email,
+        &actor.role,
+        "platform_api_key.created",
+        "platform",
+        "api_key",
+        Some(&prefix),
+        None,
+        json!({ "name": name, "scopes": scopes, "expiresAt": expires_at }),
+        "warning",
+    )
+    .await;
+    ok(json!({
+        "success": true,
+        "key": key,
+        "prefix": prefix,
+        "scopes": scopes,
+        "expiresAt": expires_at,
+        "message": "Store this key now. It will not be shown again.",
+    }))
+}
+
+/// Revoke a platform key. It stops working immediately.
+pub async fn revoke_platform_api_key(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(key_id): Path<String>,
+) -> ApiResult {
+    let actor = match authorize_platform(&state, &headers).await {
+        Ok(actor) => actor,
+        Err(response) => return response,
+    };
+    if !actor.is_configured_owner {
+        return fail(
+            StatusCode::FORBIDDEN,
+            "Only the platform owner can revoke a platform API key.",
+        );
+    }
+    let db = match pool(&state) {
+        Ok(db) => db,
+        Err(response) => return response,
+    };
+    let id = match Uuid::parse_str(&key_id) {
+        Ok(value) => value,
+        Err(_) => return fail(StatusCode::BAD_REQUEST, "Invalid API key id."),
+    };
+    let result = sqlx::query(
+        "UPDATE platform_api_keys SET revoked_at = NOW() WHERE id = $1 AND revoked_at IS NULL",
+    )
+    .bind(id)
+    .execute(db)
+    .await;
+    match result {
+        Ok(result) if result.rows_affected() > 0 => {
+            audit(
+                db,
+                &actor.email,
+                &actor.role,
+                "platform_api_key.revoked",
+                "platform",
+                "api_key",
+                Some(&id.to_string()),
+                None,
+                json!({}),
+                "warning",
+            )
+            .await;
+            ok(json!({ "success": true }))
+        }
+        Ok(_) => fail(StatusCode::NOT_FOUND, "API key not found."),
+        Err(_) => fail(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Unable to revoke the platform API key.",
+        ),
+    }
+}
+
 pub async fn platform_system(State(state): State<AppState>, headers: HeaderMap) -> ApiResult {
     if let Err(response) = authorize_platform(&state, &headers).await {
         return response;

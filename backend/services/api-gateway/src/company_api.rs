@@ -1965,6 +1965,105 @@ async fn tenant_business_db_url(db: &PgPool, tenant_id: Uuid) -> Option<String> 
 }
 
 // ---------------------------------------------------------------------------
+// Team
+// ---------------------------------------------------------------------------
+
+/// Remove a member from the workspace.
+///
+/// The membership is marked as removed, so the member loses the access at
+/// once and the seat is free again.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RemoveMemberRequest {
+    pub email: String,
+}
+
+pub async fn remove_team_member(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(payload): Json<RemoveMemberRequest>,
+) -> ApiResult {
+    let context = workspace_context(&state, &headers).await?;
+    context.require_manage()?;
+    let db = db_pool(&state)?;
+
+    let email = payload.email.trim().to_lowercase();
+    if email.is_empty() {
+        return Err(fail(StatusCode::BAD_REQUEST, "A member email is required."));
+    }
+    if email == context.email {
+        return Err(fail(
+            StatusCode::BAD_REQUEST,
+            "You cannot remove yourself from the workspace.",
+        ));
+    }
+
+    let owner_count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*)::bigint FROM company_members
+         WHERE tenant_id = $1 AND role = 'owner' AND status = 'active'",
+    )
+    .bind(context.tenant_id)
+    .fetch_one(db)
+    .await
+    .unwrap_or(0);
+    let target_is_owner: bool = sqlx::query_scalar(
+        "SELECT EXISTS (SELECT 1 FROM company_members
+         WHERE tenant_id = $1 AND LOWER(email) = $2 AND role = 'owner')",
+    )
+    .bind(context.tenant_id)
+    .bind(&email)
+    .fetch_one(db)
+    .await
+    .unwrap_or(false);
+    if target_is_owner && owner_count <= 1 {
+        return Err(fail(
+            StatusCode::BAD_REQUEST,
+            "A workspace needs at least one owner.",
+        ));
+    }
+
+    let result = sqlx::query(
+        "UPDATE company_members SET status = 'removed'
+         WHERE tenant_id = $1 AND LOWER(email) = $2 AND status <> 'removed'",
+    )
+    .bind(context.tenant_id)
+    .bind(&email)
+    .execute(db)
+    .await;
+    if let Err(err) = result {
+        tracing::error!("could not remove member {email}: {err}");
+        return Err(fail(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Unable to remove the member.",
+        ));
+    }
+
+    // The sessions of the member are closed, so the access ends at once.
+    let _ = sqlx::query(
+        "UPDATE sessions SET is_active = false
+         WHERE user_id IN (SELECT user_id FROM users WHERE LOWER(email) = $1 AND tenant_id = $2)",
+    )
+    .bind(&email)
+    .bind(context.tenant_id)
+    .execute(db)
+    .await;
+
+    audit(
+        db,
+        &context.email,
+        &context.role,
+        "company.member_removed",
+        "team",
+        Some(&email),
+        context.tenant_id,
+        json!({ "email": email }),
+    )
+    .await;
+
+    ok(json!({ "success": true, "email": email }))
+}
+
+// ---------------------------------------------------------------------------
 // Contacts
 // ---------------------------------------------------------------------------
 pub async fn list_contacts(
@@ -2047,6 +2146,7 @@ pub async fn list_contacts(
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ContactRequest {
+    pub id: Option<String>,
     pub name: String,
     pub email: String,
     pub phone: Option<String>,
@@ -2079,43 +2179,83 @@ pub async fn create_contact(
         .filter(|value| !value.is_empty())
         .unwrap_or_else(|| "General".to_string());
 
-    let row = sqlx::query(
-        "INSERT INTO business_contacts
-         (tenant_id, name, email, phone, company, group_name, notes, is_favorite, created_by)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-         ON CONFLICT (tenant_id, email) DO UPDATE
-         SET name = EXCLUDED.name,
-             phone = EXCLUDED.phone,
-             company = EXCLUDED.company,
-             group_name = EXCLUDED.group_name,
-             notes = EXCLUDED.notes,
-             is_favorite = EXCLUDED.is_favorite,
-             updated_at = NOW()
-         RETURNING id",
-    )
-    .bind(context.tenant_id)
-    .bind(&name)
-    .bind(&email)
-    .bind(
-        payload
-            .phone
-            .as_deref()
-            .map(str::trim)
-            .filter(|value| !value.is_empty()),
-    )
-    .bind(
-        payload
-            .company
-            .as_deref()
-            .map(str::trim)
-            .filter(|value| !value.is_empty()),
-    )
-    .bind(&group)
-    .bind(payload.notes.as_deref().unwrap_or(""))
-    .bind(payload.favorite.unwrap_or(false))
-    .bind(&context.email)
-    .fetch_optional(db)
-    .await;
+    let row = if let Some(id) = payload
+        .id
+        .as_deref()
+        .map(str::trim)
+        .filter(|v| !v.is_empty())
+    {
+        // An existing contact is updated in place, so the email can change
+        // without leaving a second copy behind.
+        sqlx::query(
+            "UPDATE business_contacts SET
+                name = $3, email = $4, phone = $5, company = $6,
+                group_name = $7, notes = $8, is_favorite = $9, updated_at = NOW()
+             WHERE tenant_id = $1 AND id::text = $2
+             RETURNING id",
+        )
+        .bind(context.tenant_id)
+        .bind(id)
+        .bind(&name)
+        .bind(&email)
+        .bind(
+            payload
+                .phone
+                .as_deref()
+                .map(str::trim)
+                .filter(|value| !value.is_empty()),
+        )
+        .bind(
+            payload
+                .company
+                .as_deref()
+                .map(str::trim)
+                .filter(|value| !value.is_empty()),
+        )
+        .bind(&group)
+        .bind(payload.notes.as_deref().unwrap_or(""))
+        .bind(payload.favorite.unwrap_or(false))
+        .fetch_optional(db)
+        .await
+    } else {
+        sqlx::query(
+            "INSERT INTO business_contacts
+             (tenant_id, name, email, phone, company, group_name, notes, is_favorite, created_by)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+             ON CONFLICT (tenant_id, email) DO UPDATE
+             SET name = EXCLUDED.name,
+                 phone = EXCLUDED.phone,
+                 company = EXCLUDED.company,
+                 group_name = EXCLUDED.group_name,
+                 notes = EXCLUDED.notes,
+                 is_favorite = EXCLUDED.is_favorite,
+                 updated_at = NOW()
+             RETURNING id",
+        )
+        .bind(context.tenant_id)
+        .bind(&name)
+        .bind(&email)
+        .bind(
+            payload
+                .phone
+                .as_deref()
+                .map(str::trim)
+                .filter(|value| !value.is_empty()),
+        )
+        .bind(
+            payload
+                .company
+                .as_deref()
+                .map(str::trim)
+                .filter(|value| !value.is_empty()),
+        )
+        .bind(&group)
+        .bind(payload.notes.as_deref().unwrap_or(""))
+        .bind(payload.favorite.unwrap_or(false))
+        .bind(&context.email)
+        .fetch_optional(db)
+        .await
+    };
 
     let id = match row {
         Ok(Some(row)) => row.try_get::<Uuid, _>("id").ok(),
@@ -2220,6 +2360,7 @@ pub async fn list_signatures(State(state): State<AppState>, headers: HeaderMap) 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SignatureRequest {
+    pub id: Option<String>,
     pub name: String,
     pub content: String,
     pub is_default: Option<bool>,
@@ -2245,22 +2386,43 @@ pub async fn create_signature(
                 .await;
     }
 
-    let row = sqlx::query(
-        "INSERT INTO business_signatures (tenant_id, user_id, name, content, is_default)
-         VALUES ($1, $2, $3, $4, $5)
-         ON CONFLICT (tenant_id, name) DO UPDATE
-         SET content = EXCLUDED.content,
-             is_default = EXCLUDED.is_default,
-             updated_at = NOW()
-         RETURNING id",
-    )
-    .bind(context.tenant_id)
-    .bind(context.user_id)
-    .bind(&name)
-    .bind(payload.content.clone())
-    .bind(payload.is_default.unwrap_or(false))
-    .fetch_optional(db)
-    .await;
+    let row = if let Some(id) = payload
+        .id
+        .as_deref()
+        .map(str::trim)
+        .filter(|v| !v.is_empty())
+    {
+        sqlx::query(
+            "UPDATE business_signatures
+             SET name = $3, content = $4, is_default = $5, updated_at = NOW()
+             WHERE tenant_id = $1 AND id::text = $2
+             RETURNING id",
+        )
+        .bind(context.tenant_id)
+        .bind(id)
+        .bind(&name)
+        .bind(payload.content.clone())
+        .bind(payload.is_default.unwrap_or(false))
+        .fetch_optional(db)
+        .await
+    } else {
+        sqlx::query(
+            "INSERT INTO business_signatures (tenant_id, user_id, name, content, is_default)
+             VALUES ($1, $2, $3, $4, $5)
+             ON CONFLICT (tenant_id, name) DO UPDATE
+             SET content = EXCLUDED.content,
+                 is_default = EXCLUDED.is_default,
+                 updated_at = NOW()
+             RETURNING id",
+        )
+        .bind(context.tenant_id)
+        .bind(context.user_id)
+        .bind(&name)
+        .bind(payload.content.clone())
+        .bind(payload.is_default.unwrap_or(false))
+        .fetch_optional(db)
+        .await
+    };
 
     let id = match row {
         Ok(Some(row)) => row.try_get::<Uuid, _>("id").ok(),

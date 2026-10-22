@@ -603,6 +603,49 @@ export const platformAdminApi = {
 
   team: () => call<PlatformTeam>('/admin/platform/team'),
 
+  /** Every platform key, with the scope catalogue and the templates. */
+  apiKeys: () =>
+    call<{
+      success: boolean;
+      keys: Array<{
+        id: string;
+        name: string;
+        prefix: string;
+        scopes: string[];
+        createdBy: string;
+        lastUsedAt?: string | null;
+        expiresAt?: string | null;
+        revokedAt?: string | null;
+        createdAt: string;
+      }>;
+      scopes: Array<{
+        id: string;
+        label: string;
+        detail: string;
+        risk: 'low' | 'medium' | 'high';
+      }>;
+      presets: Array<{
+        id: string;
+        name: string;
+        summary: string;
+        detail: string;
+        scopes: string[];
+        recommended: boolean;
+      }>;
+    }>('/admin/platform/api-keys'),
+
+  createApiKey: (payload: { name: string; scopes?: string[]; expiresInDays?: number }) =>
+    call<{ success: boolean; key: string; prefix: string; scopes: string[]; expiresAt?: string | null }>(
+      '/admin/platform/api-keys',
+      jsonBody(payload),
+    ),
+
+  revokeApiKey: (id: string) =>
+    call<{ success: boolean }>(
+      `/admin/platform/api-keys/${encodeURIComponent(id)}`,
+      { method: 'DELETE' },
+    ),
+
   broadcast: (payload: {
     subject: string;
     body: string;

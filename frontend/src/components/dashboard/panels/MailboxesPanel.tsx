@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { ArrowRight, Database, Info, Mail, Plus, Menu, CheckCircle2, Inbox, Trash2 } from 'lucide-react';
-import { businessMailboxes } from '../../../api/client';
+import { workspaceApi } from '../../../api/company';
 import type { DashboardState } from '../types';
 import type { BusinessMailbox } from '../../../api/client';
 
@@ -13,18 +13,27 @@ export default function MailboxesPanel({ state }: MailboxesPanelProps) {
   const [deletingAddress, setDeletingAddress] = useState('');
 
   const handleCreateMailbox = async () => {
+    const localPart = state.mailboxLocalPart.trim();
+    if (!localPart) {
+      state.showToast('Enter the local part of the mailbox.', 'error');
+      return;
+    }
     setSavingMailbox(true);
     try {
-      const mailbox = await businessMailboxes.create(state.activeDomainName, {
-        localPart: state.mailboxLocalPart,
-        displayName: state.mailboxDisplayName,
+      // The mailbox is stored in the database of the company, so it is also
+      // accepted by the mail path and shows up after a refresh.
+      const address = `${localPart}@${state.activeDomainName}`.toLowerCase();
+      await workspaceApi.createMailbox({
+        domain: state.activeDomainName,
+        address,
+        displayName: state.mailboxDisplayName.trim() || localPart,
         kind: state.mailboxKind,
       });
       await state.refreshMailboxes();
       state.setMailboxLocalPart('');
       state.setMailboxDisplayName('');
-      state.setActiveMailboxAddress(mailbox.address);
-      state.setSelectedFromAddress(mailbox.address);
+      state.setActiveMailboxAddress(address);
+      state.setSelectedFromAddress(address);
       state.setActiveFolder('inbox');
       state.setActiveBizTab('mail');
       state.showToast('Mailbox created and inbox opened');
@@ -38,7 +47,7 @@ export default function MailboxesPanel({ state }: MailboxesPanelProps) {
   const handleDeleteMailbox = async (address: string) => {
     setDeletingAddress(address);
     try {
-      await businessMailboxes.remove(state.activeDomainName, address);
+      await workspaceApi.deleteMailbox(state.activeDomainName, address);
       await state.refreshMailboxes();
       if (state.activeMailboxAddress === address) {
         state.setActiveMailboxAddress('');

@@ -6,6 +6,7 @@ mod company_businesses;
 mod config;
 mod domain_dns;
 mod middleware;
+mod platform_api_keys;
 mod routes;
 mod state;
 mod traffic;

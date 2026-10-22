@@ -3,13 +3,16 @@ import {
   Activity,
   AlertTriangle,
   BarChart3,
+  Bot,
   Building2,
   CheckCircle2,
+  Copy,
   CreditCard,
   Crown,
   FileText,
   Flag,
   Globe,
+  KeyRound,
   Menu,
   Plus,
   RefreshCw,
@@ -54,7 +57,8 @@ export type PlatformSection =
   | 'audit'
   | 'config'
   | 'health'
-  | 'broadcast';
+  | 'broadcast'
+  | 'api-keys';
 
 interface PlatformAdminPanelProps {
   section: PlatformSection;
@@ -267,6 +271,13 @@ export default function PlatformAdminPanel({ section, state }: PlatformAdminPane
   const [settings, setSettings] = useState<PlatformSetting[]>([]);
   const [system, setSystem] = useState<SystemInfo | null>(null);
 
+  // Management API - the keys that run the control plane.
+  const [apiKeys, setApiKeys] = useState<Awaited<ReturnType<typeof platformAdminApi.apiKeys>> | null>(null);
+  const [canManageKeys, setCanManageKeys] = useState(false);
+  const [keyForm, setKeyForm] = useState({ name: '', scopes: [] as string[], expiresInDays: 365, presetId: '' });
+  const [newKey, setNewKey] = useState('');
+  const [keyOpen, setKeyOpen] = useState(false);
+
   const [companySearch, setCompanySearch] = useState('');
   const [caseFilter, setCaseFilter] = useState('all');
   const [auditFilter, setAuditFilter] = useState('');
@@ -279,8 +290,7 @@ export default function PlatformAdminPanel({ section, state }: PlatformAdminPane
   const [caseEvents, setCaseEvents] = useState<Array<{ id: string; actor: string; kind: string; message: string; createdAt: string }>>([]);
 
   // Broadcast composer
-  const [broadcastRecipients, setBroadcastRecipients] = useState<PlatformUser[]>([]);
-  const [broadcastSelected, setBroadcastSelected] = useState<string[]>([]);
+  const [broadcastRecipients, setBroadcastRecipients] = useState<PlatformUser[]>([]);  const [broadcastSelected, setBroadcastSelected] = useState<string[]>([]);
   const [broadcastSearch, setBroadcastSearch] = useState('');
   const [broadcastAudience, setBroadcastAudience] = useState('all');
   const [broadcastCategory, setBroadcastCategory] = useState('notification');
@@ -348,6 +358,15 @@ export default function PlatformAdminPanel({ section, state }: PlatformAdminPane
         setSettings(settingResult.settings);
       } else if (section === 'health') {
         setSystem(await platformAdminApi.system());
+      } else if (section === 'api-keys') {
+        const [keysResult, meResult] = await Promise.all([
+          platformAdminApi.apiKeys(),
+          platformAdminApi.me().catch(() => null),
+        ]);
+        setApiKeys(keysResult);
+        // The keys are owner only, but the console should still show the
+        // catalogue so everybody can see what a key can do.
+        setCanManageKeys(Boolean(meResult?.owner));
       } else if (section === 'broadcast') {
         const [recipientResult, historyResult, senderResult] = await Promise.all([
           platformAdminApi.users({
@@ -1659,6 +1678,171 @@ export default function PlatformAdminPanel({ section, state }: PlatformAdminPane
             </div>
           </>
         )}
+
+        {section === 'api-keys' && apiKeys && (
+          <>
+            <div className="admin-controls-bar">
+              <span className="text-sm text-muted">
+                {apiKeys.keys.filter((key) => !key.revokedAt).length} active platform keys
+              </span>
+              <button
+                type="button"
+                className="btn btn-primary btn-sm"
+                disabled={!canManageKeys}
+                onClick={() => { setNewKey(''); setKeyForm({ name: '', scopes: [], expiresInDays: 365, presetId: '' }); setKeyOpen(true); }}
+              >
+                <Plus size={15} /> Create platform key
+              </button>
+            </div>
+
+            {!canManageKeys && (
+              <p className="text-xs text-muted">Only the platform owner can create or revoke platform keys.</p>
+            )}
+
+            <section className="glass-card">
+              <div className="admin-card-head">
+                <div>
+                  <h3>Choose what the key is for</h3>
+                  <p>A template fills in the right permissions, you can fine tune them afterwards</p>
+                </div>
+                <Bot size={16} />
+              </div>
+              <div className="key-preset-grid">
+                {apiKeys.presets.map((preset) => (
+                  <button
+                    key={preset.id}
+                    type="button"
+                    className={`key-preset ${keyForm.presetId === preset.id ? 'active' : ''}`}
+                    disabled={!canManageKeys}
+                    onClick={() => {
+                      setKeyForm((current) => ({
+                        ...current,
+                        presetId: preset.id,
+                        name: current.name || preset.name,
+                        scopes: preset.scopes,
+                      }));
+                      setKeyOpen(true);
+                    }}
+                  >
+                    <span className="key-preset-head">
+                      <strong>{preset.name}</strong>
+                      {preset.recommended && <span className="badge badge-primary">Recommended</span>}
+                    </span>
+                    <span className="key-preset-summary">{preset.summary}</span>
+                    <span className="key-preset-scopes">
+                      {preset.scopes.length} {preset.scopes.length === 1 ? 'permission' : 'permissions'}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </section>
+
+            <section className="glass-card">
+              <div className="admin-card-head">
+                <div>
+                  <h3>What a platform key can do</h3>
+                  <p>Scopes are enforced by the API on every route, and a route the platform API does not know is refused</p>
+                </div>
+                <KeyRound size={16} />
+              </div>
+              <div className="scope-grid">
+                {apiKeys.scopes.map((scope) => (
+                  <div key={scope.id} className={`scope-card scope-${scope.risk}`}>
+                    <strong>{scope.id}</strong>
+                    <span className="text-xs text-muted">{scope.detail}</span>
+                  </div>
+                ))}
+              </div>
+            </section>
+
+            <section className="glass-card">
+              <div className="admin-card-head">
+                <div>
+                  <h3>Your platform keys</h3>
+                  <p>Every action of a key is attributed to its creator in the audit trail</p>
+                </div>
+                <KeyRound size={16} />
+              </div>
+              <div className="admin-table-wrap">
+                <table className="admin-table">
+                  <thead>
+                    <tr><th>Name</th><th>Prefix</th><th>Access</th><th>Created by</th><th>Created</th><th>Last used</th><th>Status</th><th>Action</th></tr>
+                  </thead>
+                  <tbody>
+                    {apiKeys.keys.map((key) => (
+                      <tr key={key.id}>
+                        <td><strong>{key.name}</strong></td>
+                        <td className="admin-mono">{key.prefix}…</td>
+                        <td>
+                          <span className="admin-key-scopes">
+                            {key.scopes.map((scope) => <span key={scope} className="badge badge-neutral">{scope}</span>)}
+                          </span>
+                        </td>
+                        <td>{key.createdBy}</td>
+                        <td>{dateTime(key.createdAt)}</td>
+                        <td>{key.lastUsedAt ? dateTime(key.lastUsedAt) : 'never'}</td>
+                        <td>{key.revokedAt ? <Badge value="revoked">Revoked</Badge> : <Badge value="active">Active</Badge>}</td>
+                        <td>
+                          {!key.revokedAt && canManageKeys ? (
+                            <button
+                              type="button"
+                              className="btn btn-danger btn-sm"
+                              onClick={() => {
+                                confirm({
+                                  title: 'Revoke platform key',
+                                  message: `"${key.name}" (${key.prefix}...) stops working immediately. Anything still calling the control plane with it will fail.`,
+                                  confirmLabel: 'Revoke key',
+                                  tone: 'danger',
+                                  onConfirm: async () => {
+                                    try {
+                                      await platformAdminApi.revokeApiKey(key.id);
+                                      setApiKeys(await platformAdminApi.apiKeys());
+                                      notify('Platform key revoked');
+                                    } catch (err) {
+                                      notify(err instanceof Error ? err.message : 'Unable to revoke the key.', 'error');
+                                    }
+                                  },
+                                });
+                              }}
+                            >
+                              Revoke
+                            </button>
+                          ) : (
+                            <span className="text-sm text-muted">—</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {apiKeys.keys.length === 0 && (
+                  <p className="admin-empty-state">No platform keys yet. Create one to let an assistant run the control plane.</p>
+                )}
+              </div>
+            </section>
+
+            <section className="glass-card">
+              <div className="admin-card-head">
+                <div>
+                  <h3>Calling the control plane</h3>
+                  <p>One request proves the key can see the whole ecosystem</p>
+                </div>
+                <Server size={16} />
+              </div>
+              <div className="admin-code-block">
+                <code>Authorization: Bearer vsk_plat_…</code>
+                <code>GET https://api.velismail.online/api/v1/admin/platform/companies</code>
+                <code>GET https://api.velismail.online/api/v1/admin/platform/users</code>
+                <code>GET https://api.velismail.online/api/v1/admin/platform/support</code>
+                <code>POST/…actions</code>
+              </div>
+              <p className="text-xs text-muted">
+                A key is refused on endpoints that are not part of the platform API, so a route added later is never
+                reachable with an old key.
+              </p>
+            </section>
+          </>
+        )}
       </div>
 
       {companyDetail && (
@@ -1912,6 +2096,123 @@ export default function PlatformAdminPanel({ section, state }: PlatformAdminPane
                 </button>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+      {keyOpen && (
+        <div className="modal-overlay" role="dialog" aria-modal="true" onClick={() => setKeyOpen(false)}>
+          <div className="biz-form-modal glass" onClick={(event) => event.stopPropagation()}>
+            <div className="modal-header">
+              <div>
+                <h3><KeyRound size={16} /> Create platform key</h3>
+                <p>Store the secret immediately - it is only shown once.</p>
+              </div>
+              <button type="button" className="btn btn-ghost btn-icon" onClick={() => setKeyOpen(false)} aria-label="Close"><X size={16} /></button>
+            </div>
+            {!newKey ? (
+              <>
+                <div className="modal-body">
+                  <div className="form-grid">
+                    <div className="form-field">
+                      <label htmlFor="platform-key-name">Key name</label>
+                      <input
+                        id="platform-key-name"
+                        className="input"
+                        value={keyForm.name}
+                        onChange={(event) => setKeyForm((current) => ({ ...current, name: event.target.value }))}
+                        placeholder="Platform assistant - operations"
+                      />
+                    </div>
+                    <div className="form-field">
+                      <label htmlFor="platform-key-expiry">Expiry (days)</label>
+                      <input
+                        id="platform-key-expiry"
+                        className="input"
+                        type="number"
+                        min={1}
+                        max={3650}
+                        value={keyForm.expiresInDays}
+                        onChange={(event) => setKeyForm((current) => ({ ...current, expiresInDays: Number(event.target.value) }))}
+                      />
+                    </div>
+                    <div className="form-field form-field-full">
+                      <span className="form-label">Permissions</span>
+                      {keyForm.presetId && (
+                        <p className="text-xs text-muted key-preset-note">
+                          Based on the <strong>{apiKeys?.presets.find((preset) => preset.id === keyForm.presetId)?.name}</strong> template. Tick or untick anything below to fine tune it.
+                        </p>
+                      )}
+                      <div className="check-grid">
+                        {(apiKeys?.scopes || []).map((scope) => (
+                          <label key={scope.id} className="check-option">
+                            <input
+                              type="checkbox"
+                              checked={keyForm.scopes.includes(scope.id)}
+                              onChange={(event) => setKeyForm((current) => ({
+                                ...current,
+                                presetId: '',
+                                scopes: event.target.checked
+                                  ? [...current.scopes, scope.id]
+                                  : current.scopes.filter((item) => item !== scope.id),
+                              }))}
+                            />
+                            <span>
+                              <strong>{scope.id}</strong>
+                              <span className="text-xs text-muted"> {scope.detail}</span>
+                            </span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div className="modal-footer">
+                  <button type="button" className="btn btn-ghost btn-sm" onClick={() => setKeyOpen(false)}>Cancel</button>
+                  <button
+                    type="button"
+                    className="btn btn-primary btn-sm"
+                    disabled={keyForm.name.trim().length < 2 || keyForm.scopes.length === 0}
+                    onClick={() => {
+                      const name = keyForm.name;
+                      const scopes = keyForm.scopes;
+                      confirm({
+                        title: 'Create platform key',
+                        message: `"${name}" is created with ${scopes.length === 1 && scopes[0] === 'platform.full' ? 'the full platform scope' : `the ${scopes.join(', ')} scope(s)`}. A platform key runs the control plane without a user session - the secret is only shown once, so store it immediately.`,
+                        confirmLabel: 'Create key',
+                        tone: 'primary',
+                        onConfirm: async () => {
+                          try {
+                            const created = await platformAdminApi.createApiKey({ name, scopes, expiresInDays: keyForm.expiresInDays });
+                            setNewKey(created.key);
+                            setApiKeys(await platformAdminApi.apiKeys());
+                            notify('Platform key created');
+                          } catch (err) {
+                            notify(err instanceof Error ? err.message : 'Unable to create the key.', 'error');
+                            setKeyOpen(false);
+                          }
+                        },
+                      });
+                    }}
+                  >
+                    Create key
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="modal-body">
+                  <div className="admin-secret-box">
+                    <span>New platform API secret</span>
+                    <code>{newKey}</code>
+                    <button type="button" className="btn btn-primary btn-sm" onClick={() => state.copyToClipboard(newKey)}><Copy size={14} /> Copy secret</button>
+                  </div>
+                  <p className="text-xs text-muted">This secret cannot be retrieved again. If it is lost, revoke the key and create another.</p>
+                </div>
+                <div className="modal-footer">
+                  <button type="button" className="btn btn-primary btn-sm" onClick={() => { setNewKey(''); setKeyOpen(false); setKeyForm({ name: '', scopes: [], expiresInDays: 365, presetId: '' }); }}>Done</button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}

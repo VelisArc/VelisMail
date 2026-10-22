@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { LogOut, Mail, Layers, Server, Globe, Inbox, Users, Shield, BarChart3, Activity, Settings, CreditCard, Crown, Plus, User, Contact as ContactIcon, Building2, FileText, LifeBuoy, Flag, Gauge, Send } from 'lucide-react';
+import { LogOut, Mail, Layers, Server, Globe, Inbox, Users, Shield, BarChart3, Activity, Settings, CreditCard, Crown, Plus, User, Contact as ContactIcon, Building2, FileText, LifeBuoy, Flag, Gauge, Send, KeyRound } from 'lucide-react';
 import type { User as UserType } from '../../api/client';
 import { BIZ_FOLDERS } from './constants';
 import type { BizTab, BizFolder } from './constants';
@@ -61,6 +61,7 @@ const PLATFORM_NAV: Array<{ group: string; items: Array<{ id: PlatformSection; l
       { id: 'audit', label: 'Audit Trail', icon: FileText },
       { id: 'config', label: 'Configuration', icon: Flag },
       { id: 'health', label: 'System Health', icon: Server },
+      { id: 'api-keys', label: 'Management API', icon: KeyRound, ownerOnly: true },
     ],
   },
 ];

@@ -285,6 +285,13 @@ pub async fn require_auth(
             let owned_path = path.to_string();
             return authorize_api_key(&state, request, next, &owned_path, &token).await;
         }
+        // Platform keys run the control plane. They are refused on every
+        // route that is not part of the platform API, so a key can never
+        // reach an endpoint that was added later.
+        if token.starts_with(crate::platform_api_keys::PLATFORM_API_KEY_PREFIX) {
+            let owned_path = path.to_string();
+            return authorize_platform_api_key(&state, request, next, &owned_path, &token).await;
+        }
     }
 
     match velismail_common::validate_bearer(request.headers(), secret) {
@@ -370,6 +377,128 @@ async fn authorize_api_key(
     };
     request.extensions_mut().insert(claims);
     crate::api_keys::touch_last_used(state, context.key_id);
+    next.run(request).await
+}
+
+/// Authenticate a platform API key and enforce its scopes.
+///
+/// A platform key runs the control plane. The scope of the route decides
+/// whether the key may run it, and a route that is not part of the platform
+/// API is refused: a key never falls back to "allowed because it is unknown".
+/// The key is then exchanged for a short lived internal token that keeps its
+/// creator, so every action is attributed in the audit trail.
+async fn authorize_platform_api_key(
+    state: &AppState,
+    request: Request<Body>,
+    next: Next,
+    path: &str,
+    token: &str,
+) -> Response {
+    let context = match crate::platform_api_keys::resolve(state, token).await {
+        Ok(context) => context,
+        Err(crate::platform_api_keys::PlatformKeyError::Revoked) => {
+            return error_response(
+                StatusCode::UNAUTHORIZED,
+                "UNAUTHORIZED",
+                "This platform API key was revoked.",
+            )
+        }
+        Err(crate::platform_api_keys::PlatformKeyError::Expired) => {
+            return error_response(
+                StatusCode::UNAUTHORIZED,
+                "UNAUTHORIZED",
+                "This platform API key has expired.",
+            )
+        }
+        Err(crate::platform_api_keys::PlatformKeyError::Unavailable) => {
+            return error_response(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "SERVICE_UNAVAILABLE",
+                "The control-plane database is not connected.",
+            )
+        }
+        Err(crate::platform_api_keys::PlatformKeyError::Unknown) => {
+            return error_response(
+                StatusCode::UNAUTHORIZED,
+                "UNAUTHORIZED",
+                "This platform API key is not valid.",
+            )
+        }
+    };
+
+    let Some(required) = crate::platform_api_keys::required_scope(request.method().as_str(), path)
+    else {
+        return error_response(
+            StatusCode::FORBIDDEN,
+            "FORBIDDEN",
+            "A platform API key cannot call this endpoint.",
+        );
+    };
+    if !context.allows(required) {
+        return error_response(
+            StatusCode::FORBIDDEN,
+            "FORBIDDEN",
+            &format!("This platform API key is missing the {required} scope."),
+        );
+    }
+
+    let Some(secret) = state.config.jwt_secret.as_deref() else {
+        return error_response(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "SERVICE_UNAVAILABLE",
+            "JWT authentication is not configured on the gateway.",
+        );
+    };
+
+    let now = chrono::Utc::now();
+    let claims = velismail_common::Claims {
+        sub: velismail_common::types::UserId(uuid::Uuid::nil()),
+        tenant_id: String::new(),
+        email: context.created_by.clone(),
+        iat: now.timestamp(),
+        exp: (now + chrono::Duration::minutes(15)).timestamp(),
+        nbf: now.timestamp(),
+        jti: format!("platform-key:{}", context.key_id),
+        role: velismail_common::UserRole::User,
+        mfa_verified: false,
+        device_id: format!("platform-key:{}", context.key_id),
+        security_level: velismail_common::SecurityLevel::Standard,
+        firebase_uid: None,
+    };
+
+    let signed = match jsonwebtoken::encode(
+        &jsonwebtoken::Header::default(),
+        &claims,
+        &jsonwebtoken::EncodingKey::from_secret(secret.as_bytes()),
+    ) {
+        Ok(signed) => signed,
+        Err(err) => {
+            tracing::error!("platform API key session could not be signed: {}", err);
+            return error_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "INTERNAL_SERVER_ERROR",
+                "Unable to create the platform session.",
+            );
+        }
+    };
+    let authorization = match HeaderValue::from_str(&format!("Bearer {signed}")) {
+        Ok(value) => value,
+        Err(_) => {
+            return error_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "INTERNAL_SERVER_ERROR",
+                "Unable to create the platform session.",
+            )
+        }
+    };
+
+    let (mut parts, body) = request.into_parts();
+    parts
+        .headers
+        .insert(axum::http::header::AUTHORIZATION, authorization);
+    let mut request = Request::from_parts(parts, body);
+    request.extensions_mut().insert(claims);
+    crate::platform_api_keys::touch_last_used(state, context.key_id);
     next.run(request).await
 }
 

@@ -68,6 +68,22 @@ export function copyToClipboard(text: string): void {
   });
 }
 
+/** Read a file as base64, so it can be sent as an attachment. */
+export function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = String(reader.result || '');
+      // The data url carries the type as well, the mail service expects the
+      // plain value.
+      const comma = result.indexOf(',');
+      resolve(comma >= 0 ? result.slice(comma + 1) : result);
+    };
+    reader.onerror = () => reject(new Error(`Could not read ${file.name}.`));
+    reader.readAsDataURL(file);
+  });
+}
+
 export function normalizeMailBody(body: string): string {
   return body.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
 }
