@@ -298,7 +298,8 @@ curl -X POST -H "Authorization: Bearer vsk_plat_…" -H "Content-Type: applicati
           <code>platform.keys.write</code> and is owner-gated on the server.
         </p>
       </section>
-        <ol>
+        <section>
+          <ol>
           <li><code>401</code> → key expired or revoked. Create a new key.</li>
           <li><code>403 "missing the X scope"</code> → recreate the key with that scope, or switch to a broader preset.</li>
           <li><code>403 "A platform API key cannot call this endpoint."</code> → you are using a platform key on a workspace route. Use a workspace key instead.</li>
