@@ -4800,6 +4800,7 @@ pub async fn escalate_feedback_to_investigation(
     };
     let now = Utc::now();
     let case_number = format!("FB-{}", &id[..8]);
+    let tags: Vec<String> = vec![category.clone(), "feedback".to_string()];
     let result = sqlx::query(
         "INSERT INTO investigations (case_number, title, investigation_type, severity, status, priority, tenant_id,
             reporter_email, summary, description, tags, sla_due_at, created_by, created_at, updated_at)
@@ -4813,7 +4814,7 @@ pub async fn escalate_feedback_to_investigation(
     .bind(&email)
     .bind(&body)
     .bind(&body)
-    .bind(json!([category, "feedback"]))
+    .bind(&tags)
     .bind(now + chrono::Duration::days(7))
     .bind(&actor.email)
     .bind(now)
