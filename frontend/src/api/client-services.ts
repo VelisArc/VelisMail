@@ -247,12 +247,14 @@ export const auth = {
 
         // MFA challenge: the account has an authenticator app, so the server
         // returns a challenge instead of tokens. The sign-in is not finished.
-        if (res && res.mfaRequired && typeof res.mfaToken === 'string') {
+        // The auth service answers in snake_case.
+        const challengeToken = res?.mfaToken ?? res?.mfa_token;
+        if (res && res.mfaRequired === true && typeof challengeToken === 'string') {
           return {
             success: true,
             mfaRequired: true,
-            mfaToken: res.mfaToken,
-            recoveryEmailMasked: res.recoveryEmailMasked,
+            mfaToken: challengeToken,
+            recoveryEmailMasked: res.recoveryEmailMasked ?? res.recovery_email_masked,
           };
         }
 
@@ -306,12 +308,14 @@ export const auth = {
 
       // MFA challenge: the account has an authenticator app, so the server
       // returns a challenge instead of tokens. The sign-in is not finished.
-      if (res && res.mfaRequired && typeof res.mfaToken === 'string') {
+      // The auth service answers in snake_case.
+      const challengeToken = res?.mfaToken ?? res?.mfa_token;
+      if (res && res.mfaRequired === true && typeof challengeToken === 'string') {
         return {
           success: true,
           mfaRequired: true,
-          mfaToken: res.mfaToken,
-          recoveryEmailMasked: res.recoveryEmailMasked,
+          mfaToken: challengeToken,
+          recoveryEmailMasked: res.recoveryEmailMasked ?? res.recovery_email_masked,
           email: identity.email,
         };
       }
