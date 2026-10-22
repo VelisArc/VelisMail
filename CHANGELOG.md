@@ -19,6 +19,7 @@
 - **Multiple domains per workspace**: adding a second domain no longer gets blocked or moved between tenants.
 - Ownership TXT records are published at `_velismail-verify` consistently.
 - DMARC conflict detection explains which duplicate record to keep.
+- The setup gate now opens **DNS records active** automatically when a domain is attached but records are incomplete, and shows the exact record count and fix instead of leaving the actionable step locked.
 - Deleting the active domain selects a valid remaining domain.
 - Infrastructure provider credentials save before a verification run, so DNS checks see fresh settings.
 

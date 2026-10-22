@@ -139,6 +139,25 @@ export default function SetupRequired({
   // The live requirements from the hook are always the source of truth; the
   // last verify response is only a fallback while the refresh is in flight.
   const displayedRecords = records.length > 0 ? records : lastResult;
+  const dnsCheck = checks.find((check) => check.key === 'dns');
+  const pendingRecords = displayedRecords.filter((record) => record.status !== 'verified');
+  // A domain that is attached is not automatically verified: the DNS step is
+  // the place where the customer can see and fix the remaining records. Skip
+  // the domain confirmation step while that is the real blocker.
+  const dnsNeedsWork = Boolean(primary && dnsCheck && !dnsCheck.done);
+  const nextActionable = firstBlocked?.key === 'domain' && dnsNeedsWork ? dnsCheck : firstBlocked;
+  // The progress line should say what to do, not repeat the status label.
+  const nextActionLabel = nextActionable
+    ? nextActionable.key === 'dns'
+      ? 'Fix DNS records'
+      : nextActionable.key === 'domain'
+        ? primary
+          ? 'Verify domain'
+          : 'Add your domain'
+        : nextActionable.key === 'receiving'
+          ? 'Verify receiving'
+          : `Finish ${nextActionable.label.toLowerCase()}`
+    : null;
 
   const isInfraStep = INFRA_KEYS.includes(activeKey);
   const infraDone = INFRA_KEYS.every(
@@ -147,11 +166,10 @@ export default function SetupRequired({
   const currentDone = Boolean(current?.done);
 
   useEffect(() => {
-    if (!hasUserSelected && loaded) {
-      const next = firstIncomplete(checks);
-      if (next) setActiveKey(next.key);
+    if (!hasUserSelected && loaded && nextActionable) {
+      setActiveKey(nextActionable.key);
     }
-  }, [checks, hasUserSelected, loaded]);
+  }, [nextActionable, hasUserSelected, loaded]);
 
   useEffect(() => {
     setMessage(null);
@@ -218,8 +236,7 @@ export default function SetupRequired({
 
   const advance = () => {
     setHasUserSelected(false);
-    const next = firstIncomplete(checks);
-    if (next) setActiveKey(next.key);
+    if (nextActionable) setActiveKey(nextActionable.key);
   };
 
   const selectStep = (key: SetupCheckKey) => {
@@ -230,6 +247,10 @@ export default function SetupRequired({
   const stepUnlocked = (key: SetupCheckKey) => {
     const check = checks.find((entry) => entry.key === key);
     if (check?.done) return true;
+    // Once a domain is attached and the infrastructure is configured, the DNS
+    // step is the actionable one even while the domain is still pending. It
+    // must never be locked behind the domain's verification flag.
+    if ((key === 'dns' || key === 'receiving') && primary && infraDone) return true;
     if (!firstBlocked) return true;
     return STEP_ORDER.indexOf(key) <= STEP_ORDER.indexOf(firstBlocked.key);
   };
@@ -455,6 +476,11 @@ export default function SetupRequired({
     if (activeKey === 'domain') {
       if (!primary) {
         void addDomain();
+      } else if (dnsNeedsWork) {
+        // The user cannot verify the domain until the live records are fixed.
+        // Take them straight to the exact records instead of running a check
+        // that is guaranteed to fail without an explanation.
+        selectStep('dns');
       } else {
         void verifyDomain();
       }
@@ -472,7 +498,10 @@ export default function SetupRequired({
   const actionLabel = (() => {
     if (allDone) return 'Open dashboard';
     if (isInfraStep) return infraDone && !editingInfra ? 'Continue' : 'Verify & continue';
-    if (activeKey === 'domain') return primary ? 'Verify domain' : 'Add domain';
+    if (activeKey === 'domain') {
+      if (!primary) return 'Add domain';
+      return dnsNeedsWork ? 'Open DNS records' : 'Verify domain';
+    }
     if (activeKey === 'dns') return 'Verify DNS records';
     if (activeKey === 'receiving') return 'Verify receiving';
     return 'Continue';
@@ -523,7 +552,13 @@ export default function SetupRequired({
         <div className="setup-wizard-progress">
           <div className="setup-wizard-progress-copy">
             <strong>{allDone ? 'Everything is verified' : `${completed} of ${checks.length} steps complete`}</strong>
-            <span>{allDone ? 'Opening your dashboard automatically.' : 'The dashboard stays locked until every step is green.'}</span>
+            <span>
+              {allDone
+                ? 'Opening your dashboard automatically.'
+                : nextActionLabel
+                  ? `Next: ${nextActionLabel}`
+                  : 'The dashboard stays locked until every step is green.'}
+            </span>
           </div>
           <div className="setup-progress">
             <div className="setup-progress-bar"><span style={{ width: `${progress}%` }} /></div>
@@ -819,20 +854,48 @@ export default function SetupRequired({
                             <span className="setup-content-kicker">Primary sending domain</span>
                             <strong>{primary.domain}</strong>
                             <small>
-                              {currentDone
-                                ? 'Verified and ready to send and receive mail.'
-                                : 'Connected. Publish the DNS records, then verify the domain.'}
+                              {dnsNeedsWork
+                                ? 'Connected. The remaining DNS records must be fixed before this domain can be verified.'
+                                : currentDone
+                                  ? 'Verified and ready to send and receive mail.'
+                                  : 'Connected. All DNS records are active. Verify the domain to finish.'}
                             </small>
                           </div>
-                          <span className={`setup-status ${currentDone ? 'ok' : 'pending'}`}>
-                            {currentDone ? 'Verified' : primary.status}
+                          <span className={`setup-status ${dnsNeedsWork || !currentDone ? 'pending' : 'ok'}`}>
+                            {dnsNeedsWork ? 'DNS needed' : currentDone ? 'Verified' : primary.status}
                           </span>
                         </div>
+
+                        {dnsNeedsWork && pendingRecords.length > 0 && (
+                          <div className="setup-callout warn">
+                            <AlertTriangle size={15} />
+                            <div>
+                              <strong>
+                                {pendingRecords.length === 1
+                                  ? 'One DNS record still needs attention'
+                                  : `${pendingRecords.length} DNS records still need attention`}
+                              </strong>
+                              <p>
+                                Open the DNS records step to see the exact name, value and conflict.
+                                Fix it in your DNS provider, then press “Verify DNS records”.
+                              </p>
+                              <button
+                                type="button"
+                                className="btn btn-primary btn-sm setup-callout-action"
+                                onClick={() => selectStep('dns')}
+                              >
+                                Open DNS records <ArrowRight size={13} />
+                              </button>
+                            </div>
+                          </div>
+                        )}
+
                         <div className="setup-guidance">
                           <Server size={15} />
                           <p>
-                            The domain is already attached to this workspace. Verifying it checks
-                            SPF, DKIM, DMARC and the inbound MX record against the live DNS.
+                            {dnsNeedsWork
+                              ? 'Verifying now would fail until the records in the DNS step are active. That step shows exactly what to add or remove.'
+                              : 'The domain is attached to this workspace. Verifying it checks SPF, DKIM, DMARC and the inbound MX record against the live DNS.'}
                           </p>
                         </div>
                       </>
@@ -881,6 +944,24 @@ export default function SetupRequired({
                           Receiving is enabled by the inbound MX record. It is checked together
                           with the rest of the DNS so the result always reflects the live zone.
                         </p>
+                      </div>
+                    )}
+
+                    {activeKey === 'dns' && pendingRecords.length > 0 && (
+                      <div className="setup-callout warn">
+                        <AlertTriangle size={15} />
+                        <div>
+                          <strong>
+                            {pendingRecords.length === 1
+                              ? 'One DNS record needs a fix'
+                              : `${pendingRecords.length} DNS records need a fix`}
+                          </strong>
+                          <p>
+                            The records marked Conflict, Missing or Unavailable below are not active
+                            yet. Fix them in your DNS provider — the cards show the exact name, value
+                            and conflict. Then press “Verify DNS records”.
+                          </p>
+                        </div>
                       </div>
                     )}
 
@@ -969,19 +1050,6 @@ export default function SetupRequired({
                             );
                           })}
                         </div>
-                        {displayedRecords.some((record) => record.status === 'mismatch') && (
-                          <div className="setup-callout warn">
-                            <AlertTriangle size={15} />
-                            <div>
-                              <strong>A DNS conflict needs one manual fix</strong>
-                              <p>
-                                Only one record of each type may exist. Delete the extra record in
-                                your DNS provider (Cloudflare, Route 53, etc.), wait for the TTL,
-                                then press verify again. The exact record to remove is shown in red above.
-                              </p>
-                            </div>
-                          </div>
-                        )}
                       </>
                     )}
                   </div>

@@ -441,6 +441,15 @@
 .setup-callout.error > svg { color: var(--danger-600); }
 .setup-callout.warn > svg { color: #b45309; }
 
+/* Callouts inside a step panel already sit in a spaced flex column. */
+.setup-gate .setup-panel > .setup-callout {
+  margin: 0;
+}
+
+.setup-gate .setup-callout .setup-callout-action {
+  margin-top: 10px;
+}
+
 .setup-loading-card {
   margin: 30px;
   display: flex;

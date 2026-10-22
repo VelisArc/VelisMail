@@ -219,7 +219,13 @@ export default function useWorkspaceReadiness(user: User | null): WorkspaceReadi
         icon: Globe,
         done: domainReady,
         detail: primary
-          ? `${primary.domain} - ${domainReady ? 'verified' : primary.status}`
+          ? `${primary.domain} - ${
+              domainReady
+                ? 'verified'
+                : primary.status === 'failed'
+                  ? 'verification failed'
+                  : 'waiting for DNS'
+            }`
           : 'No domain connected yet',
       },
       {
@@ -231,7 +237,11 @@ export default function useWorkspaceReadiness(user: User | null): WorkspaceReadi
         detail: loading
           ? 'Checking the live DNS...'
           : records.length
-            ? `${records.length - pending.length} of ${records.length} records active`
+            ? `${records.length - pending.length} of ${records.length} records active${
+                pending.length
+                  ? ` — ${pending.length} ${pending.length === 1 ? 'needs' : 'need'} attention`
+                  : ''
+              }`
             : 'No records to check yet',
       },
       {
