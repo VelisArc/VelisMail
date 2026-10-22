@@ -135,6 +135,16 @@ pub fn required_scope(method: &str, path: &str) -> Option<&'static str> {
         ("GET", "/signatures") => Some("signatures.read"),
         ("POST", "/signatures") => Some("signatures.write"),
         ("DELETE", p) if p.starts_with("/signatures") => Some("signatures.write"),
+        // The company console inside the business dashboard. A workspace key
+        // may read the state of its own company and send feedback. It may
+        // never manage the API keys of that company, because a key that can
+        // mint keys can escalate its own permissions.
+        ("GET", p)
+            if p.starts_with("/admin/company/") && !p.starts_with("/admin/company/api-keys") =>
+        {
+            Some("company.read")
+        }
+        ("POST", "/admin/company/feedback") => Some("company.feedback.write"),
         _ => None,
     }
 }
@@ -163,6 +173,8 @@ pub fn scope_catalog() -> Vec<serde_json::Value> {
         json!({ "id": "contacts.write", "label": "Manage contacts", "detail": "Create and delete contacts.", "risk": "medium" }),
         json!({ "id": "signatures.read", "label": "Read signatures", "detail": "List the saved signatures.", "risk": "low" }),
         json!({ "id": "signatures.write", "label": "Manage signatures", "detail": "Create and delete signatures.", "risk": "medium" }),
+        json!({ "id": "company.read", "label": "Read the company state", "detail": "Read the usage, the roles, the security state and the announcements of the company.", "risk": "low" }),
+        json!({ "id": "company.feedback.write", "label": "Send feedback", "detail": "Send a note or a complaint to the VelisMail control plane on behalf of the company.", "risk": "low" }),
     ]
 }
 

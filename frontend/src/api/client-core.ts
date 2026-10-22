@@ -1399,8 +1399,20 @@ export function buildSessionUser(params: {
   });
 }
 
-export function loginIdentifierCandidates(identifier: string): string[] {
-  const normalized = normalizeMailbox(identifier);
+/**
+ * True when the account may not sign in.
+ *
+ * A suspended or deactivated account keeps its data and can be restored, but
+ * it is refused at the door. Every sign-in path asks this question, so the
+ * answer lives in one place.
+ */
+export function isInactiveAccount(status?: string): boolean {
+  if (!status) return false;
+  const normalized = status.trim().toLowerCase();
+  return normalized === 'suspended' || normalized === 'deactivated';
+}
+
+export function loginIdentifierCandidates(identifier: string): string[] {  const normalized = normalizeMailbox(identifier);
   if (normalized && !normalized.includes('@')) {
     return [`admin@${normalizeDomainInput(normalized)}`];
   }

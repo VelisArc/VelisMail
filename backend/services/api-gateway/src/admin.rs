@@ -3191,6 +3191,24 @@ pub async fn update_platform_admin(
             );
         }
     }
+    // The table only accepts these two states, so an unknown one is refused
+    // here with a clear message instead of a database error.
+    let status = match payload
+        .status
+        .as_deref()
+        .map(|value| value.trim().to_lowercase())
+    {
+        Some(value) if !value.is_empty() => {
+            if !matches!(value.as_str(), "active" | "suspended") {
+                return fail(
+                    StatusCode::BAD_REQUEST,
+                    "Unknown administrator status. Use 'active' or 'suspended'.",
+                );
+            }
+            Some(value)
+        }
+        _ => None,
+    };
     let permissions: Value = match payload.role.as_deref() {
         Some(role) => sqlx::query_scalar("SELECT permissions FROM platform_roles WHERE key = $1")
             .bind(role.to_lowercase())
@@ -3210,7 +3228,7 @@ pub async fn update_platform_admin(
     )
     .bind(&email)
     .bind(payload.role.as_deref().map(str::to_lowercase))
-    .bind(payload.status.as_deref().map(str::to_lowercase))
+    .bind(status)
     .bind(payload.display_name.as_deref())
     .bind(permissions)
     .execute(db)
@@ -4253,6 +4271,14 @@ pub struct SupportUpdateRequest {
     pub priority: Option<String>,
 }
 
+/// The statuses a support ticket can take. The table carries the same check,
+/// so an unknown value is refused here with a clear message instead of
+/// turning into a database error later.
+const SUPPORT_TICKET_STATUSES: [&str; 4] = ["open", "pending", "resolved", "closed"];
+
+/// The priorities a support ticket can take.
+const SUPPORT_TICKET_PRIORITIES: [&str; 4] = ["P1", "P2", "P3", "P4"];
+
 pub async fn update_support_ticket(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -4271,10 +4297,49 @@ pub async fn update_support_ticket(
         Ok(value) => value,
         Err(_) => return fail(StatusCode::BAD_REQUEST, "Invalid ticket id."),
     };
-    let resolved_at = payload
+    let status = match payload
         .status
         .as_deref()
-        .filter(|value| matches!(value.to_lowercase().as_str(), "resolved" | "closed"))
+        .map(|value| value.trim().to_lowercase())
+    {
+        Some(value) if !value.is_empty() => {
+            if !SUPPORT_TICKET_STATUSES.contains(&value.as_str()) {
+                return fail(
+                    StatusCode::BAD_REQUEST,
+                    &format!(
+                        "Unknown ticket status '{}'. Use one of: {}.",
+                        value,
+                        SUPPORT_TICKET_STATUSES.join(", ")
+                    ),
+                );
+            }
+            Some(value)
+        }
+        _ => None,
+    };
+    let priority = match payload
+        .priority
+        .as_deref()
+        .map(|value| value.trim().to_uppercase())
+    {
+        Some(value) if !value.is_empty() => {
+            if !SUPPORT_TICKET_PRIORITIES.contains(&value.as_str()) {
+                return fail(
+                    StatusCode::BAD_REQUEST,
+                    &format!(
+                        "Unknown ticket priority '{}'. Use one of: {}.",
+                        value,
+                        SUPPORT_TICKET_PRIORITIES.join(", ")
+                    ),
+                );
+            }
+            Some(value)
+        }
+        _ => None,
+    };
+    let resolved_at = status
+        .as_deref()
+        .filter(|value| matches!(*value, "resolved" | "closed"))
         .map(|_| Utc::now());
     let result = sqlx::query(
         "UPDATE support_tickets SET status = COALESCE($2, status),
@@ -4284,9 +4349,9 @@ pub async fn update_support_ticket(
          WHERE id = $1",
     )
     .bind(ticket_id)
-    .bind(payload.status.as_deref().map(str::to_lowercase))
+    .bind(status)
     .bind(payload.assignee_email.as_deref())
-    .bind(payload.priority.as_deref().map(str::to_uppercase))
+    .bind(priority)
     .bind(resolved_at)
     .execute(db)
     .await;

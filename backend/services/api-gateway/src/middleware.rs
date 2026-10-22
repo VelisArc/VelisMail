@@ -350,12 +350,24 @@ async fn authorize_api_key(
         }
     };
 
-    if let Some(required) = crate::api_keys::required_scope(request.method().as_str(), path) {
-        if !context.allows(required) {
+    // A workspace key may only call the routes the scope table knows, and it
+    // needs the scope of that route. A route that is not in the table is
+    // refused, so a new endpoint is never reachable by accident.
+    match crate::api_keys::required_scope(request.method().as_str(), path) {
+        Some(required) => {
+            if !context.allows(required) {
+                return error_response(
+                    StatusCode::FORBIDDEN,
+                    "FORBIDDEN",
+                    &format!("This API key is missing the {} scope.", required),
+                );
+            }
+        }
+        None => {
             return error_response(
                 StatusCode::FORBIDDEN,
                 "FORBIDDEN",
-                &format!("This API key is missing the {} scope.", required),
+                "This API key cannot call this endpoint.",
             );
         }
     }

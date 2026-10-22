@@ -3081,7 +3081,7 @@ pub struct ValidateTeamInviteRequest {
 pub struct CompleteTeamInviteRequest {
     pub token: String,
     pub email: String,
-    pub verification_token: String,
+    pub password: String,
 }
 
 #[derive(Debug, Deserialize)]

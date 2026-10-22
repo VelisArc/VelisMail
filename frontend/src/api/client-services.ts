@@ -40,6 +40,7 @@ import {
   sessionHasMismatch, mergeDnsRecords,
   isLegacyDnsRecord,
   safeRandomUUID, deleteBusinessEmailFromDb,
+  isInactiveAccount,
 } from './client-core';
 import type {
   User, DnsRecord, DomainCheck, CustomDomain, BusinessMailbox,
@@ -204,7 +205,7 @@ export const auth = {
         profile,
       });
 
-      if (safeUser.status === 'suspended' || safeUser.status === 'deactivated') {
+      if (isInactiveAccount(safeUser.status)) {
         this.logout();
         return { success: false, error: 'This account is not active. Contact VelisMail support for review or recovery.' };
       }
@@ -277,7 +278,7 @@ export const auth = {
           profile,
         });
 
-        if (safeUser.status === 'suspended' || safeUser.status === 'deactivated') {
+        if (isInactiveAccount(safeUser.status)) {
           this.logout();
           return { success: false, error: 'This account is not active. Contact VelisMail support for review or recovery.' };
         }
@@ -342,7 +343,7 @@ export const auth = {
       safeUser.firebaseUid = identity.uid;
       if (identity.photoUrl && !safeUser.profileImageUrl) safeUser.profileImageUrl = identity.photoUrl;
 
-      if (safeUser.status === 'suspended' || safeUser.status === 'deactivated') {
+      if (isInactiveAccount(safeUser.status)) {
         this.logout();
         await signOutFirebase();
         return { success: false, error: 'This account is not active. Contact VelisMail support for review or recovery.' };
@@ -436,7 +437,7 @@ export const auth = {
       }
       const profile = await fetchAuthenticatedProfile();
       const safeUser = buildSessionUser({ token: res.access_token, email: '', profile });
-      if (safeUser.status === 'suspended' || safeUser.status === 'deactivated') {
+      if (isInactiveAccount(safeUser.status)) {
         this.logout();
         return { success: false, error: 'This account is not active. Contact VelisMail support for review or recovery.' };
       }
@@ -500,7 +501,7 @@ export const auth = {
       }
       const profile = await fetchAuthenticatedProfile();
       const safeUser = buildSessionUser({ token: res.access_token, email: '', profile });
-      if (safeUser.status === 'suspended' || safeUser.status === 'deactivated') {
+      if (isInactiveAccount(safeUser.status)) {
         this.logout();
         return { success: false, error: 'This account is not active. Contact VelisMail support for review or recovery.' };
       }
