@@ -242,14 +242,17 @@ export const auth = {
         const existingLocal = scopedExistingSession(candidate);
         const res = await fetchAPI('/auth/login', {
           method: 'POST',
-          body: JSON.stringify({ email: candidate, password }),
+          // The device id ties this session to a browser, so it can be named
+          // in the session list and revoked on its own.
+          body: JSON.stringify({ email: candidate, password, device_id: 'web' }),
         });
 
         // MFA challenge: the account has an authenticator app, so the server
         // returns a challenge instead of tokens. The sign-in is not finished.
         // The auth service answers in snake_case.
         const challengeToken = res?.mfaToken ?? res?.mfa_token;
-        if (res && res.mfaRequired === true && typeof challengeToken === 'string') {
+        const challengeRequired = res?.mfaRequired ?? res?.mfa_required;
+        if (res && challengeRequired === true && typeof challengeToken === 'string') {
           return {
             success: true,
             mfaRequired: true,
@@ -310,7 +313,8 @@ export const auth = {
       // returns a challenge instead of tokens. The sign-in is not finished.
       // The auth service answers in snake_case.
       const challengeToken = res?.mfaToken ?? res?.mfa_token;
-      if (res && res.mfaRequired === true && typeof challengeToken === 'string') {
+      const challengeRequired = res?.mfaRequired ?? res?.mfa_required;
+      if (res && challengeRequired === true && typeof challengeToken === 'string') {
         return {
           success: true,
           mfaRequired: true,
@@ -1062,9 +1066,37 @@ export const businessMailboxes = {
 };
 
 // ---- Group Functions ----
+//
+// The groups live in the workspace database. The browser copy is a cache that
+// the composer reads, so it is filled from the server on every load. The
+// writes go through the workspace API, never through this cache.
 export const businessGroups = {
   getByDomain(domain: string): BusinessGroup[] {
     return loadBusinessGroups(domain);
+  },
+
+  /** Fill the cache with the groups the server returned. */
+  replaceAll(domain: string, groups: BusinessGroup[]) {
+    const normalizedDomain = normalizeDomainInput(domain);
+    const byDomain = new Map<string, BusinessGroup[]>();
+    for (const group of groups) {
+      const groupDomain = normalizeDomainInput(group.domain || normalizedDomain);
+      const list = byDomain.get(groupDomain) || [];
+      list.push(normalizeBusinessGroupEntry(group, groupDomain));
+      byDomain.set(groupDomain, list);
+    }
+    // Domains that the server no longer returns are cleared, so a removed
+    // group does not survive in the cache.
+    const current = loadBusinessGroups(normalizedDomain);
+    const known = new Set(current.map((entry) => entry.domain));
+    for (const knownDomain of known) {
+      if (!byDomain.has(knownDomain)) {
+        saveBusinessGroups(knownDomain, []);
+      }
+    }
+    for (const [groupDomain, list] of byDomain) {
+      saveBusinessGroups(groupDomain, list);
+    }
   },
 
   create(domain: string, data: { name: string; localPart?: string; members: string[] }): BusinessGroup {
@@ -1081,14 +1113,6 @@ export const businessGroups = {
     }, normalizedDomain);
     saveBusinessGroups(normalizedDomain, [...entries, group]);
 
-    const session = auth.getSession();
-    if (session?.tenantId) {
-      syncBridge(`/tenants/${session.tenantId}/groups`, {
-        method: 'POST',
-        body: JSON.stringify(group),
-      });
-    }
-
     businessAudit.add({
       action: 'Created group',
       actor: auth.getSession()?.email || address,
@@ -1096,46 +1120,6 @@ export const businessGroups = {
       severity: 'info',
     });
     return group;
-  },
-
-  update(domain: string, id: string, data: Partial<BusinessGroup>) {
-    const normalizedDomain = normalizeDomainInput(domain);
-    const updated = this.getByDomain(normalizedDomain).map((entry) => (
-      entry.id === id
-        ? normalizeBusinessGroupEntry({ ...entry, ...data, updatedAt: new Date().toISOString() }, normalizedDomain)
-        : entry
-    ));
-    saveBusinessGroups(normalizedDomain, updated);
-
-    const session = auth.getSession();
-    if (session?.tenantId) {
-      syncBridge(`/tenants/${session.tenantId}/groups/${id}`, {
-        method: 'PUT',
-        body: JSON.stringify(updated.find(e => e.id === id)),
-      });
-    }
-  },
-
-  remove(domain: string, id: string) {
-    const normalizedDomain = normalizeDomainInput(domain);
-    const current = this.getByDomain(normalizedDomain);
-    const group = current.find((entry) => entry.id === id);
-    saveBusinessGroups(normalizedDomain, current.filter((entry) => entry.id !== id));
-
-    const session = auth.getSession();
-    if (session?.tenantId) {
-      syncBridge(`/tenants/${session.tenantId}/groups/${id}`, {
-        method: 'DELETE',
-      });
-    }
-    if (group) {
-      businessAudit.add({
-        action: 'Removed group',
-        actor: auth.getSession()?.email || group.address,
-        target: group.address,
-        severity: 'warn',
-      });
-    }
   },
 
   removeDomain(domain: string) {
@@ -2034,12 +2018,6 @@ export const connections = {
 
     auth.updateSettings(next);
 
-    if (session.tenantId) {
-      syncBridge(`/tenants/${session.tenantId}/connections/${id}`, {
-        method: 'DELETE',
-      });
-    }
-
     return true;
   },
 };
@@ -2296,12 +2274,6 @@ export const domains = {
         },
       });
     }
-
-    if (session?.tenantId && domainToDelete) {
-      syncBridge(`/tenants/${session.tenantId}/domains/${domainToDelete.domain}`, {
-        method: 'DELETE',
-      });
-    }
   },
 };
 
@@ -2309,6 +2281,17 @@ export const domains = {
 export const contacts = {
   getAll(): Contact[] {
     return loadUserDB<Contact[]>(STORAGE_KEYS.contacts, []);
+  },
+
+  /**
+   * Fill the browser cache with the contacts the server returned.
+   *
+   * The contacts live in the workspace database. The cache only exists so
+   * the auto-reply rule can check an address without a round trip, so it is
+   * replaced, never merged.
+   */
+  replaceAll(list: Contact[]) {
+    saveUserDB(STORAGE_KEYS.contacts, list);
   },
 
   add(data: Omit<Contact, 'id' | 'favorite' | 'createdAt'>): Contact {
@@ -2323,45 +2306,7 @@ export const contacts = {
     all.push(c);
     saveUserDB(STORAGE_KEYS.contacts, all);
 
-    const session = auth.getSession();
-    if (session?.tenantId) {
-      syncBridge(`/tenants/${session.tenantId}/contacts`, {
-        method: 'POST',
-        body: JSON.stringify(c),
-      });
-    }
-
     return c;
-  },
-
-  update(id: string, data: Partial<Contact>) {
-    const all = this.getAll();
-    const idx = all.findIndex(c => c.id === id);
-    if (idx !== -1) {
-      all[idx] = { ...all[idx], ...data };
-      saveUserDB(STORAGE_KEYS.contacts, all);
-
-      const session = auth.getSession();
-      if (session?.tenantId) {
-        syncBridge(`/tenants/${session.tenantId}/contacts/${id}`, {
-          method: 'PUT',
-          body: JSON.stringify(all[idx]),
-        });
-      }
-    }
-  },
-
-  remove(id: string) {
-    let all = this.getAll();
-    all = all.filter(c => c.id !== id);
-    saveUserDB(STORAGE_KEYS.contacts, all);
-
-    const session = auth.getSession();
-    if (session?.tenantId) {
-      syncBridge(`/tenants/${session.tenantId}/contacts/${id}`, {
-        method: 'DELETE',
-      });
-    }
   },
 
   toggleFavorite(id: string): boolean {
@@ -2388,6 +2333,16 @@ export const signatures = {
     return loadUserDB<Signature[]>(STORAGE_KEYS.signatures, []);
   },
 
+  /**
+   * Fill the browser cache with the signatures the server returned.
+   *
+   * The signatures live in the workspace database. The cache is replaced, so a
+   * signature that was deleted on another device does not survive here.
+   */
+  replaceAll(list: Signature[]) {
+    saveUserDB(STORAGE_KEYS.signatures, list);
+  },
+
   add(name: string, content: string): Signature {
     const all = this.getAll();
     const sig: Signature = {
@@ -2398,45 +2353,7 @@ export const signatures = {
     all.push(sig);
     saveUserDB(STORAGE_KEYS.signatures, all);
 
-    const session = auth.getSession();
-    if (session?.tenantId) {
-      syncBridge(`/tenants/${session.tenantId}/signatures`, {
-        method: 'POST',
-        body: JSON.stringify(sig),
-      });
-    }
-
     return sig;
-  },
-
-  update(id: string, data: Partial<Signature>) {
-    const all = this.getAll();
-    const idx = all.findIndex(s => s.id === id);
-    if (idx !== -1) {
-      all[idx] = { ...all[idx], ...data };
-      saveUserDB(STORAGE_KEYS.signatures, all);
-
-      const session = auth.getSession();
-      if (session?.tenantId) {
-        syncBridge(`/tenants/${session.tenantId}/signatures/${id}`, {
-          method: 'PUT',
-          body: JSON.stringify(all[idx]),
-        });
-      }
-    }
-  },
-
-  remove(id: string) {
-    let all = this.getAll();
-    all = all.filter(s => s.id !== id);
-    saveUserDB(STORAGE_KEYS.signatures, all);
-
-    const session = auth.getSession();
-    if (session?.tenantId) {
-      syncBridge(`/tenants/${session.tenantId}/signatures/${id}`, {
-        method: 'DELETE',
-      });
-    }
   },
 
   getDefault(): Signature | null {

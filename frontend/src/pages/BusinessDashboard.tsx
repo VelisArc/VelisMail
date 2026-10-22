@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef, type Dispatch, type SetStateAction } from 'react';
 import { Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { Building2, Check, ChevronDown, ChevronUp, Crown, Globe, Plus, X } from 'lucide-react';
-import { auth, connections, fetchAPI, fetchAuthenticatedProfile, isBusinessSetupReady, mail, saveDB, STORAGE_KEYS, type BusinessAuditEntry, type BusinessGroup, type BusinessMailbox, type BusinessTeamMember, type BusinessTemplate, type ConnectionUsage, type Email, type PlatformAdminUserRecord, type Signature, type Contact, type ActiveSession, type User } from '../api/client';
+import { auth, businessGroups, connections, contacts, fetchAPI, fetchAuthenticatedProfile, isBusinessSetupReady, mail, saveDB, signatures, STORAGE_KEYS, type BusinessAuditEntry, type BusinessGroup, type BusinessMailbox, type BusinessTeamMember, type BusinessTemplate, type ConnectionUsage, type Email, type PlatformAdminUserRecord, type Signature, type Contact, type ActiveSession, type User } from '../api/client';
 import { platformAdminApi } from '../api/admin';
 import Sidebar from '../components/dashboard/Sidebar';
 import { PLANS, ROLE_ALLOWED_TABS, type BizTab } from '../components/dashboard/constants';
@@ -471,7 +471,7 @@ function WorkspaceDashboard({ user, setUser, reloadReadiness }: WorkspaceDashboa
   const refreshGroups = useCallback(async () => {
     try {
       const result = await workspaceApi.groups(activeDomainName);
-      setDomainGroups(result.groups.map((group) => ({
+      const groups = result.groups.map((group) => ({
         id: group.id,
         domain: group.domain,
         name: group.name,
@@ -479,7 +479,11 @@ function WorkspaceDashboard({ user, setUser, reloadReadiness }: WorkspaceDashboa
         members: group.members || [],
         createdAt: group.createdAt || '',
         updatedAt: group.updatedAt || '',
-      })));
+      }));
+      setDomainGroups(groups);
+      // The composer reads the groups from the cache, so the cache is filled
+      // from the server. A group that was deleted elsewhere disappears here too.
+      businessGroups.replaceAll(activeDomainName, groups);
     } catch (error) {
       console.error('refresh groups failed', error);
       showToast(error instanceof Error ? error.message : 'Unable to load groups.', 'error');
@@ -500,20 +504,26 @@ function WorkspaceDashboard({ user, setUser, reloadReadiness }: WorkspaceDashboa
     try {
       const result = await workspaceApi.signatures();
       setSignaturesList(result.signatures);
+      // The composer reads the default signature from the cache, so the cache
+      // follows the server.
+      signatures.replaceAll(result.signatures);
     } catch (error) {
       console.error('refresh signatures failed', error);
-      setSignaturesList([]);
+      showToast(error instanceof Error ? error.message : 'Unable to load signatures.', 'error');
     }
-  }, []);
+  }, [showToast]);
   const refreshContacts = useCallback(async () => {
     try {
       const result = await workspaceApi.contacts();
       setContactsList(result.contacts);
+      // The auto-reply rule checks the cached contacts, so the cache follows
+      // the server instead of keeping a second, diverging list.
+      contacts.replaceAll(result.contacts);
     } catch (error) {
       console.error('refresh contacts failed', error);
-      setContactsList([]);
+      showToast(error instanceof Error ? error.message : 'Unable to load contacts.', 'error');
     }
-  }, []);
+  }, [showToast]);
   const refreshSessions = useCallback(async () => { try { const res = await auth.listSessions(); if (res.success) setActiveSessions(res.sessions); } catch (e) { console.error('refresh sessions failed', e); } }, []);
 
   useEffect(() => {
