@@ -1,7 +1,7 @@
-import { useState, useEffect, useCallback, useMemo, type Dispatch, type SetStateAction } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef, type Dispatch, type SetStateAction } from 'react';
 import { Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { Building2, Check, ChevronDown, ChevronUp, Crown, Globe, Plus, X } from 'lucide-react';
-import { auth, connections, fetchAPI, fetchAuthenticatedProfile, isBusinessSetupReady, mail, saveDB, signatures, contacts, STORAGE_KEYS, type BusinessAuditEntry, type BusinessGroup, type BusinessMailbox, type BusinessTeamMember, type BusinessTemplate, type ConnectionUsage, type Email, type PlatformAdminUserRecord, type Signature, type Contact, type ActiveSession, type User } from '../api/client';
+import { auth, connections, fetchAPI, fetchAuthenticatedProfile, isBusinessSetupReady, mail, saveDB, STORAGE_KEYS, type BusinessAuditEntry, type BusinessGroup, type BusinessMailbox, type BusinessTeamMember, type BusinessTemplate, type ConnectionUsage, type Email, type PlatformAdminUserRecord, type Signature, type Contact, type ActiveSession, type User } from '../api/client';
 import { platformAdminApi } from '../api/admin';
 import Sidebar from '../components/dashboard/Sidebar';
 import { PLANS, ROLE_ALLOWED_TABS, type BizTab } from '../components/dashboard/constants';
@@ -161,6 +161,7 @@ function WorkspaceDashboard({ user, setUser, reloadReadiness }: WorkspaceDashboa
   const [annual, setAnnual] = useState(false);
   const [loadingPayment, setLoadingPayment] = useState<string | null>(null);
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
+  const toastTimer = useRef<number | null>(null);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [confirmRevokeId, setConfirmRevokeId] = useState<string | null>(null);
   const [pendingRoleChange, setPendingRoleChange] = useState<{ id: string; role: string; step: number } | null>(null);
@@ -240,13 +241,14 @@ function WorkspaceDashboard({ user, setUser, reloadReadiness }: WorkspaceDashboa
   const [groupLocalPart, setGroupLocalPart] = useState('');
   const [groupMembers, setGroupMembers] = useState('');
   const [verifyingDomainId, setVerifyingDomainId] = useState('');
+  const [domainVerifyBusy, setDomainVerifyBusy] = useState(false);
   const [domainVerifyOpen, setDomainVerifyOpen] = useState(false);
   const [domainVerifySteps, setDomainVerifySteps] = useState<DomainHealth[]>([]);
   const [domainVerifyProviderRecords, setDomainVerifyProviderRecords] = useState<Record<string, string>[]>([]);
   const [copiedField, setCopiedField] = useState<string | null>(null);
 
-  const [signaturesList, setSignaturesList] = useState<Signature[]>(() => signatures.getAll());
-  const [contactsList, setContactsList] = useState<Contact[]>(() => contacts.getAll());
+  const [signaturesList, setSignaturesList] = useState<Signature[]>([]);
+  const [contactsList, setContactsList] = useState<Contact[]>([]);
   const [contactsSearch, setContactsSearch] = useState('');
   const [activeSessions, setActiveSessions] = useState<ActiveSession[]>([]);
   const [signatureEditorOpen, setSignatureEditorOpen] = useState(false);
@@ -265,8 +267,24 @@ function WorkspaceDashboard({ user, setUser, reloadReadiness }: WorkspaceDashboa
 
   const showToast = useCallback((msg: string, type: 'success' | 'error' = 'success') => {
     setToast({ msg, type });
-    setTimeout(() => setToast(null), 3000);
+    // A new message replaces the old one, so its timer has to be replaced too
+    // or the previous timer would hide the newer message early.
+    if (toastTimer.current) window.clearTimeout(toastTimer.current);
+    toastTimer.current = window.setTimeout(() => setToast(null), 4000);
   }, []);
+  useEffect(() => () => {
+    if (toastTimer.current) window.clearTimeout(toastTimer.current);
+  }, []);
+  const copyValue = useCallback(async (text: string) => {
+    const copied = await copyToClipboard(text);
+    showToast(
+      copied
+        ? 'Copied to the clipboard.'
+        : 'Your browser blocked the clipboard. Select the value and copy it manually.',
+      copied ? 'success' : 'error',
+    );
+    return copied;
+  }, [showToast]);
 
   const handleLogout = useCallback(() => { auth.logout(); navigate('/login'); }, [navigate]);
   const openComposeWith = (to = '', subject = '', body = '', replyQuote = '') => {
@@ -373,24 +391,31 @@ function WorkspaceDashboard({ user, setUser, reloadReadiness }: WorkspaceDashboa
     try {
       const result = await workspaceApi.domains();
       setDomainsList(
-        result.domains.map((domain) => ({
-          id: domain.id,
-          domain: domain.domain,
-          status: domain.status === 'verified' ? 'active' : domain.status === 'failed' ? 'error' : 'pending',
-          reputation: 100,
-          mailCount: domain.mailboxes || 0,
-          addedAt: domain.createdAt || new Date().toISOString(),
-          health: [
+        result.domains.map((domain) => {
+          const health: DomainHealth[] = [
             { key: 'mx', label: 'MX Record', status: domain.mxRecords?.length ? 'verified' : 'pending', detail: domain.mxRecords?.length ? 'Mail exchange configured' : 'Not configured', lastCheck: domain.verifiedAt || '' },
             { key: 'spf', label: 'SPF Record', status: domain.spfRecord ? 'verified' : 'pending', detail: domain.spfRecord ? 'Sender policy published' : 'Not published', lastCheck: domain.verifiedAt || '' },
             { key: 'dkim', label: 'DKIM Signature', status: domain.dkimRecord ? 'verified' : 'pending', detail: domain.dkimRecord ? 'DKIM key active' : 'Not configured', lastCheck: domain.verifiedAt || '' },
             { key: 'dmarc', label: 'DMARC Policy', status: domain.dmarcRecord ? 'verified' : 'pending', detail: domain.dmarcRecord ? 'DMARC policy published' : 'Not published', lastCheck: domain.verifiedAt || '' },
-          ],
-          checks: [],
-          mxVerified: Boolean(domain.mxRecords?.length),
-          dkimVerified: Boolean(domain.dkimRecord),
-          dmarcVerified: Boolean(domain.dmarcRecord),
-        })),
+          ];
+          const verifiedRecords = health.filter((entry) => entry.status === 'verified').length;
+          return {
+            id: domain.id,
+            domain: domain.domain,
+            status: domain.status === 'verified' ? 'active' : domain.status === 'failed' ? 'error' : 'pending',
+            // The setup score is the share of the DNS records that are
+            // published. It is real data, not a fixed reputation number.
+            reputation: Math.round((verifiedRecords / health.length) * 100),
+            mailCount: domain.mailboxes || 0,
+            addedAt: domain.createdAt || new Date().toISOString(),
+            health,
+            checks: [],
+            mxVerified: Boolean(domain.mxRecords?.length),
+            spfVerified: Boolean(domain.spfRecord),
+            dkimVerified: Boolean(domain.dkimRecord),
+            dmarcVerified: Boolean(domain.dmarcRecord),
+          };
+        }),
       );
     } catch (error) {
       console.error('refresh domains failed', error);
@@ -754,6 +779,7 @@ function WorkspaceDashboard({ user, setUser, reloadReadiness }: WorkspaceDashboa
     const dom = domainsList.find(d => d.id === domainId);
     if (!dom) return;
     setVerifyingDomainId(domainId);
+    setDomainVerifyBusy(true);
     setDomainVerifySteps([
       { key: 'checking', label: 'Reading the live DNS', status: 'checking', detail: `Checking every record of ${dom.domain}...`, lastCheck: new Date().toISOString() },
     ]);
@@ -795,7 +821,9 @@ function WorkspaceDashboard({ user, setUser, reloadReadiness }: WorkspaceDashboa
       console.error('verify domain failed', error);
       showToast(error instanceof Error ? error.message : 'Unable to verify the domain.', 'error');
     } finally {
-      setVerifyingDomainId('');
+      // The identifier stays set, so "Re-check" can run the same domain
+      // again. Only the spinner stops.
+      setDomainVerifyBusy(false);
     }
   };
 
@@ -897,7 +925,7 @@ function WorkspaceDashboard({ user, setUser, reloadReadiness }: WorkspaceDashboa
     activeDomainName,
     hasRoleAccess, canAccessPlatformAdmin, refreshDomains, refreshTeam, refreshQueue,
     refreshAudit, refreshTemplates, refreshMailboxes, refreshGroups, removeTeamMember, refreshConnectionUsage, refreshAdminUsers,
-    handleLogout, handleSendEmail, openComposeWith, copyToClipboard,
+    handleLogout, handleSendEmail, openComposeWith, copyToClipboard: copyValue,
     inviteOpen, setInviteOpen, inviteName, setInviteName, inviteEmail, setInviteEmail,
     inviteRole, setInviteRole, inviteExpiresHours, setInviteExpiresHours,
     inviteSending, setInviteSending,
@@ -914,6 +942,7 @@ function WorkspaceDashboard({ user, setUser, reloadReadiness }: WorkspaceDashboa
     mailboxKind, setMailboxKind,
     groupName, setGroupName, groupLocalPart, setGroupLocalPart, groupMembers, setGroupMembers,
     verifyingDomainId, setVerifyingDomainId,
+    domainVerifyBusy, setDomainVerifyBusy,
     domainVerifyOpen, setDomainVerifyOpen, domainVerifySteps, setDomainVerifySteps,
     domainVerifyProviderRecords, setDomainVerifyProviderRecords,
     copiedField, setCopiedField,
@@ -935,7 +964,7 @@ function WorkspaceDashboard({ user, setUser, reloadReadiness }: WorkspaceDashboa
     contactEditorPhone, setContactEditorPhone,
     contactEditorCompany, setContactEditorCompany,
     editingContactId, setEditingContactId,
-  }), [activeBizTab, activeFolder, searchQuery, composeOpen, composeTo, composeSubject, composeBody, composeReplyQuote, sending, selectedFromAddress, activeMailboxAddress, annual, loadingPayment, toast, showLogoutConfirm, confirmRevokeId, pendingRoleChange, confirmAction, domainsList, activeDomain, domainMailboxes, domainGroups, teamMembers, mailQueue, auditLog, templates, connectionUsage, adminUsers, sortOrder, selectedEmails, mailStatusFilter, notificationEnabled, soundEnabled, showQueueFilters, queueStatusFilter, templateSearch, showAddDomain, newDomainInput, teamFilter, auditFilter, adminSearch, adminPlanFilter, adminStatusFilter, adminRiskFilter, adminPage, sidebarOpen, user, inviteOpen, inviteName, inviteEmail, inviteRole, inviteExpiresHours, issuedInvite, templateEditorOpen, templateName, templateSubject, templateBody, previewTemplate, selectedAdminUser, adminStatusConfirm, domainDetails, mailboxDetails, groupDetails, mailboxLocalPart, mailboxDisplayName, mailboxKind, groupName, groupLocalPart, groupMembers, verifyingDomainId, domainVerifyOpen, domainVerifySteps, domainVerifyProviderRecords, copiedField, signaturesList, contactsList, contactsSearch, activeSessions, signatureEditorOpen, signatureEditorName, signatureEditorContent, editingSignatureId, contactEditorOpen, contactEditorName, contactEditorEmail, contactEditorPhone, contactEditorCompany, editingContactId, showToast, activeDomainName, canAccessPlatformAdmin, handleLogout, handleSendEmail, hasRoleAccess, refreshAdminUsers, refreshAudit, refreshConnectionUsage, refreshContacts, refreshGroups, refreshMailboxes, refreshQueue, refreshSessions, refreshSignatures, refreshTeam, refreshTemplates, removeTeamMember, refreshDomains]);
+  }), [activeBizTab, activeFolder, searchQuery, composeOpen, composeTo, composeSubject, composeBody, composeReplyQuote, sending, selectedFromAddress, activeMailboxAddress, annual, loadingPayment, toast, showLogoutConfirm, confirmRevokeId, pendingRoleChange, confirmAction, domainsList, activeDomain, domainMailboxes, domainGroups, teamMembers, mailQueue, auditLog, templates, connectionUsage, adminUsers, sortOrder, selectedEmails, mailStatusFilter, notificationEnabled, soundEnabled, showQueueFilters, queueStatusFilter, templateSearch, showAddDomain, newDomainInput, teamFilter, auditFilter, adminSearch, adminPlanFilter, adminStatusFilter, adminRiskFilter, adminPage, sidebarOpen, user, inviteOpen, inviteName, inviteEmail, inviteRole, inviteExpiresHours, issuedInvite, templateEditorOpen, templateName, templateSubject, templateBody, previewTemplate, selectedAdminUser, adminStatusConfirm, domainDetails, mailboxDetails, groupDetails, mailboxLocalPart, mailboxDisplayName, mailboxKind, groupName, groupLocalPart, groupMembers, verifyingDomainId, domainVerifyBusy, domainVerifyOpen, domainVerifySteps, domainVerifyProviderRecords, copiedField, signaturesList, contactsList, contactsSearch, activeSessions, signatureEditorOpen, signatureEditorName, signatureEditorContent, editingSignatureId, contactEditorOpen, contactEditorName, contactEditorEmail, contactEditorPhone, contactEditorCompany, editingContactId, showToast, activeDomainName, canAccessPlatformAdmin, handleLogout, handleSendEmail, copyValue, hasRoleAccess, refreshAdminUsers, refreshAudit, refreshConnectionUsage, refreshContacts, refreshGroups, refreshMailboxes, refreshQueue, refreshSessions, refreshSignatures, refreshTeam, refreshTemplates, removeTeamMember, refreshDomains]);
 
   return (
     <div className="biz-dash">

@@ -6,7 +6,7 @@ export default function Privacy() {
     <LegalLayout
       slug="privacy"
       title="Privacy Policy"
-      description="VelisMail's Privacy Policy explains our zero-knowledge architecture, data minimization, BYOI provider boundaries, retention practices, and user privacy rights."
+      description="VelisMail's Privacy Policy explains data minimisation, BYOI provider boundaries, retention practices, and user privacy rights."
       contactEmail="support@velismail.online"
       contactLabel="Questions about privacy practices, data rights, or account data handling can be sent to VelisMail support."
     >
@@ -18,8 +18,8 @@ export default function Privacy() {
         <div className="privacy-cards">
           <div className="glass-card privacy-card">
             <Shield size={22} />
-            <h3>Zero-Knowledge Architecture</h3>
-            <p>We cannot read plaintext email contents stored through client-side encryption.</p>
+            <h3>Limited Access</h3>
+            <p>Message content is stored in the workspace database and is available to the members of that workspace and the configured mail provider.</p>
           </div>
           <div className="glass-card privacy-card">
             <Database size={22} />
@@ -42,16 +42,17 @@ export default function Privacy() {
       <section>
         <h2>1. Information We Do Not Collect</h2>
         <p>
-          Unlike legacy email providers that mine inbox data for advertising, VelisMail is designed to know as little as possible. We do not collect:
+          Unlike legacy email providers that mine inbox data for advertising, VelisMail keeps its data collection to what the service needs. We do not collect:
         </p>
         <ul>
-          <li>The plaintext content of encrypted emails, bodies, or attachments.</li>
-          <li>Your encryption keys in plaintext.</li>
           <li>Browsing history across the web.</li>
           <li>Advertising IDs or third-party tracking pixels.</li>
           <li>Social media profiles from external services.</li>
           <li>Biometric information.</li>
         </ul>
+        <p>
+          Message bodies and attachments are stored in the workspace database you connect. They are readable by the workspace members, by VelisMail operators with database access, and by the configured mail provider.
+        </p>
       </section>
 
       <section>
@@ -108,7 +109,7 @@ export default function Privacy() {
       <section>
         <h2>6. Compliance and Law Enforcement</h2>
         <p>
-          VelisMail responds to lawful requests from authorized government agencies. Because encrypted message contents are designed to remain outside our plaintext access, we cannot provide plaintext content we do not possess.
+          VelisMail responds to lawful requests from authorized government agencies. Because message content is stored in the workspace database, we provide only the data we actually hold and that the request lawfully covers.
         </p>
         <p>
           Where legally allowed, we will notify affected users of data requests. We may publish transparency information describing the number and nature of requests received.

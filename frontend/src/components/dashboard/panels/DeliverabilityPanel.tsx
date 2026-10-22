@@ -66,18 +66,20 @@ export default function DeliverabilityPanel({ state }: DeliverabilityPanelProps)
     const dmarcVerified = useLive ? liveDmarc?.status === 'verified' : Boolean(activeDomain.dmarcVerified);
     const mxVerified = useLive ? liveMx?.status === 'verified' : Boolean(activeDomain.mxVerified);
 
-    let total = 30; // base score representing bounce rate and system infrastructure
-    if (spfVerified) total += 20;
-    if (dkimVerified) total += 25;
-    if (dmarcVerified) total += 15;
-    if (mxVerified) total += 10;
+    // The score only counts the records that are actually published. No
+    // bounce or reputation figure is invented here.
+    let total = 0;
+    if (spfVerified) total += 25;
+    if (dkimVerified) total += 30;
+    if (dmarcVerified) total += 25;
+    if (mxVerified) total += 20;
 
-    const rating: 'excellent' | 'good' | 'critical' = total >= 90 ? 'excellent' : total >= 70 ? 'good' : 'critical';
-    const desc = total >= 90
-      ? 'Excellent: Your email security is fully validated. High likelihood of landing in primary user inboxes.'
+    const rating: 'excellent' | 'good' | 'critical' = total >= 100 ? 'excellent' : total >= 70 ? 'good' : 'critical';
+    const desc = total >= 100
+      ? 'Excellent: every required record is published and verified, so receivers can authenticate your mail.'
       : total >= 70
-        ? 'Good: Your configuration is working, but adding missing records will protect your domain from phishing and spoofing.'
-        : 'Critical: Key security parameters are missing. Your domain is at risk of deliverability drops and email rejection.';
+        ? 'Good: most of the setup is in place. Publish the missing records to protect the domain from spoofing.'
+        : 'Critical: key records are missing. Mail from this domain can be rejected or marked as spam.';
 
     return {
       score: total,
@@ -245,9 +247,9 @@ export default function DeliverabilityPanel({ state }: DeliverabilityPanelProps)
                       <Check size={14} className="text-success" />
                       Domain IP Reputation
                     </span>
-                    <span className="diagnostic-pts">30 / 30 pts</span>
+                    <span className="diagnostic-pts">not measured yet</span>
                   </div>
-                  <p className="diagnostic-desc">Tracks your historical bounce statistics and spam complaint ratios. Your current score is excellent with low bounce rates (0.1%).</p>
+                  <p className="diagnostic-desc">VelisMail does not record a reputation figure for a new domain. This card turns green once real delivery statistics are available from the mail provider; until then it stays neutral.</p>
                 </div>
               </div>
 
@@ -292,7 +294,7 @@ export default function DeliverabilityPanel({ state }: DeliverabilityPanelProps)
                               type="button"
                               className="btn btn-ghost btn-sm"
                               title="Copy value"
-                              onClick={() => { navigator.clipboard.writeText(record.value); state.showToast('Value copied'); }}
+                              onClick={() => { state.copyToClipboard(record.value); }}
                             >
                               <Copy size={12} />
                             </button>

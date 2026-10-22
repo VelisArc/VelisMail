@@ -57,11 +57,11 @@ function SignatureEditor({ state, sig }: { state: DashboardState; sig?: Signatur
           <button className="btn btn-ghost btn-icon" onClick={() => { state.setSignatureEditorOpen(false); state.setEditingSignatureId(null); }}><X size={16} /></button>
         </div>
         <div className="invite-form">
-          <label className="text-xs font-semibold text-muted mb-2 block">Signature Name</label>
-          <input className="input" placeholder="e.g. Professional, Personal" value={name} onChange={e => setName(e.target.value)} />
+          <label className="text-xs font-semibold text-muted mb-2 block" htmlFor="signature-name">Signature Name</label>
+          <input id="signature-name" className="input" placeholder="e.g. Professional, Personal" value={name} onChange={e => setName(e.target.value)} />
           
-          <label className="text-xs font-semibold text-muted mt-4 mb-2 block">Content (HTML or Text)</label>
-          <textarea className="input" rows={6} placeholder="Kind regards,&#10;John Doe" value={content} onChange={e => setContent(e.target.value)} />
+          <label className="text-xs font-semibold text-muted mt-4 mb-2 block" htmlFor="signature-content">Content (HTML or Text)</label>
+          <textarea id="signature-content" className="input" rows={6} placeholder="Kind regards,&#10;John Doe" value={content} onChange={e => setContent(e.target.value)} />
           
           <button className="btn btn-primary mt-6" onClick={async () => {
             try {
@@ -118,10 +118,14 @@ function ContactEditor({ state, contact }: { state: DashboardState; contact?: Co
           <button className="btn btn-ghost btn-icon" onClick={() => { state.setContactEditorOpen(false); state.setEditingContactId(null); }}><X size={16} /></button>
         </div>
         <div className="invite-form">
-          <input className="input" placeholder="Full name" value={name} onChange={e => setName(e.target.value)} />
-          <input className="input" placeholder="Email address" type="email" value={email} onChange={e => setEmail(e.target.value)} />
-          <input className="input" placeholder="Phone" value={phone} onChange={e => setPhone(e.target.value)} />
-          <input className="input" placeholder="Company" value={company} onChange={e => setCompany(e.target.value)} />
+          <label className="text-xs font-semibold text-muted mb-2 block" htmlFor="contact-name">Full name</label>
+          <input id="contact-name" className="input" placeholder="Full name" value={name} onChange={e => setName(e.target.value)} />
+          <label className="text-xs font-semibold text-muted mt-4 mb-2 block" htmlFor="contact-email">Email address</label>
+          <input id="contact-email" className="input" placeholder="Email address" type="email" autoComplete="email" value={email} onChange={e => setEmail(e.target.value)} />
+          <label className="text-xs font-semibold text-muted mt-4 mb-2 block" htmlFor="contact-phone">Phone</label>
+          <input id="contact-phone" className="input" placeholder="Phone" type="tel" autoComplete="tel" value={phone} onChange={e => setPhone(e.target.value)} />
+          <label className="text-xs font-semibold text-muted mt-4 mb-2 block" htmlFor="contact-company">Company</label>
+          <input id="contact-company" className="input" placeholder="Company" autoComplete="organization" value={company} onChange={e => setCompany(e.target.value)} />
           <button className="btn btn-primary mt-4" onClick={async () => {
             try {
               if (!name.trim() || !email.trim().includes('@')) {
@@ -503,12 +507,12 @@ export default function SettingsPanel({ state }: SettingsPanelProps) {
                       <div className="avatar avatar-sm" style={{ background: `hsl(${c.name.charCodeAt(0) * 7 % 360}, 60%, 85%)`, color: `hsl(${c.name.charCodeAt(0) * 7 % 360}, 60%, 35%)` }}>{c.name.charAt(0).toUpperCase()}</div>
                       <div className="team-member-info">
                         <strong>{c.name}</strong>
-                        <span className="text-xs text-muted">{c.email}{c.company ? ` · ${c.company}` : ''}</span>
+                        <span className="text-xs text-muted">{c.email}{c.company ? ` Ã‚Â· ${c.company}` : ''}</span>
                       </div>
                       <div className="flex items-center gap-1">
                         <button className="btn btn-ghost btn-sm" onClick={async () => { try { await workspaceApi.saveContact({ id: c.id, name: c.name, email: c.email, phone: c.phone, company: c.company, group: c.group, favorite: !c.favorite }); await state.refreshContacts(); } catch (e) { state.showToast(e instanceof Error ? e.message : 'Update failed', 'error'); } }}><Star size={12} className={c.favorite ? 'text-primary fill-primary' : 'text-muted'} /></button>
                         <button className="btn btn-ghost btn-sm" onClick={() => { state.setEditingContactId(c.id); state.setContactEditorOpen(true); }}><Edit3 size={12} /></button>
-                        <button className="btn btn-ghost btn-sm" title="Copy Address" onClick={() => { state.copyToClipboard(c.email); state.showToast('Email copied'); }}><Copy size={12} /></button>
+                        <button className="btn btn-ghost btn-sm" title="Copy Address" onClick={() => { state.copyToClipboard(c.email); }}><Copy size={12} /></button>
                         <button className="btn btn-ghost btn-sm btn-danger" onClick={async () => { try { await workspaceApi.deleteContact(c.id); await state.refreshContacts(); state.showToast('Deleted contact'); } catch (e) { console.error('delete contact failed', e); state.showToast(e instanceof Error ? e.message : 'Delete failed', 'error'); } }}><Trash2 size={12} /></button>
                       </div>
                     </div>
@@ -536,7 +540,7 @@ export default function SettingsPanel({ state }: SettingsPanelProps) {
                       <div className="avatar avatar-sm bg-primary-10/10 text-primary"><Shield size={12} /></div>
                       <div className="team-member-info">
                         <strong>{s.userAgent ? s.userAgent.slice(0, 45) : 'Unknown device'}</strong>
-                        <span className="text-xs text-muted">{s.ipAddress}{s.current ? ' · Active Now' : ''}</span>
+                        <span className="text-xs text-muted">{s.ipAddress || 'IP not recorded'}{s.current ? ' - Active now' : ''}</span>
                       </div>
                       <div className="flex items-center gap-3">
                         <span className="text-xs text-muted font-mono">{new Date(s.lastActive).toLocaleDateString()}</span>

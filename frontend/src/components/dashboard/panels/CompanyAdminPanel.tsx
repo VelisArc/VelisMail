@@ -821,7 +821,7 @@ export default function CompanyAdminPanel({ state }: { state: DashboardState }) 
                   <div className="admin-secret-box">
                     <span>New API secret</span>
                     <code>{newKey}</code>
-                    <button type="button" className="btn btn-primary btn-sm" onClick={() => { state.copyToClipboard(newKey); setNotice('API key copied to clipboard.'); }}><Copy size={14} /> Copy secret</button>
+                    <button type="button" className="btn btn-primary btn-sm" onClick={() => state.copyToClipboard(newKey)}><Copy size={14} /> Copy secret</button>
                   </div>
                   <p className="text-xs text-muted">This secret cannot be retrieved again. If it is lost, revoke the key and create another.</p>
                 </div>

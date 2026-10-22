@@ -57,15 +57,28 @@ export function truncate(str: string, len: number): string {
   return `${str.slice(0, len).trimEnd()}…`;
 }
 
-export function copyToClipboard(text: string): void {
-  navigator.clipboard.writeText(text).catch(() => {
-    const ta = document.createElement('textarea');
-    ta.value = text;
-    document.body.appendChild(ta);
-    ta.select();
-    document.execCommand('copy');
-    document.body.removeChild(ta);
-  });
+export async function copyToClipboard(text: string): Promise<boolean> {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    // Browsers without the async clipboard, or a page that lost the
+    // permission, fall back to the old selection based copy.
+    try {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.setAttribute('readonly', '');
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      const copied = document.execCommand('copy');
+      document.body.removeChild(ta);
+      return copied;
+    } catch {
+      return false;
+    }
+  }
 }
 
 /** Read a file as base64, so it can be sent as an attachment. */

@@ -56,6 +56,13 @@ export type User = {
     spfStatus?: 'pending' | 'verified' | 'failed';
     dmarcStatus?: 'pending' | 'verified' | 'failed';
   };
+  // TOTP Authenticator
+  totpEnabled?: boolean;
+  // Phone for future recovery
+  phoneCountryCode?: string;
+  phoneNumber?: string;
+  phoneE164?: string;
+  phoneVerified?: boolean;
 };
 
 export type Contact = {
@@ -298,6 +305,7 @@ export type Email = {
   threadId?: string;
   inReplyTo?: string;
   scheduledAt?: string;
+  pendingSync?: boolean;
 };
 
 export type OtpSendResponse = {
@@ -313,6 +321,71 @@ export type OtpVerifyResponse = {
   success: boolean;
   verificationToken: string;
   expiresIn: number;
+};
+
+// MFA / TOTP Authenticator types
+export type MfaChallengeResponse = {
+  success: boolean;
+  mfaRequired: boolean;
+  mfaToken: string;
+  recoveryEmailMasked?: string;
+};
+
+export type MfaSetupResponse = {
+  success: boolean;
+  secret: string;
+  otpauthUrl: string;
+};
+
+export type MfaEnableResponse = {
+  success: boolean;
+  totpEnabled: boolean;
+  access_token: string;
+  refresh_token: string;
+  expires_in: number;
+  token_type: string;
+  mfa_required: boolean;
+};
+
+export type MfaDisableResponse = {
+  success: boolean;
+  totpEnabled: boolean;
+  access_token: string;
+  refresh_token: string;
+  expires_in: number;
+  token_type: string;
+  mfa_required: boolean;
+};
+
+export type MfaVerifyResponse = {
+  access_token: string;
+  refresh_token: string;
+  expires_in: number;
+  token_type: string;
+  mfa_required: boolean;
+};
+
+export type MfaRecoverySendResponse = {
+  success: boolean;
+  challengeToken: string;
+  expiresIn: number;
+  maskedEmail: string;
+};
+
+export type MfaRecoveryVerifyResponse = {
+  success: boolean;
+  recoveryToken: string;
+  secret: string;
+  otpauthUrl: string;
+  recoveryEmail: string;
+};
+
+export type MfaRecoveryCompleteResponse = {
+  access_token: string;
+  refresh_token: string;
+  expires_in: number;
+  token_type: string;
+  mfa_required: boolean;
 };
 
 export type ApiJsonDetailedResult<T = unknown> = {

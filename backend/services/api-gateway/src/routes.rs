@@ -463,10 +463,6 @@ async fn handle_socket(mut socket: WebSocket) {
     }
 }
 
-pub fn swagger_ui() -> Router<AppState> {
-    Router::new()
-}
-
 #[allow(clippy::too_many_arguments)]
 async fn proxy_generic(
     state: &AppState,

@@ -8,7 +8,7 @@ import {
   normalizeSessionUser, buildSessionUser,
   loginIdentifierCandidates, scopedExistingSession,
   fetchAuthenticatedProfile,
-  saveUserToPersistentStore, loadPersistentUsers, savePersistentUsers,
+  saveUserToPersistentStore,
   fetchApiJsonDetailed,
   providerEndpointForRequest,
   fetchAPI,
@@ -466,23 +466,6 @@ export const auth = {
     }
   },
 
-  async deleteAccount(): Promise<{ success: boolean; error?: string }> {
-    const session = this.getSession();
-    if (!session) return { success: false, error: 'No active session.' };
-
-    const users = loadPersistentUsers();
-    const normalizedEmail = normalizeMailbox(session.email);
-    users[normalizedEmail] = normalizeSessionUser({
-      ...session,
-      status: 'deactivated',
-      suspendedAt: new Date().toISOString(),
-      suspensionReason: 'Account deactivated by owner. Data retained for recovery.',
-    });
-    savePersistentUsers(users);
-
-    this.logout();
-    return { success: true };
-  },
 };
 
 // ---- Audit Functions ----
@@ -1353,6 +1336,14 @@ export const mail = {
 
       if (response.ok && response.data?.success && Array.isArray(response.data.emails)) {
         sourceEmails = response.data.emails.map((entry) => normalizeBusinessEmailFromDb(entry));
+        // Merge local pending-sync emails (e.g., sent mail that hasn't synced yet)
+        const localCache = loadUserDB<Email[]>(STORAGE_KEYS.emails, EMPTY_EMAILS);
+        const backendIds = new Set(sourceEmails.map(e => e.id));
+        for (const localEmail of localCache) {
+          if (localEmail.pendingSync && !backendIds.has(localEmail.id)) {
+            sourceEmails.push(localEmail);
+          }
+        }
         saveEmailsSyncAndAsync(STORAGE_KEYS.emails, sourceEmails);
       } else if (response.status === 404) {
         setBusinessEmailDbRouteUnavailable(true);
@@ -1425,6 +1416,9 @@ export const mail = {
     const htmlBody = hasHtml ? body : undefined;
     const plainBody = hasHtml ? stripHtmlTags(body) : body;
 
+    // Generate a stable client ID for the email (used for deduplication in backend)
+    const clientId = 'bem_' + safeRandomUUID().split('-')[0];
+
     const normalizedSchedule = scheduledAt ? new Date(scheduledAt).toISOString() : '';
     const queueEntry = businessQueue.enqueue({
       domain: normalizedDomain,
@@ -1451,14 +1445,14 @@ export const mail = {
         unread: false,
         starred: false,
         labels: ['scheduled'],
-        hasAttachment: attachments && attachments.length > 0 ? true : false,
+        hasAttachment: attachments && attachments.length > 0 ? true : false,\n      pendingSync: true,
         scheduledAt: normalizedSchedule,
       };
       const scheduledCache = reloadEmailsCacheFromStorage();
       scheduledCache.unshift(email);
       saveEmailsSyncAndAsync(STORAGE_KEYS.emails, scheduledCache);
       if (session?.businessDbUrl) {
-        await syncBusinessEmailToDb(email);
+        await syncBusinessEmailToDb(email, { force: true });
       }
       businessAudit.add({
         action: 'Scheduled business email',
@@ -1482,6 +1476,7 @@ export const mail = {
           provider: session?.businessMailProvider,
           apiKey: session?.businessApiKey,
           dbUrl: session?.businessDbUrl,
+          clientId: clientId,
           providerEndpoint: providerEndpointForRequest(session?.businessMailProvider, session?.businessMailProviderEndpoint),
           attachments: attachments?.map(a => ({
             filename: a.filename,
@@ -1507,7 +1502,7 @@ export const mail = {
       throw error;
     }
     const email: Email = {
-      id: 'bem_' + safeRandomUUID().split('-')[0],
+      id: clientId,
       from: fromAddr,
       fromName: selectedMailbox.displayName || session?.displayName || 'Business',
       to: expandedRecipients,
@@ -1515,7 +1510,7 @@ export const mail = {
       body: plainBody, // Save plain body locally for clean rendering
       htmlBody,
       date: new Date().toISOString(),
-      folder: 'sent', unread: false, starred: false, labels: [], hasAttachment: attachments && attachments.length > 0 ? true : false,
+      folder: 'sent', unread: false, starred: false, labels: [], hasAttachment: attachments && attachments.length > 0 ? true : false,\n      pendingSync: true,
     };
     const sendCache = reloadEmailsCacheFromStorage();
     const filteredCache = sendCache.filter(existing => existing.id !== email.id);
@@ -1524,7 +1519,7 @@ export const mail = {
 
     if (session?.businessDbUrl) {
       try {
-        await syncBusinessEmailToDb(email);
+        await syncBusinessEmailToDb(email, { force: true });
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Sent copy database sync failed.';
         businessQueue.mark(queueEntry.id, { error: `Delivered, but sent-copy sync failed: ${message}` });
@@ -1554,7 +1549,7 @@ export const mail = {
         unread: true,
         starred: false,
         labels: ['internal'],
-        hasAttachment: attachments && attachments.length > 0 ? true : false,
+        hasAttachment: attachments && attachments.length > 0 ? true : false,\n      pendingSync: true,
         messageId: email.messageId || email.id,
         threadId: email.threadId || email.messageId || email.id,
       }));
@@ -2328,3 +2323,6 @@ export const rules = {
     if (rule) { rule.enabled = !rule.enabled; saveRules(all); }
   },
 };
+
+
+

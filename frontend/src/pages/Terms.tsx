@@ -18,7 +18,7 @@ export default function Terms() {
       <section>
         <h2>1. Provision of Service</h2>
         <p>
-          VelisMail provides secure, end-to-end encrypted email hosting infrastructure for business and enterprise use. The service includes custom domain management, automated DNS validation, team management, audit logging, mail queue management, template management, and zero-knowledge inbox storage.
+          VelisMail provides business email hosting infrastructure for custom domains. The service includes custom domain management, live DNS validation, team management, audit logging, mail queue management and template management. Mail is stored in the workspace database you connect, and VelisMail is not an end-to-end encrypted or zero-knowledge service.
         </p>
         <p>
           Enterprise tier subscribers receive a 99.99% platform uptime target, Business tier subscribers receive 99.9%, and Starter tier subscribers receive 99.5%, subject to applicable service limitations. The Free tier is offered on a best-effort basis and does not carry an uptime guarantee.
@@ -41,7 +41,7 @@ export default function Terms() {
       <section>
         <h2>3. User Responsibilities</h2>
         <p>
-          You are responsible for maintaining the security of your cryptographic keys and passwords. Because VelisMail operates on a zero-knowledge framework, <strong>we cannot recover encrypted data if you lose the credentials required to decrypt it</strong>.
+          You are responsible for maintaining the security of your password and of the credentials for the database and mail provider you connect. If you lose the credentials for connected infrastructure, VelisMail cannot restore access to that infrastructure for you.
         </p>
         <p>You are also responsible for:</p>
         <ul>

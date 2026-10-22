@@ -1,9 +1,14 @@
-//! Auth route handlers
+﻿//! Auth route handlers
 //!
 //! This module exposes the working password-based auth flow (register / login)
 //! plus compatibility aliases used by deployed clients.
 
 use crate::jwt::TokenPairResponse;
+use crate::mfa::{
+    build_otpauth_uri, create_mfa_challenge, create_recovery_token, decode_mfa_challenge,
+    decode_recovery_token, generate_totp_secret, verify_totp_code, EncryptedTotpSecret,
+    TOTP_ISSUER,
+};
 use crate::state::AuthState;
 use argon2::password_hash::{rand_core::OsRng, PasswordHasher, PasswordVerifier, SaltString};
 use argon2::{Argon2, PasswordHash};
@@ -370,6 +375,7 @@ pub struct VerifyOtpRequest {
 
 /// Registration request (password-based).
 #[derive(Debug, Deserialize, Validate)]
+#[serde(rename_all = "camelCase")]
 pub struct RegisterRequest {
     #[validate(email)]
     pub email: String,
@@ -381,6 +387,8 @@ pub struct RegisterRequest {
     pub recovery_email: Option<String>,
     pub verification_token: Option<String>,
     pub tenant_id: Option<Uuid>,
+    pub phone_country_code: Option<String>,
+    pub phone_number: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Validate)]
@@ -475,6 +483,35 @@ pub async fn register(
     // client-supplied tenant id would let anyone join another company.
     let tenant_id = resolve_or_create_tenant(&state, &email, "otp").await?;
 
+    // Process optional phone fields
+    let phone_country_code = request
+        .phone_country_code
+        .as_deref()
+        .map(|v| v.trim())
+        .filter(|v| !v.is_empty());
+    let phone_number = request
+        .phone_number
+        .as_deref()
+        .map(|v| v.trim())
+        .filter(|v| !v.is_empty());
+
+    // Validate phone fields: both must be provided together
+    if phone_country_code.is_some() ^ phone_number.is_some() {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+
+    // Normalize phone number to E.164 format
+    let phone_e164 = match (phone_country_code, phone_number) {
+        (Some(cc), Some(num)) => {
+            let digits: String = num.chars().filter(|c| c.is_ascii_digit()).collect();
+            if digits.len() < 6 || digits.len() > 15 || !cc.starts_with('+') {
+                return Err(StatusCode::BAD_REQUEST);
+            }
+            Some(format!("{}{}", cc, digits))
+        }
+        _ => None,
+    };
+
     let member_count: i64 =
         sqlx::query_scalar("SELECT COUNT(*)::bigint FROM users WHERE tenant_id = $1")
             .bind(tenant_id)
@@ -503,9 +540,12 @@ pub async fn register(
                display_name,
                password_hash,
                status,
-               settings
+               settings,
+               phone_country_code,
+               phone_number,
+               phone_e164
            )
-           VALUES ($1, $2, $3, $4, $5, $6, $7, 'active', $8)"#,
+           VALUES ($1, $2, $3, $4, $5, $6, $7, 'active', $8, $9, $10, $11)"#,
     )
     .bind(user_id)
     .bind(tenant_id)
@@ -515,6 +555,9 @@ pub async fn register(
     .bind(&request.display_name)
     .bind(&password_hash)
     .bind(&settings)
+    .bind(phone_country_code)
+    .bind(phone_number)
+    .bind(phone_e164)
     .execute(&state.db)
     .await
     .map_err(|e| {
@@ -552,12 +595,12 @@ pub struct PasswordLoginRequest {
     pub device_id: Option<String>,
 }
 
-/// Login with email + password. Issues real JWT access + refresh tokens.
+/// Login with email + password. Issues real JWT access + refresh tokens, or MFA challenge if TOTP enabled.
 pub async fn login_password(
     State(state): State<AuthState>,
     headers: HeaderMap,
     Json(request): Json<PasswordLoginRequest>,
-) -> Result<Json<TokenPairResponse>, StatusCode> {
+) -> Result<Json<serde_json::Value>, StatusCode> {
     login_password_inner(state, headers, request).await
 }
 
@@ -565,7 +608,7 @@ async fn login_password_inner(
     state: AuthState,
     headers: HeaderMap,
     request: PasswordLoginRequest,
-) -> Result<Json<TokenPairResponse>, StatusCode> {
+) -> Result<Json<serde_json::Value>, StatusCode> {
     let submitted_identifier = request.email.trim().to_lowercase();
     let identifier = if submitted_identifier.contains('@') {
         submitted_identifier
@@ -588,7 +631,7 @@ async fn login_password_inner(
     }
 
     let row = sqlx::query(
-        "SELECT id, tenant_id, email, password_hash
+        "SELECT id, tenant_id, email, password_hash, recovery_email, recovery_email_verified, totp_enabled, display_name
          FROM users
          WHERE (email = $1 OR recovery_email = $1) AND status = 'active'
          ORDER BY CASE WHEN email = $1 THEN 0 ELSE 1 END
@@ -621,6 +664,9 @@ async fn login_password_inner(
         .try_get("email")
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     let password_hash: Option<String> = row.try_get("password_hash").ok();
+    let recovery_email: Option<String> = row.try_get("recovery_email").ok().flatten();
+    let recovery_verified: bool = row.try_get("recovery_email_verified").unwrap_or(false);
+    let totp_enabled: bool = row.try_get("totp_enabled").unwrap_or(false);
 
     let stored = password_hash.ok_or(StatusCode::UNAUTHORIZED)?;
     if !verify_password(&request.password, &stored) {
@@ -646,91 +692,48 @@ async fn login_password_inner(
         );
     }
 
-    let device_id = request.device_id.unwrap_or_default();
-    let access_token = state
-        .jwt_manager
-        .generate_access_token(
-            UserId(user_id),
-            &tenant_id.to_string(),
-            &email,
-            UserRole::User,
-            &device_id,
-            false,
+    // If TOTP is enabled, return MFA challenge instead of tokens
+    if totp_enabled {
+        let mfa_token = create_mfa_challenge(
+            &state.config.otp_signing_secret,
+            &user_id.to_string(),
+            "mfa_login",
+            300, // 5 minutes
         )
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    let refresh_token = crate::jwt::JwtManager::generate_refresh_token()
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    let token_hash = crate::jwt::JwtManager::hash_refresh_token(&refresh_token);
-    let expires_at =
-        chrono::Utc::now() + chrono::Duration::days(state.config.refresh_token_expiry_days);
+        let recovery_email_masked = recovery_email
+            .filter(|_| recovery_verified)
+            .map(|e| mask_email(&e));
 
-    let _ = sqlx::query(
-        r#"INSERT INTO refresh_tokens
-           (user_id, token_hash, device_id, device_fingerprint, expires_at, ip_address)
-           VALUES ($1, $2, $3, $4, $5, $6::inet)"#,
+        return Ok(Json(json!({
+            "success": true,
+            "mfa_required": true,
+            "mfa_token": mfa_token,
+            "recovery_email_masked": recovery_email_masked,
+        })));
+    }
+
+    let device_id = request.device_id.unwrap_or_default();
+    let tokens = issue_tokens_for_user(
+        &state,
+        user_id,
+        tenant_id,
+        &email,
+        &device_id,
+        &ip_address,
+        user_agent,
+        false, // mfa_verified = false when TOTP not enabled
     )
-    .bind(user_id)
-    .bind(&token_hash)
-    .bind(&device_id)
-    .bind(&device_id)
-    .bind(expires_at)
-    .bind(&ip_address)
-    .execute(&state.db)
-    .await;
+    .await?;
 
-    sqlx::query(
-        "UPDATE sessions
-         SET is_active = false
-         WHERE id IN (
-             SELECT id FROM sessions
-             WHERE user_id = $1 AND is_active = true
-             ORDER BY last_active ASC
-             OFFSET $2
-         )",
-    )
-    .bind(user_id)
-    .bind(state.config.max_sessions_per_user.saturating_sub(1) as i64)
-    .execute(&state.db)
-    .await
-    .ok();
-
-    let session_id = Uuid::new_v4();
-    let session_expires_at =
-        chrono::Utc::now() + chrono::Duration::days(state.config.refresh_token_expiry_days);
-    sqlx::query(
-        r#"INSERT INTO sessions
-           (id, user_id, tenant_id, device_fingerprint, ip_address, user_agent, expires_at, mfa_verified)
-           VALUES ($1, $2, $3, $4, $5::inet, $6, $7, $8)"#,
-    )
-    .bind(session_id)
-    .bind(user_id)
-    .bind(tenant_id.to_string())
-    .bind(&device_id)
-    .bind(&ip_address)
-    .bind(user_agent)
-    .bind(session_expires_at)
-    .bind(false)
-    .execute(&state.db)
-    .await
-    .map_err(|err| {
-        tracing::error!("session insert failed for user {}: {}", user_id, err);
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?;
-
-    sqlx::query("UPDATE users SET last_login = NOW() WHERE id = $1")
-        .bind(user_id)
-        .execute(&state.db)
-        .await
-        .ok();
-
-    Ok(Json(TokenPairResponse {
-        access_token,
-        refresh_token,
-        expires_in: state.config.jwt_expiry_seconds,
-        token_type: "Bearer".to_string(),
-        mfa_required: state.config.require_mfa,
-    }))
+    Ok(Json(json!({
+        "access_token": tokens.access_token,
+        "refresh_token": tokens.refresh_token,
+        "expires_in": tokens.expires_in,
+        "token_type": tokens.token_type,
+        "mfa_required": tokens.mfa_required,
+    })))
 }
 
 pub async fn send_otp(
@@ -1046,7 +1049,7 @@ pub async fn refresh_token(
     let token_hash = crate::jwt::JwtManager::hash_refresh_token(&request.refresh_token);
 
     let row = sqlx::query(
-        "SELECT user_id FROM refresh_tokens
+        "SELECT user_id, mfa_verified FROM refresh_tokens
          WHERE token_hash = $1 AND revoked = false AND expires_at > NOW()",
     )
     .bind(&token_hash)
@@ -1058,20 +1061,29 @@ pub async fn refresh_token(
     let user_id: Uuid = row
         .try_get("user_id")
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let token_mfa_verified: bool = row.try_get("mfa_verified").unwrap_or(false);
 
     // A suspended, deactivated or deleted account never gets a new token.
-    let user =
-        sqlx::query("SELECT email, tenant_id FROM users WHERE id = $1 AND status = 'active'")
-            .bind(user_id)
-            .fetch_optional(&state.db)
-            .await
-            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-            .ok_or(StatusCode::UNAUTHORIZED)?;
+    let user = sqlx::query(
+        "SELECT email, tenant_id, totp_enabled FROM users WHERE id = $1 AND status = 'active'",
+    )
+    .bind(user_id)
+    .fetch_optional(&state.db)
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+    .ok_or(StatusCode::UNAUTHORIZED)?;
     let email: String = user
         .try_get("email")
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     let tenant_id: Uuid = user.try_get("tenant_id").unwrap_or_else(|_| Uuid::nil());
+    let totp_enabled: bool = user.try_get("totp_enabled").unwrap_or(false);
 
+    // If user has TOTP enabled but refresh token wasn't issued with MFA, reject
+    if totp_enabled && !token_mfa_verified {
+        return Err(StatusCode::UNAUTHORIZED);
+    }
+
+    // New access token should have mfa_verified = token_mfa_verified (preserve the flag)
     let access_token = state
         .jwt_manager
         .generate_access_token(
@@ -1080,14 +1092,14 @@ pub async fn refresh_token(
             &email,
             UserRole::User,
             &request.device_id,
-            true,
+            token_mfa_verified,
         )
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     let refresh = crate::jwt::JwtManager::generate_refresh_token()
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    // Rotate: revoke old, insert new
+    // Rotate: revoke old, insert new with same mfa_verified flag
     sqlx::query("UPDATE refresh_tokens SET revoked = true WHERE token_hash = $1")
         .bind(&token_hash)
         .execute(&state.db)
@@ -1098,8 +1110,8 @@ pub async fn refresh_token(
         chrono::Utc::now() + chrono::Duration::days(state.config.refresh_token_expiry_days);
     sqlx::query(
         r#"INSERT INTO refresh_tokens
-           (user_id, token_hash, device_id, device_fingerprint, expires_at, ip_address)
-           VALUES ($1, $2, $3, $4, $5, $6::inet)"#,
+           (user_id, token_hash, device_id, device_fingerprint, expires_at, ip_address, mfa_verified)
+           VALUES ($1, $2, $3, $4, $5, $6::inet, $7)"#,
     )
     .bind(user_id)
     .bind(&new_hash)
@@ -1107,6 +1119,7 @@ pub async fn refresh_token(
     .bind(&request.device_id)
     .bind(expires_at)
     .bind(request_ip(&headers))
+    .bind(token_mfa_verified)
     .execute(&state.db)
     .await
     .ok();
@@ -1170,6 +1183,784 @@ pub async fn logout(
     })))
 }
 
+/// Helper to issue access + refresh tokens with optional MFA verification flag
+#[allow(clippy::too_many_arguments)]
+async fn issue_tokens_for_user(
+    state: &AuthState,
+    user_id: Uuid,
+    tenant_id: Uuid,
+    email: &str,
+    device_id: &str,
+    ip_address: &str,
+    user_agent: Option<String>,
+    mfa_verified: bool,
+) -> Result<TokenPairResponse, StatusCode> {
+    let access_token = state
+        .jwt_manager
+        .generate_access_token(
+            UserId(user_id),
+            &tenant_id.to_string(),
+            email,
+            UserRole::User,
+            device_id,
+            mfa_verified,
+        )
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let refresh_token = crate::jwt::JwtManager::generate_refresh_token()
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let token_hash = crate::jwt::JwtManager::hash_refresh_token(&refresh_token);
+    let expires_at =
+        chrono::Utc::now() + chrono::Duration::days(state.config.refresh_token_expiry_days);
+
+    sqlx::query(
+        r#"INSERT INTO refresh_tokens
+           (user_id, token_hash, device_id, device_fingerprint, expires_at, ip_address, mfa_verified)
+           VALUES ($1, $2, $3, $4, $5, $6::inet, $7)"#,
+    )
+    .bind(user_id)
+    .bind(&token_hash)
+    .bind(device_id)
+    .bind(device_id)
+    .bind(expires_at)
+    .bind(ip_address)
+    .bind(mfa_verified)
+    .execute(&state.db)
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    sqlx::query(
+        "UPDATE sessions
+         SET is_active = false
+         WHERE id IN (
+             SELECT id FROM sessions
+             WHERE user_id = $1 AND is_active = true
+             ORDER BY last_active ASC
+             OFFSET $2
+         )",
+    )
+    .bind(user_id)
+    .bind(state.config.max_sessions_per_user.saturating_sub(1) as i64)
+    .execute(&state.db)
+    .await
+    .ok();
+
+    let session_id = Uuid::new_v4();
+    let session_expires_at =
+        chrono::Utc::now() + chrono::Duration::days(state.config.refresh_token_expiry_days);
+    sqlx::query(
+        r#"INSERT INTO sessions
+           (id, user_id, tenant_id, device_fingerprint, ip_address, user_agent, expires_at, mfa_verified)
+           VALUES ($1, $2, $3, $4, $5::inet, $6, $7, $8)"#,
+    )
+    .bind(session_id)
+    .bind(user_id)
+    .bind(tenant_id.to_string())
+    .bind(device_id)
+    .bind(ip_address)
+    .bind(user_agent)
+    .bind(session_expires_at)
+    .bind(mfa_verified)
+    .execute(&state.db)
+    .await
+    .map_err(|err| {
+        tracing::error!("session insert failed for user {}: {}", user_id, err);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+
+    sqlx::query("UPDATE users SET last_login = NOW() WHERE id = $1")
+        .bind(user_id)
+        .execute(&state.db)
+        .await
+        .ok();
+
+    Ok(TokenPairResponse {
+        access_token,
+        refresh_token,
+        expires_in: state.config.jwt_expiry_seconds,
+        token_type: "Bearer".to_string(),
+        mfa_required: state.config.require_mfa,
+    })
+}
+
+/// Revoke all refresh tokens for a user (used when enabling/disabling MFA)
+async fn revoke_all_refresh_tokens(state: &AuthState, user_id: Uuid) {
+    sqlx::query("UPDATE refresh_tokens SET revoked = true WHERE user_id = $1 AND revoked = false")
+        .bind(user_id)
+        .execute(&state.db)
+        .await
+        .ok();
+}
+
+#[derive(Debug, Deserialize)]
+pub struct MfaCodeRequest {
+    pub code: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct MfaDisableRequest {
+    pub password: Option<String>,
+    pub code: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct MfaVerifyRequest {
+    pub mfa_token: String,
+    pub code: String,
+    pub device_id: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct MfaRecoverySendRequest {
+    pub mfa_token: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct MfaRecoveryVerifyRequest {
+    pub mfa_token: String,
+    pub challenge_token: String,
+    pub otp: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct MfaRecoveryCompleteRequest {
+    pub recovery_token: String,
+    pub code: String,
+    pub device_id: Option<String>,
+}
+
+/// Start MFA setup - returns secret and otpauth URI for QR code
+pub async fn mfa_setup(
+    State(state): State<AuthState>,
+    Extension(claims): Extension<velismail_common::Claims>,
+) -> Result<Json<serde_json::Value>, velismail_common::AppError> {
+    let user_id = claims.sub.0;
+
+    let row = sqlx::query(
+        "SELECT email, recovery_email, recovery_email_verified, totp_enabled, display_name
+         FROM users WHERE id = $1 AND status = 'active'",
+    )
+    .bind(user_id)
+    .fetch_optional(&state.db)
+    .await
+    .map_err(|_| velismail_common::AppError::Internal)?
+    .ok_or(velismail_common::AppError::NotFound(
+        "User not found".to_string(),
+    ))?;
+
+    let totp_enabled: bool = row.try_get("totp_enabled").unwrap_or(false);
+    if totp_enabled {
+        return Err(velismail_common::AppError::BadRequest(
+            "Authenticator is already enabled.".to_string(),
+        ));
+    }
+
+    let recovery_email: Option<String> = row.try_get("recovery_email").ok().flatten();
+    let recovery_verified: bool = row.try_get("recovery_email_verified").unwrap_or(false);
+    let email: String = row
+        .try_get("email")
+        .map_err(|_| velismail_common::AppError::Internal)?;
+    let _display_name: String = row
+        .try_get("display_name")
+        .map_err(|_| velismail_common::AppError::Internal)?;
+
+    if recovery_email.is_none() || !recovery_verified {
+        return Err(velismail_common::AppError::BadRequest(
+            "Add and verify a recovery email before enabling the authenticator.".to_string(),
+        ));
+    }
+
+    let secret = generate_totp_secret().map_err(|_| velismail_common::AppError::Internal)?;
+    let encrypted = EncryptedTotpSecret::new(&secret, &state.config.otp_signing_secret)
+        .map_err(|_| velismail_common::AppError::Internal)?;
+
+    sqlx::query("UPDATE users SET totp_pending_secret = $1, updated_at = NOW() WHERE id = $2")
+        .bind(&encrypted.0)
+        .bind(user_id)
+        .execute(&state.db)
+        .await
+        .map_err(|_| velismail_common::AppError::Internal)?;
+
+    let otpauth_url = build_otpauth_uri(&secret, &email, TOTP_ISSUER);
+
+    Ok(Json(json!({
+        "success": true,
+        "secret": secret,
+        "otpauth_url": otpauth_url,
+    })))
+}
+
+/// Enable MFA after verifying the setup code
+pub async fn mfa_enable(
+    State(state): State<AuthState>,
+    Extension(claims): Extension<velismail_common::Claims>,
+    headers: HeaderMap,
+    Json(request): Json<MfaCodeRequest>,
+) -> Result<Json<serde_json::Value>, velismail_common::AppError> {
+    let user_id = claims.sub.0;
+    let device_id = claims.device_id.clone();
+    let ip_address = request_ip(&headers);
+    let user_agent = request_user_agent(&headers);
+
+    if request.code.trim().len() != 6 || !request.code.chars().all(|c| c.is_ascii_digit()) {
+        return Err(velismail_common::AppError::BadRequest(
+            "Invalid code format. Enter the 6-digit code.".to_string(),
+        ));
+    }
+
+    let row = sqlx::query(
+        "SELECT email, tenant_id, totp_pending_secret, totp_enabled
+         FROM users WHERE id = $1 AND status = 'active'",
+    )
+    .bind(user_id)
+    .fetch_optional(&state.db)
+    .await
+    .map_err(|_| velismail_common::AppError::Internal)?
+    .ok_or(velismail_common::AppError::NotFound(
+        "User not found".to_string(),
+    ))?;
+
+    let totp_enabled: bool = row.try_get("totp_enabled").unwrap_or(false);
+    if totp_enabled {
+        return Err(velismail_common::AppError::BadRequest(
+            "Authenticator is already enabled.".to_string(),
+        ));
+    }
+
+    let pending_secret_enc: Option<String> = row.try_get("totp_pending_secret").ok().flatten();
+    let pending_secret_enc = pending_secret_enc.ok_or_else(|| {
+        velismail_common::AppError::BadRequest(
+            "No pending authenticator setup. Start setup first.".to_string(),
+        )
+    })?;
+
+    let secret = EncryptedTotpSecret(pending_secret_enc.clone())
+        .decrypt(&state.config.otp_signing_secret)
+        .ok_or_else(|| velismail_common::AppError::Internal)?;
+
+    if !verify_totp_code(&secret, &request.code, None) {
+        return Err(velismail_common::AppError::Unauthorized(
+            "Invalid authenticator code.".to_string(),
+        ));
+    }
+
+    // Move pending secret to active, enable TOTP
+    sqlx::query(
+        "UPDATE users SET totp_secret = $1, totp_pending_secret = NULL, totp_enabled = TRUE, totp_confirmed_at = NOW(), updated_at = NOW() WHERE id = $2",
+    )
+    .bind(&pending_secret_enc)
+    .bind(user_id)
+    .execute(&state.db)
+    .await
+    .map_err(|_| velismail_common::AppError::Internal)?;
+
+    // Revoke all old refresh tokens (issued without MFA)
+    revoke_all_refresh_tokens(&state, user_id).await;
+
+    // Issue new tokens with mfa_verified = true
+    let email: String = row
+        .try_get("email")
+        .map_err(|_| velismail_common::AppError::Internal)?;
+    let tenant_id: Uuid = row
+        .try_get("tenant_id")
+        .map_err(|_| velismail_common::AppError::Internal)?;
+    let tokens = issue_tokens_for_user(
+        &state,
+        user_id,
+        tenant_id,
+        &email,
+        &device_id,
+        &ip_address,
+        user_agent,
+        true,
+    )
+    .await
+    .map_err(|_| velismail_common::AppError::Internal)?;
+
+    Ok(Json(json!({
+        "success": true,
+        "totp_enabled": true,
+        "access_token": tokens.access_token,
+        "refresh_token": tokens.refresh_token,
+        "expires_in": tokens.expires_in,
+        "token_type": tokens.token_type,
+        "mfa_required": tokens.mfa_required,
+    })))
+}
+
+/// Disable MFA - requires password and current authenticator code
+pub async fn mfa_disable(
+    State(state): State<AuthState>,
+    Extension(claims): Extension<velismail_common::Claims>,
+    headers: HeaderMap,
+    Json(request): Json<MfaDisableRequest>,
+) -> Result<Json<serde_json::Value>, velismail_common::AppError> {
+    let user_id = claims.sub.0;
+    let device_id = claims.device_id.clone();
+    let ip_address = request_ip(&headers);
+    let user_agent = request_user_agent(&headers);
+
+    let row = sqlx::query(
+        "SELECT email, tenant_id, password_hash, totp_secret, totp_enabled
+         FROM users WHERE id = $1 AND status = 'active'",
+    )
+    .bind(user_id)
+    .fetch_optional(&state.db)
+    .await
+    .map_err(|_| velismail_common::AppError::Internal)?
+    .ok_or(velismail_common::AppError::NotFound(
+        "User not found".to_string(),
+    ))?;
+
+    let totp_enabled: bool = row.try_get("totp_enabled").unwrap_or(false);
+    if !totp_enabled {
+        return Err(velismail_common::AppError::BadRequest(
+            "Authenticator is not enabled.".to_string(),
+        ));
+    }
+
+    let password_hash: Option<String> = row.try_get("password_hash").ok().flatten();
+    if let Some(hash) = password_hash {
+        if request.password.is_none() || !verify_password(&request.password.unwrap(), &hash) {
+            return Err(velismail_common::AppError::Unauthorized(
+                "Current password is incorrect.".to_string(),
+            ));
+        }
+    }
+
+    let secret_enc: Option<String> = row.try_get("totp_secret").ok().flatten();
+    let secret_enc = secret_enc.ok_or_else(|| velismail_common::AppError::Internal)?;
+
+    let secret = EncryptedTotpSecret(secret_enc)
+        .decrypt(&state.config.otp_signing_secret)
+        .ok_or_else(|| velismail_common::AppError::Internal)?;
+
+    if !verify_totp_code(&secret, &request.code, None) {
+        return Err(velismail_common::AppError::Unauthorized(
+            "Invalid authenticator code.".to_string(),
+        ));
+    }
+
+    // Disable TOTP
+    sqlx::query(
+        "UPDATE users SET totp_secret = NULL, totp_pending_secret = NULL, totp_enabled = FALSE, totp_confirmed_at = NULL, updated_at = NOW() WHERE id = $1",
+    )
+    .bind(user_id)
+    .execute(&state.db)
+    .await
+    .map_err(|_| velismail_common::AppError::Internal)?;
+
+    // Revoke all refresh tokens and issue new ones with mfa_verified = false
+    revoke_all_refresh_tokens(&state, user_id).await;
+
+    let email: String = row
+        .try_get("email")
+        .map_err(|_| velismail_common::AppError::Internal)?;
+    let tenant_id: Uuid = row
+        .try_get("tenant_id")
+        .map_err(|_| velismail_common::AppError::Internal)?;
+    let tokens = issue_tokens_for_user(
+        &state,
+        user_id,
+        tenant_id,
+        &email,
+        &device_id,
+        &ip_address,
+        user_agent,
+        false,
+    )
+    .await
+    .map_err(|_| velismail_common::AppError::Internal)?;
+
+    Ok(Json(json!({
+        "success": true,
+        "totp_enabled": false,
+        "access_token": tokens.access_token,
+        "refresh_token": tokens.refresh_token,
+        "expires_in": tokens.expires_in,
+        "token_type": tokens.token_type,
+        "mfa_required": tokens.mfa_required,
+    })))
+}
+
+/// Verify MFA code during login (when authenticator is enabled)
+pub async fn mfa_verify(
+    State(state): State<AuthState>,
+    headers: HeaderMap,
+    Json(request): Json<MfaVerifyRequest>,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    let device_id = request.device_id.unwrap_or_else(|| "web".to_string());
+    let ip_address = request_ip(&headers);
+    let user_agent = request_user_agent(&headers);
+
+    let challenge = decode_mfa_challenge(&state.config.otp_signing_secret, &request.mfa_token)
+        .ok_or(StatusCode::UNAUTHORIZED)?;
+
+    if challenge.purpose != "mfa_login" {
+        return Err(StatusCode::UNAUTHORIZED);
+    }
+
+    let user_id = Uuid::parse_str(&challenge.sub).map_err(|_| StatusCode::UNAUTHORIZED)?;
+
+    let row = sqlx::query(
+        "SELECT email, tenant_id, totp_secret, totp_enabled, status
+         FROM users WHERE id = $1",
+    )
+    .bind(user_id)
+    .fetch_optional(&state.db)
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+    .ok_or(StatusCode::UNAUTHORIZED)?;
+
+    let status: String = row
+        .try_get("status")
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    if status != "active" {
+        return Err(StatusCode::UNAUTHORIZED);
+    }
+
+    let totp_enabled: bool = row.try_get("totp_enabled").unwrap_or(false);
+    if !totp_enabled {
+        return Err(StatusCode::UNAUTHORIZED);
+    }
+
+    let secret_enc: Option<String> = row.try_get("totp_secret").ok().flatten();
+    let secret_enc = secret_enc.ok_or(StatusCode::UNAUTHORIZED)?;
+
+    let secret = EncryptedTotpSecret(secret_enc)
+        .decrypt(&state.config.otp_signing_secret)
+        .ok_or(StatusCode::UNAUTHORIZED)?;
+
+    if !verify_totp_code(&secret, &request.code, None) {
+        return Err(StatusCode::UNAUTHORIZED);
+    }
+
+    let email: String = row
+        .try_get("email")
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let tenant_id: Uuid = row
+        .try_get("tenant_id")
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let tokens = issue_tokens_for_user(
+        &state,
+        user_id,
+        tenant_id,
+        &email,
+        &device_id,
+        &ip_address,
+        user_agent,
+        true,
+    )
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    Ok(Json(json!({
+        "access_token": tokens.access_token,
+        "refresh_token": tokens.refresh_token,
+        "expires_in": tokens.expires_in,
+        "token_type": tokens.token_type,
+        "mfa_required": tokens.mfa_required,
+    })))
+}
+
+/// Send recovery OTP to recovery email when authenticator is lost
+pub async fn mfa_recovery_send_otp(
+    State(state): State<AuthState>,
+    Json(request): Json<MfaRecoverySendRequest>,
+) -> Result<Json<serde_json::Value>, velismail_common::AppError> {
+    let challenge = decode_mfa_challenge(&state.config.otp_signing_secret, &request.mfa_token)
+        .ok_or_else(|| {
+            velismail_common::AppError::Unauthorized("Invalid MFA challenge".to_string())
+        })?;
+
+    if challenge.purpose != "mfa_login" {
+        return Err(velismail_common::AppError::Unauthorized(
+            "Invalid challenge".to_string(),
+        ));
+    }
+
+    let user_id =
+        Uuid::parse_str(&challenge.sub).map_err(|_| velismail_common::AppError::Internal)?;
+
+    let row = sqlx::query(
+        "SELECT email, recovery_email, recovery_email_verified, display_name, totp_enabled
+         FROM users WHERE id = $1 AND status = 'active'",
+    )
+    .bind(user_id)
+    .fetch_optional(&state.db)
+    .await
+    .map_err(|_| velismail_common::AppError::Internal)?
+    .ok_or_else(|| velismail_common::AppError::NotFound("User not found".to_string()))?;
+
+    let totp_enabled: bool = row.try_get("totp_enabled").unwrap_or(false);
+    if !totp_enabled {
+        return Err(velismail_common::AppError::BadRequest(
+            "Authenticator is not enabled for this account.".to_string(),
+        ));
+    }
+
+    let recovery_email: Option<String> = row.try_get("recovery_email").ok().flatten();
+    let recovery_verified: bool = row.try_get("recovery_email_verified").unwrap_or(false);
+    let recovery_email = recovery_email.ok_or_else(|| {
+        velismail_common::AppError::BadRequest(
+            "No recovery email set. Cannot recover authenticator.".to_string(),
+        )
+    })?;
+
+    if !recovery_verified {
+        return Err(velismail_common::AppError::BadRequest(
+            "Recovery email is not verified. Cannot recover authenticator.".to_string(),
+        ));
+    }
+
+    let display_name: String = row
+        .try_get("display_name")
+        .map_err(|_| velismail_common::AppError::Internal)?;
+
+    // Rate limit
+    reserve_daily_otp_send(&state, &recovery_email, "mfa_recovery").await?;
+
+    // Generate OTP
+    let otp = velismail_crypto::random::generate_otp(6)
+        .map_err(|_| velismail_common::AppError::Internal)?;
+    let salt = Uuid::new_v4().to_string();
+    let now = chrono::Utc::now().timestamp();
+    let exp = now + state.config.otp_ttl_seconds;
+    let otp_hash = hash_otp_value(
+        &state.config.otp_signing_secret,
+        &recovery_email,
+        &otp,
+        &salt,
+        "mfa_recovery",
+    );
+
+    // Send OTP email
+    send_otp_email(&state, &recovery_email, &display_name, &otp).await?;
+
+    // Create challenge token for OTP verification
+    let challenge_token = encode(
+        &Header::default(),
+        &OtpChallengeClaims {
+            sub: recovery_email.clone(),
+            purpose: "mfa_recovery".to_string(),
+            salt,
+            otp_hash,
+            iat: now,
+            exp,
+        },
+        &EncodingKey::from_secret(state.config.otp_signing_secret.as_bytes()),
+    )
+    .map_err(|_| velismail_common::AppError::Internal)?;
+
+    Ok(Json(json!({
+        "success": true,
+        "challenge_token": challenge_token,
+        "expires_in": state.config.otp_ttl_seconds,
+        "masked_email": mask_email(&recovery_email),
+    })))
+}
+
+/// Verify recovery OTP and generate new TOTP setup secret
+pub async fn mfa_recovery_verify(
+    State(state): State<AuthState>,
+    Json(request): Json<MfaRecoveryVerifyRequest>,
+) -> Result<Json<serde_json::Value>, velismail_common::AppError> {
+    let mfa_challenge = decode_mfa_challenge(&state.config.otp_signing_secret, &request.mfa_token)
+        .ok_or_else(|| {
+            velismail_common::AppError::Unauthorized("Invalid MFA challenge".to_string())
+        })?;
+
+    if mfa_challenge.purpose != "mfa_login" {
+        return Err(velismail_common::AppError::Unauthorized(
+            "Invalid challenge".to_string(),
+        ));
+    }
+
+    let user_id =
+        Uuid::parse_str(&mfa_challenge.sub).map_err(|_| velismail_common::AppError::Internal)?;
+
+    // Verify OTP challenge
+    let validation = Validation {
+        validate_aud: false,
+        leeway: 60,
+        ..Default::default()
+    };
+    let otp_challenge = decode::<OtpChallengeClaims>(
+        &request.challenge_token,
+        &DecodingKey::from_secret(state.config.otp_signing_secret.as_bytes()),
+        &validation,
+    )
+    .map_err(|_| {
+        velismail_common::AppError::Unauthorized("Invalid or expired challenge".to_string())
+    })?;
+
+    if otp_challenge.claims.purpose != "mfa_recovery" {
+        return Err(velismail_common::AppError::Unauthorized(
+            "Invalid challenge purpose".to_string(),
+        ));
+    }
+
+    // Verify OTP
+    let expected_hash = hash_otp_value(
+        &state.config.otp_signing_secret,
+        &otp_challenge.claims.sub,
+        &request.otp,
+        &otp_challenge.claims.salt,
+        "mfa_recovery",
+    );
+
+    if expected_hash != otp_challenge.claims.otp_hash {
+        return Err(velismail_common::AppError::Unauthorized(
+            "Invalid recovery code.".to_string(),
+        ));
+    }
+
+    // Get user and recovery email
+    let row = sqlx::query(
+        "SELECT email, recovery_email, recovery_email_verified, totp_enabled
+         FROM users WHERE id = $1 AND status = 'active'",
+    )
+    .bind(user_id)
+    .fetch_optional(&state.db)
+    .await
+    .map_err(|_| velismail_common::AppError::Internal)?
+    .ok_or_else(|| velismail_common::AppError::NotFound("User not found".to_string()))?;
+
+    let recovery_email: Option<String> = row.try_get("recovery_email").ok().flatten();
+    let recovery_verified: bool = row.try_get("recovery_email_verified").unwrap_or(false);
+    let recovery_email = recovery_email.ok_or_else(|| {
+        velismail_common::AppError::BadRequest("No recovery email set.".to_string())
+    })?;
+
+    if !recovery_verified || otp_challenge.claims.sub != recovery_email {
+        return Err(velismail_common::AppError::Unauthorized(
+            "Recovery email mismatch.".to_string(),
+        ));
+    }
+
+    // Generate new TOTP secret (store as pending, keep old active until complete)
+    let new_secret = generate_totp_secret().map_err(|_| velismail_common::AppError::Internal)?;
+    let new_encrypted = EncryptedTotpSecret::new(&new_secret, &state.config.otp_signing_secret)
+        .map_err(|_| velismail_common::AppError::Internal)?;
+
+    sqlx::query("UPDATE users SET totp_pending_secret = $1, updated_at = NOW() WHERE id = $2")
+        .bind(&new_encrypted.0)
+        .bind(user_id)
+        .execute(&state.db)
+        .await
+        .map_err(|_| velismail_common::AppError::Internal)?;
+
+    // Create recovery completion token (10 min expiry)
+    let recovery_token =
+        create_recovery_token(&state.config.otp_signing_secret, &user_id.to_string(), 600)
+            .map_err(|_| velismail_common::AppError::Internal)?;
+
+    let email_for_uri: String = row
+        .try_get("email")
+        .map_err(|_| velismail_common::AppError::Internal)?;
+    let otpauth_url = build_otpauth_uri(&new_secret, &email_for_uri, TOTP_ISSUER);
+
+    Ok(Json(json!({
+        "success": true,
+        "recovery_token": recovery_token,
+        "secret": new_secret,
+        "otpauth_url": otpauth_url,
+        "recovery_email": recovery_email,
+    })))
+}
+
+/// Complete recovery - verify new TOTP code and activate new authenticator
+pub async fn mfa_recovery_complete(
+    State(state): State<AuthState>,
+    headers: HeaderMap,
+    Json(request): Json<MfaRecoveryCompleteRequest>,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    let device_id = request.device_id.unwrap_or_else(|| "web".to_string());
+    let ip_address = request_ip(&headers);
+    let user_agent = request_user_agent(&headers);
+
+    let recovery_token =
+        decode_recovery_token(&state.config.otp_signing_secret, &request.recovery_token)
+            .ok_or(StatusCode::UNAUTHORIZED)?;
+
+    if recovery_token.purpose != "mfa_recovery_replace" {
+        return Err(StatusCode::UNAUTHORIZED);
+    }
+
+    let user_id = Uuid::parse_str(&recovery_token.sub).map_err(|_| StatusCode::UNAUTHORIZED)?;
+
+    let row = sqlx::query(
+        "SELECT email, tenant_id, totp_pending_secret, totp_enabled, status
+         FROM users WHERE id = $1",
+    )
+    .bind(user_id)
+    .fetch_optional(&state.db)
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+    .ok_or(StatusCode::UNAUTHORIZED)?;
+
+    let status: String = row
+        .try_get("status")
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    if status != "active" {
+        return Err(StatusCode::UNAUTHORIZED);
+    }
+
+    let pending_secret_enc: Option<String> = row.try_get("totp_pending_secret").ok().flatten();
+    let pending_secret_enc = pending_secret_enc.ok_or(StatusCode::UNAUTHORIZED)?;
+
+    let secret = EncryptedTotpSecret(pending_secret_enc.clone())
+        .decrypt(&state.config.otp_signing_secret)
+        .ok_or(StatusCode::UNAUTHORIZED)?;
+
+    if !verify_totp_code(&secret, &request.code, None) {
+        return Err(StatusCode::UNAUTHORIZED);
+    }
+
+    // Activate new secret
+    sqlx::query(
+        "UPDATE users SET totp_secret = $1, totp_pending_secret = NULL, totp_enabled = TRUE, totp_confirmed_at = NOW(), updated_at = NOW() WHERE id = $2",
+    )
+    .bind(&pending_secret_enc)
+    .bind(user_id)
+    .execute(&state.db)
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    // Revoke all old refresh tokens
+    revoke_all_refresh_tokens(&state, user_id).await;
+
+    // Issue new tokens with mfa_verified = true
+    let email: String = row
+        .try_get("email")
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let tenant_id: Uuid = row
+        .try_get("tenant_id")
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let tokens = issue_tokens_for_user(
+        &state,
+        user_id,
+        tenant_id,
+        &email,
+        &device_id,
+        &ip_address,
+        user_agent,
+        true,
+    )
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    Ok(Json(json!({
+        "access_token": tokens.access_token,
+        "refresh_token": tokens.refresh_token,
+        "expires_in": tokens.expires_in,
+        "token_type": tokens.token_type,
+        "mfa_required": tokens.mfa_required,
+    })))
+}
+
 pub async fn get_current_user(
     State(state): State<AuthState>,
     Extension(claims): Extension<velismail_common::Claims>,
@@ -1177,7 +1968,9 @@ pub async fn get_current_user(
     let user_id = claims.sub.0;
 
     let user = sqlx::query(
-        "SELECT u.id, u.tenant_id, u.email, u.recovery_email, u.display_name, u.status,
+        "SELECT u.id, u.tenant_id, u.email, u.recovery_email, u.recovery_email_verified,
+                u.display_name, u.status, u.totp_enabled,
+                u.phone_country_code, u.phone_number, u.phone_e164, u.phone_verified,
                 u.settings, u.created_at, u.updated_at, u.last_login,
                 (SELECT cm.role FROM company_members cm
                  WHERE cm.tenant_id = u.tenant_id AND cm.email = u.email
@@ -1203,6 +1996,12 @@ pub async fn get_current_user(
         .try_get("email")
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     let recovery_email: Option<String> = user.try_get("recovery_email").ok();
+    let recovery_email_verified: bool = user.try_get("recovery_email_verified").unwrap_or(false);
+    let totp_enabled: bool = user.try_get("totp_enabled").unwrap_or(false);
+    let phone_country_code: Option<String> = user.try_get("phone_country_code").ok().flatten();
+    let phone_number: Option<String> = user.try_get("phone_number").ok().flatten();
+    let phone_e164: Option<String> = user.try_get("phone_e164").ok().flatten();
+    let phone_verified: bool = user.try_get("phone_verified").unwrap_or(false);
     let display_name: String = user
         .try_get("display_name")
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
@@ -1272,6 +2071,12 @@ pub async fn get_current_user(
             "tenant_id": tenant_id,
             "email": email,
             "recovery_email": recovery_email,
+            "recovery_email_verified": recovery_email_verified,
+            "totp_enabled": totp_enabled,
+            "phone_country_code": phone_country_code,
+            "phone_number": phone_number,
+            "phone_e164": phone_e164,
+            "phone_verified": phone_verified,
             "display_name": display_name,
             "status": status,
             "settings": settings,
@@ -1821,6 +2626,39 @@ pub async fn firebase_login(
     )
     .await;
 
+    // Check if user has TOTP enabled - if so, require MFA challenge
+    let totp_row = sqlx::query(
+        "SELECT totp_enabled, recovery_email, recovery_email_verified FROM users WHERE id = $1",
+    )
+    .bind(user_id)
+    .fetch_one(&state.db)
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let totp_enabled: bool = totp_row.try_get("totp_enabled").unwrap_or(false);
+    if totp_enabled {
+        let mfa_token = create_mfa_challenge(
+            &state.config.otp_signing_secret,
+            &user_id.to_string(),
+            "mfa_login",
+            300,
+        )
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+        let recovery_email: Option<String> = totp_row.try_get("recovery_email").ok().flatten();
+        let recovery_verified: bool = totp_row.try_get("recovery_email_verified").unwrap_or(false);
+        let recovery_email_masked = recovery_email
+            .filter(|_| recovery_verified)
+            .map(|e| mask_email(&e));
+
+        return Ok(Json(json!({
+            "success": true,
+            "mfa_required": true,
+            "mfa_token": mfa_token,
+            "recovery_email_masked": recovery_email_masked,
+        })));
+    }
+
     let device_id = request
         .device_id
         .unwrap_or_else(|| format!("firebase-{firebase_uid}"));
@@ -1845,8 +2683,8 @@ pub async fn firebase_login(
     let user_agent = request_user_agent(&headers);
 
     let _ = sqlx::query(
-        "INSERT INTO refresh_tokens (user_id, token_hash, device_id, device_fingerprint, expires_at, ip_address)
-         VALUES ($1, $2, $3, $4, $5, $6::inet)",
+        "INSERT INTO refresh_tokens (user_id, token_hash, device_id, device_fingerprint, expires_at, ip_address, mfa_verified)
+         VALUES ($1, $2, $3, $4, $5, $6::inet, $7)",
     )
     .bind(user_id)
     .bind(&token_hash)
@@ -1854,6 +2692,7 @@ pub async fn firebase_login(
     .bind(&device_id)
     .bind(expires_at)
     .bind(&ip_address)
+    .bind(false) // mfa_verified = false for Google login without TOTP
     .execute(&state.db)
     .await;
 
@@ -1861,7 +2700,7 @@ pub async fn firebase_login(
         chrono::Utc::now() + chrono::Duration::days(state.config.refresh_token_expiry_days);
     let _ = sqlx::query(
         "INSERT INTO sessions (user_id, tenant_id, device_fingerprint, ip_address, user_agent, expires_at, mfa_verified)
-         VALUES ($1, $2, $3, $4::inet, $5, $6, TRUE)",
+         VALUES ($1, $2, $3, $4::inet, $5, $6, $7)",
     )
     .bind(user_id)
     .bind(tenant_id.to_string())
@@ -1869,6 +2708,7 @@ pub async fn firebase_login(
     .bind(&ip_address)
     .bind(&user_agent)
     .bind(session_expires_at)
+    .bind(false) // mfa_verified = false
     .execute(&state.db)
     .await;
 

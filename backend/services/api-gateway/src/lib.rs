@@ -56,7 +56,6 @@ pub async fn run_service() -> anyhow::Result<()> {
         .route("/metrics", axum::routing::get(routes::metrics))
         .nest("/api/v1", api_routes.clone())
         .nest("/v1", api_routes)
-        .merge(routes::swagger_ui())
         .fallback(routes::not_found)
         // Inner layers first: rate limiting/metrics wrap the handlers.
         .layer(axum::middleware::from_fn_with_state(

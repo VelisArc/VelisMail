@@ -27,17 +27,13 @@ export default function BillingPanel({ state, handleBuyPlan }: BillingPanelProps
   // customer, so it has no numbers to show here.
   const planAllowance = PLAN_LIMITS[currentPlan];
 
-  const purchasedAt = state.user?.paidPlanPurchasedAt 
+  const purchasedAt = state.user?.paidPlanPurchasedAt
     ? new Date(state.user.paidPlanPurchasedAt).toLocaleDateString()
-    : state.user?.createdAt 
-      ? new Date(state.user.createdAt).toLocaleDateString() 
-      : 'N/A';
+    : 'Not provided by billing';
   
-  const expiresAt = state.user?.paidPlanExpiresAt 
+  const expiresAt = state.user?.paidPlanExpiresAt
     ? new Date(state.user.paidPlanExpiresAt).toLocaleDateString()
-    : state.user?.createdAt 
-      ? new Date(new Date(state.user.createdAt).getTime() + (currentBilling === 'annual' ? 365 : 30) * 24 * 60 * 60 * 1000).toLocaleDateString()
-      : 'N/A';
+    : 'Not provided by billing';
 
   return (
     <div className="dash-panel billing-panel">
@@ -51,14 +47,14 @@ export default function BillingPanel({ state, handleBuyPlan }: BillingPanelProps
 
       {currentPlan !== 'free' && (
         <div className="premium-status-card glass-card" style={{ padding: '16px', border: '1px solid var(--border-primary)', background: 'var(--bg-surface-2)', marginBottom: '24px', display: 'flex', flexDirection: 'column', gap: '8px', textAlign: 'left', borderRadius: '0' }}>
-          <h4 style={{ fontSize: '13px', fontWeight: 'bold', textTransform: 'uppercase', color: 'var(--text-primary)', margin: 0, letterSpacing: '0.05em' }}>Active Premium Subscription</h4>
+          <h4 style={{ fontSize: '13px', fontWeight: 'bold', textTransform: 'uppercase', color: 'var(--text-primary)', margin: 0, letterSpacing: '0.05em' }}>Current Subscription</h4>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginTop: '4px' }}>
             <div>
               <span className="text-xs text-muted" style={{ display: 'block', marginBottom: '2px' }}>Activation Date</span>
               <strong className="text-sm text-primary" style={{ fontWeight: '600' }}>{purchasedAt}</strong>
             </div>
             <div>
-              <span className="text-xs text-muted" style={{ display: 'block', marginBottom: '2px' }}>Renewal / Expiration Date</span>
+              <span className="text-xs text-muted" style={{ display: 'block', marginBottom: '2px' }}>Renews / expires</span>
               <strong className="text-sm text-primary" style={{ fontWeight: '600' }}>{expiresAt}</strong>
             </div>
             <div>

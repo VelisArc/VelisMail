@@ -1,10 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import {
   Users, Search, X, Mail, Phone, Building2, Edit3, Trash2,
-  ArrowLeft, CheckCircle2, UserPlus, Star, Filter
+  ArrowLeft, CheckCircle2, UserPlus, Star, Filter, AlertCircle
 } from 'lucide-react';
-import { auth, contacts, isBusinessSetupReady, type Contact } from '../api/client';
+import { auth, isBusinessSetupReady, type Contact } from '../api/client';
+import { workspaceApi } from '../api/company';
 import './Contacts.css';
 
 export default function Contacts() {
@@ -20,6 +21,9 @@ export default function Contacts() {
   }, [navigate, user]);
 
   const [contactList, setContactList] = useState<Contact[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [loadError, setLoadError] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -35,14 +39,29 @@ export default function Contacts() {
   const [formGroup, setFormGroup] = useState('');
   const [formNotes, setFormNotes] = useState('');
 
-  useEffect(() => {
-    setContactList(contacts.getAll());
+  // The company contact list is stored with the workspace, so the page, the
+  // settings panel and every other device read the same records.
+  const loadContacts = useCallback(async () => {
+    try {
+      setLoadError('');
+      const result = await workspaceApi.contacts();
+      setContactList(result.contacts);
+    } catch (error) {
+      console.error('load contacts failed', error);
+      setLoadError(error instanceof Error ? error.message : 'Unable to load the contacts.');
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    void loadContacts();
+  }, [loadContacts]);
 
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout>;
     if (toast) {
-      timer = setTimeout(() => setToast(null), 3000);
+      timer = setTimeout(() => setToast(null), 4000);
     }
     return () => clearTimeout(timer);
   }, [toast]);
@@ -56,40 +75,95 @@ export default function Contacts() {
     setFormCompany(''); setFormGroup(''); setFormNotes('');
   };
 
-  const handleAdd = () => {
-    if (!formName || !formEmail) return;
-    const c = contacts.add({
-      name: formName, email: formEmail, phone: formPhone,
-      company: formCompany, group: formGroup || 'General', notes: formNotes,
-    });
-    setContactList(contacts.getAll());
-    setShowAddModal(false);
-    resetForm();
-    showToast(`${c.name} added to contacts`);
+  const findById = (id: string) => contactList.find((contact) => contact.id === id) || null;
+
+  const handleAdd = async () => {
+    if (!formName.trim() || !formEmail.trim()) return;
+    setSaving(true);
+    try {
+      await workspaceApi.saveContact({
+        name: formName.trim(),
+        email: formEmail.trim(),
+        phone: formPhone,
+        company: formCompany,
+        group: formGroup.trim() || 'General',
+        notes: formNotes,
+      });
+      await loadContacts();
+      setShowAddModal(false);
+      resetForm();
+      showToast(`${formName.trim()} added to contacts`);
+    } catch (error) {
+      console.error('add contact failed', error);
+      showToast(error instanceof Error ? error.message : 'Unable to add the contact.', 'error');
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const handleUpdate = () => {
-    if (!selectedContact || !formName || !formEmail) return;
-    contacts.update(selectedContact.id, {
-      name: formName, email: formEmail, phone: formPhone,
-      company: formCompany, group: formGroup, notes: formNotes,
-    });
-    setContactList(contacts.getAll());
-    setEditMode(false);
-    setSelectedContact(contacts.getAll().find(c => c.id === selectedContact.id) || null);
-    showToast('Contact updated');
+  const handleUpdate = async () => {
+    if (!selectedContact || !formName.trim() || !formEmail.trim()) return;
+    setSaving(true);
+    try {
+      await workspaceApi.saveContact({
+        id: selectedContact.id,
+        name: formName.trim(),
+        email: formEmail.trim(),
+        phone: formPhone,
+        company: formCompany,
+        group: formGroup.trim() || 'General',
+        notes: formNotes,
+      });
+      await loadContacts();
+      setSelectedContact(findById(selectedContact.id));
+      setEditMode(false);
+      showToast('Contact updated');
+    } catch (error) {
+      console.error('update contact failed', error);
+      showToast(error instanceof Error ? error.message : 'Unable to update the contact.', 'error');
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const handleDelete = (id: string) => {
-    contacts.remove(id);
-    setContactList(contacts.getAll());
-    setSelectedContact(null);
-    showToast('Contact deleted');
+  const handleDelete = async (id: string) => {
+    const contact = findById(id);
+    if (!contact) return;
+    // A delete removes the contact for the whole company, so it asks first.
+    if (!window.confirm(`Delete ${contact.name} (${contact.email}) from the company contacts?`)) {
+      return;
+    }
+    setSaving(true);
+    try {
+      await workspaceApi.deleteContact(id);
+      await loadContacts();
+      setSelectedContact(null);
+      showToast('Contact deleted');
+    } catch (error) {
+      console.error('delete contact failed', error);
+      showToast(error instanceof Error ? error.message : 'Unable to delete the contact.', 'error');
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const handleToggleFav = (id: string) => {
-    contacts.toggleFavorite(id);
-    setContactList(contacts.getAll());
+  const handleToggleFav = async (contact: Contact) => {
+    try {
+      await workspaceApi.saveContact({
+        id: contact.id,
+        name: contact.name,
+        email: contact.email,
+        phone: contact.phone,
+        company: contact.company,
+        group: contact.group || 'General',
+        notes: contact.notes,
+        favorite: !contact.favorite,
+      });
+      await loadContacts();
+    } catch (error) {
+      console.error('toggle favourite failed', error);
+      showToast(error instanceof Error ? error.message : 'Unable to update the contact.', 'error');
+    }
   };
 
   const startEdit = () => {
@@ -156,10 +230,20 @@ export default function Contacts() {
 
         {/* Contact List */}
         <div className="contacts-list">
-          {filteredContacts.length === 0 ? (
+          {loading ? (
+            <div className="contacts-empty">
+              <p>Loading contacts…</p>
+            </div>
+          ) : loadError ? (
+            <div className="contacts-empty">
+              <AlertCircle size={32} opacity={0.4} />
+              <p>{loadError}</p>
+              <button className="btn btn-secondary btn-sm mt-2" onClick={() => { setLoading(true); void loadContacts(); }}>Try again</button>
+            </div>
+          ) : filteredContacts.length === 0 ? (
             <div className="contacts-empty">
               <Users size={32} opacity={0.2} />
-              <p>No contacts found</p>
+              <p>{contactList.length === 0 ? 'No contacts yet' : 'No contacts found'}</p>
             </div>
           ) : (
             filteredContacts.map(c => (
@@ -175,7 +259,8 @@ export default function Contacts() {
                   <span className="contact-row-email">{c.email}</span>
                 </div>
                 <button className={`star-btn ${c.favorite ? 'starred' : ''}`}
-                  onClick={(e) => { e.stopPropagation(); handleToggleFav(c.id); }}>
+                  aria-label={c.favorite ? `Remove ${c.name} from favourites` : `Add ${c.name} to favourites`}
+                  onClick={(e) => { e.stopPropagation(); void handleToggleFav(c); }}>
                   <Star size={14} fill={c.favorite ? '#facc15' : 'none'} color={c.favorite ? '#facc15' : 'var(--text-muted)'} />
                 </button>
               </div>
@@ -198,7 +283,7 @@ export default function Contacts() {
               </div>
               <div className="contact-detail-actions">
                 <button aria-label="Edit" className="btn btn-ghost btn-icon" onClick={startEdit} title="Edit"><Edit3 size={16} /></button>
-                <button aria-label="Delete" className="btn btn-danger btn-icon btn-sm" onClick={() => handleDelete(selectedContact.id)} title="Delete"><Trash2 size={16} /></button>
+                <button aria-label="Delete" className="btn btn-danger btn-icon btn-sm" disabled={saving} onClick={() => void handleDelete(selectedContact.id)} title="Delete"><Trash2 size={16} /></button>
               </div>
             </div>
 
@@ -213,12 +298,10 @@ export default function Contacts() {
                   <span className="detail-value">{selectedContact.phone}</span>
                 </div>
               )}
-              {selectedContact.group && (
-                <div className="detail-field">
-                  <Filter size={16} /><span className="detail-label">Group</span>
-                  <span className="detail-value badge badge-primary">{selectedContact.group}</span>
-                </div>
-              )}
+              <div className="detail-field">
+                <Filter size={16} /><span className="detail-label">Group</span>
+                <span className="detail-value badge badge-primary">{selectedContact.group || 'General'}</span>
+              </div>
               {selectedContact.notes && (
                 <div className="detail-field detail-field-notes">
                   <span className="detail-label">Notes</span>
@@ -237,16 +320,16 @@ export default function Contacts() {
           <div className="contact-edit-form animate-fade">
             <h3>Edit Contact</h3>
             <div className="form-grid">
-              <div className="form-field"><label>Name *</label><input className="input" value={formName} onChange={e => setFormName(e.target.value)} /></div>
-              <div className="form-field"><label>Email *</label><input className="input" type="email" value={formEmail} onChange={e => setFormEmail(e.target.value)} /></div>
-              <div className="form-field"><label>Phone</label><input className="input" value={formPhone} onChange={e => setFormPhone(e.target.value)} /></div>
-              <div className="form-field"><label>Company</label><input className="input" value={formCompany} onChange={e => setFormCompany(e.target.value)} /></div>
-              <div className="form-field"><label>Group</label><input className="input" value={formGroup} onChange={e => setFormGroup(e.target.value)} placeholder="General" /></div>
-              <div className="form-field full-width"><label>Notes</label><textarea className="input" value={formNotes} onChange={e => setFormNotes(e.target.value)} /></div>
+              <div className="form-field"><label htmlFor="contact-edit-name">Name *</label><input id="contact-edit-name" className="input" value={formName} onChange={e => setFormName(e.target.value)} /></div>
+              <div className="form-field"><label htmlFor="contact-edit-email">Email *</label><input id="contact-edit-email" className="input" type="email" autoComplete="email" value={formEmail} onChange={e => setFormEmail(e.target.value)} /></div>
+              <div className="form-field"><label htmlFor="contact-edit-phone">Phone</label><input id="contact-edit-phone" className="input" type="tel" autoComplete="tel" value={formPhone} onChange={e => setFormPhone(e.target.value)} /></div>
+              <div className="form-field"><label htmlFor="contact-edit-company">Company</label><input id="contact-edit-company" className="input" autoComplete="organization" value={formCompany} onChange={e => setFormCompany(e.target.value)} /></div>
+              <div className="form-field"><label htmlFor="contact-edit-group">Group</label><input id="contact-edit-group" className="input" value={formGroup} onChange={e => setFormGroup(e.target.value)} placeholder="General" /></div>
+              <div className="form-field full-width"><label htmlFor="contact-edit-notes">Notes</label><textarea id="contact-edit-notes" className="input" value={formNotes} onChange={e => setFormNotes(e.target.value)} /></div>
             </div>
             <div className="form-actions">
-              <button className="btn btn-secondary" onClick={() => setEditMode(false)}>Cancel</button>
-              <button className="btn btn-primary" onClick={handleUpdate} disabled={!formName || !formEmail}>Save Changes</button>
+              <button className="btn btn-secondary" onClick={() => setEditMode(false)} disabled={saving}>Cancel</button>
+              <button className="btn btn-primary" onClick={() => void handleUpdate()} disabled={saving || !formName || !formEmail}>{saving ? 'Saving…' : 'Save Changes'}</button>
             </div>
           </div>
         ) : (
@@ -261,23 +344,23 @@ export default function Contacts() {
       {/* Add Contact Modal */}
       {showAddModal && (
         <div className="modal-overlay" onClick={() => setShowAddModal(false)}>
-          <div className="add-contact-modal glass animate-scale" onClick={e => e.stopPropagation()}>
+          <div className="add-contact-modal glass animate-scale" role="dialog" aria-modal="true" aria-label="New contact" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
               <h3><UserPlus size={18} /> New Contact</h3>
               <button aria-label="Close" className="btn btn-ghost btn-icon" onClick={() => setShowAddModal(false)}><X size={18} /></button>
             </div>
             <div className="form-grid">
-              <div className="form-field"><label>Name *</label><input className="input" value={formName} onChange={e => setFormName(e.target.value)} placeholder="John Doe" /></div>
-              <div className="form-field"><label>Email *</label><input className="input" type="email" value={formEmail} onChange={e => setFormEmail(e.target.value)} placeholder="john@example.com" /></div>
-              <div className="form-field"><label>Phone</label><input className="input" value={formPhone} onChange={e => setFormPhone(e.target.value)} placeholder="+91 98765 43210" /></div>
-              <div className="form-field"><label>Company</label><input className="input" value={formCompany} onChange={e => setFormCompany(e.target.value)} placeholder="Acme Corp" /></div>
-              <div className="form-field"><label>Group</label><input className="input" value={formGroup} onChange={e => setFormGroup(e.target.value)} placeholder="General" /></div>
-              <div className="form-field full-width"><label>Notes</label><textarea className="input" value={formNotes} onChange={e => setFormNotes(e.target.value)} placeholder="Any notes about this contact…" /></div>
+              <div className="form-field"><label htmlFor="contact-add-name">Name *</label><input id="contact-add-name" className="input" value={formName} onChange={e => setFormName(e.target.value)} placeholder="John Doe" /></div>
+              <div className="form-field"><label htmlFor="contact-add-email">Email *</label><input id="contact-add-email" className="input" type="email" autoComplete="email" value={formEmail} onChange={e => setFormEmail(e.target.value)} placeholder="john@example.com" /></div>
+              <div className="form-field"><label htmlFor="contact-add-phone">Phone</label><input id="contact-add-phone" className="input" type="tel" autoComplete="tel" value={formPhone} onChange={e => setFormPhone(e.target.value)} placeholder="+91 98765 43210" /></div>
+              <div className="form-field"><label htmlFor="contact-add-company">Company</label><input id="contact-add-company" className="input" autoComplete="organization" value={formCompany} onChange={e => setFormCompany(e.target.value)} placeholder="Acme Corp" /></div>
+              <div className="form-field"><label htmlFor="contact-add-group">Group</label><input id="contact-add-group" className="input" value={formGroup} onChange={e => setFormGroup(e.target.value)} placeholder="General" /></div>
+              <div className="form-field full-width"><label htmlFor="contact-add-notes">Notes</label><textarea id="contact-add-notes" className="input" value={formNotes} onChange={e => setFormNotes(e.target.value)} placeholder="Any notes about this contact…" /></div>
             </div>
             <div className="modal-footer">
-              <button className="btn btn-secondary" onClick={() => setShowAddModal(false)}>Cancel</button>
-              <button className="btn btn-primary" onClick={handleAdd} disabled={!formName || !formEmail}>
-                <UserPlus size={16} /> Add Contact
+              <button className="btn btn-secondary" onClick={() => setShowAddModal(false)} disabled={saving}>Cancel</button>
+              <button className="btn btn-primary" onClick={() => void handleAdd()} disabled={saving || !formName.trim() || !formEmail.trim()}>
+                <UserPlus size={16} /> {saving ? 'Saving…' : 'Add Contact'}
               </button>
             </div>
           </div>
@@ -287,7 +370,10 @@ export default function Contacts() {
       {/* Toast */}
       {toast && (
         <div className="toast-container">
-          <div className={`toast toast-${toast.type}`}><CheckCircle2 size={16} />{toast.msg}</div>
+          <div className={`toast toast-${toast.type}`}>
+            {toast.type === 'error' ? <AlertCircle size={16} /> : <CheckCircle2 size={16} />}
+            {toast.msg}
+          </div>
         </div>
       )}
     </div>

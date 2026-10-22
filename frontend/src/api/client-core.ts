@@ -1272,26 +1272,12 @@ export function normalizeSessionUser(session: User): User {
     delete normalized.paidPlanPurchasedAt;
     delete normalized.paidPlanExpiresAt;
     normalized.subscriptionStatus = 'active';
-  } else {
-    const purchasedAt = normalized.paidPlanPurchasedAt || normalized.planStartedAt || normalized.createdAt || new Date().toISOString();
-    normalized.paidPlanPurchasedAt = purchasedAt;
-    normalized.paidPlanExpiresAt = normalized.paidPlanExpiresAt || addBillingPeriod(purchasedAt, normalized.billingCycle);
+  } else if (normalized.paidPlanExpiresAt) {
+    // The renewal date comes from the server. The console never invents one,
+    // because a guessed date would promise the customer the wrong thing.
     normalized.subscriptionStatus = new Date(normalized.paidPlanExpiresAt).getTime() < Date.now() ? 'expired' : (normalized.subscriptionStatus || 'active');
   }
   return normalized;
-}
-
-export function addBillingPeriod(startIso: string, billingCycle: 'monthly' | 'annual'): string {
-  const date = new Date(startIso);
-  if (Number.isNaN(date.getTime())) {
-    return addBillingPeriod(new Date().toISOString(), billingCycle);
-  }
-  if (billingCycle === 'annual') {
-    date.setFullYear(date.getFullYear() + 1);
-  } else {
-    date.setMonth(date.getMonth() + 1);
-  }
-  return date.toISOString();
 }
 
 export function decodeJwtPayload(token: string): Record<string, unknown> {
@@ -1327,7 +1313,7 @@ export async function fetchAuthenticatedProfile(): Promise<Partial<User>> {
       displayName: raw.display_name || raw.displayName,
       ...(role ? { role } : {}),
       recoveryEmail: raw.recovery_email || raw.recoveryEmail || undefined,
-      recoveryEmailVerified: Boolean(raw.recovery_email || raw.recoveryEmail),
+      recoveryEmailVerified: Boolean(raw.recovery_email_verified ?? raw.recoveryEmailVerified ?? raw.recovery_email ?? raw.recoveryEmail),
       createdAt: raw.created_at || raw.createdAt,
       businessDbUrl: settings.businessDbUrl || settings.business_db_url || raw.business_db_url || raw.businessDbUrl,
       businessApiKey: settings.businessApiKey || settings.business_api_key || raw.business_api_key || raw.businessApiKey,
@@ -1344,6 +1330,13 @@ export async function fetchAuthenticatedProfile(): Promise<Partial<User>> {
       // only uses it to decide whether the control plane switch is visible.
       firebaseUid: settings.firebaseUid || settings.firebase_uid || raw.firebase_uid || raw.firebaseUid || undefined,
       isPlatformAdmin: Boolean(settings.isPlatformAdmin ?? settings.is_platform_admin ?? raw.is_platform_admin ?? raw.isPlatformAdmin),
+      // TOTP Authenticator
+      totpEnabled: Boolean(raw.totp_enabled ?? raw.totpEnabled),
+      // Phone for future recovery
+      phoneCountryCode: raw.phone_country_code || raw.phoneCountryCode,
+      phoneNumber: raw.phone_number || raw.phoneNumber,
+      phoneE164: raw.phone_e164 || raw.phoneE164,
+      phoneVerified: Boolean(raw.phone_verified ?? raw.phoneVerified),
     };
   } catch {
     return {};
@@ -1401,6 +1394,13 @@ export function buildSessionUser(params: {
     spfStatus: params.existing?.spfStatus || 'pending',
     dmarcStatus: params.existing?.dmarcStatus || 'pending',
     createdAt: String(profile.createdAt || params.existing?.createdAt || new Date().toISOString()),
+    // TOTP Authenticator
+    totpEnabled: profile.totpEnabled ?? params.existing?.totpEnabled ?? false,
+    // Phone for future recovery
+    phoneCountryCode: profile.phoneCountryCode || params.existing?.phoneCountryCode,
+    phoneNumber: profile.phoneNumber || params.existing?.phoneNumber,
+    phoneE164: profile.phoneE164 || params.existing?.phoneE164,
+    phoneVerified: profile.phoneVerified ?? params.existing?.phoneVerified ?? false,
   });
 }
 
@@ -1487,9 +1487,13 @@ export function normalizeBusinessEmailFromDb(raw: Partial<Email> & {
   };
 }
 
-export async function syncBusinessEmailToDb(email: Email): Promise<void> {
+export async function syncBusinessEmailToDb(email: Email, options?: { force?: boolean; suppressError?: boolean }): Promise<void> {
   const session = getSessionSafe();
-  if (!session?.businessDbUrl || businessEmailDbRouteUnavailable) return;
+  if (!session?.businessDbUrl) return;
+  if (businessEmailDbRouteUnavailable && !options?.force) {
+    // If route was previously unavailable, reset and try once more
+    businessEmailDbRouteUnavailable = false;
+  }
   const headers: Record<string, string> = {
     'x-business-db-url': session.businessDbUrl
   };
@@ -1506,9 +1510,19 @@ export async function syncBusinessEmailToDb(email: Email): Promise<void> {
         },
       }),
     });
+    // On success, mark email as synced in local cache
+    if (email.id) {
+      const cached = reloadEmailsCacheFromStorage();
+      const idx = cached.findIndex(e => e.id === email.id);
+      if (idx >= 0) {
+        cached[idx] = { ...cached[idx], pendingSync: false };
+        saveEmailsSyncAndAsync(STORAGE_KEYS.emails, cached);
+      }
+    }
   } catch (err) {
     if (err instanceof Error && err.message.includes('route was not found')) {
       businessEmailDbRouteUnavailable = true;
+      if (!options?.suppressError) throw err;
       return;
     }
     throw err;

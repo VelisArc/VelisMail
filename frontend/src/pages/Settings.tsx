@@ -29,7 +29,6 @@ export default function SettingsPage() {
   const [passwordSaving, setPasswordSaving] = useState(false);
   const [securityError, setSecurityError] = useState<string | null>(null);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [recoveryEmailDraft, setRecoveryEmailDraft] = useState(user?.recoveryEmail || '');
   const [recoveryOtp, setRecoveryOtp] = useState('');
   const [recoveryChallengeToken, setRecoveryChallengeToken] = useState('');
@@ -188,20 +187,6 @@ export default function SettingsPage() {
     setNewPassword('');
     setConfirmPassword('');
     showToast('Password updated successfully');
-  };
-
-  const handleDeleteAccount = () => {
-    setShowDeleteConfirm(true);
-  };
-
-  const confirmDeleteAccount = async () => {
-    const result = await auth.deleteAccount();
-    if (!result.success) {
-      showToast(result.error || 'Account deactivation failed', 'error');
-      setShowDeleteConfirm(false);
-      return;
-    }
-    navigate('/login');
   };
 
   const handleLogout = () => {
@@ -454,14 +439,14 @@ export default function SettingsPage() {
                 </form>
               </div>
               <div className="glass-card security-card">
-                <h3><Shield size={18} /> Encryption Keys</h3>
-                <p>Your encryption keys are stored locally on your device. We never have access to them.</p>
+                <h3><Shield size={18} /> Account Security</h3>
+                <p>Your password is hashed with Argon2id and never stored in plain text. Email codes protect registration and password reset.</p>
                 <div className="key-info">
                   <div className="key-row">
-                    <span>Key Algorithm</span><span className="badge badge-accent">AES-256-GCM</span>
+                    <span>Password hashing</span><span className="badge badge-accent">Argon2id</span>
                   </div>
                   <div className="key-row">
-                    <span>Key Derivation</span><span className="badge badge-accent">HKDF-SHA256</span>
+                    <span>Sessions</span><span className="badge badge-accent">Signed, expiring tokens</span>
                   </div>
                   <div className="key-row">
                     <span>Auth Method</span><span className="badge badge-primary">Password + recovery OTP</span>
@@ -557,11 +542,11 @@ export default function SettingsPage() {
               </div>
 
               <div className="glass-card security-card danger-zone">
-                <h3><AlertCircle size={18} color="var(--danger)" /> Account Access</h3>
-                <p>Deactivate your account access while retaining workspace data for administrator-assisted recovery.</p>
-                <button className="btn btn-danger btn-sm settings-spacer-xs" onClick={handleDeleteAccount}>
-                  <Trash2 size={14} /> Deactivate Account
-                </button>
+                <h3><AlertCircle size={18} color="var(--danger)" /> Account Deletion</h3>
+                <p>Account deletion is handled by the VelisMail team so that workspace data and audit history are not lost by accident. Email support from your registered admin address to request it.</p>
+                <a className="btn btn-danger btn-sm settings-spacer-xs" href="mailto:support@velismail.online?subject=Account%20deletion%20request">
+                  <Trash2 size={14} /> Request Account Deletion
+                </a>
               </div>
             </div>
           )}
@@ -580,22 +565,6 @@ export default function SettingsPage() {
             <div className="logout-confirm-actions">
               <button className="btn btn-secondary" onClick={() => setShowLogoutConfirm(false)}>Cancel</button>
               <button className="btn btn-danger" onClick={handleLogout}><LogOut size={16} /> Yes, Log Out</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {showDeleteConfirm && (
-        <div className="modal-overlay" onClick={() => setShowDeleteConfirm(false)}>
-          <div className="logout-confirm-modal glass-card animate-scale" onClick={e => e.stopPropagation()}>
-            <div className="logout-confirm-icon">
-              <AlertCircle size={40} color="var(--danger)" />
-            </div>
-            <h3>Deactivate Account?</h3>
-            <p>Your sign-in access will be disabled and you will be logged out. Workspace data is retained so the account can be reviewed and recovered later.</p>
-            <div className="logout-confirm-actions">
-              <button className="btn btn-secondary" onClick={() => setShowDeleteConfirm(false)}>Cancel</button>
-              <button className="btn btn-danger" onClick={confirmDeleteAccount}><Trash2 size={16} /> Deactivate</button>
             </div>
           </div>
         </div>

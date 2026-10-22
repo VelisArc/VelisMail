@@ -4,35 +4,35 @@ export default function SecurityPolicy() {
   return (
     <LegalLayout
       slug="security"
-      title="Enterprise Security Policy"
+      title="Security Policy"
       category="Security"
-      description="VelisMail's Security Policy outlines encryption standards, secure recovery, Rust-built backend controls, RBAC, incident response, and vulnerability disclosure."
+      description="VelisMail's Security Policy outlines password storage, transport security, access controls, incident response, and vulnerability disclosure."
       contactEmail="security@velismail.online"
       contactLabel="For security questions or responsible disclosure, contact the security team with reproduction steps and relevant evidence."
     >
       <section>
         <p>
-          Security is not a feature at VelisMail; it is the foundation of our infrastructure. This document outlines our cryptographic implementation, operational security measures, and processes used to protect data at every level.
+          Security is not a feature at VelisMail; it is the foundation of our infrastructure. This document outlines the measures we actually run, so you can judge the platform for yourself.
         </p>
       </section>
 
       <section>
         <h2>1. Cryptographic Standards</h2>
         <p>
-          Data at rest is encrypted using <strong>AES-256-GCM</strong>. Data in transit is secured through strict TLS 1.3 with forward secrecy. Emails are encrypted client-side before leaving the browser, and private keys never leave the device unencrypted.
+          Passwords are stored as one-way <strong>Argon2id</strong> hashes with per-user salts. Public endpoints are served over TLS. VelisMail is <strong>not</strong> an end-to-end encrypted or zero-knowledge service: mail is stored in the workspace database and the configured mail provider can read a message in order to deliver it.
         </p>
-        <p>Key cryptographic measures include:</p>
+        <p>Key measures include:</p>
         <ul>
-          <li><strong>Transport Security:</strong> TLS 1.3 enforced on all connections. TLS 1.0 and 1.1 are disabled.</li>
-          <li><strong>Encryption at Rest:</strong> AES-256-GCM for stored data, including backups where enabled.</li>
-          <li><strong>Key Derivation:</strong> Argon2id password hashing with per-user salts.</li>
-          <li><strong>Message Encryption:</strong> Client-side E2EE using modern public-key cryptography.</li>
-          <li><strong>Certificate Management:</strong> Automated certificate rotation through ACME where applicable.</li>
+          <li><strong>Transport Security:</strong> TLS on every public endpoint. Plain HTTP is redirected.</li>
+          <li><strong>Password Storage:</strong> Argon2id with per-user salts. Plain passwords are never stored.</li>
+          <li><strong>Session Tokens:</strong> Signed, time-limited access tokens with revocable refresh tokens.</li>
+          <li><strong>Message Storage:</strong> Held in the workspace database you connect. Encryption at rest depends on how that database is deployed.</li>
+          <li><strong>Certificate Management:</strong> TLS is terminated at the reverse proxy, with renewal configured on the host.</li>
         </ul>
       </section>
 
       <section>
-        <h2>2. Zero-Knowledge Authentication</h2>
+        <h2>2. Authentication</h2>
         <p>
           VelisMail accepts credentials only over HTTPS and stores passwords as one-way password hashes. Recovery-sensitive flows require OTP verification before account creation or password reset can complete.
         </p>
@@ -51,7 +51,7 @@ export default function SecurityPolicy() {
         </p>
         <p>Additional infrastructure measures:</p>
         <ul>
-          <li><strong>Network Isolation:</strong> Internal services communicate over private service networks.</li>
+          <li><strong>Network Isolation:</strong> Internal services are fronted by the reverse proxy and are not exposed directly.</li>
           <li><strong>DDoS Protection:</strong> Edge protection through Cloudflare where enabled.</li>
           <li><strong>Rate Limiting:</strong> API endpoints include rate limits to reduce brute-force attacks and abuse.</li>
           <li><strong>Security Updates:</strong> Critical security patches are prioritized after public disclosure.</li>
@@ -66,7 +66,7 @@ export default function SecurityPolicy() {
           <li><strong>Role-Based Access Control:</strong> Workspace roles are scoped to administrative and member operations.</li>
           <li><strong>Least Privilege:</strong> Users are granted the minimum access necessary to perform their functions.</li>
           <li><strong>Session Management:</strong> Sessions are cryptographically signed, time-limited, and revocable.</li>
-          <li><strong>Device Revocation:</strong> Administrators can revoke sessions from the Team Access panel.</li>
+          <li><strong>Device Revocation:</strong> Members can revoke a session from Settings → Active Sessions.</li>
           <li><strong>Workspace Isolation:</strong> Tenant-aware routing separates customer configuration and access boundaries.</li>
         </ul>
       </section>
@@ -90,7 +90,7 @@ export default function SecurityPolicy() {
           <li><strong>SPF:</strong> Validates that emails are sent from authorized mail servers.</li>
           <li><strong>DKIM:</strong> Cryptographically signs outgoing emails to help prevent tampering.</li>
           <li><strong>DMARC:</strong> Protects domains from spoofing and phishing.</li>
-          <li><strong>Anti-Abuse Controls:</strong> Abuse detection protects sending reputation and recipient safety.</li>
+          <li><strong>Anti-Abuse Controls:</strong> Workspace quotas, scoped API keys and rate limits reduce abuse.</li>
           <li><strong>Secure Transport:</strong> Mail and API traffic use encrypted channels wherever supported.</li>
         </ul>
       </section>
@@ -105,6 +105,7 @@ export default function SecurityPolicy() {
           <li>Business audit logging and access review workflows.</li>
           <li>Enterprise availability and confidentiality practices.</li>
         </ul>
+        <p>This is an alignment statement, not a certification. We do not claim SOC 2, ISO 27001 or HIPAA certification.</p>
       </section>
 
       <section>

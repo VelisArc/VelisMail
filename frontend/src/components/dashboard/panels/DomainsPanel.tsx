@@ -30,7 +30,7 @@ export default function DomainsPanel({ state, handleAddDomain, handleVerifyDomai
           {state.domainsList.map(dom => (
             <div key={dom.id} className="domain-card glass-card" onClick={() => state.setDomainDetails(dom)}>
               <div className="domain-card-header"><strong>{dom.domain}</strong><span className={`badge badge-${dom.status === 'active' ? 'success' : 'neutral'}`}>{dom.status}</span></div>
-              <div className="domain-metrics"><span>{dom.mailCount} sent</span><span>{dom.reputation}% rep</span></div>
+              <div className="domain-metrics"><span>{dom.mailCount} mailbox{dom.mailCount === 1 ? '' : 's'}</span><span>{dom.reputation}% setup</span></div>
               <div className="domain-health">
                 {dom.health.map(h => (
                   <div key={h.key} className={`health-item ${h.status}`}><Shield size={12} /><span>{h.label}</span></div>
@@ -38,7 +38,7 @@ export default function DomainsPanel({ state, handleAddDomain, handleVerifyDomai
               </div>
               <div className="domain-card-actions">
                 <button className="btn btn-ghost btn-sm" onClick={e => { e.stopPropagation(); handleVerifyDomain(dom.id); }}><RefreshCcw size={12} /> Verify</button>
-                <button className="btn btn-ghost btn-sm" onClick={e => { e.stopPropagation(); state.copyToClipboard(dom.domain); state.showToast('Copied'); }}><Copy size={12} /></button>
+                <button className="btn btn-ghost btn-sm" onClick={e => { e.stopPropagation(); state.copyToClipboard(dom.domain); }}><Copy size={12} /></button>
                 <button className="btn btn-ghost btn-sm btn-danger" onClick={e => { e.stopPropagation(); state.setConfirmAction({ title: 'Delete Domain', message: `Delete ${dom.domain}? Its mailboxes stop working and this cannot be undone.`, onConfirm: () => handleDeleteDomain(dom.id) }); }}><Trash2 size={12} /></button>
               </div>
             </div>

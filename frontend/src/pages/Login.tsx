@@ -184,20 +184,6 @@ export default function Login() {
   };
 
   const sendRegistrationOtp = async () => {
-    const existingUsers = JSON.parse(localStorage.getItem('velismail_users') || '[]');
-    const expectedMailbox = (regRecoveryEmail.trim().toLowerCase() || defaultBusinessMailboxAddress);
-    const candidateValues = [expectedMailbox, otpTargetEmail]
-      .map(value => value.trim().toLowerCase())
-      .filter(Boolean);
-    if (existingUsers.find((u: { email: string; recoveryEmail?: string; businessMailboxAddress?: string }) => {
-      const existingValues = [u.email, u.recoveryEmail, u.businessMailboxAddress]
-        .map(value => String(value || '').trim().toLowerCase())
-        .filter(Boolean);
-      return candidateValues.some(value => existingValues.includes(value));
-    })) {
-      throw new Error('An account with this mailbox or recovery email already exists.');
-    }
-
     const response = await auth.sendRegistrationOtp({
       email: otpTargetEmail,
       displayName: regName,
@@ -514,6 +500,8 @@ export default function Login() {
                     <button
                       type="button"
                       role="tab"
+                      id="login-tab-password"
+                      aria-controls="login-panel-password"
                       aria-selected={loginAccessMode === 'password'}
                       className={loginAccessMode === 'password' ? 'active' : ''}
                       onClick={() => { setLoginAccessMode('password'); setError(''); }}
@@ -523,6 +511,8 @@ export default function Login() {
                     <button
                       type="button"
                       role="tab"
+                      id="login-tab-team"
+                      aria-controls="login-panel-team"
                       aria-selected={loginAccessMode === 'team'}
                       className={loginAccessMode === 'team' ? 'active' : ''}
                       onClick={() => { setLoginAccessMode('team'); setError(''); }}
@@ -532,7 +522,7 @@ export default function Login() {
                   </div>
 
                   {loginAccessMode === 'password' ? (
-                    <form onSubmit={handleLogin} className="login-form" autoComplete="off">
+                    <form id="login-panel-password" role="tabpanel" aria-labelledby="login-tab-password" onSubmit={handleLogin} className="login-form" autoComplete="off">
                       <div className="form-group">
                         <label htmlFor="login-email">Workspace Email</label>
                         <input
@@ -620,7 +610,7 @@ export default function Login() {
                       )}
 
                       {teamStep === 'key' && (
-                        <form onSubmit={handleTeamKeySubmit} className="login-form" autoComplete="off">
+                        <form id="login-panel-team" role="tabpanel" aria-labelledby="login-tab-team" onSubmit={handleTeamKeySubmit} className="login-form" autoComplete="off">
                           <div className="form-group">
                             <label htmlFor="team-token">Team Access Key</label>
                             <input
@@ -827,7 +817,7 @@ export default function Login() {
                     className="input"
                     placeholder="Your full name"
                     name="velismail-new-account-display-name"
-                    autoComplete="new-password"
+                    autoComplete="name"
                     required
                     value={regName}
                     onChange={e => setRegName(e.target.value)}

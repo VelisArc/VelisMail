@@ -13,9 +13,9 @@ import './Home.css';
 
 // Feature data with semantic structure for better SEO
 const features = [
-  { icon: Lock, title: 'End-to-End Encryption', desc: 'Messages encrypted in transit and at rest with zero-knowledge architecture. Your data stays yours.', category: 'security' },
-  { icon: Fingerprint, title: 'Zero Trust Access', desc: 'Passwordless auth with hardware-backed keys. Revoke devices instantly, recover securely.', category: 'security' },
-  { icon: Globe, title: 'Smart DNS Management', desc: 'Automated SPF, DKIM, and DMARC verification. One-click domain setup with guided diagnostics.', category: 'infrastructure' },
+  { icon: Lock, title: 'Encrypted Transport', desc: 'Every connection uses TLS. Mail is stored in an encrypted database with per-workspace access rules.', category: 'security' },
+  { icon: Fingerprint, title: 'Controlled Sign-In', desc: 'Password, Google sign-in and email codes, with sessions you can revoke from the dashboard at any time.', category: 'security' },
+  { icon: Globe, title: 'Smart DNS Management', desc: 'Automated SPF, DKIM, and DMARC verification. Guided domain setup with live DNS diagnostics.', category: 'infrastructure' },
   { icon: BarChart3, title: 'Delivery Analytics', desc: 'Track queue health, delivery rates, and audit trails with real-time operational dashboards.', category: 'analytics' },
   { icon: Users, title: 'Team Collaboration', desc: 'Role-based access for admins, members, and viewers. Shared inboxes and distribution groups.', category: 'collaboration' },
   { icon: Database, title: 'Bring Your Own Stack', desc: 'Connect your own database and mail provider. Full control over your infrastructure.', category: 'infrastructure' },
@@ -24,28 +24,28 @@ const features = [
 const steps = [
   { num: '01', title: 'Connect Your Domain', desc: 'Add your business domain and verify ownership with automatic DNS record generation.', icon: Globe },
   { num: '02', title: 'Provision Your Team', desc: 'Create mailboxes, set up groups, and invite team members with granular permission controls.', icon: Users },
-  { num: '03', title: 'Go Secure', desc: 'Start sending encrypted email with real-time monitoring, audit logs, and delivery insights.', icon: Shield },
+  { num: '03', title: 'Go Live', desc: 'Send authenticated email with real-time monitoring, audit logs, and delivery insights.', icon: Shield },
 ] as const;
 
 const stats = [
-  { value: '256-bit', label: 'AES Encryption', icon: Lock, description: 'Military-grade encryption standard' },
-  { value: '99.99%', label: 'Uptime SLA', icon: Activity, description: 'Enterprise reliability guarantee' },
-  { value: '<50ms', label: 'Global Routing', icon: Zap, description: 'Low-latency message delivery' },
-  { value: 'Zero Trust', label: 'Security Model', icon: Shield, description: 'Never trust, always verify' },
+  { value: '4 records', label: 'DNS verification', icon: Lock, description: 'SPF, DKIM, DMARC and MX checked live' },
+  { value: 'Scoped keys', label: 'API access', icon: Activity, description: 'Every workspace key carries explicit scopes' },
+  { value: 'Live queue', label: 'Delivery tracking', icon: Zap, description: 'Queued, sending, sent and failed states' },
+  { value: 'Audit log', label: 'Accountability', icon: Shield, description: 'Every workspace change is recorded' },
 ] as const;
 
 const solutions = [
-  { title: 'Enterprise Security', desc: 'Full compliance controls, audit trails, and zero-trust architecture for security-conscious organizations.', industries: ['Finance', 'Healthcare', 'Legal'] },
-  { title: 'Regulated Industries', desc: 'Healthcare, finance, and legal teams rely on our data sovereignty and verifiable encryption.', industries: ['HIPAA', 'SOC 2', 'GDPR'] },
-  { title: 'Remote Teams', desc: 'Global edge infrastructure ensures low-latency communication for distributed workforces.', industries: ['Technology', 'Consulting', 'Media'] },
+  { title: 'Enterprise Security', desc: 'Role-based access, audit trails, and scoped API keys for security-conscious organizations.', industries: ['Finance', 'Healthcare', 'Legal'] },
+  { title: 'Regulated Industries', desc: 'Data residency in your own database, retained audit history, and records of every admin change.', industries: ['Healthcare', 'Finance', 'Legal'] },
+  { title: 'Remote Teams', desc: 'One console for domains, mailboxes, groups and the delivery queue across a distributed workforce.', industries: ['Technology', 'Consulting', 'Media'] },
   { title: 'Scaling Startups', desc: 'From 10 to 10,000 users with instant provisioning and predictable per-user pricing.', industries: ['SaaS', 'E-commerce', 'Fintech'] },
 ] as const;
 
 const faqs = [
-  { q: 'How does encryption work?', a: 'Messages are encrypted with RSA-4096 in transit and AES-256 at rest. Your private keys never leave your device, ensuring complete data sovereignty and privacy.', schema: 'encryption' },
-  { q: 'Can I migrate from Gmail or Outlook?', a: 'Yes. Our migration tools support IMAP import from Google Workspace and Microsoft 365 with zero downtime. We provide guided migration wizards and dedicated support.', schema: 'migration' },
-  { q: 'What happens if a device is lost?', a: 'Admins can revoke device access instantly from the dashboard. Users can re-authenticate via recovery email or backup codes without any data loss.', schema: 'security' },
-  { q: 'Is custom branding available?', a: 'Enterprise plans include white-labeling with custom logos, colors, domains, and dedicated support. Contact our sales team for a customized solution.', schema: 'branding' },
+  { q: 'How is my mail protected?', a: 'Mail moves over TLS and is stored in an encrypted database. Access is limited to your workspace. VelisMail is not an end-to-end encrypted service: the mail service can read a message in order to deliver and index it.', schema: 'encryption' },
+  { q: 'Can I migrate from Gmail or Outlook?', a: 'Not automatically yet. Automated IMAP import from Google Workspace and Microsoft 365 is on the roadmap. You can connect your domain and create mailboxes today; historical mail import is not offered.', schema: 'migration' },
+  { q: 'What happens if a device is lost?', a: 'Sessions can be revoked from the dashboard instantly. The user signs in again with their password, Google sign-in or an email code.', schema: 'security' },
+  { q: 'Is custom branding available?', a: 'White-labeling and a dedicated queue are negotiated with our sales team on the Enterprise plan. The self-serve plans keep the VelisMail console.', schema: 'branding' },
 ] as const;
 
 type SubmissionState = { type: 'success' | 'info' | 'error'; message: string } | null;
@@ -113,17 +113,6 @@ function useIntersectionObserver(): React.RefObject<HTMLDivElement | null> {
   return ref;
 }
 
-// Offline-first data persistence for lead capture
-function saveOfflineLead(key: string, payload: Record<string, unknown>): void {
-  try {
-    const existing = JSON.parse(localStorage.getItem(key) || '[]') as Array<Record<string, unknown>>;
-    existing.unshift({ ...payload, createdAt: new Date().toISOString() });
-    localStorage.setItem(key, JSON.stringify(existing.slice(0, 25)));
-  } catch (error) {
-    console.warn('Failed to save feedback locally:', error);
-  }
-}
-
 export default function Home(): React.ReactElement {
   const [user] = useState(auth.getSession());
   const scrolled = useScrollPosition();
@@ -164,9 +153,9 @@ export default function Home(): React.ReactElement {
       if (errorMsg && !errorMsg.includes('Failed to fetch') && !errorMsg.includes('NetworkError')) {
         setFeedbackState({ type: 'error', message: `Submission failed: ${errorMsg}` });
       } else {
-        saveOfflineLead('velismail_feedback_submissions', { ...feedbackForm });
-        setFeedbackState({ type: 'info', message: 'Service is currently offline. Feedback saved locally and will sync later.' });
-        setFeedbackForm({ name: '', email: '', type: 'suggestion', message: '' });
+        // Nothing is stored on the device: a message that was never sent must
+        // not look like a message that will be sent later.
+        setFeedbackState({ type: 'error', message: 'The feedback service could not be reached. Nothing was sent. Please try again or email support@velismail.online.' });
       }
     } finally {
       setFeedbackSending(false);
@@ -180,9 +169,9 @@ export default function Home(): React.ReactElement {
   return (
     <div className="home animate-page">
       <SEO 
-        title="Secure Business Email Platform"
-        description="Enterprise-grade encrypted email for custom domains. Features include mail queues, scheduled send, team collaboration, DNS verification, zero-trust security, and delivery analytics."
-        keywords={['secure business email', 'encrypted email platform', 'enterprise email hosting', 'custom domain email', 'zero trust email', 'email with queues', 'scheduled email send']}
+        title="Business Email Platform"
+        description="Business email for custom domains. Mail queues, scheduled send, team collaboration, live DNS verification, scoped API keys and delivery analytics."
+        keywords={['business email platform', 'custom domain email', 'email hosting', 'email with queues', 'scheduled email send', 'dns verification']}
       />
 
       <nav className={`home-nav ${scrolled ? 'nav-scrolled' : ''}`} role="navigation" aria-label="Main navigation">

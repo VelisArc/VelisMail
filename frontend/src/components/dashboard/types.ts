@@ -124,7 +124,7 @@ export interface DashboardState {
   handleLogout: () => void;
   handleSendEmail: (to?: string, subject?: string, body?: string, attachments?: File[], scheduledAt?: string) => void;
   openComposeWith: (to?: string, subject?: string, body?: string) => void;
-  copyToClipboard: (text: string) => void;
+  copyToClipboard: (text: string) => Promise<boolean>;
   inviteOpen: boolean;
   setInviteOpen: (o: boolean) => void;
   inviteName: string;
@@ -169,6 +169,8 @@ export interface DashboardState {
   setDomainVerifyProviderRecords: (r: Record<string, string>[]) => void;
   verifyingDomainId: string;
   setVerifyingDomainId: (id: string) => void;
+  domainVerifyBusy: boolean;
+  setDomainVerifyBusy: (busy: boolean) => void;
   mailboxLocalPart: string;
   setMailboxLocalPart: (p: string) => void;
   mailboxDisplayName: string;

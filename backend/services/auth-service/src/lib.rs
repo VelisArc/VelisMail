@@ -2,6 +2,7 @@ pub mod account_lock;
 pub mod config;
 pub mod handlers;
 pub mod jwt;
+pub mod mfa;
 pub mod middleware;
 pub mod state;
 
@@ -63,6 +64,23 @@ pub async fn run_service() -> anyhow::Result<()> {
         .route(
             "/token/refresh",
             axum::routing::post(handlers::refresh_token),
+        )
+        // MFA / TOTP Authenticator routes
+        .route("/mfa/setup", axum::routing::post(handlers::mfa_setup))
+        .route("/mfa/enable", axum::routing::post(handlers::mfa_enable))
+        .route("/mfa/disable", axum::routing::post(handlers::mfa_disable))
+        .route("/mfa/verify", axum::routing::post(handlers::mfa_verify))
+        .route(
+            "/mfa/recovery/send-otp",
+            axum::routing::post(handlers::mfa_recovery_send_otp),
+        )
+        .route(
+            "/mfa/recovery/verify",
+            axum::routing::post(handlers::mfa_recovery_verify),
+        )
+        .route(
+            "/mfa/recovery/complete",
+            axum::routing::post(handlers::mfa_recovery_complete),
         )
         .route("/feedback", axum::routing::post(handlers::feedback))
         .merge(protected_routes)

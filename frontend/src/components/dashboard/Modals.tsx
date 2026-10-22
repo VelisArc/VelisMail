@@ -1,7 +1,7 @@
 import { X, UserCheck, CheckCircle2, Copy, Shield, AlertTriangle, LogOut, Mail, Send, Globe, Users, Layers, Check, AlertCircle, RefreshCcw } from 'lucide-react';
 import Composer from '../Composer';
 import type { DashboardState } from './types';
-import { copyToClipboard, providerRecordType } from './utils';
+import { providerRecordType } from './utils';
 import { connections } from '../../api/client';
 import { workspaceApi } from '../../api/company';
 
@@ -210,8 +210,8 @@ function DomainDetailsModal({ state, handleVerifyDomain }: { state: DashboardSta
         <div className="compose-header"><h3><Globe size={16} /> {state.domainDetails.domain}</h3><button className="btn btn-ghost btn-icon" onClick={() => state.setDomainDetails(null)}><X size={16} /></button></div>
         <div className="detail-grid-2">
           <div><span className="text-xs text-muted">Status</span><strong className="text-sm text-block">{state.domainDetails.status}</strong></div>
-          <div><span className="text-xs text-muted">Reputation</span><strong className="text-sm text-block">{state.domainDetails.reputation}/100</strong></div>
-          <div><span className="text-xs text-muted">Sent</span><strong className="text-sm text-block">{state.domainDetails.mailCount}</strong></div>
+          <div><span className="text-xs text-muted">DNS setup</span><strong className="text-sm text-block">{state.domainDetails.reputation}/100</strong></div>
+          <div><span className="text-xs text-muted">Mailboxes</span><strong className="text-sm text-block">{state.domainDetails.mailCount}</strong></div>
         </div>
         <div className="px-20 py-20">
           {state.domainDetails.health.map(h => (
@@ -223,7 +223,7 @@ function DomainDetailsModal({ state, handleVerifyDomain }: { state: DashboardSta
           ))}
         </div>
         <div className="flex gap-2 px-20 py-20">
-          <button className="btn btn-ghost btn-sm" onClick={() => { copyToClipboard(state.domainDetails!.domain); state.showToast('Copied'); }}><Copy size={14} /> Copy Domain</button>
+          <button className="btn btn-ghost btn-sm" onClick={() => { void state.copyToClipboard(state.domainDetails!.domain); }}><Copy size={14} /> Copy Domain</button>
           <button className="btn btn-primary btn-sm" onClick={() => handleVerifyDomain(state.domainDetails!.id)}><RefreshCcw size={14} /> Verify</button>
         </div>
       </div>
@@ -243,7 +243,7 @@ function MailboxDetailsModal({ state }: { state: DashboardState }) {
           <div><span className="text-xs text-muted">Active</span><strong className="text-sm text-block">{state.mailboxDetails.active ? 'Yes' : 'No'}</strong></div>
         </div>
         <div className="flex gap-2 px-20 py-20">
-          <button className="btn btn-ghost btn-sm" onClick={() => { copyToClipboard(state.mailboxDetails!.address); state.showToast('Copied'); }}><Copy size={14} /> Copy</button>
+          <button className="btn btn-ghost btn-sm" onClick={() => { void state.copyToClipboard(state.mailboxDetails!.address); }}><Copy size={14} /> Copy</button>
           <button className="btn btn-ghost btn-sm" onClick={() => { state.setActiveMailboxAddress(state.mailboxDetails!.address); state.setSelectedFromAddress(state.mailboxDetails!.address); state.setActiveFolder('inbox'); state.setActiveBizTab('mail'); state.setMailboxDetails(null); }}><Mail size={14} /> Open Inbox</button>
           <button className="btn btn-primary btn-sm" onClick={() => { state.setSelectedFromAddress(state.mailboxDetails!.address); state.setMailboxDetails(null); state.showToast('Sender set'); }}><CheckCircle2 size={14} /> Set Sender</button>
         </div>
@@ -271,7 +271,7 @@ function GroupDetailsModal({ state }: { state: DashboardState }) {
           ))}
         </div>
         <div className="flex gap-2 px-20 py-20">
-          <button className="btn btn-ghost btn-sm" onClick={() => { copyToClipboard(state.groupDetails!.address); state.showToast('Copied'); }}><Copy size={14} /> Copy Group</button>
+          <button className="btn btn-ghost btn-sm" onClick={() => { void state.copyToClipboard(state.groupDetails!.address); }}><Copy size={14} /> Copy Group</button>
           <button className="btn btn-primary btn-sm" onClick={() => { state.openComposeWith(state.groupDetails!.address); state.setGroupDetails(null); }}><Send size={14} /> Email Group</button>
         </div>
       </div>
@@ -344,7 +344,7 @@ function ConfirmActionModal({ state }: { state: DashboardState }) {
 
 function DomainVerifyModal({ state, handleVerifyDomain }: { state: DashboardState; handleVerifyDomain: (id: string) => void }) {
   if (!state.domainVerifyOpen) return null;
-  const isVerifying = state.domainVerifySteps.length > 0 && state.domainVerifySteps.some(s => s.status === 'pending' || s.status === 'checking');
+  const isVerifying = state.domainVerifyBusy;
   return (
     <div className="modal-overlay" onClick={() => state.setDomainVerifyOpen(false)} role="dialog" aria-modal="true" aria-label="Domain verification">
       <div className="biz-form-modal glass animate-scale domain-verify-modal" onClick={e => e.stopPropagation()}>
@@ -368,14 +368,14 @@ function DomainVerifyModal({ state, handleVerifyDomain }: { state: DashboardStat
                   <span className="dns-type-badge dns-type-txt">{providerRecordType(rec)}</span>
                   <span className="text-xs truncate dns-record-name">{rec.name || rec.host || '-'}</span>
                   <span className="text-xs truncate dns-record-value">{rec.value || rec.data || '-'}</span>
-                  <button className="btn btn-ghost btn-sm" onClick={() => { copyToClipboard(rec.value || rec.data || ''); state.showToast('Copied'); }}><Copy size={12} /></button>
+                  <button className="btn btn-ghost btn-sm" onClick={() => { void state.copyToClipboard(rec.value || rec.data || ''); }}><Copy size={12} /></button>
                 </div>
               ))}
             </div>
           )}
         </div>
         <div className="flex gap-2 px-20 py-20">
-          <button className="btn btn-primary" onClick={() => { const dom = state.domainsList.find(d => d.id === state.verifyingDomainId); if (dom) handleVerifyDomain(dom.id); }}><RefreshCcw size={14} /> Re-check</button>
+          <button className="btn btn-primary" disabled={isVerifying} onClick={() => { if (state.verifyingDomainId) handleVerifyDomain(state.verifyingDomainId); }}><RefreshCcw size={14} /> {isVerifying ? 'Checking...' : 'Re-check'}</button>
           <button className="btn btn-ghost" onClick={() => state.setDomainVerifyOpen(false)}>Close</button>
         </div>
       </div>

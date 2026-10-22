@@ -11,18 +11,18 @@ const operatingPrinciples = [
 ];
 
 const milestones = [
-  { year: '2025', event: 'VelisMail founded with a mission to democratize email privacy.' },
-  { year: '2025', event: 'First prototype with end-to-end encryption and workspace recovery controls.' },
-  { year: '2026', event: 'Zero-Knowledge Proof authentication system launched.' },
-  { year: '2026', event: 'Multi-tenant architecture and custom domain support shipped.' },
-  { year: '2026', event: 'Public launch with Starter, Pro, and Enterprise plans.' },
+  { year: '2025', event: 'VelisMail founded with a mission to give businesses control of their own email.' },
+  { year: '2025', event: 'First prototype of the workspace console with domains, mailboxes and delivery queue.' },
+  { year: '2026', event: 'Live DNS verification for SPF, DKIM, DMARC and receiving MX shipped.' },
+  { year: '2026', event: 'Multi-tenant architecture, custom domain support and the workspace API shipped.' },
+  { year: '2026', event: 'Public launch with Starter, Business and Enterprise plans.' },
 ];
 
 const values = [
-  { icon: Lock, title: 'Privacy First', desc: 'We engineer our systems so we physically cannot access your data. Privacy is not a feature — it\'s the foundation.' },
-  { icon: Users, title: 'Open & Transparent', desc: 'Our encryption protocols are open for audit. We publish transparency reports and maintain an open security model.' },
-  { icon: Zap, title: 'Performance', desc: 'Built entirely in Rust for maximum speed and reliability. We obsess over every millisecond.' },
-  { icon: Globe, title: 'Accessible', desc: 'Security should not be complicated. We make enterprise-grade protection available to everyone.' },
+  { icon: Lock, title: 'Data you can see', desc: 'Your workspace lives in your own database, and every change is written to an audit log you can read.' },
+  { icon: Users, title: 'Open about limits', desc: 'We describe what the platform does and does not protect, and publish the live status of the API.' },
+  { icon: Zap, title: 'Performance', desc: 'The API gateway is built in Rust. We keep the setup checks and the queue fast.' },
+  { icon: Globe, title: 'Accessible', desc: 'Every plan includes DNS verification and the queue console. No enterprise contract needed to see your own delivery.' },
 ];
 
 export default function About() {
@@ -99,10 +99,11 @@ export default function About() {
         <div className="about-hero-orb" />
         <div className="container about-hero-inner">
           <span className="section-tag">ABOUT US</span>
-          <h1 className="animate-slide-up">We're building email<br />for the <span className="gradient-text">privacy era.</span></h1>
+          <h1 className="animate-slide-up">We're building email<br />for the <span className="gradient-text">business era.</span></h1>
           <p className="animate-slide-up stagger-1">
-            VelisMail was founded on a simple belief: your emails are your business — not ours. 
-            We built an email platform where even we can't read your messages.
+            VelisMail was founded on a simple belief: your email should run on infrastructure you control.
+            We put domain setup, mailboxes, the delivery queue and the audit trail in one console —
+            backed by your own database and mail provider.
           </p>
         </div>
       </section>
@@ -113,33 +114,32 @@ export default function About() {
           <div className="mission-grid">
             <div className="mission-text">
               <span className="section-tag">OUR MISSION</span>
-              <h2>Making end-to-end encryption the default, not the exception.</h2>
+              <h2>Giving every business control of its own email.</h2>
               <p>
-                Big tech companies have built their email empires by mining your data. 
-                We believe there's a better way — one where your inbox is truly yours.
+                Most email platforms keep your domain, your data and your delivery history
+                in a black box. We put the records, the queue and the audit log in front of you.
               </p>
               <p>
-                VelisMail combines cutting-edge cryptography with modern design to create 
-                an email experience that's both incredibly secure and delightfully simple to use.
-                Our Zero-Knowledge architecture means our servers never see your plaintext data.
+                VelisMail pairs live DNS verification with a workspace API, so a workspace can be
+                set up, automated and reviewed without a support ticket.
               </p>
             </div>
             <div className="mission-stats">
               <div className="glass-card mission-stat">
-                <span className="mission-stat-value gradient-text">0</span>
-                <span className="mission-stat-label">Data breaches. Ever.</span>
+                <span className="mission-stat-value gradient-text">4</span>
+                <span className="mission-stat-label">DNS records checked live</span>
               </div>
               <div className="glass-card mission-stat">
-                <span className="mission-stat-value gradient-text">256-bit</span>
-                <span className="mission-stat-label">AES encryption standard</span>
-              </div>
-              <div className="glass-card mission-stat">
-                <span className="mission-stat-value gradient-text">100%</span>
-                <span className="mission-stat-label">Open-source protocols</span>
+                <span className="mission-stat-value gradient-text">5</span>
+                <span className="mission-stat-label">Delivery states tracked</span>
               </div>
               <div className="glass-card mission-stat">
                 <span className="mission-stat-value gradient-text">Rust</span>
-                <span className="mission-stat-label">Built from the ground up</span>
+                <span className="mission-stat-label">API gateway</span>
+              </div>
+              <div className="glass-card mission-stat">
+                <span className="mission-stat-value gradient-text">PostgreSQL</span>
+                <span className="mission-stat-label">Workspace storage</span>
               </div>
             </div>
           </div>
@@ -214,7 +214,7 @@ export default function About() {
         <div className="container">
           <div className="glass about-cta-box">
             <h2>Ready to experience truly private email?</h2>
-            <p>Join VelisMail today — it takes less than 30 seconds.</p>
+            <p>Join VelisMail today — setup takes a few minutes once your DNS is ready.</p>
             <Link to={getDashboardLink()} className="btn btn-primary btn-lg">
               {user ? 'Go to Dashboard' : 'Get Started Free'} <ArrowRight size={20} />
             </Link>
@@ -231,7 +231,7 @@ export default function About() {
                 <img src="/ZeeResizer.png" alt="" className="home-logo-img" />
                 <span>VelisMail</span>
               </div>
-              <p>Secure, encrypted email for modern teams.</p>
+              <p>Business email for modern teams.</p>
             </div>
 
             <div className="footer-column">
