@@ -260,8 +260,6 @@ pub async fn require_auth(
         || path == "/mail/inbound"
         || path == "/team/invites/validate"
         || path == "/team/invites/complete"
-        || path == "/payments/create-order"
-        || path == "/payments/verify"
         || path == "/ws";
 
     if is_public || request.method() == Method::OPTIONS {

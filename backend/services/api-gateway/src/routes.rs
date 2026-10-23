@@ -969,6 +969,57 @@ async fn is_public_http_endpoint(value: &str) -> bool {
     resolved
 }
 
+/// Build a one-off HTTP client whose DNS answer is pinned to the address that
+/// was validated.
+///
+/// Validating a hostname and then letting the shared client resolve it again
+/// is a DNS-rebinding hole. Redirects are disabled as well, otherwise a public
+/// endpoint could redirect the server into the private network.
+async fn pinned_public_endpoint_client(value: &str) -> Result<reqwest::Client, String> {
+    let url = reqwest::Url::parse(value.trim()).map_err(|_| "Invalid webhook URL.".to_string())?;
+    if !matches!(url.scheme(), "http" | "https") {
+        return Err("The webhook URL must use http or https.".to_string());
+    }
+    let host = url
+        .host_str()
+        .map(str::to_string)
+        .ok_or_else(|| "The webhook URL is missing a host.".to_string())?;
+    if host.eq_ignore_ascii_case("localhost") {
+        return Err("The webhook URL resolves to a private address.".to_string());
+    }
+
+    if host.parse::<IpAddr>().is_err() {
+        if !is_public_http_endpoint(value).await {
+            return Err("The webhook URL resolves to a private or reserved address.".to_string());
+        }
+        let port = url.port_or_known_default().unwrap_or(443);
+        let address = lookup_host((host.as_str(), port))
+            .await
+            .map_err(|_| "The webhook host could not be resolved.".to_string())?
+            .find(|address| !velismail_common::traffic::is_blocked_ip(address.ip()))
+            .ok_or_else(|| "The webhook host has no public address.".to_string())?;
+        return reqwest::Client::builder()
+            .timeout(Duration::from_secs(20))
+            .redirect(reqwest::redirect::Policy::none())
+            .resolve(&host, address)
+            .build()
+            .map_err(|_| "Unable to prepare the webhook client.".to_string());
+    }
+
+    if velismail_common::traffic::is_blocked_ip(
+        host.trim_matches(['[', ']'])
+            .parse::<IpAddr>()
+            .map_err(|_| "Invalid webhook address.".to_string())?,
+    ) {
+        return Err("The webhook URL resolves to a private or reserved address.".to_string());
+    }
+    reqwest::Client::builder()
+        .timeout(Duration::from_secs(20))
+        .redirect(reqwest::redirect::Policy::none())
+        .build()
+        .map_err(|_| "Unable to prepare the webhook client.".to_string())
+}
+
 fn contains_unsafe_placeholder(value: &str) -> bool {
     let normalized = value.trim().to_lowercase();
     normalized.is_empty()
@@ -1296,23 +1347,26 @@ async fn validate_provider_credentials(
             };
         };
 
-        let request = client.get(endpoint).header(
+        let pinned_client = match pinned_public_endpoint_client(endpoint).await {
+            Ok(client) => client,
+            Err(message) => {
+                return RuntimeCheckResult {
+                    key: "mailProvider",
+                    label: "Mail Provider Runtime Check",
+                    status: "failed",
+                    detail: message,
+                    category: "config",
+                    recommendation: Some(
+                        "Use a publicly reachable HTTPS endpoint for the custom webhook."
+                            .to_string(),
+                    ),
+                }
+            }
+        };
+        let request = pinned_client.get(endpoint).header(
             axum::http::header::AUTHORIZATION,
             format!("Bearer {api_key}"),
         );
-        if !is_public_http_endpoint(endpoint).await {
-            return RuntimeCheckResult {
-                key: "mailProvider",
-                label: "Mail Provider Runtime Check",
-                status: "failed",
-                detail: "Custom webhook endpoint resolves to a private or reserved address."
-                    .to_string(),
-                category: "config",
-                recommendation: Some(
-                    "Use a publicly reachable HTTPS endpoint for the custom webhook.".to_string(),
-                ),
-            };
-        }
         return match timeout(Duration::from_secs(10), request.send()).await {
             Ok(Ok(response)) if response.status().is_success() || response.status().as_u16() == 405 => RuntimeCheckResult {
                 key: "mailProvider",
@@ -1695,13 +1749,10 @@ async fn dispatch_via_provider(
         "custom_webhook" => {
             let endpoint =
                 endpoint.ok_or_else(|| "Custom webhook endpoint is missing.".to_string())?;
-            if !is_public_http_endpoint(endpoint).await {
-                return Err(
-                    "Custom webhook endpoint resolves to a private or reserved address."
-                        .to_string(),
-                );
-            }
-            client
+            let pinned_client = pinned_public_endpoint_client(endpoint)
+                .await
+                .map_err(|err| format!("Custom webhook endpoint was refused: {err}"))?;
+            pinned_client
                 .post(endpoint)
                 .header(
                     axum::http::header::AUTHORIZATION,
@@ -6255,6 +6306,7 @@ pub struct CreateOrderRequest {
     pub currency: String,
     pub plan: Option<String>,
     pub billing: Option<String>,
+    #[allow(dead_code)] // Kept for older clients; the account comes from the token.
     pub email: Option<String>,
 }
 
@@ -6283,6 +6335,7 @@ fn expected_subscription_amount_paise(plan: &str, billing: &str) -> Option<u64> 
 
 pub async fn create_payment_order(
     State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
     Json(payload): Json<CreateOrderRequest>,
 ) -> (StatusCode, Json<Value>) {
     if state.config.razorpay_key_id.is_empty() || state.config.razorpay_key_secret.is_empty() {
@@ -6341,7 +6394,10 @@ pub async fn create_payment_order(
     let client = reqwest::Client::new();
     let amount = expected_amount;
     let currency = payload.currency.to_ascii_uppercase();
-    let receipt_email = payload.email.unwrap_or_else(|| "workspace".to_string());
+    // The receipt is bound to the authenticated account. An unauthenticated
+    // order could otherwise be paid towards somebody else's address, and a
+    // downgrade purchase could be forced onto another workspace.
+    let receipt_email = claims.email.trim().to_lowercase();
     let receipt_suffix: String = uuid::Uuid::new_v4()
         .simple()
         .to_string()
@@ -6443,6 +6499,7 @@ fn bytes_to_lower_hex(bytes: &[u8]) -> String {
 
 pub async fn verify_payment(
     State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
     Json(payload): Json<VerifyPaymentRequest>,
 ) -> (StatusCode, Json<Value>) {
     if state.config.razorpay_key_secret.is_empty() {
@@ -6551,6 +6608,91 @@ pub async fn verify_payment(
             })),
         );
     }
+    if !email.trim().eq_ignore_ascii_case(claims.email.trim()) {
+        return (
+            StatusCode::FORBIDDEN,
+            Json(json!({
+                "success": false,
+                "message": "This payment belongs to a different account."
+            })),
+        );
+    }
+
+    let Some(db_pool) = state.db.as_ref() else {
+        tracing::error!("Database connection pool not available in api-gateway state");
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({
+                "success": false,
+                "message": "Internal server error: Database not connected."
+            })),
+        );
+    };
+
+    // A valid signature can be replayed. The invoice ledger is the
+    // idempotency key: once a payment is recorded it never extends a plan
+    // again.
+    let already_recorded: bool = sqlx::query_scalar(
+        "SELECT EXISTS (SELECT 1 FROM company_invoices
+         WHERE gateway = 'razorpay' AND payment_ref = $1)",
+    )
+    .bind(payment_id)
+    .fetch_one(db_pool)
+    .await
+    .unwrap_or(false);
+    if already_recorded {
+        return (
+            StatusCode::OK,
+            Json(json!({
+                "success": true,
+                "paymentId": payment_id,
+                "orderId": order_id,
+                "alreadyProcessed": true
+            })),
+        );
+    }
+
+    // Confirm with Razorpay that this payment was actually captured and that
+    // its amount matches the plan. The signature alone proves the checkout
+    // reached us, not that the money was collected.
+    let expected_amount = expected_subscription_amount_paise(&plan.to_lowercase(), &billing);
+    let payment_res = client
+        .get(format!("https://api.razorpay.com/v1/payments/{payment_id}"))
+        .basic_auth(
+            &state.config.razorpay_key_id,
+            Some(&state.config.razorpay_key_secret),
+        )
+        .send()
+        .await;
+    let payment_ok = match payment_res {
+        Ok(res) if res.status().is_success() => match res.json::<serde_json::Value>().await {
+            Ok(data) => {
+                let status = data
+                    .get("status")
+                    .and_then(|value| value.as_str())
+                    .unwrap_or("");
+                let linked_order = data
+                    .get("order_id")
+                    .and_then(|value| value.as_str())
+                    .unwrap_or("");
+                let amount = data.get("amount").and_then(|value| value.as_u64());
+                status == "captured"
+                    && linked_order == order_id
+                    && expected_amount.is_some_and(|expected| amount == Some(expected))
+            }
+            Err(_) => false,
+        },
+        _ => false,
+    };
+    if !payment_ok {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({
+                "success": false,
+                "message": "The payment is not captured, does not belong to this order, or has the wrong amount."
+            })),
+        );
+    }
 
     // 2. Calculate subscription timers
     let now = chrono::Utc::now();
@@ -6572,17 +6714,6 @@ pub async fn verify_payment(
         serde_json::to_string(&settings_update).unwrap_or_else(|_| "{}".to_string());
 
     // 3. Update user settings in the database based on the email from the order
-    let Some(db_pool) = state.db.as_ref() else {
-        tracing::error!("Database connection pool not available in api-gateway state");
-        return (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({
-                "success": false,
-                "message": "Internal server error: Database not connected."
-            })),
-        );
-    };
-
     let update_result = sqlx::query(
         "UPDATE users SET settings = COALESCE(settings, '{}'::jsonb) || $1::jsonb, updated_at = NOW() WHERE email = $2"
     )

@@ -508,6 +508,9 @@ pub async fn submit_feedback(
 /// List the feedback notes submitted by this workspace.
 pub async fn list_feedback(State(state): State<AppState>, headers: HeaderMap) -> ApiResult {
     let context = workspace_context(&state, &headers).await?;
+    // Feedback can contain screenshots and account details; only workspace
+    // administrators may read the inbox.
+    context.require_manage()?;
     let db = db_pool(&state)?;
     let rows = sqlx::query(
         "SELECT id, subject, body, category, priority, status, reply, image_base64, has_image, created_at, updated_at, resolved_at
