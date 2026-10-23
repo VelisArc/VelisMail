@@ -67,6 +67,10 @@ interface PlatformAdminPanelProps {
   state: DashboardState;
 }
 
+type PlatformFeedbackItem = NonNullable<
+  Awaited<ReturnType<typeof platformAdminApi.feedback>>['feedback'][number]
+>;
+
 type Banner = { tone: 'success' | 'error'; message: string } | null;
 
 
@@ -278,6 +282,17 @@ export default function PlatformAdminPanel({ section, state }: PlatformAdminPane
   const [canManageKeys, setCanManageKeys] = useState(false);
   const [platformFeedback, setPlatformFeedback] = useState<Awaited<ReturnType<typeof platformAdminApi.feedback>> | null>(null);
   const [keyForm, setKeyForm] = useState({ name: '', scopes: [] as string[], expiresInDays: 365, presetId: '' });
+  // Feedback triage state
+  const [feedbackSearch, setFeedbackSearch] = useState('');
+  const [feedbackStatusFilter, setFeedbackStatusFilter] = useState('all');
+  const [feedbackPriorityFilter, setFeedbackPriorityFilter] = useState('all');
+  const [selectedFeedback, setSelectedFeedback] = useState<PlatformFeedbackItem | null>(null);
+  const [feedbackDraftStatus, setFeedbackDraftStatus] = useState('');
+  const [feedbackDraftPriority, setFeedbackDraftPriority] = useState('');
+  const [feedbackDraftAssignee, setFeedbackDraftAssignee] = useState('');
+  const [feedbackDraftReply, setFeedbackDraftReply] = useState('');
+  const [feedbackSaving, setFeedbackSaving] = useState(false);
+  const [feedbackImageOpen, setFeedbackImageOpen] = useState(false);
   const [newKey, setNewKey] = useState('');
   const [keyOpen, setKeyOpen] = useState(false);
 
@@ -320,6 +335,65 @@ export default function PlatformAdminPanel({ section, state }: PlatformAdminPane
     state.showToast(message, tone);
     if (tone === 'success') setTimeout(() => setBanner(null), 4000);
   }, [state]);
+
+  const openFeedback = useCallback((item: PlatformFeedbackItem) => {
+    setSelectedFeedback(item);
+    setFeedbackDraftStatus(item.status);
+    setFeedbackDraftPriority(item.priority);
+    setFeedbackDraftAssignee(item.assigneeEmail || '');
+    setFeedbackDraftReply(item.reply || '');
+    setFeedbackImageOpen(false);
+  }, []);
+
+  const saveFeedback = useCallback(async () => {
+    if (!selectedFeedback) return;
+    setFeedbackSaving(true);
+    try {
+      await platformAdminApi.updateFeedback(selectedFeedback.id, {
+        status: feedbackDraftStatus,
+        priority: feedbackDraftPriority,
+        assigneeEmail: feedbackDraftAssignee.trim() || undefined,
+        reply: feedbackDraftReply.trim() || undefined,
+      });
+      const fresh = await platformAdminApi.feedback();
+      setPlatformFeedback(fresh);
+      const updated = fresh.feedback.find((entry) => entry.id === selectedFeedback.id);
+      if (updated) setSelectedFeedback(updated as PlatformFeedbackItem);
+      notify('Feedback updated.', 'success');
+    } catch (err) {
+      notify(err instanceof Error ? err.message : 'Could not update feedback.', 'error');
+    } finally {
+      setFeedbackSaving(false);
+    }
+  }, [selectedFeedback, feedbackDraftStatus, feedbackDraftPriority, feedbackDraftAssignee, feedbackDraftReply, notify]);
+
+  const escalateSelected = useCallback(async () => {
+    if (!selectedFeedback) return;
+    try {
+      const result = await platformAdminApi.escalateFeedback(selectedFeedback.id);
+      notify(`Escalated to investigation ${result.caseNumber}.`, 'success');
+      const fresh = await platformAdminApi.feedback();
+      setPlatformFeedback(fresh);
+      const updated = fresh.feedback.find((entry) => entry.id === selectedFeedback.id);
+      if (updated) setSelectedFeedback(updated as PlatformFeedbackItem);
+    } catch (err) {
+      notify(err instanceof Error ? err.message : 'Could not escalate feedback.', 'error');
+    }
+  }, [selectedFeedback, notify]);
+
+  const filteredPlatformFeedback = useMemo(() => {
+    if (!platformFeedback) return [];
+    const query = feedbackSearch.trim().toLowerCase();
+    return platformFeedback.feedback.filter((item) => {
+      if (feedbackStatusFilter !== 'all' && item.status !== feedbackStatusFilter) return false;
+      if (feedbackPriorityFilter !== 'all' && item.priority !== feedbackPriorityFilter) return false;
+      if (!query) return true;
+      return [item.subject, item.body, item.userEmail, item.category, item.tenantId || '', item.assigneeEmail || '']
+        .join(' ')
+        .toLowerCase()
+        .includes(query);
+    });
+  }, [platformFeedback, feedbackSearch, feedbackStatusFilter, feedbackPriorityFilter]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -1850,61 +1924,193 @@ export default function PlatformAdminPanel({ section, state }: PlatformAdminPane
         )}
         {section === 'feedback' && platformFeedback && (
           <div className="admin-grid-1">
-            <div className="admin-controls-bar">
-              <span className="text-sm text-muted">{platformFeedback.counts.open} open of {platformFeedback.counts.total}</span>
+            <div className="admin-controls-bar" style={{ flexWrap: 'wrap', gap: 'var(--space-3)' }}>
+              <div className="admin-feedback-filters">
+                <input
+                  className="input input-sm"
+                  placeholder="Search subject, body, reporter, workspace..."
+                  value={feedbackSearch}
+                  onChange={(e) => setFeedbackSearch(e.target.value)}
+                  aria-label="Search feedback"
+                />
+                <select className="input input-sm" value={feedbackStatusFilter} onChange={(e) => setFeedbackStatusFilter(e.target.value)} aria-label="Filter by status">
+                  <option value="all">All statuses</option>
+                  <option value="open">Open</option>
+                  <option value="investigating">Investigating</option>
+                  <option value="escalated">Escalated</option>
+                  <option value="resolved">Resolved</option>
+                  <option value="closed">Closed</option>
+                </select>
+                <select className="input input-sm" value={feedbackPriorityFilter} onChange={(e) => setFeedbackPriorityFilter(e.target.value)} aria-label="Filter by priority">
+                  <option value="all">All priorities</option>
+                  <option value="low">Low</option>
+                  <option value="medium">Medium</option>
+                  <option value="high">High</option>
+                  <option value="urgent">Urgent</option>
+                </select>
+              </div>
+              <div className="admin-feedback-counts">
+                <span className="admin-feedback-count"><strong>{platformFeedback.counts.open}</strong> open</span>
+                <span className="admin-feedback-count"><strong>{platformFeedback.counts.total}</strong> total</span>
+                <span className="admin-feedback-count"><strong>{filteredPlatformFeedback.length}</strong> shown</span>
+              </div>
             </div>
+
             <section className="glass-card">
-              <div className="admin-card-head"><div><h3>Workspace feedback</h3><p>Complaints, ideas and bugs submitted from workspaces.</p></div><MessageSquare size={16} /></div>
+              <div className="admin-card-head">
+                <div>
+                  <h3>Workspace feedback</h3>
+                  <p>Complaints, ideas and bugs submitted from workspaces. Click a row to open the full report.</p>
+                </div>
+                <MessageSquare size={16} />
+              </div>
               <div className="admin-table-wrap">
-                <table className="admin-table">
-                  <thead><tr><th>Subject</th><th>From</th><th>Category</th><th>Priority</th><th>Status</th><th>Submitted</th><th>Action</th></tr></thead>
+                <table className="admin-table admin-feedback-table">
+                  <thead><tr><th>Subject</th><th>From</th><th>Category</th><th>Priority</th><th>Status</th><th>Submitted</th></tr></thead>
                   <tbody>
-                    {platformFeedback.feedback.map((f) => (
-                      <tr key={f.id}>
-                        <td><strong>{f.subject}</strong><br /><span className="text-xs text-muted">{f.body.slice(0, 60)}{f.body.length > 60 ? '…' : ''}</span>{f.hasImage && <span className="text-xs"> 📎</span>}</td>
-                        <td>{f.userEmail}</td>
+                    {filteredPlatformFeedback.map((f) => (
+                      <tr key={f.id} onClick={() => openFeedback(f as PlatformFeedbackItem)} className="admin-feedback-row">
+                        <td>
+                          <strong>{f.subject}</strong>
+                          <br />
+                          <span className="text-xs text-muted">{f.body.slice(0, 70)}{f.body.length > 70 ? '...' : ''}</span>
+                          {f.hasImage && <span className="text-xs admin-feedback-attachment"> attachment</span>}
+                        </td>
+                        <td>
+                          <div className="admin-feedback-reporter">
+                            <strong>{f.userEmail}</strong>
+                            {f.tenantId && <span className="text-xs text-muted">{f.tenantId.slice(0, 8)}...</span>}
+                          </div>
+                        </td>
                         <td>{f.category}</td>
                         <td><Badge value={f.priority}>{f.priority}</Badge></td>
                         <td><Badge value={f.status}>{f.status}</Badge></td>
                         <td>{dateTime(f.createdAt)}</td>
-                        <td>
-                          <div className="admin-row-actions">
-                            {f.status !== 'resolved' && f.status !== 'closed' && (
-                              <button type="button" className="btn btn-ghost btn-sm" onClick={async () => {
-                                try {
-                                  await platformAdminApi.updateFeedback(f.id, { status: 'resolved', reply: 'Noted and resolved.' });
-                                  setPlatformFeedback(await platformAdminApi.feedback());
-                                } catch (err) { setBanner({ tone: 'error', message: err instanceof Error ? err.message : 'Failed' }); }
-                              }}>Resolve</button>
-                            )}
-                            {f.status === 'open' && (
-                              <button type="button" className="btn btn-ghost btn-sm" onClick={async () => {
-                                try {
-                                  const r = await platformAdminApi.escalateFeedback(f.id);
-                                  setBanner({ tone: 'success', message: `Escalated to investigation ${r.caseNumber}.` });
-                                  setPlatformFeedback(await platformAdminApi.feedback());
-                                } catch (err) { setBanner({ tone: 'error', message: err instanceof Error ? err.message : 'Failed' }); }
-                              }}>Escalate</button>
-                            )}
-                          </div>
-                        </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
-                {platformFeedback.feedback.length === 0 && <p className="admin-empty-state">No feedback submitted yet.</p>}
+                {platformFeedback.feedback.length === 0 && (
+                  <p className="admin-empty-state">No feedback submitted yet.</p>
+                )}
+                {platformFeedback.feedback.length > 0 && filteredPlatformFeedback.length === 0 && (
+                  <p className="admin-empty-state">No feedback matches these filters.</p>
+                )}
               </div>
             </section>
-            {platformFeedback.feedback.filter((f) => f.imageBase64).map((f) => (
-              <section key={f.id + '-img'} className="glass-card">
-                <div className="admin-card-head"><div><h3>Screenshot — {f.subject}</h3><p>From {f.userEmail}</p></div></div>
-                <img src={`data:image/*;base64,${f.imageBase64}`} alt="feedback screenshot" style={{ maxWidth: '100%', borderRadius: 8 }} />
-              </section>
-            ))}
           </div>
         )}
       </div>
 
+      {selectedFeedback && (
+        <div className="modal-overlay" onClick={() => setSelectedFeedback(null)} role="dialog" aria-modal="true" aria-label="Feedback report">
+          <div className="biz-form-modal glass admin-feedback-modal" onClick={(event) => event.stopPropagation()}>
+            <div className="compose-header">
+              <div>
+                <h3><MessageSquare size={16} /> {selectedFeedback.subject}</h3>
+                <p>Full report submitted from a workspace. Review, reply, resolve or escalate.</p>
+              </div>
+              <button type="button" className="btn btn-ghost btn-icon" onClick={() => setSelectedFeedback(null)} aria-label="Close"><X size={16} /></button>
+            </div>
+
+            <div className="admin-feedback-modal-grid">
+              <div className="admin-feedback-modal-main">
+                <div className="admin-feedback-badges">
+                  <Badge value={selectedFeedback.status}>{selectedFeedback.status}</Badge>
+                  <Badge value={selectedFeedback.priority}>{selectedFeedback.priority}</Badge>
+                  <span className="admin-feedback-category">{selectedFeedback.category}</span>
+                  {selectedFeedback.hasImage && <span className="admin-feedback-attachment-chip">attachment</span>}
+                </div>
+
+                <div className="admin-feedback-block">
+                  <span className="admin-feedback-label">Message</span>
+                  <p className="admin-feedback-body">{selectedFeedback.body}</p>
+                </div>
+
+                {selectedFeedback.imageBase64 && (
+                  <div className="admin-feedback-block">
+                    <span className="admin-feedback-label">Screenshot</span>
+                    <button type="button" className="admin-feedback-image-btn" onClick={() => setFeedbackImageOpen(true)}>
+                      <img src={`data:image/*;base64,${selectedFeedback.imageBase64}`} alt="Feedback screenshot" />
+                      <span>Click to enlarge</span>
+                    </button>
+                  </div>
+                )}
+
+                {selectedFeedback.reply && (
+                  <div className="admin-feedback-block admin-feedback-reply">
+                    <span className="admin-feedback-label">Reply sent</span>
+                    <p>{selectedFeedback.reply}</p>
+                  </div>
+                )}
+
+                <div className="admin-feedback-meta">
+                  <div><span>Reporter</span><strong>{selectedFeedback.userEmail}</strong></div>
+                  <div><span>Workspace / tenant</span><strong>{selectedFeedback.tenantId || '-'}</strong></div>
+                  <div><span>User id</span><strong>{selectedFeedback.userId || '-'}</strong></div>
+                  <div><span>Submitted</span><strong>{new Date(selectedFeedback.createdAt).toLocaleString()}</strong></div>
+                  <div><span>Updated</span><strong>{new Date(selectedFeedback.updatedAt).toLocaleString()}</strong></div>
+                  {selectedFeedback.resolvedAt && <div><span>Resolved</span><strong>{new Date(selectedFeedback.resolvedAt).toLocaleString()}</strong></div>}
+                  {selectedFeedback.assigneeEmail && <div><span>Assignee</span><strong>{selectedFeedback.assigneeEmail}</strong></div>}
+                </div>
+              </div>
+
+              <div className="admin-feedback-modal-side">
+                <div className="admin-feedback-block">
+                  <span className="admin-feedback-label">Triage</span>
+                  <div className="admin-form">
+                    <div className="form-group">
+                      <label>Status</label>
+                      <select className="input" value={feedbackDraftStatus} onChange={(e) => setFeedbackDraftStatus(e.target.value)}>
+                        <option value="open">Open</option>
+                        <option value="investigating">Investigating</option>
+                        <option value="escalated">Escalated</option>
+                        <option value="resolved">Resolved</option>
+                        <option value="closed">Closed</option>
+                      </select>
+                    </div>
+                    <div className="form-group">
+                      <label>Priority</label>
+                      <select className="input" value={feedbackDraftPriority} onChange={(e) => setFeedbackDraftPriority(e.target.value)}>
+                        <option value="low">Low</option>
+                        <option value="medium">Medium</option>
+                        <option value="high">High</option>
+                        <option value="urgent">Urgent</option>
+                      </select>
+                    </div>
+                    <div className="form-group">
+                      <label>Assignee email</label>
+                      <input className="input" value={feedbackDraftAssignee} onChange={(e) => setFeedbackDraftAssignee(e.target.value)} placeholder="operator@velismail.online" />
+                    </div>
+                    <div className="form-group">
+                      <label>Reply to reporter</label>
+                      <textarea className="input" rows={4} value={feedbackDraftReply} onChange={(e) => setFeedbackDraftReply(e.target.value)} placeholder="What we did and what happens next..." />
+                    </div>
+                  </div>
+                  <div className="admin-modal-actions" style={{ marginTop: 'var(--space-3)' }}>
+                    <button type="button" className="btn btn-primary btn-sm" onClick={() => void saveFeedback()} disabled={feedbackSaving}>
+                      {feedbackSaving ? 'Saving...' : 'Save changes'}
+                    </button>
+                    {selectedFeedback.status === 'open' && (
+                      <button type="button" className="btn btn-ghost btn-sm" onClick={() => void escalateSelected()}>
+                        Escalate to investigation
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {feedbackImageOpen && selectedFeedback?.imageBase64 && (
+        <div className="modal-overlay" onClick={() => setFeedbackImageOpen(false)} role="dialog" aria-modal="true" aria-label="Screenshot">
+          <div className="biz-form-modal glass" onClick={(event) => event.stopPropagation()} style={{ maxWidth: '90vw', padding: 'var(--space-2)' }}>
+            <img src={`data:image/*;base64,${selectedFeedback.imageBase64}`} alt="Feedback screenshot" style={{ maxWidth: '100%', maxHeight: '85vh', display: 'block' }} />
+          </div>
+        </div>
+      )}
       {companyDetail && (
         <div className="modal-overlay" onClick={() => setCompanyDetail(null)} role="dialog" aria-modal="true" aria-label="Company management">
           <div className="biz-form-modal glass admin-company-modal" onClick={(event) => event.stopPropagation()}>

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef, type Dispatch, type SetStateAction } from 'react';
 import { Navigate, useNavigate, useLocation } from 'react-router-dom';
-import { Building2, Check, ChevronDown, ChevronUp, Crown, Globe, Plus, X } from 'lucide-react';
+import { Building2, Check, ChevronDown, ChevronUp, Crown, Globe, MessageSquare, Plus, X } from 'lucide-react';
 import { auth, businessGroups, connections, contacts, fetchAPI, fetchAuthenticatedProfile, isBusinessSetupReady, mail, saveDB, signatures, STORAGE_KEYS, type BusinessAuditEntry, type BusinessGroup, type BusinessMailbox, type BusinessTeamMember, type BusinessTemplate, type ConnectionUsage, type Email, type PlatformAdminUserRecord, type Signature, type Contact, type ActiveSession, type User } from '../api/client';
 import { platformAdminApi } from '../api/admin';
 import Sidebar from '../components/dashboard/Sidebar';
@@ -33,6 +33,7 @@ import { useEmails } from '../hooks/useMail';
 import './BusinessDashboard.css';
 import './Pricing.css';
 import ContactsPage from './Contacts';
+import FeedbackModal from '../components/dashboard/FeedbackModal';
 import DeliverabilityPanel from '../components/dashboard/panels/DeliverabilityPanel';
 
 export default function BusinessDashboard() {
@@ -146,6 +147,7 @@ function WorkspaceDashboard({ user, setUser, reloadReadiness }: WorkspaceDashboa
   const [businesses, setBusinesses] = useState<WorkspaceBusiness[]>([]);
   const [activeBusinessId, setActiveBusinessId] = useState('');
   const [businessMenuOpen, setBusinessMenuOpen] = useState(false);
+const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [newBusinessOpen, setNewBusinessOpen] = useState(false);
   const [newBusiness, setNewBusiness] = useState({ name: '', domain: '', plan: 'free' });
   const [creatingBusiness, setCreatingBusiness] = useState(false);
@@ -1032,6 +1034,16 @@ function WorkspaceDashboard({ user, setUser, reloadReadiness }: WorkspaceDashboa
                   </label>
                 )}
 
+                <button
+                  type="button"
+                  className="dash-feedback-trigger"
+                  onClick={() => setFeedbackOpen(true)}
+                  aria-label="Send feedback"
+                >
+                  <MessageSquare size={14} />
+                  <span>Feedback</span>
+                </button>
+
                 <div className="dash-business-switcher">
                   <button
                     type="button"
@@ -1213,6 +1225,8 @@ function WorkspaceDashboard({ user, setUser, reloadReadiness }: WorkspaceDashboa
         handleVerifyDomain={handleVerifyDomain}
         confirmRoleChangeStep={confirmRoleChangeStep}
       />
+
+      <FeedbackModal open={feedbackOpen} onClose={() => setFeedbackOpen(false)} />
     </div>
   );
 }
