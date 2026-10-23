@@ -46,3 +46,8 @@ desktop.ini
 *.bak
 *.orig
 *.rej
+
+# Local audit scratch (route audits, UI screenshots) - never shared
+.audit-routes.mjs
+.audit-*.mjs
+frontend/.ui-audit/
