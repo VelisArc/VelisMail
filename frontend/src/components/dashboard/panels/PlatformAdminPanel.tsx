@@ -2119,6 +2119,16 @@ export default function PlatformAdminPanel({ section, state }: PlatformAdminPane
         <div className="modal-overlay" onClick={() => setFeedbackImageOpen(false)} role="dialog" aria-modal="true" aria-label="Screenshot">
           <div className="biz-form-modal glass" onClick={(event) => event.stopPropagation()} style={{ maxWidth: '90vw', padding: 'var(--space-2)' }}>
             <img src={imageSourceFromBase64(selectedFeedback.imageBase64)} alt="Feedback screenshot" style={{ maxWidth: '100%', maxHeight: '85vh', display: 'block' }} />
+            <div className="admin-feedback-image-actions" style={{ marginTop: 'var(--space-2)' }}>
+              <button
+                type="button"
+                className="btn btn-primary btn-sm"
+                onClick={() => { downloadBase64Image(selectedFeedback.imageBase64 || '', `feedback-${selectedFeedback.id.slice(0, 8)}`); }}
+              >
+                Download screenshot
+              </button>
+              <button type="button" className="btn btn-ghost btn-sm" onClick={() => setFeedbackImageOpen(false)}>Close</button>
+            </div>
           </div>
         </div>
       )}
