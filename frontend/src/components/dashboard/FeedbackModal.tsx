@@ -13,7 +13,7 @@ import {
   X,
 } from 'lucide-react';
 import { companyAdminApi } from '../../api/admin';
-import { fileToBase64 } from './utils';
+import { downloadBase64Image, fileToBase64, imageSourceFromBase64 } from './utils';
 import './FeedbackModal.css';
 
 type FeedbackNote = {
@@ -435,7 +435,14 @@ export default function FeedbackModal({ open, onClose }: FeedbackModalProps) {
                           <p className="feedback-history-body">{note.body}</p>
                           {note.imageBase64 && (
                             <div className="feedback-history-image">
-                              <img src={note.imageBase64.startsWith('data:') ? note.imageBase64 : `data:image/*;base64,${note.imageBase64}`} alt="Attached screenshot" />
+                              <img src={imageSourceFromBase64(note.imageBase64)} alt="Attached screenshot" />
+                              <button
+                                type="button"
+                                className="btn btn-ghost btn-sm feedback-history-download"
+                                onClick={() => { downloadBase64Image(note.imageBase64 || '', `feedback-${note.id.slice(0, 8)}`); }}
+                              >
+                                Download
+                              </button>
                             </div>
                           )}
                           {note.reply && (

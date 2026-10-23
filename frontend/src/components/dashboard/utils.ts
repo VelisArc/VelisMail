@@ -97,6 +97,69 @@ export function fileToBase64(file: File): Promise<string> {
   });
 }
 
+/**
+ * Read an image that was stored as base64 (optionally still carrying its data
+ * url prefix) and turn it into the source that can be used on an <img>.
+ */
+export function imageSourceFromBase64(value?: string | null): string {
+  if (!value) return '';
+  if (value.startsWith('data:') || value.startsWith('blob:') || value.startsWith('http')) return value;
+  // A value with no prefix is a png the gateway accepted before the mime type
+  // was stored, so the generic image type is the only safe guess left.
+  return `data:image/png;base64,${value}`;
+}
+
+/** The file extension for a stored screenshot, taken from its mime type. */
+export function imageExtensionFromBase64(value?: string | null): string {
+  const source = imageSourceFromBase64(value);
+  const subtype = /^data:image\/([a-zA-Z0-9.+-]+)/.exec(source)?.[1]?.toLowerCase() || 'png';
+  if (subtype === 'jpeg') return 'jpg';
+  if (subtype === 'svg+xml') return 'svg';
+  if (subtype === 'x-icon' || subtype === 'vnd.microsoft.icon') return 'ico';
+  return subtype;
+}
+
+/**
+ * Save a stored screenshot to disk as a real image file.
+ *
+ * The data url is decoded into bytes first and handed to the browser as a blob
+ * with the original mime type and a proper file name, so the download is the
+ * exact image the reporter attached - never the base64 text, and never a file
+ * without an extension that the operating system refuses to open.
+ */
+export function downloadBase64Image(value: string, fileNameBase: string): boolean {
+  const source = imageSourceFromBase64(value);
+  if (!source.startsWith('data:')) return false;
+  const [header, encoded] = source.split(',', 2);
+  if (!encoded) return false;
+  const mime = /^data:([^;]+)/.exec(header)?.[1] || 'image/png';
+  let bytes: BlobPart;
+  try {
+    const binary = atob(encoded);
+    const buffer = new ArrayBuffer(binary.length);
+    const view = new Uint8Array(buffer);
+    for (let index = 0; index < binary.length; index += 1) {
+      view[index] = binary.charCodeAt(index);
+    }
+    bytes = view;
+  } catch {
+    return false;
+  }
+  const blob = new Blob([bytes], { type: mime });
+  const extension = imageExtensionFromBase64(value);
+  const objectUrl = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = objectUrl;
+  anchor.download = `${fileNameBase}.${extension}`;
+  anchor.style.display = 'none';
+  document.body.appendChild(anchor);
+  anchor.click();
+  document.body.removeChild(anchor);
+  // Revoke on the next tick so the download has already started.
+  window.setTimeout(() => URL.revokeObjectURL(objectUrl), 4000);
+  return true;
+}
+
 export function normalizeMailBody(body: string): string {
   return body.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
 }

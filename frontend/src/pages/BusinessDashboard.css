@@ -3312,3 +3312,11 @@
   color: var(--text-primary);
   word-break: break-all;
 }
+
+.admin-feedback-image-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  margin-top: var(--space-2);
+}
