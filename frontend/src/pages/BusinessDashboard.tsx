@@ -327,29 +327,32 @@ const [feedbackOpen, setFeedbackOpen] = useState(false);
   // The control plane renders its own access notice when the account is not
   // platform staff, so the requested view is never silently discarded.
 
-  // Keep the platform identity in sync with the backend. The gateway stays
-  // authoritative, this only keeps the control-plane switch accurate after a
-  // Google sign-in or a role change.
+  // Keep the session identity in sync with the backend. The gateway stays
+  // authoritative, this only keeps the control-plane switch and the role
+  // gates accurate after a sign-in, a role change or a business switch.
   useEffect(() => {
     let cancelled = false;
     void fetchAuthenticatedProfile().then((profile) => {
       if (cancelled || !profile) return;
-      const firebaseUid = profile.firebaseUid;
-      const isPlatformAdmin = profile.isPlatformAdmin;
-      if (!firebaseUid && !isPlatformAdmin) return;
       setUser((current) => {
         if (!current) return current;
         const next = {
           ...current,
-          firebaseUid: firebaseUid || current.firebaseUid,
-          isPlatformAdmin: Boolean(isPlatformAdmin ?? current.isPlatformAdmin),
+          firebaseUid: profile.firebaseUid || current.firebaseUid,
+          isPlatformAdmin: Boolean(profile.isPlatformAdmin ?? current.isPlatformAdmin),
+          ...(profile.role ? { role: profile.role } : {}),
         };
+        if (next.firebaseUid === current.firebaseUid
+          && next.isPlatformAdmin === current.isPlatformAdmin
+          && next.role === current.role) {
+          return current;
+        }
         saveDB(STORAGE_KEYS.session, next);
         return next;
       });
     });
     return () => { cancelled = true; };
-  }, [setUser]);
+  }, [setUser, activeBusinessId]);
 
   // The configured platform owner is the only account that may broadcast to
   // every user, so the console asks the gateway who it is dealing with.

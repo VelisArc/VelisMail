@@ -614,10 +614,11 @@ async fn authorize_company(
         ));
     }
 
-    if !is_platform && company_role != "owner" && company_role != "admin" {
+    if !is_platform && company_role == "member" {
         // Legacy repair: a workspace whose administrators were never recorded
         // (or were all removed) promotes its earliest active member once, so
-        // the company is never left without a way to administer it.
+        // the company is never left without a way to administer it. A viewer
+        // is never promoted; those workspaces need a platform administrator.
         let has_admin: bool = sqlx::query_scalar(
             "SELECT EXISTS (
                 SELECT 1 FROM company_members
@@ -631,7 +632,7 @@ async fn authorize_company(
         if !has_admin {
             let earliest: Option<String> = sqlx::query_scalar(
                 "SELECT email FROM company_members
-                 WHERE tenant_id = $1 AND status = 'active'
+                 WHERE tenant_id = $1 AND status = 'active' AND role = 'member'
                  ORDER BY joined_at ASC, created_at ASC LIMIT 1",
             )
             .bind(tenant_id)
@@ -5780,6 +5781,27 @@ pub async fn company_update_member(
         .bind(actor.tenant_id)
         .bind(target_user)
         .bind(json!({ "email": target_email, "by": actor.email }))
+        .execute(db)
+        .await;
+
+        // A suspended or removed account must not stay pinned to a workspace
+        // it can no longer open. Move it to another active membership when one
+        // exists, so the person keeps access to their other businesses.
+        let _ = sqlx::query(
+            "UPDATE users u
+             SET tenant_id = COALESCE(
+                 (SELECT cm.tenant_id FROM company_members cm
+                   WHERE LOWER(cm.email) = LOWER(u.email)
+                     AND cm.status = 'active'
+                     AND cm.tenant_id <> $2
+                   ORDER BY cm.joined_at ASC
+                   LIMIT 1),
+                 u.tenant_id
+             ), updated_at = NOW()
+             WHERE LOWER(u.email) = LOWER($1) AND u.tenant_id = $2",
+        )
+        .bind(&target_email)
+        .bind(actor.tenant_id)
         .execute(db)
         .await;
     }

@@ -2413,7 +2413,8 @@ pub async fn get_current_user(
                 u.phone_country_code, u.phone_number, u.phone_e164, u.phone_verified,
                 u.settings, u.created_at, u.updated_at, u.last_login,
                 (SELECT cm.role FROM company_members cm
-                 WHERE cm.tenant_id = u.tenant_id AND cm.email = u.email
+                 WHERE cm.tenant_id = u.tenant_id
+                   AND LOWER(cm.email) = LOWER(u.email)
                    AND cm.status = 'active'
                  LIMIT 1) AS company_role
          FROM users u

@@ -4013,7 +4013,7 @@ pub async fn complete_team_invite(
     }
 
     let existing = sqlx::query(
-        "SELECT id, tenant_id, password_hash FROM users WHERE email = $1 AND status = 'active' LIMIT 1",
+        "SELECT id, password_hash FROM users WHERE email = $1 AND status = 'active' LIMIT 1",
     )
     .bind(&email)
     .fetch_optional(db)
@@ -4030,7 +4030,6 @@ pub async fn complete_team_invite(
                     )
                 }
             };
-            let tenant: Option<uuid::Uuid> = row.try_get("tenant_id").ok().flatten();
             let hash: Option<String> = row.try_get("password_hash").ok().flatten();
             let stored = match hash {
                 Some(value) => value,
@@ -4061,16 +4060,9 @@ pub async fn complete_team_invite(
                     ),
                 );
             }
-            if let Some(t) = tenant {
-                if t != admin_tenant {
-                    return (
-                        StatusCode::FORBIDDEN,
-                        Json(
-                            json!({ "success": false, "message": "This email already has its own VelisMail workspace. Ask the admin to invite a different email address." }),
-                        ),
-                    );
-                }
-            }
+            // An account may belong to several workspaces. The invite is bound
+            // to this workspace by the key and the verified password, so the
+            // account is switched to the workspace it just accepted below.
             uid
         }
         Ok(None) => {
@@ -4161,16 +4153,14 @@ pub async fn complete_team_invite(
         );
     }
 
-    // A user who had no workspace yet is now attached to this one, so the
-    // session tenant and the account row stay in sync.
-    let _ = sqlx::query(
-        "UPDATE users SET tenant_id = $1, updated_at = NOW()
-         WHERE id = $2 AND (tenant_id IS NULL OR tenant_id = $1)",
-    )
-    .bind(admin_tenant)
-    .bind(user_id)
-    .execute(db)
-    .await;
+    // The accepted workspace becomes the active one for this session. The
+    // account can still switch back to another membership from the business
+    // menu, and the gateway rejects a token for a tenant the account left.
+    let _ = sqlx::query("UPDATE users SET tenant_id = $1, updated_at = NOW() WHERE id = $2")
+        .bind(admin_tenant)
+        .bind(user_id)
+        .execute(db)
+        .await;
 
     // Any other pending key for this address is now obsolete: acceptance is
     // per address, not per key, so an old link must not open a second session.
