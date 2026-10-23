@@ -549,7 +549,9 @@ export const auth = {
     // remove mailbox data, provider keys and cached invitations as well.
     const token = localStorage.getItem('velismail_token');
     if (token) {
-      fetchAPI('/auth/logout', { method: 'POST' }).catch(() => undefined);
+      // keepalive lets the request finish even if the page navigates away
+      // immediately after signing out.
+      fetchAPI('/auth/logout', { method: 'POST', keepalive: true }).catch(() => undefined);
     }
     localStorage.removeItem(STORAGE_KEYS.session);
     localStorage.removeItem('velismail_token');
