@@ -513,3 +513,15 @@
     min-width: 0;
   }
 }
+
+.feedback-history-image {
+  border: 1px solid var(--border-primary);
+  background: var(--bg-surface-2);
+  padding: var(--space-2);
+}
+.feedback-history-image img {
+  max-width: 100%;
+  max-height: 200px;
+  object-fit: contain;
+  display: block;
+}

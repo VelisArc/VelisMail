@@ -24,6 +24,7 @@ type FeedbackNote = {
   priority: string;
   status: string;
   reply?: string | null;
+  imageBase64?: string | null;
   hasImage: boolean;
   createdAt: string;
   updatedAt: string;
@@ -143,7 +144,7 @@ export default function FeedbackModal({ open, onClose }: FeedbackModalProps) {
     }
     try {
       const b64 = await fileToBase64(file);
-      setImage(b64);
+      setImage(`data:${file.type || 'image/png'};base64,${b64}`);
       setImageName(file.name);
     } catch {
       setFormError('Could not read that image.');
@@ -330,7 +331,7 @@ export default function FeedbackModal({ open, onClose }: FeedbackModalProps) {
                   <label>Screenshot (optional, max 3 MB)</label>
                   {image ? (
                     <div className="feedback-image-preview">
-                      <img src={`data:image/*;base64,${image}`} alt="Attached screenshot" />
+                      <img src={image} alt="Attached screenshot" />
                       <div className="feedback-image-meta">
                         <span>{imageName || 'Screenshot attached'}</span>
                         <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setImage(''); setImageName(''); }}>
@@ -432,6 +433,11 @@ export default function FeedbackModal({ open, onClose }: FeedbackModalProps) {
                       {expanded && (
                         <div className="feedback-history-detail">
                           <p className="feedback-history-body">{note.body}</p>
+                          {note.imageBase64 && (
+                            <div className="feedback-history-image">
+                              <img src={note.imageBase64.startsWith('data:') ? note.imageBase64 : `data:image/*;base64,${note.imageBase64}`} alt="Attached screenshot" />
+                            </div>
+                          )}
                           {note.reply && (
                             <div className="feedback-reply">
                               <span className="feedback-reply-label">Reply from the control plane</span>

@@ -1053,6 +1053,7 @@ export const companyAdminApi = {
         priority: string;
         status: string;
         reply?: string | null;
+        imageBase64?: string | null;
         hasImage: boolean;
         createdAt: string;
         updatedAt: string;

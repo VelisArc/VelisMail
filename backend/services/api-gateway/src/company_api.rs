@@ -413,9 +413,10 @@ pub async fn list_feedback(State(state): State<AppState>, headers: HeaderMap) ->
     let context = workspace_context(&state, &headers).await?;
     let db = db_pool(&state)?;
     let rows = sqlx::query(
-        "SELECT id, subject, body, category, priority, status, reply, has_image, created_at, updated_at, resolved_at
+        "SELECT id, subject, body, category, priority, status, reply, image_base64, has_image, created_at, updated_at, resolved_at
          FROM (
             SELECT id, subject, body, category, priority, status, reply,
+                   image_base64,
                    (image_base64 IS NOT NULL) AS has_image,
                    created_at, updated_at, resolved_at
             FROM feedback
@@ -439,6 +440,7 @@ pub async fn list_feedback(State(state): State<AppState>, headers: HeaderMap) ->
                 "priority": row.try_get::<String, _>("priority").unwrap_or_else(|_| "medium".to_string()),
                 "status": row.try_get::<String, _>("status").unwrap_or_else(|_| "open".to_string()),
                 "reply": row.try_get::<Option<String>, _>("reply").ok().flatten(),
+                "imageBase64": row.try_get::<Option<String>, _>("image_base64").ok().flatten(),
                 "hasImage": row.try_get::<bool, _>("has_image").unwrap_or(false),
                 "createdAt": row.try_get::<DateTime<Utc>, _>("created_at").map(|v| v.to_rfc3339()).unwrap_or_default(),
                 "updatedAt": row.try_get::<DateTime<Utc>, _>("updated_at").map(|v| v.to_rfc3339()).unwrap_or_default(),

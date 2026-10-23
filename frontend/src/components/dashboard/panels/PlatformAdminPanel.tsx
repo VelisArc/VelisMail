@@ -2031,9 +2031,17 @@ export default function PlatformAdminPanel({ section, state }: PlatformAdminPane
                   <div className="admin-feedback-block">
                     <span className="admin-feedback-label">Screenshot</span>
                     <button type="button" className="admin-feedback-image-btn" onClick={() => setFeedbackImageOpen(true)}>
-                      <img src={`data:image/*;base64,${selectedFeedback.imageBase64}`} alt="Feedback screenshot" />
+                      <img src={selectedFeedback.imageBase64.startsWith('data:') ? selectedFeedback.imageBase64 : `data:image/*;base64,${selectedFeedback.imageBase64}`} alt="Feedback screenshot" />
                       <span>Click to enlarge</span>
                     </button>
+                    <a
+                      className="btn btn-ghost btn-sm"
+                      href={selectedFeedback.imageBase64.startsWith('data:') ? selectedFeedback.imageBase64 : `data:image/*;base64,${selectedFeedback.imageBase64}`}
+                      download={`feedback-${selectedFeedback.id.slice(0, 8)}.${selectedFeedback.imageBase64.startsWith('data:image/') ? (selectedFeedback.imageBase64.match(/^data:image\/([a-zA-Z0-9.+-]+)/)?.[1]?.replace('jpeg','jpg') || 'png') : 'png'}`}
+                      style={{ alignSelf: 'flex-start', marginTop: 'var(--space-2)' }}
+                    >
+                      Download
+                    </a>
                   </div>
                 )}
 
@@ -2107,7 +2115,7 @@ export default function PlatformAdminPanel({ section, state }: PlatformAdminPane
       {feedbackImageOpen && selectedFeedback?.imageBase64 && (
         <div className="modal-overlay" onClick={() => setFeedbackImageOpen(false)} role="dialog" aria-modal="true" aria-label="Screenshot">
           <div className="biz-form-modal glass" onClick={(event) => event.stopPropagation()} style={{ maxWidth: '90vw', padding: 'var(--space-2)' }}>
-            <img src={`data:image/*;base64,${selectedFeedback.imageBase64}`} alt="Feedback screenshot" style={{ maxWidth: '100%', maxHeight: '85vh', display: 'block' }} />
+            <img src={selectedFeedback.imageBase64.startsWith('data:') ? selectedFeedback.imageBase64 : `data:image/*;base64,${selectedFeedback.imageBase64}`} alt="Feedback screenshot" style={{ maxWidth: '100%', maxHeight: '85vh', display: 'block' }} />
           </div>
         </div>
       )}
