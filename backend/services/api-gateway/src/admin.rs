@@ -3807,10 +3807,11 @@ fn collect_additional_emails(values: Vec<String>) -> Vec<String> {
 
 /// The mailboxes the platform owner can choose as the broadcast sender.
 ///
-/// The list spans every active workspace mailbox so the control plane can use
-/// a real custom address (support@, announcements@, ...) instead of guessing
-/// which sender the mail service will pick. The platform default is always
-/// present, even before a customer domain has been configured.
+/// The list is built from the workspace mailbox index, so every entry is a
+/// real, active mailbox on a domain that can actually send. Nothing is guessed
+/// from the account email or built client side. When a workspace has no
+/// mailbox at all the list stays empty and the composer keeps the platform
+/// default (the configured no-reply address).
 pub async fn list_broadcast_senders(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -3830,6 +3831,16 @@ pub async fn list_broadcast_senders(
         Err(response) => return response,
     };
 
+    let platform_domain = state
+        .config
+        .platform_from_email
+        .rsplit_once('@')
+        .map(|(_, domain)| domain.trim().to_lowercase())
+        .unwrap_or_default();
+
+    // Only sendable mailboxes: the mailbox is active and its domain either
+    // belongs to the platform or is a verified custom domain. Listing a
+    // mailbox whose domain is still pending would only produce failed sends.
     let rows = sqlx::query(
         "SELECT bm.address,
                 bm.display_name,
@@ -3840,74 +3851,59 @@ pub async fn list_broadcast_senders(
                     SELECT cd.verification_status
                     FROM custom_domains cd
                     WHERE cd.tenant_id = bm.tenant_id
-                      AND cd.domain_name = bm.domain
+                      AND LOWER(cd.domain_name) = LOWER(bm.domain)
                     ORDER BY cd.created_at DESC NULLS LAST, cd.id DESC
                     LIMIT 1
                 ), 'unknown') AS domain_status
          FROM business_mailboxes bm
          LEFT JOIN tenants t ON t.id = bm.tenant_id
          WHERE bm.active = TRUE
+           AND (
+                ($1 <> '' AND LOWER(bm.domain) = $1)
+                OR EXISTS (
+                    SELECT 1 FROM custom_domains cd
+                    WHERE cd.tenant_id = bm.tenant_id
+                      AND LOWER(cd.domain_name) = LOWER(bm.domain)
+                      AND cd.verification_status = 'verified'
+                )
+           )
          ORDER BY bm.domain, bm.address
          LIMIT 500",
     )
+    .bind(&platform_domain)
     .fetch_all(db)
-    .await
-    .unwrap_or_default();
+    .await;
 
-    let mut mailboxes: Vec<Value> = rows
+    let rows = match rows {
+        Ok(rows) => rows,
+        Err(err) => {
+            tracing::error!("broadcast sender lookup failed: {}", err);
+            return fail(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Unable to load the workspace mailboxes.",
+            );
+        }
+    };
+
+    let mut seen = std::collections::HashSet::new();
+    let mailboxes: Vec<Value> = rows
         .iter()
-        .map(|row| {
-            json!({
-                "address": row.try_get::<String, _>("address").unwrap_or_default(),
+        .filter_map(|row| {
+            let address: String = row.try_get("address").ok()?;
+            let address = address.trim().to_lowercase();
+            if address.is_empty() || !seen.insert(address.clone()) {
+                return None;
+            }
+            Some(json!({
+                "address": address,
                 "displayName": row.try_get::<String, _>("display_name").unwrap_or_default(),
                 "domain": row.try_get::<String, _>("domain").unwrap_or_default(),
                 "company": row.try_get::<String, _>("company").unwrap_or_default(),
                 "source": row.try_get::<String, _>("source").unwrap_or_else(|_| "custom".to_string()),
                 "domainStatus": row.try_get::<String, _>("domain_status").unwrap_or_else(|_| "unknown".to_string()),
-            })
+            }))
         })
         .collect();
-
-    // The table above is the synced mailbox index. A workspace can still have
-    // a verified primary mailbox before that index is populated (for example
-    // right after domain setup), so offer the signed-in owner's address when
-    // its domain is verified.
-    let owner_address = normalize_email(&actor.email);
-    let owner_domain = owner_address
-        .split('@')
-        .nth(1)
-        .unwrap_or_default()
-        .to_string();
-    let owner_domain_verified = sqlx::query_scalar::<_, bool>(
-        "SELECT EXISTS(
-             SELECT 1 FROM custom_domains
-             WHERE LOWER(domain_name) = $1 AND verification_status = 'verified'
-         )",
-    )
-    .bind(&owner_domain)
-    .fetch_one(db)
-    .await
-    .unwrap_or(false);
-    if owner_domain_verified
-        && !mailboxes.iter().any(|mailbox| {
-            mailbox
-                .get("address")
-                .and_then(Value::as_str)
-                .is_some_and(|address| address.eq_ignore_ascii_case(&owner_address))
-        })
-    {
-        mailboxes.insert(
-            0,
-            json!({
-                "address": owner_address,
-                "displayName": "Account mailbox",
-                "domain": owner_domain,
-                "company": "Your workspace",
-                "source": "system",
-                "domainStatus": "verified",
-            }),
-        );
-    }
 
     ok(json!({
         "success": true,
@@ -4015,12 +4011,16 @@ pub async fn platform_broadcast(
         Err(response) => return response,
     };
 
-    // Resolve the sender once. The mail service keeps its configured default
-    // when `from` is empty, otherwise the address must be an active mailbox
-    // that really belongs to the platform. This prevents a typo from silently
-    // changing (or spoofing) the From header.
+    // Resolve the sender once. An empty value keeps the configured platform
+    // default; anything else must be a real, active workspace mailbox on a
+    // verified domain. Guessing an address from the domain is never allowed,
+    // so the From header can only ever be a mailbox that exists.
     let requested_from = payload.from.unwrap_or_default().trim().to_lowercase();
     let platform_default_from = state.config.platform_from_email.trim().to_lowercase();
+    let platform_domain = platform_default_from
+        .rsplit_once('@')
+        .map(|(_, domain)| domain.to_string())
+        .unwrap_or_default();
     let (sender_from, sender_name) = if requested_from.is_empty()
         || requested_from == platform_default_from
     {
@@ -4030,12 +4030,23 @@ pub async fn platform_broadcast(
             return fail(StatusCode::BAD_REQUEST, "Invalid sender mailbox address.");
         }
         let sender = sqlx::query(
-            "SELECT display_name
-             FROM business_mailboxes
-             WHERE LOWER(address) = $1 AND active = TRUE
+            "SELECT bm.display_name
+             FROM business_mailboxes bm
+             WHERE LOWER(bm.address) = $1
+               AND bm.active = TRUE
+               AND (
+                    ($2 <> '' AND LOWER(bm.domain) = $2)
+                    OR EXISTS (
+                        SELECT 1 FROM custom_domains cd
+                        WHERE cd.tenant_id = bm.tenant_id
+                          AND LOWER(cd.domain_name) = LOWER(bm.domain)
+                          AND cd.verification_status = 'verified'
+                    )
+               )
              LIMIT 1",
         )
         .bind(&requested_from)
+        .bind(&platform_domain)
         .fetch_optional(db)
         .await;
         match sender {
@@ -4052,40 +4063,10 @@ pub async fn platform_broadcast(
                 )
             }
             Ok(None) => {
-                // A newly configured workspace may not have synced its mailbox
-                // index yet. Any address on a verified custom domain is still a
-                // real sender, so allow it and let the mail provider reject an
-                // address that does not exist.
-                let domain = requested_from
-                    .split('@')
-                    .nth(1)
-                    .unwrap_or_default()
-                    .to_string();
-                let domain_verified = sqlx::query_scalar::<_, bool>(
-                    "SELECT EXISTS(
-                         SELECT 1 FROM custom_domains
-                         WHERE LOWER(domain_name) = $1 AND verification_status = 'verified'
-                     )",
+                return fail(
+                    StatusCode::BAD_REQUEST,
+                    "Choose an active workspace mailbox on a verified domain, or keep the platform default.",
                 )
-                .bind(&domain)
-                .fetch_one(db)
-                .await;
-                match domain_verified {
-                    Ok(true) => (Some(requested_from), None),
-                    Ok(false) => {
-                        return fail(
-                            StatusCode::BAD_REQUEST,
-                            "Choose a sender on a verified domain, or leave it empty for the platform default.",
-                        )
-                    }
-                    Err(err) => {
-                        tracing::error!("broadcast sender domain lookup failed: {}", err);
-                        return fail(
-                            StatusCode::INTERNAL_SERVER_ERROR,
-                            "Unable to verify the sender domain.",
-                        );
-                    }
-                }
             }
             Err(err) => {
                 tracing::error!("broadcast sender lookup failed: {}", err);

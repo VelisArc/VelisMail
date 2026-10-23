@@ -44,7 +44,6 @@ import type { DashboardState } from '../types';
 import { AdminConfirmSelect } from '../AdminConfirm';
 import { useAdminConfirm } from '../useAdminConfirm';
 import LoadingSpinner from '../../LoadingSpinner';
-import { loadBusinessMailboxes } from '../../../api/client';
 import { downloadBase64Image, imageSourceFromBase64 } from '../utils';
 
 export type PlatformSection =
@@ -455,17 +454,16 @@ export default function PlatformAdminPanel({ section, state }: PlatformAdminPane
             plan: broadcastAudience === 'free' || broadcastAudience === 'paid' ? broadcastAudience : undefined,
           }),
           platformAdminApi.broadcasts(),
-          // Older gateways do not have the sender endpoint yet. The current
-          // workspace mailboxes are still offered as a fallback below.
+          // Every sender comes from the real workspace mailbox index. When the
+          // endpoint is unavailable the composer falls back to the platform
+          // default instead of guessing an address.
           platformAdminApi.broadcastSenders().catch(() => null),
         ]);
         setBroadcastRecipients(recipientResult.users);
         setBroadcastHistory(historyResult.broadcasts);
-        if (senderResult) {
-          setBroadcastSenders(senderResult.mailboxes || []);
-          if (senderResult.defaultSender?.address) {
-            setBroadcastDefaultSender(senderResult.defaultSender);
-          }
+        setBroadcastSenders(senderResult?.mailboxes || []);
+        if (senderResult?.defaultSender?.address) {
+          setBroadcastDefaultSender(senderResult.defaultSender);
         }
       }
     } catch (error) {
@@ -569,7 +567,7 @@ export default function PlatformAdminPanel({ section, state }: PlatformAdminPane
   const broadcastSenderChoices = useMemo(() => {
     const seen = new Set<string>();
     const options: PlatformBroadcastSender[] = [];
-    const add = (mailbox: Partial<PlatformBroadcastSender> & { address?: string }) => {
+    broadcastSenders.forEach((mailbox) => {
       const address = (mailbox.address || '').trim().toLowerCase();
       if (!address || seen.has(address)) return;
       seen.add(address);
@@ -581,52 +579,9 @@ export default function PlatformAdminPanel({ section, state }: PlatformAdminPane
         source: mailbox.source || 'custom',
         domainStatus: mailbox.domainStatus || 'unknown',
       });
-    };
-    broadcastSenders.forEach(add);
-    // The control plane already has the current workspace mailboxes loaded.
-    // Offering them here keeps the picker useful during a rolling backend
-    // deploy, before the dedicated sender endpoint is available.
-    (state.domainMailboxes || []).forEach((mailbox) => {
-      if (!mailbox.active) return;
-      add({
-        address: mailbox.address,
-        displayName: mailbox.displayName,
-        domain: mailbox.domain,
-        source: mailbox.source,
-      });
     });
-    // Inbox compose also uses the locally saved mailbox index. Some workspaces
-    // have their custom mailboxes there before the central index has synced,
-    // so include them instead of showing only the platform default.
-    try {
-      loadBusinessMailboxes().forEach((mailbox) => {
-        if (!mailbox.active) return;
-        add({
-          address: mailbox.address,
-          displayName: mailbox.displayName,
-          domain: mailbox.domain,
-          source: mailbox.source,
-        });
-      });
-    } catch {
-      // A blocked localStorage must not make the broadcast composer unusable.
-    }
-    // The verified primary mailbox is the system fallback used by Inbox even
-    // when no custom mailbox row exists yet.
-    const account = state.user;
-    if (account?.businessDomainVerified && account.businessDomain) {
-      const domain = account.businessDomain.trim().toLowerCase();
-      const preferred = account.businessMailboxAddress?.trim().toLowerCase();
-      const address = preferred?.endsWith(`@${domain}`) ? preferred : `admin@${domain}`;
-      add({
-        address,
-        displayName: account.displayName || 'Administrator',
-        domain,
-        source: 'system',
-      });
-    }
     return options.sort((left, right) => left.address.localeCompare(right.address));
-  }, [broadcastSenders, state.domainMailboxes, state.user]);
+  }, [broadcastSenders]);
 
   useEffect(() => {
     if (broadcastFrom && !broadcastSenderChoices.some((mailbox) => mailbox.address === broadcastFrom)) {
@@ -1333,7 +1288,9 @@ export default function PlatformAdminPanel({ section, state }: PlatformAdminPane
                     ))}
                   </select>
                   <span className="form-hint">
-                    Every delivery uses this From address, including custom recipients. Pick an active custom mailbox or keep the platform default.
+                    {broadcastSenderChoices.length === 0
+                      ? 'No workspace business mailbox exists yet, so broadcasts use the platform default address.'
+                      : 'Every delivery uses this From address, including custom recipients. Pick one of the active workspace mailboxes or keep the platform default.'}
                   </span>
                 </div>
 

@@ -535,9 +535,42 @@ pub async fn send_email(
         .ok()
         .flatten();
         if domain_owner.is_some_and(|owner| owner != tenant_id) {
-            return Err(velismail_common::AppError::Forbidden(
-                "This sending domain belongs to another workspace.".to_string(),
-            ));
+            // A platform broadcast may pick a mailbox from any workspace. Staff
+            // may only use an address that really exists as an active mailbox,
+            // never an arbitrary local part on somebody else's domain.
+            let is_platform_staff: bool = sqlx::query_scalar(
+                "SELECT EXISTS(
+                    SELECT 1 FROM platform_admins pa
+                    WHERE pa.status = 'active'
+                      AND pa.role = 'owner'
+                      AND (
+                          LOWER(pa.email) = LOWER($1)
+                          OR LOWER(pa.email) = (
+                              SELECT LOWER(u.recovery_email)
+                              FROM users u
+                              WHERE LOWER(u.email) = LOWER($1)
+                              LIMIT 1
+                          )
+                      )
+                )",
+            )
+            .bind(&claims.email)
+            .fetch_one(&state.db)
+            .await
+            .unwrap_or(false);
+            let mailbox_exists: bool = sqlx::query_scalar(
+                "SELECT EXISTS(SELECT 1 FROM business_mailboxes
+                 WHERE LOWER(address) = LOWER($1) AND active = TRUE)",
+            )
+            .bind(&from_email)
+            .fetch_one(&state.db)
+            .await
+            .unwrap_or(false);
+            if !is_platform_staff || !mailbox_exists {
+                return Err(velismail_common::AppError::Forbidden(
+                    "This sending domain belongs to another workspace.".to_string(),
+                ));
+            }
         }
     }
 
