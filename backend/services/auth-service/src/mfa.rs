@@ -179,40 +179,57 @@ fn hotp(secret: &[u8], counter: u64) -> String {
     format!("{:06}", otp)
 }
 
-/// Verify a 6-digit TOTP code with ±1 time step skew
+/// Verify a 6-digit TOTP code with ±1 time step skew.
 pub fn verify_totp_code(secret_b32: &str, code: &str, now: Option<u64>) -> bool {
-    let secret = match base32_decode(secret_b32) {
-        Ok(s) => s,
-        Err(_) => return false,
-    };
+    verify_totp_code_step(secret_b32, code, now).is_some()
+}
+
+/// Compare two digests without an early exit on the first differing byte.
+fn constant_time_eq(left: &[u8], right: &[u8]) -> bool {
+    if left.len() != right.len() {
+        return false;
+    }
+    let mut difference = 0u8;
+    for (a, b) in left.iter().zip(right.iter()) {
+        difference |= a ^ b;
+    }
+    difference == 0
+}
+
+/// Verify a TOTP code and return the time step that matched.
+///
+/// Callers persist the step so the same six digit code cannot be replayed
+/// inside its validity window.
+pub fn verify_totp_code_step(secret_b32: &str, code: &str, now: Option<u64>) -> Option<u64> {
+    let secret = base32_decode(secret_b32).ok()?;
+    if secret.is_empty() {
+        return None;
+    }
 
     let code = code.trim().replace(' ', "");
     if code.len() != 6 || !code.chars().all(|c| c.is_ascii_digit()) {
-        return false;
+        return None;
     }
 
     let now = now.unwrap_or_else(|| {
         SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_secs()
+            .map(|duration| duration.as_secs())
+            .unwrap_or(0)
     });
     let time_step = now / TOTP_PERIOD;
 
     for offset in -TOTP_SKEW_WINDOW..=TOTP_SKEW_WINDOW {
-        let counter = (time_step as i64 + offset) as u64;
+        let counter = (time_step as i64 + offset).max(0) as u64;
         let expected = hotp(&secret, counter);
-        let equal = expected.len() == code.len()
-            && expected
-                .as_bytes()
-                .iter()
-                .zip(code.as_bytes().iter())
-                .all(|(a, b)| a == b);
-        if equal {
-            return true;
+        // Constant time: an early return on the first differing digit leaks
+        // the prefix of a valid code to an attacker who can measure timing.
+        let matches = constant_time_eq(expected.as_bytes(), code.as_bytes());
+        if matches {
+            return Some(counter);
         }
     }
-    false
+    None
 }
 
 /// MFA Challenge Claims (for login challenge and recovery)

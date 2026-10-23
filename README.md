@@ -1,6 +1,6 @@
 # VelisMail
 
-Current release: **v5.1.0**
+Current release: **v5.2.0**
 
 VelisMail uses a clean split deployment:
 
@@ -69,8 +69,8 @@ curl -H "Authorization: Bearer $METRICS_TOKEN" http://127.0.0.1:3000/metrics
 curl https://api.velismail.online/health   # after the DNS A record exists
 ```
 
-The health response includes the running service version. A production v5.1.0
-deploy should report `"version":"5.1.0"` on all Rust services.
+The health response includes the running service version. A production v5.2.0
+deploy should report `"version":"5.2.0"` on all Rust services.
 
 ### Database migrations
 Migrations live in `backend/crates/database/migrations` and are applied by

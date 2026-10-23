@@ -15,6 +15,13 @@ pub async fn run_service() -> anyhow::Result<()> {
     let protected_routes = axum::Router::new()
         .route("/me", axum::routing::get(handlers::get_current_user))
         .route("/account", axum::routing::patch(handlers::update_account))
+        .route(
+            "/change-password",
+            axum::routing::post(handlers::change_password),
+        )
+        .route("/mfa/setup", axum::routing::post(handlers::mfa_setup))
+        .route("/mfa/enable", axum::routing::post(handlers::mfa_enable))
+        .route("/mfa/disable", axum::routing::post(handlers::mfa_disable))
         .route("/sessions", axum::routing::get(handlers::list_sessions))
         .route(
             "/sessions/revoke-others",
@@ -58,17 +65,11 @@ pub async fn run_service() -> anyhow::Result<()> {
             axum::routing::post(handlers::reset_password),
         )
         .route(
-            "/change-password",
-            axum::routing::post(handlers::change_password),
-        )
-        .route(
             "/token/refresh",
             axum::routing::post(handlers::refresh_token),
         )
-        // MFA / TOTP Authenticator routes
-        .route("/mfa/setup", axum::routing::post(handlers::mfa_setup))
-        .route("/mfa/enable", axum::routing::post(handlers::mfa_enable))
-        .route("/mfa/disable", axum::routing::post(handlers::mfa_disable))
+        // MFA / TOTP Authenticator routes. Setup and removal require a signed
+        // session; only the login challenge and the recovery flow are public.
         .route("/mfa/verify", axum::routing::post(handlers::mfa_verify))
         .route(
             "/mfa/recovery/send-otp",

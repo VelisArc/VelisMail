@@ -110,7 +110,7 @@ export default function Sidebar({
     <>
       {sidebarOpen && <div className="dash-overlay open" onClick={() => setSidebarOpen(false)} />}
 
-      <aside className={`dash-sidebar ${sidebarOpen ? 'open' : ''}`}>
+      <aside className={`dash-sidebar ${sidebarOpen ? 'open' : ''}`} id="workspace-sidebar">
         <div className="side-header">
           <Link to="/" className="side-logo" style={{ textDecoration: 'none' }}>
             <img src="/ZeeResizer.png" alt="VelisMail" />
@@ -121,7 +121,7 @@ export default function Sidebar({
           </Link>
         </div>
         {!isControlPlane && (
-          <button type="button" className="btn btn-primary side-compose" onClick={onCompose}>
+          <button type="button" className="btn btn-primary side-compose" onClick={() => { setSidebarOpen(false); onCompose(); }}>
             <Plus size={16} /> New Message
           </button>
         )}

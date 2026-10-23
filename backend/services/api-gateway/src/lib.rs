@@ -120,7 +120,6 @@ fn build_cors_layer(frontend_url: &str) -> tower_http::cors::CorsLayer {
         axum::http::header::ACCEPT,
         axum::http::header::CONTENT_TYPE,
         axum::http::HeaderName::from_static("x-request-id"),
-        axum::http::HeaderName::from_static("x-business-db-url"),
     ];
 
     let expose_headers = vec![

@@ -21,6 +21,10 @@ pub struct AuthState {
     pub jwt_manager: Arc<JwtManager>,
     pub account_lock: Arc<AccountLockManager>,
     pub rate_limiter: Arc<IpRateLimiter>,
+    /// Per-challenge limiter for OTP guesses. A six digit code has only
+    /// 900,000 possibilities, so an unlimited verify endpoint is brute
+    /// forceable even with a per-IP request limit.
+    pub otp_verify_limiter: Arc<velismail_common::traffic::RateLimiter>,
     pub email_client: Arc<ResendClient>,
 }
 
@@ -56,6 +60,10 @@ impl AuthState {
         let rate_limiter = Arc::new(governor::RateLimiter::keyed(governor::Quota::per_minute(
             limit,
         )));
+        let otp_verify_limiter = Arc::new(velismail_common::traffic::RateLimiter::new(
+            10,
+            std::time::Duration::from_secs(config.otp_ttl_seconds.max(60) as u64),
+        ));
         let email_client = Arc::new(ResendClient::new(&config.platform_resend_api_key)?);
 
         Ok(Self {
@@ -65,6 +73,7 @@ impl AuthState {
             jwt_manager,
             account_lock,
             rate_limiter,
+            otp_verify_limiter,
             email_client,
         })
     }

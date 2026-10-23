@@ -31,7 +31,7 @@ export default function QueuePanel({ state }: QueuePanelProps) {
         </div>
       )}
       <div className="queue-stats">
-        {[{ label: 'Queued', count: state.mailQueue.filter(i => i.status === 'queued').length }, { label: 'Scheduled', count: state.mailQueue.filter(i => i.status === 'scheduled').length }, { label: 'Sending', count: state.mailQueue.filter(i => i.status === 'sending').length }, { label: 'Failed', count: state.mailQueue.filter(i => i.status === 'failed').length }, { label: 'Deferred', count: state.mailQueue.filter(i => i.status === 'deferred').length }].map(s => (
+        {[{ label: 'Queued', count: state.mailQueue.filter(i => i.status === 'queued').length }, { label: 'Scheduled', count: state.mailQueue.filter(i => i.status === 'scheduled').length }, { label: 'Sending', count: state.mailQueue.filter(i => i.status === 'sending').length }, { label: 'Sent', count: state.mailQueue.filter(i => i.status === 'sent').length }, { label: 'Failed', count: state.mailQueue.filter(i => i.status === 'failed').length }, { label: 'Deferred', count: state.mailQueue.filter(i => i.status === 'deferred').length }].map(s => (
           <div key={s.label} className="glass-card queue-stat-item"><strong className="queue-stat-value">{s.count}</strong><span className="text-muted text-sm">{s.label}</span></div>
         ))}
       </div>

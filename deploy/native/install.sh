@@ -135,8 +135,8 @@ elif [[ "${SYNC_ENV:-0}" == "1" && -f .env ]]; then
 elif [[ -f .env ]] && ! cmp -s .env "${ENV_FILE}"; then
   log "WARNING: repo .env differs from ${ENV_FILE}; re-run with SYNC_ENV=1 to update it"
 fi
-chown root:"${APP_GROUP}" "${ENV_FILE}"
-chmod 0640 "${ENV_FILE}"
+chown root:root "${ENV_FILE}"
+chmod 0600 "${ENV_FILE}"
 
 # Windows checkouts and copied env files often have CRLF endings. A trailing
 # carriage return silently corrupts values (for example "velismail\r" becomes
@@ -482,6 +482,9 @@ cat > "${CADDY_DIR}/Caddyfile" <<EOF
     # Pin the production CA explicitly; otherwise some Caddy builds fall back
     # to staging or ZeroSSL when the first order fails.
     acme_ca https://acme-v02.api.letsencrypt.org/directory
+    # No local HTTP admin API. Any unprivileged process could otherwise
+    # rewrite the proxy configuration (and reach cloud metadata through it).
+    admin off
     servers {
         timeouts {
             read_body 60s
@@ -560,11 +563,19 @@ http://${PUBLIC_IP} {
         X-Frame-Options "DENY"
         -Server
     }
-    reverse_proxy ${GATEWAY_UPSTREAMS} {
-        lb_policy least_conn
-        health_uri /health
-        health_interval 10s
-        health_timeout 3s
+    # Only the health probe is served over plain HTTP. Everything else
+    # redirects to TLS; proxying the API on the bare IP exposed passwords and
+    # bearer tokens to anyone on the path.
+    handle /health* {
+        reverse_proxy ${GATEWAY_UPSTREAMS} {
+            lb_policy least_conn
+            health_uri /health
+            health_interval 10s
+            health_timeout 3s
+        }
+    }
+    handle {
+        redir https://${API_DOMAIN}{uri} 308
     }
     log {
         output stdout
@@ -580,7 +591,7 @@ if command -v caddy >/dev/null 2>&1; then
 fi
 
 systemctl enable caddy >/dev/null 2>&1 || true
-systemctl reload caddy >/dev/null 2>&1 || systemctl restart caddy
+systemctl restart caddy
 
 # ---------------------------------------------------------------------------
 # 7b. Daily PostgreSQL backups

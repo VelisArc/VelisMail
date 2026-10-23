@@ -5,6 +5,7 @@ import {
   normalizeMailbox, normalizeDomainInput, normalizeLocalPart,
   hashString,
   isJwtLikelyUsable, clearBackendTokens,
+  clearLocalAccountData,
   normalizeSessionUser, buildSessionUser,
   loginIdentifierCandidates, scopedExistingSession,
   fetchAuthenticatedProfile,
@@ -40,7 +41,7 @@ import {
   sessionHasMismatch, mergeDnsRecords,
   isLegacyDnsRecord,
   safeRandomUUID, deleteBusinessEmailFromDb,
-  isInactiveAccount,
+  isInactiveAccount, getDeviceId,
 } from './client-core';
 import type {
   User, DnsRecord, DomainCheck, CustomDomain, BusinessMailbox,
@@ -245,7 +246,7 @@ export const auth = {
           method: 'POST',
           // The device id ties this session to a browser, so it can be named
           // in the session list and revoked on its own.
-          body: JSON.stringify({ email: candidate, password, device_id: 'web' }),
+          body: JSON.stringify({ email: candidate, password, device_id: getDeviceId() }),
         });
 
         // MFA challenge: the account has an authenticator app, so the server
@@ -307,7 +308,7 @@ export const auth = {
       const existingLocal = scopedExistingSession(identity.email);
       const res = await fetchAPI('/auth/firebase', {
         method: 'POST',
-        body: JSON.stringify({ idToken: identity.idToken, deviceId: 'google-web' }),
+        body: JSON.stringify({ idToken: identity.idToken, deviceId: getDeviceId() }),
       });
 
       // MFA challenge: the account has an authenticator app, so the server
@@ -426,7 +427,7 @@ export const auth = {
     try {
       const res = await fetchAPI('/auth/mfa/verify', {
         method: 'POST',
-        body: JSON.stringify({ mfa_token: mfaToken, code, device_id: 'web' }),
+        body: JSON.stringify({ mfa_token: mfaToken, code, device_id: getDeviceId() }),
       });
       if (!res || typeof res.access_token !== 'string') {
         return { success: false, error: 'Invalid authenticator code.' };
@@ -490,7 +491,7 @@ export const auth = {
     try {
       const res = await fetchAPI('/auth/mfa/recovery/complete', {
         method: 'POST',
-        body: JSON.stringify({ recovery_token: recoveryToken, code, device_id: 'web' }),
+        body: JSON.stringify({ recovery_token: recoveryToken, code, device_id: getDeviceId() }),
       });
       if (!res || typeof res.access_token !== 'string') {
         return { success: false, error: 'Failed to complete the recovery.' };
@@ -544,11 +545,18 @@ export const auth = {
   },
 
   logout() {
+    // Revoke the server-side refresh token before dropping it locally, then
+    // remove mailbox data, provider keys and cached invitations as well.
+    const token = localStorage.getItem('velismail_token');
+    if (token) {
+      fetchAPI('/auth/logout', { method: 'POST' }).catch(() => undefined);
+    }
     localStorage.removeItem(STORAGE_KEYS.session);
     localStorage.removeItem('velismail_token');
     localStorage.removeItem('velismail_refresh');
     sessionStorage.removeItem('velismail-session');
     emailsCache.length = 0;
+    void clearLocalAccountData();
   },
 
   getSession(): User | null {
@@ -557,7 +565,7 @@ export const auth = {
     const backendToken = localStorage.getItem('velismail_token');
     const refreshToken = localStorage.getItem('velismail_refresh');
     const hasAuthenticatedSession = Boolean(
-      normalizedSession?.teamAccessRole || isJwtLikelyUsable(backendToken) || Boolean(refreshToken),
+      isJwtLikelyUsable(backendToken) || Boolean(refreshToken),
     );
     if (normalizedSession && !hasAuthenticatedSession) {
       this.logout();
@@ -807,20 +815,13 @@ function isTransientBusinessDbError(status: number, message: string): boolean {
   return status >= 500 || /pool timed out|open connection|timeout|connection/i.test(message);
 }
 
-function businessMailboxDbHeaders(dbUrl: string): Record<string, string> {
-  return { 'x-business-db-url': dbUrl };
-}
-
 async function fetchBusinessMailboxesFromDb(domain: string): Promise<BusinessMailbox[] | null> {
-  const session = getSessionSafe();
-  if (!session?.businessDbUrl || businessMailboxDbRouteUnavailable) return null;
+  if (businessMailboxDbRouteUnavailable) return null;
   if (businessDbIsUnreachable()) return null;
 
   const response = await fetchApiJsonDetailed<BusinessMailboxApiResponse>('/mail/business-mailboxes/query', {
     method: 'POST',
-    headers: businessMailboxDbHeaders(session.businessDbUrl),
     body: JSON.stringify({
-      dbUrl: session.businessDbUrl,
       domain: normalizeDomainInput(domain),
     }),
   });
@@ -844,19 +845,13 @@ async function fetchBusinessMailboxesFromDb(domain: string): Promise<BusinessMai
 }
 
 async function upsertBusinessMailboxToDb(mailbox: BusinessMailbox): Promise<void> {
-  const session = getSessionSafe();
-  if (!session?.businessDbUrl) return;
   if (businessMailboxDbRouteUnavailable) {
     throw new Error('Business mailbox database route is unavailable. Try again after the backend deploy finishes.');
   }
 
   const response = await fetchApiJsonDetailed<BusinessMailboxApiResponse>('/mail/business-mailboxes', {
     method: 'POST',
-    headers: businessMailboxDbHeaders(session.businessDbUrl),
-    body: JSON.stringify({
-      dbUrl: session.businessDbUrl,
-      mailbox,
-    }),
+    body: JSON.stringify({ mailbox }),
   });
 
   if (response.status === 404) {
@@ -868,17 +863,13 @@ async function upsertBusinessMailboxToDb(mailbox: BusinessMailbox): Promise<void
 }
 
 async function deleteBusinessMailboxFromDb(domain: string, address: string): Promise<void> {
-  const session = getSessionSafe();
-  if (!session?.businessDbUrl) return;
   if (businessMailboxDbRouteUnavailable) {
     throw new Error('Business mailbox database route is unavailable. Try again after the backend deploy finishes.');
   }
 
   const response = await fetchApiJsonDetailed<BusinessMailboxApiResponse>('/mail/business-mailboxes', {
     method: 'DELETE',
-    headers: businessMailboxDbHeaders(session.businessDbUrl),
     body: JSON.stringify({
-      dbUrl: session.businessDbUrl,
       domain: normalizeDomainInput(domain),
       address: normalizeMailbox(address),
     }),
@@ -1243,6 +1234,7 @@ export const teamAccess = {
         token: params.token.trim(),
         email: normalizedEmail,
         password: params.password,
+        deviceId: getDeviceId(),
       });
 
       if (!completion?.ok) {
@@ -1283,13 +1275,8 @@ export const teamAccess = {
         isBusinessSetupComplete: true,
         customDomain: invite.workspace.businessDomain,
         businessDomain: invite.workspace.businessDomain,
-        businessDbUrl: invite.workspace.businessDbUrl,
-        businessApiKey: invite.workspace.businessApiKey,
-        businessMailProvider: invite.workspace.businessMailProvider,
-        businessMailProviderEndpoint: invite.workspace.businessMailProviderEndpoint,
         businessMailboxAddress: normalizedEmail,
         businessDomainVerified: invite.workspace.businessDomainVerified ?? true,
-        businessProfile: invite.workspace.businessProfile,
         teamAccessRole: invite.role,
         teamAccessInviteId: invite.id,
         teamAccessOwnerEmail: invite.issuerEmail,
@@ -1498,17 +1485,12 @@ export const mail = {
   },
 
   async getBusinessByFolder(domain: string, folder: string): Promise<Email[]> {
-    const session = auth.getSession();
     let sourceEmails = loadUserDB<Email[]>(STORAGE_KEYS.emails, EMPTY_EMAILS);
 
-    if (session?.businessDbUrl && !businessEmailDbRouteUnavailable && !businessDbIsUnreachable()) {
-      const headers: Record<string, string> = {
-        'x-business-db-url': session.businessDbUrl
-      };
+    if (!businessEmailDbRouteUnavailable && !businessDbIsUnreachable()) {
       const response = await fetchApiJsonDetailed<{ success?: boolean; emails?: Array<Partial<Email> & { read?: boolean }>; error?: string; message?: string }>('/mail/business-emails/query', {
         method: 'POST',
-        headers,
-        body: JSON.stringify({ dbUrl: session.businessDbUrl }),
+        body: JSON.stringify({}),
       });
 
       if (response.ok && response.data?.success && Array.isArray(response.data.emails)) {
@@ -1653,7 +1635,6 @@ export const mail = {
           fromName: selectedMailbox.displayName || session?.displayName || 'Business',
           provider: session?.businessMailProvider,
           apiKey: session?.businessApiKey,
-          dbUrl: session?.businessDbUrl,
           clientId: clientId,
           providerEndpoint: providerEndpointForRequest(session?.businessMailProvider, session?.businessMailProviderEndpoint),
           attachments: attachments?.map(a => ({
@@ -2035,31 +2016,10 @@ export const domains = {
     const storedDomains = loadUserDB<(Partial<CustomDomain> & { id: string; domain: string; status?: 'pending' | 'verified' | 'failed' })[]>(STORAGE_KEYS.domains, []);
     const normalizedDomains = storedDomains.map(normalizeStoredDomain);
 
-    const session = getSessionSafe();
-    if (session?.businessDomain && session?.businessDomainVerified) {
-      const normalizedDomainInput = normalizeDomainInput(session.businessDomain);
-      if (!normalizedDomains.find(d => d.domain === normalizedDomainInput)) {
-        const tokenHash = hashString(`domain-verify:${session.tenantId || 'local'}:${normalizedDomainInput}`).padStart(12, '0').slice(0, 12);
-        const verificationToken = `velismail-verify=${tokenHash}`;
-        const autoHydratedDomain: CustomDomain = {
-          id: `dom_${hashString(normalizedDomainInput)}`,
-          domain: normalizedDomainInput,
-          status: 'verified',
-          verificationToken,
-          dnsRecords: buildDnsRecords(normalizedDomainInput, verificationToken),
-          checks: buildDomainChecks(normalizedDomainInput, verificationToken).map(check => ({
-            ...check,
-            status: 'verified',
-            actual: check.expected,
-          })),
-          addedAt: session.createdAt || new Date().toISOString(),
-          lastCheckedAt: new Date().toISOString(),
-          verifiedAt: new Date().toISOString(),
-        };
-        normalizedDomains.push(autoHydratedDomain);
-      }
-    }
-
+    // A domain is only verified by the live DNS report from the backend.
+    // Session flags are client-written, so they are never allowed to mint a
+    // verified domain here (the previous auto-hydration did exactly that and
+    // could show a fake "verified" badge).
     if (JSON.stringify(storedDomains) !== JSON.stringify(normalizedDomains)) {
       saveUserDB(STORAGE_KEYS.domains, normalizedDomains);
     }

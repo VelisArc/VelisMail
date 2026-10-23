@@ -77,18 +77,25 @@ export default function BillingPanel({ state, handleBuyPlan }: BillingPanelProps
         </div>
       )}
       <div className="billing-toggle-bar" role="group" aria-label="Billing cycle">
-        <span className={!state.annual ? 'active' : ''}>Monthly</span>
-        <button
-          type="button"
-          className={`toggle-switch ${state.annual ? 'active' : ''}`}
-          onClick={() => state.setAnnual(!state.annual)}
-          aria-label="Toggle annual billing"
-          aria-pressed={state.annual}
-        >
-          <div className="toggle-knob" />
-        </button>
-        <span className={state.annual ? 'active' : ''}>Annual</span>
-        <span className="badge badge-success">Save 16%</span>
+        <div className="billing-toggle">
+          <button
+            type="button"
+            className={!state.annual ? 'active' : ''}
+            aria-pressed={!state.annual}
+            onClick={() => state.setAnnual(false)}
+          >
+            Monthly
+          </button>
+          <button
+            type="button"
+            className={state.annual ? 'active' : ''}
+            aria-pressed={state.annual}
+            onClick={() => state.setAnnual(true)}
+          >
+            Annual
+          </button>
+        </div>
+        <span className="billing-save-badge">Save 16%</span>
       </div>
       <div className="billing-grid">
         {PLANS.map(plan => {

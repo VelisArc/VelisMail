@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef, type Dispatch, type SetStateAction } from 'react';
 import { Navigate, useNavigate, useLocation } from 'react-router-dom';
-import { Building2, Check, ChevronDown, ChevronUp, Crown, MessageSquare, Plus, X } from 'lucide-react';
-import { auth, businessGroups, connections, contacts, fetchAPI, fetchAuthenticatedProfile, isBusinessSetupReady, mail, saveDB, signatures, STORAGE_KEYS, type BusinessAuditEntry, type BusinessGroup, type BusinessMailbox, type BusinessTeamMember, type BusinessTemplate, type ConnectionUsage, type Email, type PlatformAdminUserRecord, type Signature, type Contact, type ActiveSession, type User } from '../api/client';
+import { Building2, Check, ChevronDown, ChevronUp, Crown, Menu, MessageSquare, Plus, X } from 'lucide-react';
+import { auth, businessGroups, connections, contacts, fetchAPI, fetchAuthenticatedProfile, isBusinessSetupReady, mail, refreshBackendSession, saveDB, signatures, STORAGE_KEYS, type BusinessAuditEntry, type BusinessGroup, type BusinessMailbox, type BusinessTeamMember, type BusinessTemplate, type ConnectionUsage, type Email, type PlatformAdminUserRecord, type Signature, type Contact, type ActiveSession, type User } from '../api/client';
 import { platformAdminApi } from '../api/admin';
 import Sidebar from '../components/dashboard/Sidebar';
 import { PLANS, ROLE_ALLOWED_TABS, type BizTab } from '../components/dashboard/constants';
@@ -77,8 +77,14 @@ export default function BusinessDashboard() {
   // A stale "ready" flag must never open another route while the live state is
   // incomplete. Keep the session in sync in both directions; the credentials
   // and the primary domain are preserved, only the verification flags change.
+  //
+  // Invited members work in a workspace the owner configured, so its setup
+  // flags are not theirs to reset. Writing them on every read would also feed
+  // a new user object back into this effect indefinitely.
   useEffect(() => {
-    if (!user || !readiness.loaded || readiness.ready || !isBusinessSetupReady(user)) return;
+    if (!user || user.teamAccessRole) return;
+    if (!readiness.loaded || readiness.ready || !isBusinessSetupReady(user)) return;
+    if (user.isBusinessSetupComplete === false && user.businessDomainVerified === false) return;
     const updated = auth.updateSettings({
       isBusinessSetupComplete: false,
       businessDomainVerified: false,
@@ -566,6 +572,10 @@ const [feedbackOpen, setFeedbackOpen] = useState(false);
     setBusinessMenuOpen(false);
     try {
       const result = await workspaceApi.switchBusiness(businessId);
+      // The workspace lives in the account row, but the access token carries
+      // the tenant it was issued for. Rotate it before loading any workspace
+      // data so every service (mail, storage, delivery) sees the new tenant.
+      await refreshBackendSession().catch(() => false);
       setActiveBusinessId(result.business.id);
       const domain = result.business.primaryDomain;
       if (domain) {
@@ -994,6 +1004,15 @@ const [feedbackOpen, setFeedbackOpen] = useState(false);
       <main className="dash-main">
         <header className="dash-topbar">
           <div className="dash-topbar-left">
+            <button
+              type="button"
+              className="dash-mobile-menu-btn sidebar-toggle"
+              onClick={() => setSidebarOpen(true)}
+              aria-label="Open navigation"
+              aria-controls="workspace-sidebar"
+            >
+              <Menu size={18} />
+            </button>
             {canAccessPlatformAdmin && (
               <button
                 type="button"
@@ -1192,7 +1211,7 @@ const [feedbackOpen, setFeedbackOpen] = useState(false);
         {viewMode === 'workspace' && activeBizTab === 'settings' && <ErrorBoundary><SettingsPanel state={dashboardState} /></ErrorBoundary>}
 
         {viewMode === 'workspace' && activeBizTab === 'billing' && <ErrorBoundary><BillingPanel state={dashboardState} handleBuyPlan={handleBuyPlan} /></ErrorBoundary>}
-        {viewMode === 'workspace' && activeBizTab === 'contacts' && <ErrorBoundary><ContactsPage /></ErrorBoundary>}
+        {viewMode === 'workspace' && activeBizTab === 'contacts' && <ErrorBoundary><ContactsPage embedded /></ErrorBoundary>}
         {viewMode === 'workspace' && activeBizTab === 'deliverability' && <ErrorBoundary><DeliverabilityPanel state={dashboardState} /></ErrorBoundary>}
 
       </main>

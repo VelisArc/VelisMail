@@ -30,6 +30,8 @@ impl DeliveryConfig {
             .and_then(|p| p.parse().ok())
             .or_else(|| std::env::var("PORT").ok().and_then(|p| p.parse().ok()))
             .unwrap_or(3005);
+        let jwt_secret = required_env("JWT_SECRET")?;
+        velismail_common::config::require_strong_secret("JWT_SECRET", &jwt_secret)?;
 
         Ok(Self {
             host: std::env::var("DELIVERY_HOST").unwrap_or_else(|_| "0.0.0.0".to_string()),
@@ -38,7 +40,7 @@ impl DeliveryConfig {
             redis_url: std::env::var("REDIS_URL")
                 .ok()
                 .filter(|v| !v.trim().is_empty()),
-            jwt_secret: required_env("JWT_SECRET")?,
+            jwt_secret,
             dkim_private_key: std::env::var("DKIM_PRIVATE_KEY")
                 .ok()
                 // Environment files cannot contain literal newlines. Accept a

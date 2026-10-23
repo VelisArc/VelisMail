@@ -29,6 +29,14 @@
 - Sending from a domain that was never verified returns a clear setup message instead of a generic failure.
 - Workspace API key scopes now also cover destructive domain and mailbox routes, business creation and switching, business mail, team invites and domain verification, so a read-only key cannot change the workspace.
 - Access tokens now last 24 hours instead of one hour, and the dashboard still renews an expired token with the stored refresh token and retries the request. The setup screen no longer stays stuck behind 401 errors, and the setup check shows a readable error instead of `[object Object]`.
+- Creating a business now runs in one transaction and stores `admin@<domain>` as the tenant contact address. The bare domain was used before in the unique `organization_email` column, so a second request could collide with an existing tenant and attach the caller to it.
+- Switching a business now rotates the access token before the dashboard reloads. Mail, storage and tenant services read the tenant from that token, so they no longer keep seeing the previous workspace until it expired.
+- Removing a workspace member now revokes their refresh tokens as well as their sessions, and moves the account to another active workspace when it belongs to one, instead of leaving it pinned to a workspace it cannot open.
+- Changing or resetting a password now revokes every refresh token and closes every active session for the account.
+- Every browser now has its own device identifier. Revoking one session also revokes that device's refresh token, the "sign out other devices" action really signs them out, and the per-account session limit closes the tokens of the sessions it trims.
+- Login no longer reveals whether an account exists through response timing, and OTP verification compares the signed hash in constant time.
+- The unused legacy domain store no longer fabricates a verified domain from client-side session flags, and the stray `Login.tsx.bak` file was removed.
+- README, RELEASE, `package.json` and `package-lock.json` now all report v5.2.0.
 
 ---
 

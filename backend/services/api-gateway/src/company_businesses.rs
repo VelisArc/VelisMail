@@ -29,8 +29,10 @@ pub struct CreateBusinessRequest {
     pub name: String,
     /// The business domain, for example acme.com.
     pub domain: String,
-    /// Optional plan for the new business.
+    /// Optional plan for the new business. Accepted for older clients only;
+    /// the plan is assigned by the server.
     #[serde(default)]
+    #[allow(dead_code)]
     pub plan: Option<String>,
 }
 
@@ -38,6 +40,20 @@ pub struct CreateBusinessRequest {
 #[serde(rename_all = "camelCase")]
 pub struct SwitchBusinessRequest {
     pub business_id: String,
+}
+
+fn internal_error(message: &str) -> (StatusCode, Json<Value>) {
+    fail(StatusCode::INTERNAL_SERVER_ERROR, message)
+}
+
+/// Contact address stored on the tenant row.
+///
+/// `tenants.organization_email` is unique, so the bare domain must never be
+/// used as the address: two rows would collide on one string and an upsert
+/// could attach the caller to a tenant they do not own. The domain's admin
+/// mailbox is unique per domain and is a real address the business owns.
+fn business_contact_email(domain: &str) -> String {
+    format!("admin@{domain}")
 }
 
 /// One business the account belongs to.
@@ -83,7 +99,10 @@ pub async fn list_businesses(State(state): State<AppState>, headers: HeaderMap) 
     .bind(context.tenant_id)
     .fetch_all(db)
     .await
-    .unwrap_or_default();
+    .map_err(|err| {
+        tracing::error!("business list could not be loaded: {}", err);
+        internal_error("Unable to load the businesses.")
+    })?;
 
     let businesses: Vec<Value> = rows.iter().map(business_json).collect();
     ok(json!({
@@ -116,8 +135,10 @@ pub async fn switch_business(
     .bind(&context.email)
     .fetch_optional(db)
     .await
-    .ok()
-    .flatten();
+    .map_err(|err| {
+        tracing::error!("business membership could not be checked: {}", err);
+        internal_error("Unable to switch the business.")
+    })?;
     let role = match member {
         Some(role) => role,
         None => {
@@ -134,19 +155,26 @@ pub async fn switch_business(
     .bind(business_id)
     .fetch_one(db)
     .await
-    .unwrap_or(false);
+    .map_err(|err| {
+        tracing::error!("business existence check failed: {}", err);
+        internal_error("Unable to switch the business.")
+    })?;
     if !exists {
         return Err(fail(StatusCode::NOT_FOUND, "That business does not exist."));
     }
 
     // The account is now attached to that business.
-    let _ = sqlx::query(
+    sqlx::query(
         "UPDATE users SET tenant_id = $1, updated_at = NOW() WHERE LOWER(email) = LOWER($2)",
     )
     .bind(business_id)
     .bind(&context.email)
     .execute(db)
-    .await;
+    .await
+    .map_err(|err| {
+        tracing::error!("business switch could not be stored: {}", err);
+        internal_error("Unable to switch the business.")
+    })?;
 
     let row = sqlx::query(
         "SELECT t.id, t.organization_name, t.organization_email, t.plan_tier, t.status,
@@ -164,13 +192,15 @@ pub async fn switch_business(
     .bind(business_id)
     .fetch_optional(db)
     .await
-    .ok()
-    .flatten();
+    .map_err(|err| {
+        tracing::error!("switched business could not be loaded: {}", err);
+        internal_error("Unable to switch the business.")
+    })?
+    .ok_or_else(|| fail(StatusCode::NOT_FOUND, "That business does not exist."))?;
 
-    let business = row.as_ref().map(business_json).unwrap_or(json!({}));
     ok(json!({
         "success": true,
-        "business": business,
+        "business": business_json(&row),
         "role": role,
     }))
 }
@@ -220,46 +250,54 @@ pub async fn create_business(
         ));
     }
 
-    let plan = payload
-        .plan
-        .unwrap_or_else(|| "free".to_string())
-        .to_lowercase();
-    let plan = if ["free", "starter", "business", "enterprise"].contains(&plan.as_str()) {
-        plan
-    } else {
-        "free".to_string()
-    };
+    // Self-service creation always starts on the free plan. Paid tiers are only
+    // granted by the billing flow (or the platform console); accepting the plan
+    // from the request let a user grant themselves an enterprise allowance.
+    let plan = "free".to_string();
     let slug = format!(
         "{}-{}",
         domain.replace(|ch: char| !ch.is_ascii_alphanumeric(), "-"),
         &Uuid::new_v4().simple().to_string()[..6]
     );
 
-    // The business lives in the same storage, in its own tenant.
+    // The business lives in the same storage, in its own tenant. Every row is
+    // written in one transaction: a half-created workspace (tenant without its
+    // domain or without its owner) must never become visible to the customer.
+    let mut tx = db.begin().await.map_err(|err| {
+        tracing::error!("business transaction could not start: {}", err);
+        internal_error("Unable to start the business setup.")
+    })?;
+
     let tenant_id: Uuid = match sqlx::query(
         "INSERT INTO tenants (organization_name, organization_email, plan_tier, status, settings, limits)
          VALUES ($1, $2, $3, 'active', jsonb_build_object('domain', $4, 'businessName', $1), '{}'::jsonb)
-         ON CONFLICT (organization_email) DO UPDATE SET updated_at = NOW()
+         ON CONFLICT (organization_email) DO NOTHING
          RETURNING id",
     )
     .bind(name)
-    .bind(&domain)
+    .bind(business_contact_email(&domain))
     .bind(&plan)
     .bind(&domain)
-    .fetch_one(db)
+    .fetch_optional(&mut *tx)
     .await
     {
-        Ok(row) => row.try_get::<Uuid, _>("id").unwrap_or_default(),
+        Ok(Some(row)) => row.try_get::<Uuid, _>("id").unwrap_or_default(),
+        Ok(None) => {
+            return Err(fail(
+                StatusCode::CONFLICT,
+                "That domain is already connected to another business.",
+            ))
+        }
         Err(err) => {
             tracing::error!("business creation failed: {}", err);
-            return Err(fail(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "Unable to create the business.",
-            ));
+            return Err(internal_error("Unable to create the business."));
         }
     };
+    if tenant_id == Uuid::nil() {
+        return Err(internal_error("Unable to create the business."));
+    }
 
-    let _ = sqlx::query(
+    sqlx::query(
         "INSERT INTO tenant_profiles (tenant_id, slug, legal_name, billing_email, technical_email)
          VALUES ($1, $2, $3, $4, $4)
          ON CONFLICT (tenant_id) DO NOTHING",
@@ -268,13 +306,17 @@ pub async fn create_business(
     .bind(&slug)
     .bind(name)
     .bind(&context.email)
-    .execute(db)
-    .await;
+    .execute(&mut *tx)
+    .await
+    .map_err(|err| {
+        tracing::error!("business profile could not be created: {}", err);
+        internal_error("Unable to create the business.")
+    })?;
 
     // The domain with its verification record, exactly like a domain that is
     // added to an existing business.
     let verification_token = Uuid::new_v4().to_string();
-    let domain_result = sqlx::query(
+    let domain_row = sqlx::query(
         "INSERT INTO custom_domains (tenant_id, domain_name, verification_status, verification_method, dns_records, mx_records)
          VALUES ($1, $2, 'pending', 'dns', $3, '[]'::jsonb)
          ON CONFLICT (domain_name) DO NOTHING
@@ -290,38 +332,21 @@ pub async fn create_business(
             "ttl": 300
         }
     ]))
-    .fetch_optional(db)
-    .await;
-    if let Err(err) = &domain_result {
+    .fetch_optional(&mut *tx)
+    .await
+    .map_err(|err| {
         tracing::error!("business domain creation failed: {}", err);
-    }
-    let domain_id = match domain_result {
-        Ok(Some(row)) => row.try_get::<Uuid, _>("id").ok(),
-        Ok(None) => {
-            // Another request claimed the domain between the check above and
-            // the insert. Do not steal it: undo the business that was just
-            // created and tell the caller.
-            let _ = sqlx::query("UPDATE tenants SET deleted_at = NOW() WHERE id = $1")
-                .bind(tenant_id)
-                .execute(db)
-                .await;
-            return Err(fail(
-                StatusCode::CONFLICT,
-                "That domain is already connected to another business.",
-            ));
-        }
-        Err(err) => {
-            tracing::error!("business domain creation failed: {}", err);
-            let _ = sqlx::query("UPDATE tenants SET deleted_at = NOW() WHERE id = $1")
-                .bind(tenant_id)
-                .execute(db)
-                .await;
-            return Err(fail(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "Unable to connect the domain to the new business.",
-            ));
-        }
-    };
+        internal_error("Unable to connect the domain to the new business.")
+    })?
+    .ok_or_else(|| {
+        // Another request claimed the domain between the check above and this
+        // insert. The transaction rolls back the tenant as well.
+        fail(
+            StatusCode::CONFLICT,
+            "That domain is already connected to another business.",
+        )
+    })?;
+    let domain_id = domain_row.try_get::<Uuid, _>("id").ok();
 
     // The sending mailboxes of the business.
     for (address, display_name, kind) in [
@@ -333,12 +358,11 @@ pub async fn create_business(
         ),
     ] {
         let mailbox_id = format!("mbx_{}", Uuid::new_v4().simple());
-        let result = sqlx::query(
+        sqlx::query(
             "INSERT INTO business_mailboxes
              (id, tenant_id, domain, address, display_name, kind, aliases, active, source, created_at)
              VALUES ($1, $2, $3, $4, $5, $6, '[]', TRUE, 'custom', $7)
-             ON CONFLICT (domain, address) DO UPDATE
-             SET display_name = EXCLUDED.display_name, kind = EXCLUDED.kind, tenant_id = EXCLUDED.tenant_id",
+             ON CONFLICT (domain, address) DO NOTHING",
         )
         .bind(&mailbox_id)
         .bind(tenant_id)
@@ -347,15 +371,16 @@ pub async fn create_business(
         .bind(&display_name)
         .bind(kind)
         .bind(crate::business_mailboxes::now_string())
-        .execute(db)
-        .await;
-        if let Err(err) = result {
-            tracing::warn!("mailbox {address} was not indexed: {err}");
-        }
+        .execute(&mut *tx)
+        .await
+        .map_err(|err| {
+            tracing::error!("mailbox {address} could not be created: {}", err);
+            internal_error("Unable to create the business mailboxes.")
+        })?;
     }
 
     // The creator owns the new business.
-    let _ = sqlx::query(
+    sqlx::query(
         "INSERT INTO company_members (tenant_id, user_id, email, display_name, role, status, joined_at, last_active_at)
          VALUES ($1, $2, $3, $4, 'owner', 'active', NOW(), NOW())
          ON CONFLICT (tenant_id, email) DO UPDATE
@@ -365,17 +390,30 @@ pub async fn create_business(
     .bind(context.user_id)
     .bind(&context.email)
     .bind(name)
-    .execute(db)
-    .await;
+    .execute(&mut *tx)
+    .await
+    .map_err(|err| {
+        tracing::error!("business owner could not be stored: {}", err);
+        internal_error("Unable to create the business.")
+    })?;
 
     // The account is now attached to the new business.
-    let _ = sqlx::query(
+    sqlx::query(
         "UPDATE users SET tenant_id = $1, updated_at = NOW() WHERE LOWER(email) = LOWER($2)",
     )
     .bind(tenant_id)
     .bind(&context.email)
-    .execute(db)
-    .await;
+    .execute(&mut *tx)
+    .await
+    .map_err(|err| {
+        tracing::error!("business could not be attached to the account: {}", err);
+        internal_error("Unable to open the new business.")
+    })?;
+
+    tx.commit().await.map_err(|err| {
+        tracing::error!("business transaction could not be committed: {}", err);
+        internal_error("Unable to create the business.")
+    })?;
 
     let row = sqlx::query(
         "SELECT t.id, t.organization_name, t.organization_email, t.plan_tier, t.status,
@@ -393,9 +431,12 @@ pub async fn create_business(
     .bind(tenant_id)
     .fetch_optional(db)
     .await
-    .ok()
-    .flatten();
-    let business = row.as_ref().map(business_json).unwrap_or(json!({}));
+    .map_err(|err| {
+        tracing::error!("created business could not be loaded: {}", err);
+        internal_error("Unable to load the new business.")
+    })?
+    .ok_or_else(|| internal_error("Unable to load the new business."))?;
+    let business = business_json(&row);
 
     ok(json!({
         "success": true,
@@ -404,4 +445,24 @@ pub async fn create_business(
         "domainId": domain_id.map(|value| value.to_string()),
         "verificationToken": verification_token,
     }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::business_contact_email;
+
+    #[test]
+    fn contact_email_uses_the_workspace_domain() {
+        assert_eq!(business_contact_email("acme.com"), "admin@acme.com");
+    }
+
+    #[test]
+    fn contact_email_is_never_the_bare_domain() {
+        // organization_email is UNIQUE. Using the domain itself made two
+        // different businesses collide on the same row and could attach the
+        // caller to a tenant they do not own.
+        let address = business_contact_email("acme.com");
+        assert!(address.contains('@'));
+        assert_ne!(address, "acme.com");
+    }
 }

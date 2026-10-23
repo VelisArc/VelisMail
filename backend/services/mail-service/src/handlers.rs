@@ -25,6 +25,45 @@ fn tenant_uuid(claims: &Claims) -> Result<Uuid, velismail_common::AppError> {
     })
 }
 
+/// Resolve the company's business database from server-side settings.
+///
+/// A database URL from a request header or body is never trusted: it is a
+/// credential and would allow one workspace to read another workspace's mail.
+async fn tenant_business_db_url(
+    state: &MailState,
+    claims: &Claims,
+) -> Result<String, velismail_common::AppError> {
+    let tenant_id = tenant_uuid(claims)?;
+    let row = sqlx::query(
+        "SELECT u.settings FROM users u
+         JOIN company_members cm ON cm.user_id = u.id
+              AND cm.tenant_id = $1 AND cm.status = 'active'
+         ORDER BY (cm.role = 'owner') DESC, cm.created_at ASC
+         LIMIT 1",
+    )
+    .bind(tenant_id)
+    .fetch_optional(&state.db)
+    .await
+    .map_err(|_| velismail_common::AppError::Internal)?
+    .ok_or_else(|| {
+        velismail_common::AppError::Forbidden(
+            "You are not an active member of this workspace.".to_string(),
+        )
+    })?;
+    let settings: Value = row.try_get("settings").unwrap_or_else(|_| json!({}));
+    settings
+        .get("businessDbUrl")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
+        .ok_or_else(|| {
+            velismail_common::AppError::BadRequest(
+                "Configure the business database in Settings first.".to_string(),
+            )
+        })
+}
+
 // ────────────────────────────────────────────────────────────
 // Business email pool (tenant-specific dynamic DB connections)
 // ────────────────────────────────────────────────────────────
@@ -185,44 +224,25 @@ pub struct BusinessEmail {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SaveBusinessEmailRequest {
-    pub db_url: Option<String>,
     pub email: BusinessEmail,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DeleteBusinessEmailRequest {
-    pub db_url: Option<String>,
     pub id: String,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct BusinessEmailsQuery {
-    pub db_url: Option<String>,
-}
+pub struct BusinessEmailsQuery {}
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BusinessEmailsRequest {
+    #[serde(default)]
+    #[allow(dead_code)] // Ignored: the workspace database comes from the session.
     pub db_url: String,
-}
-
-fn business_db_url_from_parts(
-    headers: &HeaderMap,
-    query_url: Option<&str>,
-    body_url: Option<&str>,
-) -> Option<String> {
-    body_url
-        .or(query_url)
-        .or_else(|| {
-            headers
-                .get("x-business-db-url")
-                .and_then(|h| h.to_str().ok())
-        })
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(str::to_string)
 }
 
 async fn read_business_emails(db_url: &str) -> Result<Json<Value>, velismail_common::AppError> {
@@ -307,55 +327,32 @@ pub async fn health_check(
 // ────────────────────────────────────────────────────────────
 
 pub async fn get_business_emails(
-    State(_state): State<MailState>,
-    Query(query): Query<BusinessEmailsQuery>,
-    headers: HeaderMap,
+    State(state): State<MailState>,
+    Extension(claims): Extension<Claims>,
+    Query(_query): Query<BusinessEmailsQuery>,
+    _headers: HeaderMap,
 ) -> Result<Json<Value>, velismail_common::AppError> {
-    let db_url = match business_db_url_from_parts(&headers, query.db_url.as_deref(), None) {
-        Some(url) => url,
-        None => {
-            return Err(velismail_common::AppError::BadRequest(
-                "Missing business database URL".to_string(),
-            ));
-        }
-    };
-
+    let db_url = tenant_business_db_url(&state, &claims).await?;
     read_business_emails(&db_url).await
 }
 
 pub async fn query_business_emails(
-    State(_state): State<MailState>,
-    Json(payload): Json<BusinessEmailsRequest>,
+    State(state): State<MailState>,
+    Extension(claims): Extension<Claims>,
+    Json(_payload): Json<BusinessEmailsRequest>,
 ) -> Result<Json<Value>, velismail_common::AppError> {
-    let db_url = payload.db_url.trim();
-    if db_url.is_empty() {
-        return Err(velismail_common::AppError::BadRequest(
-            "Missing business database URL".to_string(),
-        ));
-    }
-
-    read_business_emails(db_url).await
+    let db_url = tenant_business_db_url(&state, &claims).await?;
+    read_business_emails(&db_url).await
 }
 
 pub async fn save_business_email(
-    State(_state): State<MailState>,
-    Query(query): Query<BusinessEmailsQuery>,
-    headers: HeaderMap,
+    State(state): State<MailState>,
+    Extension(claims): Extension<Claims>,
+    Query(_query): Query<BusinessEmailsQuery>,
+    _headers: HeaderMap,
     Json(payload): Json<SaveBusinessEmailRequest>,
 ) -> Result<Json<Value>, velismail_common::AppError> {
-    let db_url = match business_db_url_from_parts(
-        &headers,
-        query.db_url.as_deref(),
-        payload.db_url.as_deref(),
-    ) {
-        Some(url) => url,
-        None => {
-            return Err(velismail_common::AppError::BadRequest(
-                "Missing business database URL".to_string(),
-            ));
-        }
-    };
-
+    let db_url = tenant_business_db_url(&state, &claims).await?;
     let pool = get_business_pool(&db_url).await.map_err(|e| {
         velismail_common::AppError::Database(sqlx::Error::Configuration(e.to_string().into()))
     })?;
@@ -413,24 +410,13 @@ pub async fn save_business_email(
 // ────────────────────────────────────────────────────────────
 
 pub async fn delete_business_email(
-    State(_state): State<MailState>,
-    Query(query): Query<BusinessEmailsQuery>,
-    headers: HeaderMap,
+    State(state): State<MailState>,
+    Extension(claims): Extension<Claims>,
+    Query(_query): Query<BusinessEmailsQuery>,
+    _headers: HeaderMap,
     Json(payload): Json<DeleteBusinessEmailRequest>,
 ) -> Result<Json<Value>, velismail_common::AppError> {
-    let db_url = match business_db_url_from_parts(
-        &headers,
-        query.db_url.as_deref(),
-        payload.db_url.as_deref(),
-    ) {
-        Some(url) => url,
-        None => {
-            return Err(velismail_common::AppError::BadRequest(
-                "Missing business database URL".to_string(),
-            ));
-        }
-    };
-
+    let db_url = tenant_business_db_url(&state, &claims).await?;
     let pool = get_business_pool(&db_url).await.map_err(|e| {
         velismail_common::AppError::Database(sqlx::Error::Configuration(e.to_string().into()))
     })?;
@@ -456,6 +442,31 @@ pub async fn send_email(
 ) -> Result<Json<serde_json::Value>, velismail_common::AppError> {
     let tenant_id = tenant_uuid(&claims)?;
 
+    // The gateway checks this too, but the service also accepts direct
+    // loopback traffic, so it verifies the account state itself.
+    let account = sqlx::query("SELECT status, tenant_id FROM users WHERE id = $1")
+        .bind(claims.sub.0)
+        .fetch_optional(&state.db)
+        .await
+        .map_err(|_| velismail_common::AppError::Internal)?
+        .ok_or_else(|| {
+            velismail_common::AppError::Unauthorized("Account not found.".to_string())
+        })?;
+    let status: String = account
+        .try_get("status")
+        .unwrap_or_else(|_| "inactive".to_string());
+    if status != "active" {
+        return Err(velismail_common::AppError::Forbidden(
+            "This account is suspended.".to_string(),
+        ));
+    }
+    let current_tenant: Option<Uuid> = account.try_get("tenant_id").ok().flatten();
+    if current_tenant.is_some_and(|current| current != tenant_id) {
+        return Err(velismail_common::AppError::Unauthorized(
+            "The workspace changed. Refresh the session and retry.".to_string(),
+        ));
+    }
+
     // Validate request
     if request.to.is_empty() {
         return Err(velismail_common::AppError::BadRequest(
@@ -468,11 +479,65 @@ pub async fn send_email(
         .clone()
         .filter(|value| !value.trim().is_empty())
         .unwrap_or_else(|| state.config.platform_from_email.clone());
+
+    // The sender domain must belong to the caller. The platform domain is
+    // reserved for the configured sender and for platform staff.
+    let from_domain = from_email
+        .split('@')
+        .nth(1)
+        .unwrap_or_default()
+        .trim()
+        .to_lowercase();
+    if from_domain == state.config.base_domain.to_lowercase() {
+        let is_platform_sender = from_email.eq_ignore_ascii_case(&state.config.platform_from_email);
+        let is_staff: bool = sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM platform_admins
+             WHERE LOWER(email) = LOWER($1) AND status = 'active')",
+        )
+        .bind(&claims.email)
+        .fetch_one(&state.db)
+        .await
+        .unwrap_or(false);
+        if !is_platform_sender && !is_staff {
+            return Err(velismail_common::AppError::Forbidden(
+                "This sender address is reserved for the platform.".to_string(),
+            ));
+        }
+    } else if !from_domain.is_empty() {
+        let domain_owner: Option<Uuid> = sqlx::query_scalar(
+            "SELECT tenant_id FROM custom_domains
+             WHERE LOWER(domain_name) = LOWER($1) LIMIT 1",
+        )
+        .bind(&from_domain)
+        .fetch_optional(&state.db)
+        .await
+        .ok()
+        .flatten();
+        if domain_owner.is_some_and(|owner| owner != tenant_id) {
+            return Err(velismail_common::AppError::Forbidden(
+                "This sending domain belongs to another workspace.".to_string(),
+            ));
+        }
+    }
+
     let from_name = request
         .from_name
         .clone()
         .filter(|value| !value.trim().is_empty())
         .unwrap_or_else(|| state.config.platform_from_name.clone());
+
+    if request.to.len() > 100
+        || request.subject.len() > 998
+        || request.body.len() > 5 * 1024 * 1024
+        || request
+            .html_body
+            .as_deref()
+            .is_some_and(|html| html.len() > 5 * 1024 * 1024)
+    {
+        return Err(velismail_common::AppError::BadRequest(
+            "The message is too large or has too many recipients.".to_string(),
+        ));
+    }
 
     let message_id = format!("<{}@{}>", Uuid::new_v4(), state.config.base_domain);
     let thread_id = if request.in_reply_to.is_some() {

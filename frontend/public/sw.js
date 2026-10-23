@@ -1,4 +1,4 @@
-const CACHE_NAME = 'velismail-shell-v4';
+const CACHE_NAME = 'velismail-shell-v5';
 const APP_SHELL = [
   '/',
   '/index.html',
@@ -33,16 +33,29 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
 
+  // Never cache authenticated API traffic. A cached mailbox response could be
+  // replayed to the next person who signs in on this browser while offline.
+  if (
+    request.headers.has('authorization') ||
+    /^\/(api|auth|mail|tenants|storage|delivery)(\/|$)/.test(url.pathname)
+  ) {
+    return;
+  }
+
   if (request.mode === 'navigate') {
     event.respondWith(fetch(request).catch(() => caches.match('/index.html')));
     return;
   }
 
+  // Only static assets are cacheable. Documents and unknown paths stay
+  // network-only.
+  if (!['script', 'style', 'image', 'font'].includes(request.destination)) return;
+
   event.respondWith(
     caches.match(request).then((cached) => {
       return fetch(request)
         .then((response) => {
-          if (response.ok) {
+          if (response.ok && response.type === 'basic') {
             const copy = response.clone();
             caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
           }

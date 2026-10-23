@@ -1,6 +1,7 @@
 // VelisMail Session Store - Centralized state management with Zustand
 // Uses sessionStorage for navigation state persistence (survives refresh, cleared on tab close)
 
+import { useMemo } from 'react';
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import type { 
@@ -200,15 +201,29 @@ export const useVerification = () => useSessionStore((state) => state.verificati
  * Hook to get session actions
  */
 export const useSessionActions = () => {
-  return {
-    setSession: useSessionStore((state) => state.setSession),
-    clearSession: useSessionStore((state) => state.clearSession),
-    setAccountType: useSessionStore((state) => state.setAccountType),
-    updateNavigation: useSessionStore((state) => state.updateNavigation),
-    updateVerification: useSessionStore((state) => state.updateVerification),
-    updateUser: useSessionStore((state) => state.updateUser),
-    touchActivity: useSessionStore((state) => state.touchActivity),
-  };
+  const setSession = useSessionStore((state) => state.setSession);
+  const clearSession = useSessionStore((state) => state.clearSession);
+  const setAccountType = useSessionStore((state) => state.setAccountType);
+  const updateNavigation = useSessionStore((state) => state.updateNavigation);
+  const updateVerification = useSessionStore((state) => state.updateVerification);
+  const updateUser = useSessionStore((state) => state.updateUser);
+  const touchActivity = useSessionStore((state) => state.touchActivity);
+
+  // Consumers use these actions in effect dependency lists. Returning a fresh
+  // object on every render made those effects run on every render, which
+  // re-wrote navigation state and triggered the "Maximum update depth" loop.
+  return useMemo(
+    () => ({
+      setSession,
+      clearSession,
+      setAccountType,
+      updateNavigation,
+      updateVerification,
+      updateUser,
+      touchActivity,
+    }),
+    [setSession, clearSession, setAccountType, updateNavigation, updateVerification, updateUser, touchActivity],
+  );
 };
 
 export default useSessionStore;

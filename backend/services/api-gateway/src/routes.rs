@@ -34,6 +34,7 @@ use tokio::{
     net::{lookup_host, TcpStream},
     time::{sleep, timeout, Duration},
 };
+use uuid::Uuid;
 use velismail_common::traffic::client_ip;
 use velismail_common::Claims;
 
@@ -287,7 +288,10 @@ pub fn api_v1_routes(_state: &AppState) -> Router<AppState> {
         .route("/mail/{*rest}", any(proxy_mail))
         .route("/tenants/{*rest}", any(proxy_tenant))
         .route("/storage/{*rest}", any(proxy_storage))
-        .route("/delivery/{*rest}", any(proxy_delivery))
+    // The delivery engine is an internal worker (queue, DKIM signing and
+    // bounce handling). It is intentionally not reachable through the
+    // public gateway: exposing queue enqueue/dkim sign let any logged-in
+    // user relay mail or obtain signatures from the platform key.
 }
 
 pub async fn root() -> Json<serde_json::Value> {
@@ -685,7 +689,6 @@ proxy_handler!(proxy_auth, auth_service_url, "/auth");
 proxy_handler!(proxy_mail, mail_service_url, "/mail");
 proxy_handler!(proxy_tenant, tenant_service_url, "");
 proxy_handler!(proxy_storage, storage_service_url, "/storage");
-proxy_handler!(proxy_delivery, delivery_service_url, "/delivery");
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -732,6 +735,9 @@ pub struct SendMailPayload {
     from_name: Option<String>,
     provider: Option<String>,
     api_key: Option<String>,
+    /// Kept for wire compatibility. The database is resolved from the
+    /// verified session; a client-supplied URL is ignored.
+    #[allow(dead_code)]
     db_url: Option<String>,
     provider_endpoint: Option<String>,
     pub attachments: Option<Vec<AttachmentPayload>>,
@@ -1666,6 +1672,12 @@ async fn dispatch_via_provider(
         "custom_webhook" => {
             let endpoint =
                 endpoint.ok_or_else(|| "Custom webhook endpoint is missing.".to_string())?;
+            if !is_public_http_endpoint(endpoint).await {
+                return Err(
+                    "Custom webhook endpoint resolves to a private or reserved address."
+                        .to_string(),
+                );
+            }
             client
                 .post(endpoint)
                 .header(
@@ -2784,6 +2796,30 @@ pub async fn send_mail(
             })),
         );
     }
+    if payload.to.len() > 100
+        || payload.subject.len() > 998
+        || payload.body.len() > 5 * 1024 * 1024
+        || payload
+            .html_body
+            .as_deref()
+            .is_some_and(|html| html.len() > 5 * 1024 * 1024)
+        || payload
+            .provider
+            .as_deref()
+            .is_some_and(|provider| provider.len() > 40)
+        || payload
+            .api_key
+            .as_deref()
+            .is_some_and(|key| key.len() > 4096)
+    {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({
+                "success": false,
+                "message": "The message is too large or malformed."
+            })),
+        );
+    }
 
     if let Some(invalid) = payload
         .to
@@ -2811,40 +2847,85 @@ pub async fn send_mail(
         }
 
         let sender_domain = email_address_domain(from).unwrap_or_default();
-        let db_url = payload.db_url.as_deref().or_else(|| {
-            headers
-                .get("x-business-db-url")
-                .and_then(|value| value.to_str().ok())
-        });
-        if let Some(db_url) = db_url {
-            match business_mailbox_exists(db_url, &sender_domain, from).await {
-                Ok(true) => {}
-                Ok(false) => {
-                    return (
-                        StatusCode::FORBIDDEN,
-                        Json(json!({
-                            "success": false,
-                            "message": "Sender mailbox is not registered in the business database."
-                        })),
+        let caller_tenant = Uuid::parse_str(claims.tenant_id.trim()).unwrap_or(Uuid::nil());
+        let platform_domain = email_address_domain(&state.config.platform_from_email)
+            .unwrap_or_else(|| "velismail.online".to_string());
+        if sender_domain == platform_domain
+            && !from.eq_ignore_ascii_case(&state.config.platform_from_email)
+        {
+            // Only the configured platform sender (or platform staff) may use
+            // an address on the platform's own domain. Everything else would
+            // let a customer impersonate support@ or no-reply@.
+            let is_staff = state
+                .config
+                .platform_owner_emails
+                .contains(&claims.email.to_lowercase())
+                || claims.firebase_uid.as_ref().is_some_and(|uid| {
+                    state
+                        .config
+                        .platform_owner_uids
+                        .iter()
+                        .any(|value| value == uid)
+                })
+                || match state.db.as_ref() {
+                    Some(db) => sqlx::query_scalar::<_, bool>(
+                        "SELECT EXISTS(SELECT 1 FROM platform_admins
+                         WHERE LOWER(email) = LOWER($1) AND status = 'active')",
                     )
-                }
-                Err(err) => {
-                    return (
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        Json(json!({
-                            "success": false,
-                            "message": format!("Unable to verify sender mailbox: {err}")
-                        })),
-                    )
+                    .bind(&claims.email)
+                    .fetch_one(db)
+                    .await
+                    .unwrap_or(false),
+                    None => false,
+                };
+            if !is_staff {
+                return (
+                    StatusCode::FORBIDDEN,
+                    Json(json!({
+                        "success": false,
+                        "message": "This sender address is reserved for the platform."
+                    })),
+                );
+            }
+        }
+
+        if let Some(db) = state.db.as_ref() {
+            // The database URL is resolved from the caller's workspace. A
+            // client-supplied URL is never trusted.
+            if let Some(db_url) =
+                crate::company_api::tenant_business_db_url(db, caller_tenant).await
+            {
+                match business_mailbox_exists(&db_url, &sender_domain, from).await {
+                    Ok(true) => {}
+                    Ok(false) => {
+                        return (
+                            StatusCode::FORBIDDEN,
+                            Json(json!({
+                                "success": false,
+                                "message": "Sender mailbox is not registered in the business database."
+                            })),
+                        )
+                    }
+                    Err(err) => {
+                        return (
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            Json(json!({
+                                "success": false,
+                                "message": format!("Unable to verify sender mailbox: {err}")
+                            })),
+                        )
+                    }
                 }
             }
         }
 
-        // The domain has to be fully set up before mail leaves the platform.
-        // The customer is told which record is still missing.
+        // The domain has to belong to the caller and be fully set up before
+        // mail leaves the platform. The customer is told which record is
+        // still missing.
         if let Some(db) = state.db.as_ref() {
             if let Some((ready, missing, message)) =
-                crate::company_api::domain_send_readiness(&state, db, &sender_domain).await
+                crate::company_api::domain_send_readiness(&state, db, caller_tenant, &sender_domain)
+                    .await
             {
                 if !ready {
                     return (
@@ -3042,19 +3123,13 @@ pub async fn send_mail(
     (status, Json(response_json))
 }
 
-#[derive(Debug, Deserialize, Serialize, Clone)]
+#[derive(Debug, Deserialize, Serialize, Clone, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct TeamInviteWorkspace {
     pub tenant_id: Option<String>,
     pub display_name: Option<String>,
     pub business_domain: Option<String>,
-    pub business_db_url: Option<String>,
-    pub business_api_key: Option<String>,
-    pub business_mail_provider: Option<String>,
-    pub business_mail_provider_endpoint: Option<String>,
-    pub business_mailbox_address: Option<String>,
     pub business_domain_verified: Option<bool>,
-    pub business_profile: Option<Value>,
     pub is_business_setup_complete: Option<bool>,
 }
 
@@ -3065,8 +3140,14 @@ pub struct CreateTeamInviteRequest {
     pub name: String,
     pub role: String,
     pub expires_in_hours: Option<i64>,
-    pub issuer_email: String,
-    pub workspace: TeamInviteWorkspace,
+    // Kept in the wire format for older clients. The issuer and the workspace
+    // always come from the verified session, never from these fields.
+    #[serde(default)]
+    #[allow(dead_code)]
+    pub issuer_email: Option<String>,
+    #[serde(default)]
+    #[allow(dead_code)]
+    pub workspace: Option<TeamInviteWorkspace>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -3082,6 +3163,8 @@ pub struct CompleteTeamInviteRequest {
     pub token: String,
     pub email: String,
     pub password: String,
+    #[serde(default)]
+    pub device_id: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -3201,7 +3284,17 @@ fn public_team_invite(invite: &TeamInviteRecord) -> Value {
         "createdAt": invite.created_at.clone(),
         "expiresAt": invite.expires_at.clone(),
         "acceptedAt": invite.accepted_at.clone(),
-        "issuerEmail": invite.issuer_email.clone()
+        "issuerEmail": invite.issuer_email.clone(),
+        // Only non-secret workspace metadata. Database URLs, provider keys and
+        // webhook secrets are resolved server-side from the tenant and are
+        // never handed to an unauthenticated invite page.
+        "workspace": {
+            "tenantId": invite.workspace.tenant_id,
+            "displayName": invite.workspace.display_name,
+            "businessDomain": invite.workspace.business_domain,
+            "businessDomainVerified": invite.workspace.business_domain_verified,
+            "isBusinessSetupComplete": invite.workspace.is_business_setup_complete,
+        }
     })
 }
 
@@ -3239,18 +3332,35 @@ fn verify_team_otp_token(
 
 pub async fn create_team_invite(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Json(payload): Json<CreateTeamInviteRequest>,
 ) -> (StatusCode, Json<Value>) {
+    // The caller's workspace and role come from the verified session. The
+    // request used to choose both, which let any authenticated user create an
+    // administrator key for any company whose tenant id they knew.
+    let context = match crate::company_api::workspace_context(&state, &headers).await {
+        Ok(context) => context,
+        Err(response) => return response,
+    };
+    if !context.can_manage() {
+        return (
+            StatusCode::FORBIDDEN,
+            Json(json!({
+                "success": false,
+                "message": "Only workspace owners and admins can create a team access key."
+            })),
+        );
+    }
+
     let email = normalize_team_email(&payload.email);
-    let issuer_email = normalize_team_email(&payload.issuer_email);
     let role = payload.role.trim().to_lowercase();
 
-    if !email.contains('@') || !issuer_email.contains('@') {
+    if !is_valid_email_address(&email) {
         return (
             StatusCode::BAD_REQUEST,
             Json(json!({
                 "success": false,
-                "message": "A valid invite email and issuer email are required."
+                "message": "A valid invite email is required."
             })),
         );
     }
@@ -3263,14 +3373,84 @@ pub async fn create_team_invite(
             })),
         );
     }
+    if role == "admin" && context.role != "owner" {
+        return (
+            StatusCode::FORBIDDEN,
+            Json(json!({
+                "success": false,
+                "message": "Only a workspace owner can invite another administrator."
+            })),
+        );
+    }
+
+    let Some(db) = state.db.as_ref() else {
+        return (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(json!({
+                "success": false,
+                "message": "The invitation store is not connected. Try again in a moment."
+            })),
+        );
+    };
+
+    let pending: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*)::bigint FROM team_invites
+         WHERE revoked = FALSE
+           AND data->>'status' = 'pending'
+           AND data->'workspace'->>'tenantId' = $1",
+    )
+    .bind(context.tenant_id.to_string())
+    .fetch_one(db)
+    .await
+    .unwrap_or(0);
+    if pending >= 50 {
+        return (
+            StatusCode::TOO_MANY_REQUESTS,
+            Json(json!({
+                "success": false,
+                "message": "Too many pending team access keys. Revoke unused keys first."
+            })),
+        );
+    }
+
+    let tenant_name: String = sqlx::query_scalar(
+        "SELECT organization_name FROM tenants WHERE id = $1 AND deleted_at IS NULL",
+    )
+    .bind(context.tenant_id)
+    .fetch_optional(db)
+    .await
+    .ok()
+    .flatten()
+    .unwrap_or_else(|| "VelisMail workspace".to_string());
+    let domain: Option<String> = sqlx::query_scalar(
+        "SELECT domain_name FROM custom_domains
+         WHERE tenant_id = $1 ORDER BY created_at ASC LIMIT 1",
+    )
+    .bind(context.tenant_id)
+    .fetch_optional(db)
+    .await
+    .ok()
+    .flatten();
+    let domain_verified: bool = match domain.as_deref() {
+        Some(domain) => sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM custom_domains
+             WHERE tenant_id = $1 AND LOWER(domain_name) = LOWER($2)
+               AND verification_status = 'verified')",
+        )
+        .bind(context.tenant_id)
+        .bind(domain)
+        .fetch_one(db)
+        .await
+        .unwrap_or(false),
+        None => false,
+    };
 
     let now = chrono::Utc::now();
     let requested_expiry = payload.expires_in_hours.unwrap_or(24);
-    let expires_at = if requested_expiry <= 0 {
-        None
-    } else {
-        Some((now + chrono::Duration::hours(requested_expiry.clamp(1, 720))).to_rfc3339())
-    };
+    // A team access key always expires. Open ended keys were impossible to
+    // retire safely when an employee left.
+    let expires_at =
+        Some((now + chrono::Duration::hours(requested_expiry.clamp(1, 720))).to_rfc3339());
     let token = format!(
         "vmt_{}{}",
         uuid::Uuid::new_v4().simple(),
@@ -3288,15 +3468,21 @@ pub async fn create_team_invite(
                 .unwrap_or("Team member")
                 .to_string()
         } else {
-            payload.name.trim().to_string()
+            payload.name.trim().chars().take(100).collect()
         },
         role,
         status: "pending".to_string(),
         created_at: now.to_rfc3339(),
         expires_at,
         accepted_at: None,
-        issuer_email,
-        workspace: payload.workspace,
+        issuer_email: context.email.clone(),
+        workspace: TeamInviteWorkspace {
+            tenant_id: Some(context.tenant_id.to_string()),
+            display_name: Some(tenant_name),
+            business_domain: domain,
+            business_domain_verified: Some(domain_verified),
+            is_business_setup_complete: Some(domain_verified),
+        },
     };
 
     let serialized = match serde_json::to_value(&invite) {
@@ -3312,17 +3498,6 @@ pub async fn create_team_invite(
         }
     };
 
-    // The invitation is written to the database, so the key survives a
-    // restart and a deploy instead of disappearing with the process.
-    let Some(db) = state.db.as_ref() else {
-        return (
-            StatusCode::SERVICE_UNAVAILABLE,
-            Json(json!({
-                "success": false,
-                "message": "The invitation store is not connected. Try again in a moment."
-            })),
-        );
-    };
     let expires_at_ts: Option<chrono::DateTime<chrono::Utc>> = invite
         .expires_at
         .as_deref()
@@ -3356,7 +3531,7 @@ pub async fn create_team_invite(
         StatusCode::OK,
         Json(json!({
             "success": true,
-            "invite": invite
+            "invite": public_team_invite(&invite)
         })),
     )
 }
@@ -3398,6 +3573,15 @@ pub async fn validate_team_invite(
             })),
         );
     }
+    if invite.status != "pending" {
+        return (
+            StatusCode::CONFLICT,
+            Json(json!({
+                "success": false,
+                "message": "This team access key was already used."
+            })),
+        );
+    }
     if team_invite_expired(&invite) {
         let _ = set_team_invite_status(&state, token, "expired").await;
         return (
@@ -3433,8 +3617,10 @@ pub async fn validate_team_invite(
 /// Extract a client IP for the refresh-token audit column.
 fn gateway_request_ip(headers: &HeaderMap) -> String {
     if let Some(value) = headers.get("x-forwarded-for").and_then(|v| v.to_str().ok()) {
-        if let Some(first) = value.split(',').next() {
-            let trimmed = first.trim();
+        // Caddy appends the peer address, so the last entry is the one that
+        // cannot be spoofed by the client.
+        if let Some(last) = value.rsplit(',').next() {
+            let trimmed = last.trim();
             if !trimmed.is_empty() {
                 return trimmed.to_string();
             }
@@ -3490,16 +3676,16 @@ pub async fn complete_team_invite(
     let token = payload.token.trim();
     let email = normalize_team_email(&payload.email);
     let password = payload.password.clone();
-    if token.is_empty() || email.is_empty() || password.len() < 8 {
+    if token.is_empty() || email.is_empty() || password.len() < 8 || password.len() > 256 {
         return (
             StatusCode::BAD_REQUEST,
             Json(json!({
                 "success": false,
-                "message": "Team access key, email, and a password of at least 8 characters are required."
+                "message": "Team access key, email, and a password of 8-256 characters are required."
             })),
         );
     }
-    if !email.contains('@') {
+    if !is_valid_email_address(&email) {
         return (
             StatusCode::BAD_REQUEST,
             Json(json!({ "success": false, "message": "Enter a valid email address." })),
@@ -3519,6 +3705,12 @@ pub async fn complete_team_invite(
         return (
             StatusCode::FORBIDDEN,
             Json(json!({ "success": false, "message": "This team access key was revoked." })),
+        );
+    }
+    if invite.status != "pending" {
+        return (
+            StatusCode::CONFLICT,
+            Json(json!({ "success": false, "message": "This team access key was already used." })),
         );
     }
     if team_invite_expired(&invite) {
@@ -3564,6 +3756,44 @@ pub async fn complete_team_invite(
         }
     };
 
+    let tenant_usable: bool = sqlx::query_scalar(
+        "SELECT EXISTS(
+             SELECT 1 FROM tenants
+             WHERE id = $1 AND deleted_at IS NULL
+               AND status NOT IN ('suspended', 'disabled', 'deleted')
+         )",
+    )
+    .bind(admin_tenant)
+    .fetch_one(db)
+    .await
+    .unwrap_or(false);
+    if !tenant_usable {
+        return (
+            StatusCode::FORBIDDEN,
+            Json(json!({ "success": false, "message": "That workspace is not active." })),
+        );
+    }
+
+    // Throttle password attempts for an existing account reached through an
+    // invitation key. Without this the endpoint is a second, unthrottled
+    // password login oracle.
+    let recent_failures: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*)::bigint FROM failed_login_attempts
+         WHERE email = $1 AND attempted_at > NOW() - INTERVAL '15 minutes'",
+    )
+    .bind(&email)
+    .fetch_one(db)
+    .await
+    .unwrap_or(0);
+    if recent_failures >= 5 {
+        return (
+            StatusCode::TOO_MANY_REQUESTS,
+            Json(
+                json!({ "success": false, "message": "Too many sign-in attempts. Try again later." }),
+            ),
+        );
+    }
+
     let existing = sqlx::query(
         "SELECT id, tenant_id, password_hash FROM users WHERE email = $1 AND status = 'active' LIMIT 1",
     )
@@ -3596,6 +3826,16 @@ pub async fn complete_team_invite(
                 }
             };
             if !verify_team_password(&password, &stored) {
+                let _ = sqlx::query(
+                    "INSERT INTO failed_login_attempts (id, user_id, email, ip_address, attempted_at)
+                     VALUES ($1, $2, $3, $4, NOW())",
+                )
+                .bind(uuid::Uuid::new_v4())
+                .bind(uid)
+                .bind(&email)
+                .bind(gateway_request_ip(&headers))
+                .execute(db)
+                .await;
                 return (
                     StatusCode::UNAUTHORIZED,
                     Json(
@@ -3660,6 +3900,12 @@ pub async fn complete_team_invite(
         }
     };
 
+    // A successful team sign-in clears the password-attempt counter.
+    let _ = sqlx::query("DELETE FROM failed_login_attempts WHERE email = $1")
+        .bind(&email)
+        .execute(db)
+        .await;
+
     let role = if valid_team_role(&invite.role) {
         invite.role.clone()
     } else {
@@ -3710,7 +3956,11 @@ pub async fn complete_team_invite(
         .and_then(|v| v.parse().ok())
         .unwrap_or(86400);
     let now = chrono::Utc::now();
-    let device_id = "team-access".to_string();
+    let device_id = payload
+        .device_id
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| "team-access".to_string());
     let claims = velismail_common::Claims {
         sub: velismail_common::types::UserId(user_id),
         tenant_id: admin_tenant.to_string(),
@@ -3781,7 +4031,7 @@ pub async fn complete_team_invite(
             "refreshToken": refresh_token,
             "expiresIn": expiry_seconds,
             "tokenType": "Bearer",
-            "invite": accepted_invite,
+            "invite": public_team_invite(&accepted_invite),
             "user": {
                 "id": user_id.to_string(),
                 "email": email,
@@ -3795,8 +4045,22 @@ pub async fn complete_team_invite(
 
 pub async fn revoke_team_invite(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Json(payload): Json<RevokeTeamInviteRequest>,
 ) -> (StatusCode, Json<Value>) {
+    let context = match crate::company_api::workspace_context(&state, &headers).await {
+        Ok(context) => context,
+        Err(response) => return response,
+    };
+    if !context.can_manage() {
+        return (
+            StatusCode::FORBIDDEN,
+            Json(json!({
+                "success": false,
+                "message": "Only workspace owners and admins can revoke a team access key."
+            })),
+        );
+    }
     let token = payload.token.trim();
     if token.is_empty() {
         return (
@@ -3820,6 +4084,22 @@ pub async fn revoke_team_invite(
             )
         }
     };
+
+    let invite_tenant = invite
+        .workspace
+        .tenant_id
+        .as_deref()
+        .and_then(|value| uuid::Uuid::parse_str(value).ok());
+    if invite_tenant != Some(context.tenant_id) {
+        return (
+            StatusCode::NOT_FOUND,
+            Json(json!({
+                "success": false,
+                "message": "Team access key was not found."
+            })),
+        );
+    }
+
     if invite.status != "pending" {
         return (
             StatusCode::CONFLICT,
@@ -4581,6 +4861,7 @@ pub struct BusinessEmail {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SaveBusinessEmailRequest {
+    #[allow(dead_code)] // Ignored: the workspace database comes from the session.
     pub db_url: Option<String>,
     pub email: BusinessEmail,
 }
@@ -4588,6 +4869,7 @@ pub struct SaveBusinessEmailRequest {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DeleteBusinessEmailRequest {
+    #[allow(dead_code)] // Ignored: the workspace database comes from the session.
     pub db_url: Option<String>,
     pub id: String,
 }
@@ -4595,12 +4877,14 @@ pub struct DeleteBusinessEmailRequest {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BusinessEmailsQuery {
+    #[allow(dead_code)] // Ignored: the workspace database comes from the session.
     pub db_url: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BusinessEmailsRequest {
+    #[allow(dead_code)] // Ignored: the workspace database comes from the session.
     pub db_url: String,
 }
 
@@ -4624,6 +4908,7 @@ pub struct BusinessMailbox {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SaveBusinessMailboxRequest {
+    #[allow(dead_code)] // Ignored: the workspace database comes from the session.
     pub db_url: Option<String>,
     pub mailbox: BusinessMailbox,
 }
@@ -4631,6 +4916,7 @@ pub struct SaveBusinessMailboxRequest {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DeleteBusinessMailboxRequest {
+    #[allow(dead_code)] // Ignored: the workspace database comes from the session.
     pub db_url: Option<String>,
     pub domain: String,
     pub address: String,
@@ -4639,6 +4925,7 @@ pub struct DeleteBusinessMailboxRequest {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BusinessMailboxesQuery {
+    #[allow(dead_code)] // Ignored: the workspace database comes from the session.
     pub db_url: Option<String>,
     pub domain: Option<String>,
 }
@@ -4646,25 +4933,69 @@ pub struct BusinessMailboxesQuery {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BusinessMailboxesRequest {
+    #[allow(dead_code)] // Ignored: the workspace database comes from the session.
     pub db_url: String,
     pub domain: String,
 }
 
-fn business_db_url_from_parts(
+/// Resolve the caller's business database from the server-side tenant
+/// configuration.
+///
+/// The database URL is a credential. Accepting it from a header, query or body
+/// let any authenticated account read or modify another workspace's mail and
+/// wrote the plaintext password into proxy access logs. The URL is now looked
+/// up from the caller's own tenant; client-supplied values are ignored.
+async fn authorized_business_db_url(
+    state: &AppState,
     headers: &HeaderMap,
-    query_url: Option<&str>,
-    body_url: Option<&str>,
-) -> Option<String> {
-    body_url
-        .or(query_url)
-        .or_else(|| {
-            headers
-                .get("x-business-db-url")
-                .and_then(|h| h.to_str().ok())
+) -> Result<String, crate::company_api::ApiError> {
+    let token = headers
+        .get(axum::http::header::AUTHORIZATION)
+        .and_then(|value| value.to_str().ok())
+        .map(str::trim)
+        .and_then(|value| {
+            value
+                .strip_prefix("Bearer ")
+                .or_else(|| value.strip_prefix("bearer "))
         })
         .map(str::trim)
         .filter(|value| !value.is_empty())
-        .map(str::to_string)
+        .ok_or_else(|| {
+            crate::company_api::fail(StatusCode::UNAUTHORIZED, "A bearer token is required.")
+        })?;
+
+    let tenant_id = if token.starts_with(crate::api_keys::API_KEY_PREFIX) {
+        crate::api_keys::resolve(state, token)
+            .await
+            .map(|key| key.tenant_id)
+            .map_err(|_| {
+                crate::company_api::fail(StatusCode::UNAUTHORIZED, "This API key is not valid.")
+            })?
+    } else {
+        let claims = crate::company_api::session_claims(state, headers)?;
+        Uuid::parse_str(claims.tenant_id.trim()).map_err(|_| {
+            crate::company_api::fail(
+                StatusCode::UNAUTHORIZED,
+                "Invalid tenant identity in token.",
+            )
+        })?
+    };
+
+    let db = state.db.as_ref().ok_or_else(|| {
+        crate::company_api::fail(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "The workspace database is not connected.",
+        )
+    })?;
+
+    crate::company_api::tenant_business_db_url(db, tenant_id)
+        .await
+        .ok_or_else(|| {
+            crate::company_api::fail(
+                StatusCode::BAD_REQUEST,
+                "Configure the business database in Settings before using mail storage.",
+            )
+        })
 }
 
 async fn ensure_business_mailboxes_table(pool: &PgPool) -> Result<(), String> {
@@ -5398,17 +5729,9 @@ pub async fn receive_resend_inbound(
         }
     };
 
-    let save_payload = SaveBusinessEmailRequest {
-        db_url: Some(db_url),
-        email,
-    };
-    let (status, Json(mut response)) = save_business_email(
-        State(state),
-        Query(BusinessEmailsQuery { db_url: None }),
-        HeaderMap::new(),
-        Json(save_payload),
-    )
-    .await;
+    // The webhook was authenticated with the per-domain signing secret above,
+    // so it may store into that route's database directly.
+    let (status, Json(mut response)) = save_business_email_with_db(&db_url, email).await;
     if let Some(object) = response.as_object_mut() {
         object.insert("provider".to_string(), json!("resend"));
         object.insert("signatureVerified".to_string(), json!(signature_verified));
@@ -5499,18 +5822,13 @@ async fn read_business_emails(db_url: &str) -> (StatusCode, Json<Value>) {
 }
 
 pub async fn get_business_mailboxes(
-    State(_state): State<AppState>,
+    State(state): State<AppState>,
     Query(query): Query<BusinessMailboxesQuery>,
     headers: HeaderMap,
 ) -> (StatusCode, Json<Value>) {
-    let db_url = match business_db_url_from_parts(&headers, query.db_url.as_deref(), None) {
-        Some(url) => url,
-        None => {
-            return (
-                StatusCode::BAD_REQUEST,
-                Json(json!({"success": false, "error": "Missing business database URL"})),
-            )
-        }
+    let db_url = match authorized_business_db_url(&state, &headers).await {
+        Ok(url) => url,
+        Err(response) => return response,
     };
     let Some(domain) = query.domain.as_deref() else {
         return (
@@ -5523,17 +5841,16 @@ pub async fn get_business_mailboxes(
 }
 
 pub async fn query_business_mailboxes(
-    State(_state): State<AppState>,
+    State(state): State<AppState>,
+    headers: HeaderMap,
     Json(payload): Json<BusinessMailboxesRequest>,
 ) -> (StatusCode, Json<Value>) {
-    if payload.db_url.trim().is_empty() {
-        return (
-            StatusCode::BAD_REQUEST,
-            Json(json!({"success": false, "error": "Missing business database URL"})),
-        );
-    }
+    let db_url = match authorized_business_db_url(&state, &headers).await {
+        Ok(url) => url,
+        Err(response) => return response,
+    };
 
-    read_business_mailboxes(payload.db_url.trim(), payload.domain.trim()).await
+    read_business_mailboxes(&db_url, payload.domain.trim()).await
 }
 
 /// Register a mailbox in the company business database.
@@ -5583,23 +5900,14 @@ async fn ensure_business_mailbox(
 }
 
 pub async fn save_business_mailbox(
-    State(_state): State<AppState>,
-    Query(query): Query<BusinessMailboxesQuery>,
+    State(state): State<AppState>,
+    Query(_query): Query<BusinessMailboxesQuery>,
     headers: HeaderMap,
     Json(payload): Json<SaveBusinessMailboxRequest>,
 ) -> (StatusCode, Json<Value>) {
-    let db_url = match business_db_url_from_parts(
-        &headers,
-        query.db_url.as_deref(),
-        payload.db_url.as_deref(),
-    ) {
-        Some(url) => url,
-        None => {
-            return (
-                StatusCode::BAD_REQUEST,
-                Json(json!({"success": false, "error": "Missing business database URL"})),
-            )
-        }
+    let db_url = match authorized_business_db_url(&state, &headers).await {
+        Ok(url) => url,
+        Err(response) => return response,
     };
 
     let mailbox = match normalize_business_mailbox(payload.mailbox) {
@@ -5668,23 +5976,14 @@ pub async fn save_business_mailbox(
 }
 
 pub async fn delete_business_mailbox(
-    State(_state): State<AppState>,
-    Query(query): Query<BusinessMailboxesQuery>,
+    State(state): State<AppState>,
+    Query(_query): Query<BusinessMailboxesQuery>,
     headers: HeaderMap,
     Json(payload): Json<DeleteBusinessMailboxRequest>,
 ) -> (StatusCode, Json<Value>) {
-    let db_url = match business_db_url_from_parts(
-        &headers,
-        query.db_url.as_deref(),
-        payload.db_url.as_deref(),
-    ) {
-        Some(url) => url,
-        None => {
-            return (
-                StatusCode::BAD_REQUEST,
-                Json(json!({"success": false, "error": "Missing business database URL"})),
-            )
-        }
+    let db_url = match authorized_business_db_url(&state, &headers).await {
+        Ok(url) => url,
+        Err(response) => return response,
     };
 
     let domain = payload.domain.trim().to_lowercase();
@@ -5728,59 +6027,50 @@ pub async fn delete_business_mailbox(
 }
 
 pub async fn get_business_emails(
-    State(_state): State<AppState>,
-    Query(query): Query<BusinessEmailsQuery>,
+    State(state): State<AppState>,
+    Query(_query): Query<BusinessEmailsQuery>,
     headers: HeaderMap,
 ) -> (StatusCode, Json<Value>) {
-    let db_url = match business_db_url_from_parts(&headers, query.db_url.as_deref(), None) {
-        Some(url) => url,
-        None => {
-            return (
-                StatusCode::BAD_REQUEST,
-                Json(json!({"success": false, "error": "Missing business database URL"})),
-            )
-        }
+    let db_url = match authorized_business_db_url(&state, &headers).await {
+        Ok(url) => url,
+        Err(response) => return response,
     };
 
     read_business_emails(&db_url).await
 }
 
 pub async fn query_business_emails(
-    State(_state): State<AppState>,
-    Json(payload): Json<BusinessEmailsRequest>,
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(_payload): Json<BusinessEmailsRequest>,
 ) -> (StatusCode, Json<Value>) {
-    let db_url = payload.db_url.trim();
-    if db_url.is_empty() {
-        return (
-            StatusCode::BAD_REQUEST,
-            Json(json!({"success": false, "error": "Missing business database URL"})),
-        );
-    }
+    let db_url = match authorized_business_db_url(&state, &headers).await {
+        Ok(url) => url,
+        Err(response) => return response,
+    };
 
-    read_business_emails(db_url).await
+    read_business_emails(&db_url).await
 }
 
 pub async fn save_business_email(
-    State(_state): State<AppState>,
-    Query(query): Query<BusinessEmailsQuery>,
+    State(state): State<AppState>,
+    Query(_query): Query<BusinessEmailsQuery>,
     headers: HeaderMap,
     Json(payload): Json<SaveBusinessEmailRequest>,
 ) -> (StatusCode, Json<Value>) {
-    let db_url = match business_db_url_from_parts(
-        &headers,
-        query.db_url.as_deref(),
-        payload.db_url.as_deref(),
-    ) {
-        Some(url) => url,
-        None => {
-            return (
-                StatusCode::BAD_REQUEST,
-                Json(json!({"success": false, "error": "Missing business database URL"})),
-            )
-        }
+    let db_url = match authorized_business_db_url(&state, &headers).await {
+        Ok(url) => url,
+        Err(response) => return response,
     };
 
-    let pool = match get_tenant_pool(&db_url).await {
+    save_business_email_with_db(&db_url, payload.email).await
+}
+
+async fn save_business_email_with_db(
+    db_url: &str,
+    email: BusinessEmail,
+) -> (StatusCode, Json<Value>) {
+    let pool = match get_tenant_pool(db_url).await {
         Ok(p) => p,
         Err(e) => {
             return (
@@ -5797,7 +6087,7 @@ pub async fn save_business_email(
         );
     }
 
-    let e = payload.email;
+    let e = email;
     let recipients_str = serde_json::to_string(&e.to).unwrap_or_else(|_| "[]".to_string());
 
     match sqlx::query(
@@ -5842,23 +6132,14 @@ pub async fn save_business_email(
 }
 
 pub async fn delete_business_email(
-    State(_state): State<AppState>,
-    Query(query): Query<BusinessEmailsQuery>,
+    State(state): State<AppState>,
+    Query(_query): Query<BusinessEmailsQuery>,
     headers: HeaderMap,
     Json(payload): Json<DeleteBusinessEmailRequest>,
 ) -> (StatusCode, Json<Value>) {
-    let db_url = match business_db_url_from_parts(
-        &headers,
-        query.db_url.as_deref(),
-        payload.db_url.as_deref(),
-    ) {
-        Some(url) => url,
-        None => {
-            return (
-                StatusCode::BAD_REQUEST,
-                Json(json!({"success": false, "error": "Missing business database URL"})),
-            )
-        }
+    let db_url = match authorized_business_db_url(&state, &headers).await {
+        Ok(url) => url,
+        Err(response) => return response,
     };
 
     let pool = match get_tenant_pool(&db_url).await {

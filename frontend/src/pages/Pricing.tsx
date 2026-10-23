@@ -1,5 +1,5 @@
 import { formatINR } from '../utils/format';
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   ArrowRight,
@@ -12,9 +12,10 @@ import {
   Rocket,
   Server,
   CheckCircle2,
-  Menu,
 } from 'lucide-react';
-import { auth, fetchApiResponse, isBusinessSetupReady } from '../api/client';
+import { auth, fetchApiResponse } from '../api/client';
+import SiteNav from '../components/site/SiteNav';
+import SiteFooter from '../components/site/SiteFooter';
 import './Pricing.css';
 
 const plans = [
@@ -180,8 +181,6 @@ export default function Pricing() {
   const [annual, setAnnual] = useState(false);
   const [openFaq, setOpenFaq] = useState<number | null>(null);
   const [user] = useState(auth.getSession());
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [scrolled, setScrolled] = useState(false);
   const [enterpriseOpen, setEnterpriseOpen] = useState(false);
   const [enterpriseSending, setEnterpriseSending] = useState(false);
   const [enterpriseState, setEnterpriseState] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
@@ -192,22 +191,9 @@ export default function Pricing() {
     message: '',
   });
 
-  useEffect(() => {
-    const handleScroll = () => setScrolled(window.scrollY > 24);
-    window.addEventListener('scroll', handleScroll, { passive: true });
-    return () => window.removeEventListener('scroll', handleScroll);
-  }, []);
-
-  const closeMobileMenu = () => setMobileMenuOpen(false);
-
   const getDashboardLink = () => {
     if (!user) return '/login?mode=register';
     return '/business';
-  };
-
-  const getDashboardText = () => {
-    if (!user) return 'Get Started Free';
-    return isBusinessSetupReady(user) ? 'Open Dashboard' : 'Continue Setup';
   };
 
   const openEnterpriseContact = () => {
@@ -264,49 +250,7 @@ export default function Pricing() {
       <div className="pricing-orb orb-a" />
       <div className="pricing-orb orb-b" />
 
-      {/* Nav */}
-      <nav className={`home-nav ${scrolled ? 'nav-scrolled' : ''}`} role="navigation" aria-label="Main navigation">
-        <div className="nav-inner">
-          <Link to="/" className="nav-logo" onClick={closeMobileMenu} aria-label="VelisMail home">
-            <img src="/ZeeResizer.png" alt="" className="home-logo-img" />
-            <span>VelisMail</span>
-          </Link>
-
-          <button
-            type="button"
-            className="nav-toggle"
-            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            aria-label={mobileMenuOpen ? 'Close menu' : 'Open menu'}
-            aria-expanded={mobileMenuOpen}
-          >
-            {mobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
-          </button>
-
-          <div className={`nav-overlay ${mobileMenuOpen ? 'open' : ''}`} onClick={closeMobileMenu} aria-hidden="true" />
-
-          <div className={`nav-links ${mobileMenuOpen ? 'open' : ''}`}>
-            <a href="/#features" className="nav-link" onClick={closeMobileMenu}>Features</a>
-            <a href="/#solutions" className="nav-link" onClick={closeMobileMenu}>Solutions</a>
-            <Link to="/pricing" className="nav-link" onClick={closeMobileMenu}>Pricing</Link>
-            <Link to="/about" className="nav-link" onClick={closeMobileMenu}>About</Link>
-            <div className="nav-divider" role="separator" />
-            {!user ? (
-              <div className="nav-actions">
-                <Link to="/login" className="nav-link" onClick={closeMobileMenu}>Log In</Link>
-                <Link to="/login?mode=register" className="btn btn-primary nav-cta" onClick={closeMobileMenu}>
-                  Get Started Free
-                </Link>
-              </div>
-            ) : (
-              <div className="nav-actions">
-                <Link to={getDashboardLink()} className="btn btn-primary nav-cta" onClick={closeMobileMenu}>
-                  {getDashboardText()}
-                </Link>
-              </div>
-            )}
-          </div>
-        </div>
-      </nav>
+      <SiteNav />
 
       {/* Hero */}
       <section className="pricing-hero">
@@ -318,20 +262,30 @@ export default function Pricing() {
           Per-workspace pricing — not per-user. Connect your own infrastructure and scale your email limits safely and securely with our dedicated software tiers.
         </p>
 
-        {/* Billing Toggle */}
+        {/* Billing cycle */}
         <div className="billing-toggle-wrap">
-          <span className={!annual ? 'active' : ''}>Monthly</span>
-          <button
-            type="button"
-            className={`billing-toggle ${annual ? 'annual' : ''}`}
-            onClick={() => setAnnual(!annual)}
-            aria-label="Toggle billing cycle"
-            aria-pressed={annual}
-          >
-            <div className="toggle-knob" />
-          </button>
-          <span className={annual ? 'active' : ''}>Annual</span>
-          <span className="billing-save-badge">Save 16%</span>
+          <div className="billing-toggle" role="group" aria-label="Billing cycle">
+            <button
+              type="button"
+              className={!annual ? 'active' : ''}
+              aria-pressed={!annual}
+              onClick={() => setAnnual(false)}
+            >
+              Monthly
+            </button>
+            <button
+              type="button"
+              className={annual ? 'active' : ''}
+              aria-pressed={annual}
+              onClick={() => setAnnual(true)}
+            >
+              Annual
+              <span className="billing-save-badge">Save 16%</span>
+            </button>
+          </div>
+          <p className="billing-toggle-note" aria-live="polite">
+            {annual ? 'Charged once a year, 16% below the monthly price.' : 'Switch to annual billing and save 16%.'}
+          </p>
         </div>
       </section>
 
@@ -424,15 +378,16 @@ export default function Pricing() {
         <div className="section-head">
           <h2>Detailed Feature Comparison</h2>
         </div>
-        <div className="comparison-table-wrap">
+        <p className="comparison-scroll-hint">Swipe sideways to compare every plan.</p>
+        <div className="comparison-table-wrap" tabIndex={0} role="region" aria-label="Plan feature comparison, scrollable">
           <table className="comparison-table">
             <thead>
               <tr>
-                <th>Feature</th>
-                <th>Free</th>
-                <th>Starter</th>
-                <th className="popular-col">Business</th>
-                <th>Enterprise</th>
+                <th scope="col">Feature</th>
+                <th scope="col">Free</th>
+                <th scope="col">Starter</th>
+                <th scope="col" className="popular-col">Business</th>
+                <th scope="col">Enterprise</th>
               </tr>
             </thead>
             <tbody>
@@ -492,66 +447,22 @@ export default function Pricing() {
               className="faq-question"
               onClick={() => setOpenFaq(openFaq === idx ? null : idx)}
               type="button"
+              aria-expanded={openFaq === idx}
+              aria-controls={`pricing-faq-answer-${idx}`}
             >
               {faq.q}
               <ChevronDown size={18} className={openFaq === idx ? 'open' : ''} />
             </button>
             {openFaq === idx && (
-              <div className="faq-answer">{faq.a}</div>
+              <div className="faq-answer" id={`pricing-faq-answer-${idx}`} role="region">
+                {faq.a}
+              </div>
             )}
           </div>
         ))}
       </div>
 
-      {/* Footer */}
-      <footer className="home-footer">
-        <div className="container">
-          <div className="footer-grid">
-            <div className="footer-brand">
-              <div className="nav-logo">
-                <img src="/ZeeResizer.png" alt="" className="home-logo-img" />
-                <span>VelisMail</span>
-              </div>
-              <p>Secure, encrypted email for modern teams.</p>
-            </div>
-
-            <div className="footer-column">
-              <h4>Product</h4>
-              <div className="footer-link-list">
-                <a href="/#features" className="footer-link">Features</a>
-                <Link to="/pricing" className="footer-link">Pricing</Link>
-                <Link to="/status" className="footer-link">Status</Link>
-                <Link to="/docs" className="footer-link">Docs</Link>
-              </div>
-            </div>
-            <div className="footer-column">
-              <h4>Company</h4>
-              <div className="footer-link-list">
-                <Link to="/about" className="footer-link">About</Link>
-                <Link to="/privacy" className="footer-link">Privacy</Link>
-                <Link to="/terms" className="footer-link">Terms</Link>
-                <Link to="/security" className="footer-link">Security</Link>
-              </div>
-            </div>
-            <div className="footer-column">
-              <h4>Connect</h4>
-              <div className="footer-link-list">
-                <a href="/#feedback" className="footer-link">Feedback</a>
-                <a href="mailto:support@velismail.online" className="footer-link">Support</a>
-              </div>
-            </div>
-          </div>
-
-          <div className="footer-bottom">
-            <p>&copy; 2026 VelisMail. All rights reserved.</p>
-            <div className="footer-bottom-links">
-              <Link to="/security" className="footer-link">Security</Link>
-              <Link to="/aup" className="footer-link">AUP</Link>
-              <Link to="/refund" className="footer-link">Refund</Link>
-            </div>
-          </div>
-        </div>
-      </footer>
+      <SiteFooter />
 
       {enterpriseOpen && (
         <div className="modal-overlay" onClick={() => setEnterpriseOpen(false)}>

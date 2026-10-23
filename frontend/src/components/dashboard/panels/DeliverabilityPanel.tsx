@@ -241,7 +241,7 @@ export default function DeliverabilityPanel({ state }: DeliverabilityPanelProps)
                 </div>
 
                 {/* Reputation */}
-                <div className="diagnostic-card">
+                <div className="diagnostic-card diagnostic-reputation">
                   <div className="diagnostic-card-header">
                     <span className="diagnostic-card-title">
                       <Check size={14} className="text-success" />

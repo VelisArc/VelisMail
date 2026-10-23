@@ -112,6 +112,23 @@ pub async fn require_auth(
         .validate_token(token)
         .map_err(|_| StatusCode::UNAUTHORIZED)?;
 
+    // A signed token remains valid after an account is suspended. Reject it
+    // here so the status change takes effect immediately on every protected
+    // auth endpoint (settings, sessions, password change, MFA setup).
+    let status: Option<String> = sqlx::query_scalar("SELECT status FROM users WHERE id = $1")
+        .bind(claims.sub.0)
+        .fetch_optional(&state.db)
+        .await
+        .map_err(|err| {
+            tracing::error!("account status lookup failed during auth: {}", err);
+            StatusCode::SERVICE_UNAVAILABLE
+        })?;
+    match status.as_deref() {
+        Some("active") => {}
+        Some(_) => return Err(StatusCode::FORBIDDEN),
+        None => return Err(StatusCode::UNAUTHORIZED),
+    }
+
     request.extensions_mut().insert(claims);
 
     Ok(next.run(request).await)

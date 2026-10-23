@@ -148,7 +148,7 @@ export default function LegalLayout({
 
       <footer className="legal-footer">
         <div className="container legal-footer-inner">
-          <span>Copyright 2026 VelisMail. All rights reserved.</span>
+          <span>Copyright {new Date().getFullYear()} VelisMail. All rights reserved.</span>
           <div className="legal-footer-links">
             {policyLinks.map(link => (
               <Link key={link.to} to={link.to}>

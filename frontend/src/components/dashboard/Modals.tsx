@@ -67,16 +67,16 @@ function InviteModal({ state }: { state: DashboardState }) {  return (
         <div className="compose-header"><h3><UserCheck size={16} /> Invite Team Member</h3><button className="btn btn-ghost btn-icon" onClick={() => { state.setInviteOpen(false); }}><X size={16} /></button></div>
         {!state.issuedInvite ? (
           <div className="invite-form">
-            <input className="input" placeholder="Full name" value={state.inviteName} onChange={e => state.setInviteName(e.target.value)} />
-            <input className="input" placeholder="Email address" type="email" value={state.inviteEmail} onChange={e => state.setInviteEmail(e.target.value)} />
-            <select className="input" value={state.inviteRole} onChange={e => state.setInviteRole(e.target.value as 'admin' | 'member' | 'viewer')}>
+            <input className="input" placeholder="Full name" aria-label="Full name" value={state.inviteName} onChange={e => state.setInviteName(e.target.value)} />
+            <input className="input" placeholder="Email address" aria-label="Email address" type="email" value={state.inviteEmail} onChange={e => state.setInviteEmail(e.target.value)} />
+            <select className="input" aria-label="Role" value={state.inviteRole} onChange={e => state.setInviteRole(e.target.value as 'admin' | 'member' | 'viewer')}>
               <option value="admin">Admin</option><option value="member">Member</option><option value="viewer">Viewer</option>
             </select>
             <div className="invite-role-access">
               <strong>{INVITE_ROLE_LABELS[state.inviteRole] || state.inviteRole}</strong>
               <span>{INVITE_ROLE_ACCESS[state.inviteRole]}</span>
             </div>
-            <select className="input" value={state.inviteExpiresHours} onChange={e => state.setInviteExpiresHours(Number(e.target.value))}>
+            <select className="input" aria-label="Invitation expires after" value={state.inviteExpiresHours} onChange={e => state.setInviteExpiresHours(Number(e.target.value))}>
               <option value={24}>24 hours</option><option value={48}>48 hours</option><option value={72}>72 hours</option><option value={168}>7 days</option>
             </select>
             <button className="btn btn-primary" disabled={state.inviteSending} onClick={async () => {

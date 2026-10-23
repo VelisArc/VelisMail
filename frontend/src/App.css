@@ -60,10 +60,10 @@
 /* ─── Premium Logo Typography ─── */
 .logo-text {
   font-weight: var(--font-weight-extrabold);
-  font-size: var(--text-base);
+  font-size: var(--text-lg);
   letter-spacing: var(--tracking-tight);
   color: var(--text-primary);
-  text-transform: uppercase;
+  text-transform: none;
 }
 
 /* ─── Glow Effects Removed ─── */

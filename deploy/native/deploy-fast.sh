@@ -51,7 +51,7 @@ for unit in "${SYSTEMD_DIR}"/velismail-*-*.service; do
 done
 
 echo "Reloading Caddy..."
-systemctl reload caddy || systemctl restart caddy || true
+systemctl restart caddy || true
 
 echo "Waiting for the gateway to become healthy..."
 healthy=0

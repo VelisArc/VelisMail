@@ -2,13 +2,15 @@ import { Link } from 'react-router-dom';
 import { useEffect, useState, useCallback, useRef } from 'react';
 import {
   ArrowRight, CheckCircle2, Database, Fingerprint,
-  Globe, Lock, Menu, Shield,
-  X, Zap, Users, ChevronDown,
+  Globe, Lock, Mail, Shield,
+  Zap, Users, ChevronDown,
   ArrowUp, BarChart3, Activity,
 } from 'lucide-react';
 import { auth, fetchApiResponse, isBusinessSetupReady } from '../api/client';
 
 import SEO from '../components/SEO';
+import SiteNav from '../components/site/SiteNav';
+import SiteFooter from '../components/site/SiteFooter';
 import './Home.css';
 
 // Feature data with semantic structure for better SEO
@@ -58,18 +60,6 @@ interface FeedbackFormState {
 }
 
 // Custom hooks with proper TypeScript types and cleanup
-function useScrollPosition(): boolean {
-  const [scrolled, setScrolled] = useState<boolean>(false);
-  
-  useEffect(() => {
-    const handleScroll = (): void => setScrolled(window.scrollY > 24);
-    window.addEventListener('scroll', handleScroll, { passive: true });
-    return () => window.removeEventListener('scroll', handleScroll);
-  }, []);
-  
-  return scrolled;
-}
-
 function useScrollToTop(): { visible: boolean; scrollToTop: () => void } {
   const [visible, setVisible] = useState<boolean>(false);
   
@@ -115,16 +105,12 @@ function useIntersectionObserver(): React.RefObject<HTMLDivElement | null> {
 
 export default function Home(): React.ReactElement {
   const [user] = useState(auth.getSession());
-  const scrolled = useScrollPosition();
   const { visible: showScrollTop, scrollToTop } = useScrollToTop();
   const animationRef = useIntersectionObserver();
-  const [mobileMenuOpen, setMobileMenuOpen] = useState<boolean>(false);
   const [openFaq, setOpenFaq] = useState<number | null>(null);
   const [feedbackForm, setFeedbackForm] = useState<FeedbackFormState>({ name: '', email: '', type: 'suggestion', message: '' });
   const [feedbackSending, setFeedbackSending] = useState<boolean>(false);
   const [feedbackState, setFeedbackState] = useState<SubmissionState>(null);
-
-  const closeMobileMenu = useCallback((): void => setMobileMenuOpen(false), []);
 
   const getDashboardLink = useCallback((): string => {
     if (!user) return '/login?mode=register';
@@ -174,48 +160,7 @@ export default function Home(): React.ReactElement {
         keywords={['business email platform', 'custom domain email', 'email hosting', 'email with queues', 'scheduled email send', 'dns verification']}
       />
 
-      <nav className={`home-nav ${scrolled ? 'nav-scrolled' : ''}`} role="navigation" aria-label="Main navigation">
-        <div className="nav-inner">
-          <Link to="/" className="nav-logo" onClick={closeMobileMenu} aria-label="VelisMail - Secure Business Email Home">
-            <img src="/ZeeResizer.png" alt="VelisMail Logo" className="home-logo-img" loading="eager" fetchPriority="high" />
-            <span>VelisMail</span>
-          </Link>
-
-          <button
-            type="button"
-            className="nav-toggle"
-            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            aria-label={mobileMenuOpen ? 'Close menu' : 'Open menu'}
-            aria-expanded={mobileMenuOpen}
-          >
-            {mobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
-          </button>
-
-          <div className={`nav-overlay ${mobileMenuOpen ? 'open' : ''}`} onClick={closeMobileMenu} aria-hidden="true" />
-
-          <div className={`nav-links ${mobileMenuOpen ? 'open' : ''}`}>
-            <a href="#features" className="nav-link" onClick={closeMobileMenu}>Features</a>
-            <a href="#solutions" className="nav-link" onClick={closeMobileMenu}>Solutions</a>
-            <Link to="/pricing" className="nav-link" onClick={closeMobileMenu}>Pricing</Link>
-            <Link to="/about" className="nav-link" onClick={closeMobileMenu}>About</Link>
-            <div className="nav-divider" role="separator" />
-            {!user ? (
-              <div className="nav-actions">
-                <Link to="/login" className="nav-link" onClick={closeMobileMenu}>Log In</Link>
-                <Link to="/login?mode=register" className="btn btn-primary nav-cta" onClick={closeMobileMenu}>
-                  Get Started Free
-                </Link>
-              </div>
-            ) : (
-              <div className="nav-actions">
-                <Link to={getDashboardLink()} className="btn btn-primary nav-cta" onClick={closeMobileMenu}>
-                  {getDashboardText()}
-                </Link>
-              </div>
-            )}
-          </div>
-        </div>
-      </nav>
+      <SiteNav />
 
       <section className="hero">
         <div className="container hero-grid">
@@ -259,15 +204,15 @@ export default function Home(): React.ReactElement {
           <div className="hero-visual" aria-hidden="true">
             <div className="hero-visual-inner">
               <div className="hero-float-card hero-float-1">
-                <div className="hero-float-icon">✉️</div>
+                <div className="hero-float-icon"><Mail size={16} aria-hidden="true" /></div>
                 <div className="hero-float-lines"><span></span><span></span></div>
               </div>
               <div className="hero-float-card hero-float-2">
-                <div className="hero-float-icon">🔒</div>
+                <div className="hero-float-icon"><Lock size={16} aria-hidden="true" /></div>
                 <div className="hero-float-lines"><span></span><span></span></div>
               </div>
               <div className="hero-float-card hero-float-3">
-                <div className="hero-float-icon">⚡</div>
+                <div className="hero-float-icon"><Zap size={16} aria-hidden="true" /></div>
                 <div className="hero-float-lines"><span></span><span></span></div>
               </div>
               <div className="hero-orbit-ring"></div>
@@ -478,54 +423,7 @@ export default function Home(): React.ReactElement {
         </section>
       </div>
 
-      <footer className="home-footer" role="contentinfo">
-        <div className="container">
-          <div className="footer-grid">
-            <div className="footer-brand">
-              <div className="nav-logo">
-                <img src="/ZeeResizer.png" alt="VelisMail Logo" className="home-logo-img" loading="lazy" />
-                <span>VelisMail</span>
-              </div>
-              <p>Secure, encrypted email for modern teams. Built with zero-trust architecture for enterprises.</p>
-            </div>
-
-            <div className="footer-column">
-              <h4>Product</h4>
-              <div className="footer-link-list">
-                <a href="#features" className="footer-link">Features</a>
-                <Link to="/pricing" className="footer-link">Pricing</Link>
-                <Link to="/status" className="footer-link">Status</Link>
-                <a href="https://docs.velismail.online" className="footer-link" rel="noopener noreferrer" target="_blank">Documentation</a>
-              </div>
-            </div>
-            <div className="footer-column">
-              <h4>Company</h4>
-              <div className="footer-link-list">
-                <Link to="/about" className="footer-link">About Us</Link>
-                <Link to="/privacy" className="footer-link">Privacy Policy</Link>
-                <Link to="/terms" className="footer-link">Terms of Service</Link>
-                <Link to="/security" className="footer-link">Security</Link>
-              </div>
-            </div>
-            <div className="footer-column">
-              <h4>Connect</h4>
-              <div className="footer-link-list">
-                <a href="#feedback" className="footer-link">Feedback</a>
-                <a href="mailto:support@velismail.online" className="footer-link">Support</a>
-              </div>
-            </div>
-          </div>
-
-          <div className="footer-bottom">
-            <p>&copy; {new Date().getFullYear()} VelisMail. All rights reserved.</p>
-            <div className="footer-bottom-links">
-              <Link to="/security" className="footer-link">Security</Link>
-              <Link to="/aup" className="footer-link">Acceptable Use</Link>
-              <Link to="/refund" className="footer-link">Refund Policy</Link>
-            </div>
-          </div>
-        </div>
-      </footer>
+      <SiteFooter />
 
       <button
         type="button"

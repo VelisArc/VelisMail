@@ -157,8 +157,8 @@ export default function CompanyAdminPanel({ state }: { state: DashboardState }) 
   };
 
   const canManage = state.user?.role === 'admin'
-    || overview?.company.role === 'owner'
-    || overview?.company.role === 'admin';
+    || overview?.company?.role === 'owner'
+    || overview?.company?.role === 'admin';
 
   const load = useCallback(async (target: Tab) => {
     setLoading(true);
@@ -272,7 +272,7 @@ export default function CompanyAdminPanel({ state }: { state: DashboardState }) 
     }
   };
 
-  const status = overview?.company.status || state.user?.status || 'active';
+  const status = overview?.company?.status || state.user?.status || 'active';
   const quotas = normalizeQuotas(overview?.quotas);
 
   return (
@@ -283,7 +283,7 @@ export default function CompanyAdminPanel({ state }: { state: DashboardState }) 
         <div className="toolbar-spacer" />
         <div className="panel-header-actions">
           <Badge value={status}>{status}</Badge>
-          <Badge value={overview?.company.plan || state.user?.plan}>{overview?.company.plan || state.user?.plan || 'Free'} plan</Badge>
+          <Badge value={overview?.company?.plan || state.user?.plan}>{overview?.company?.plan || state.user?.plan || 'Free'} plan</Badge>
           <button type="button" className="btn btn-ghost btn-sm" onClick={() => void load(tab)} disabled={loading}>
             <RefreshCw size={15} /> Refresh
           </button>
@@ -292,7 +292,7 @@ export default function CompanyAdminPanel({ state }: { state: DashboardState }) 
 
       <div className="dash-body">
         <div className="admin-company-head">
-          <h2>{overview?.company.name || state.user?.displayName || 'Your workspace'}</h2>
+          <h2>{overview?.company?.name || state.user?.displayName || 'Your workspace'}</h2>
           <p className="text-sm text-muted">Manage the people, mail operations, security and billing for this company.</p>
         </div>
 

@@ -60,64 +60,69 @@
 /* ─── Billing Switcher Toggle ─── */
 .billing-toggle-wrap {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: center;
-  gap: var(--space-3);
+  gap: var(--space-2);
   margin: var(--space-5) auto 0;
 }
 
-.billing-toggle-wrap span {
-  font-size: var(--text-xs);
-  color: var(--text-secondary);
-  font-weight: var(--font-weight-bold);
-  text-transform: uppercase;
+.billing-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-accent);
 }
 
-.billing-toggle-wrap span.active {
+.billing-toggle button {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 34px;
+  padding: 6px 14px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  font-weight: var(--font-weight-bold);
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+
+.billing-toggle button:hover {
+  background: var(--bg-hover);
   color: var(--text-primary);
 }
 
-.billing-toggle {
-  position: relative;
-  width: 48px;
-  height: 24px;
-  background: var(--bg-surface-2);
-  border: 1px solid var(--border-accent);
-  cursor: pointer;
-  padding: 0;
-}
-
-.billing-toggle.annual {
+.billing-toggle button.active {
   background: var(--primary);
-}
-
-.billing-toggle .toggle-knob {
-  position: absolute;
-  top: 2px;
-  left: 2px;
-  width: 18px;
-  height: 18px;
-  background: var(--text-primary);
-  transition: transform var(--transition-fast) ease-out;
-}
-
-.billing-toggle.annual .toggle-knob {
-  transform: translateX(24px);
-  background: var(--text-inverted);
+  border-color: var(--border-accent);
+  color: var(--text-inverted);
 }
 
 .billing-save-badge {
-  font-size: var(--text-xs);
+  font-size: var(--text-2xs);
   font-weight: var(--font-weight-bold);
-  padding: 2px 8px;
-  background: var(--primary);
-  color: var(--text-inverted);
+  padding: 2px 6px;
+  background: var(--bg-surface-2);
+  color: var(--text-primary);
   border: 1px solid var(--border-accent);
+  letter-spacing: 0;
   text-transform: uppercase;
 }
 
-.billing-toggle-wrap .billing-save-badge {
-  color: var(--text-inverted);
+.billing-toggle button.active .billing-save-badge {
+  background: var(--bg-surface);
+  color: var(--text-primary);
+}
+
+.billing-toggle-note {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
 }
 
 /* ─── Pricing Cards Grid ─── */
@@ -126,6 +131,8 @@
   grid-template-columns: repeat(4, 1fr);
   gap: var(--space-4);
   max-width: 1200px;
+  width: 100%;
+  min-width: 0;
   margin: var(--space-6) auto 0;
   padding: 0 var(--space-4);
   position: relative;
@@ -276,7 +283,7 @@
   display: flex;
   align-items: flex-start;
   gap: var(--space-2);
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   color: var(--text-secondary);
   line-height: var(--leading-normal);
 }
@@ -374,6 +381,8 @@
 /* ─── Comparison Matrix Table ─── */
 .pricing-comparison {
   max-width: 1200px;
+  width: 100%;
+  min-width: 0;
   margin: 60px auto 0;
   padding: 0 var(--space-4);
   position: relative;
@@ -386,15 +395,31 @@
 }
 
 .pricing-comparison .section-head h2 {
-  font-size: var(--text-lg);
+  font-size: var(--text-2xl);
   font-weight: var(--font-weight-extrabold);
+  letter-spacing: var(--tracking-tight);
   text-transform: uppercase;
+}
+
+.comparison-scroll-hint {
+  display: none;
+  margin: 0 0 var(--space-2);
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  text-align: center;
 }
 
 .comparison-table-wrap {
   overflow-x: auto;
   border: 1px solid var(--border-accent);
   background: var(--bg-surface);
+  scrollbar-width: thin;
+  scrollbar-color: var(--text-muted) transparent;
+}
+
+.comparison-table-wrap:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: 2px;
 }
 
 .comparison-table {
@@ -437,6 +462,20 @@
   text-transform: uppercase;
 }
 
+.comparison-table th:first-child,
+.comparison-table td:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  background: var(--bg-surface);
+  box-shadow: 1px 0 0 var(--border-primary);
+}
+
+.comparison-table thead th:first-child {
+  z-index: 3;
+  background: var(--bg-surface);
+}
+
 .comparison-table tbody tr:last-child td {
   border-bottom: none;
 }
@@ -457,6 +496,8 @@
 /* ─── FAQ Dropdown Section ─── */
 .pricing-faq {
   max-width: 800px;
+  width: 100%;
+  min-width: 0;
   margin: 60px auto 0;
   padding: 0 var(--space-4) 80px;
   position: relative;
@@ -469,8 +510,9 @@
 }
 
 .pricing-faq .section-head h2 {
-  font-size: var(--text-lg);
+  font-size: var(--text-2xl);
   font-weight: var(--font-weight-extrabold);
+  letter-spacing: var(--tracking-tight);
   text-transform: uppercase;
 }
 
@@ -513,7 +555,7 @@
 .faq-answer {
   padding: 0 var(--space-4) var(--space-3);
   color: var(--text-secondary);
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   line-height: var(--leading-normal);
 }
 
@@ -534,11 +576,32 @@
     grid-template-columns: 1fr;
     max-width: 400px;
   }
+
+  .comparison-scroll-hint {
+    display: block;
+  }
+
+  .comparison-table {
+    min-width: 700px;
+  }
+
+  .comparison-table thead th,
+  .comparison-table tbody td {
+    padding-left: var(--space-3);
+    padding-right: var(--space-3);
+  }
+
+  .comparison-table thead th:first-child,
+  .comparison-table tbody td:first-child {
+    min-width: 132px;
+  }
 }
 
 /* ─── Infrastructure Note (BYOI) ─── */
 .infra-note {
   max-width: 800px;
+  width: 100%;
+  min-width: 0;
   margin: 60px auto 0;
   padding: 0 var(--space-4);
   position: relative;

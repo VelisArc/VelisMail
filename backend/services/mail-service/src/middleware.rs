@@ -14,15 +14,15 @@ use tower_http::cors::{AllowOrigin, CorsLayer};
 ///
 /// The service binds to loopback and is normally reached through the gateway,
 /// but it still validates the JWT locally so a misconfigured proxy or a local
-/// process cannot impersonate a user. Health checks and the signed inbound
-/// webhook are exempt.
+/// process cannot impersonate a user. Only health checks are exempt. The
+/// signed provider webhook is handled by the gateway.
 pub async fn auth_layer(
     State(state): State<MailState>,
     request: Request,
     next: Next,
 ) -> Result<Response, StatusCode> {
     let path = request.uri().path();
-    if matches!(path, "/health" | "/ready" | "/inbound") {
+    if matches!(path, "/health" | "/ready") {
         return Ok(next.run(request).await);
     }
 
@@ -65,7 +65,6 @@ pub fn cors_layer() -> CorsLayer {
             header::AUTHORIZATION,
             header::ACCEPT,
             header::CONTENT_TYPE,
-            axum::http::HeaderName::from_static("x-business-db-url"),
             axum::http::HeaderName::from_static("x-request-id"),
         ])
         .allow_credentials(true)

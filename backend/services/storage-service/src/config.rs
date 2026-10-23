@@ -24,18 +24,23 @@ impl StorageConfig {
             .or_else(|| std::env::var("PORT").ok().and_then(|p| p.parse().ok()))
             .unwrap_or(3003);
 
+        let jwt_secret = required_env("JWT_SECRET")?;
+        velismail_common::config::require_strong_secret("JWT_SECRET", &jwt_secret)?;
+        let encryption_key = required_env("ENCRYPTION_KEY")?;
+        velismail_common::config::require_strong_secret("ENCRYPTION_KEY", &encryption_key)?;
+
         Ok(Self {
             host: std::env::var("STORAGE_HOST").unwrap_or_else(|_| "0.0.0.0".to_string()),
             port,
             storage_root: std::env::var("STORAGE_ROOT")
                 .unwrap_or_else(|_| "/var/lib/velismail/storage".to_string()),
             db_url: required_env("DATABASE_URL")?,
-            jwt_secret: required_env("JWT_SECRET")?,
+            jwt_secret,
             max_file_size_mb: std::env::var("MAX_FILE_SIZE_MB")
                 .ok()
                 .and_then(|p| p.parse().ok())
                 .unwrap_or(50),
-            encryption_key: required_env("ENCRYPTION_KEY")?,
+            encryption_key,
             default_quota_bytes: std::env::var("DEFAULT_QUOTA_BYTES")
                 .ok()
                 .and_then(|p| p.parse().ok())

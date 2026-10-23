@@ -253,7 +253,8 @@ pub async fn require_auth(
         .strip_prefix("/api/v1")
         .or_else(|| raw_path.strip_prefix("/v1"))
         .unwrap_or(raw_path);
-    let is_public = path.starts_with("/auth")
+    let is_public = path == "/auth"
+        || path.starts_with("/auth/")
         || path == "/verify/providers"
         || path == "/config/public"
         || path == "/mail/inbound"
@@ -296,6 +297,57 @@ pub async fn require_auth(
 
     match velismail_common::validate_bearer(request.headers(), secret) {
         Ok(claims) => {
+            // A valid signature is not enough: the account may have been
+            // suspended or removed from its workspace since the token was
+            // issued. Check the authoritative account row on every protected
+            // gateway request. A tenant change (business switch) returns 401
+            // so the client rotates the token and picks up the new tenant.
+            if let Some(db) = state.db.as_ref() {
+                let account = sqlx::query("SELECT status, tenant_id FROM users WHERE id = $1")
+                    .bind(claims.sub.0)
+                    .fetch_optional(db)
+                    .await;
+                match account {
+                    Ok(Some(row)) => {
+                        let status: String = sqlx::Row::try_get(&row, "status")
+                            .unwrap_or_else(|_| "inactive".to_string());
+                        if status != "active" {
+                            return error_response(
+                                StatusCode::FORBIDDEN,
+                                "ACCOUNT_SUSPENDED",
+                                "This account is suspended. Contact support.",
+                            );
+                        }
+                        let current_tenant: Option<uuid::Uuid> =
+                            sqlx::Row::try_get(&row, "tenant_id").ok().flatten();
+                        let token_tenant = uuid::Uuid::parse_str(claims.tenant_id.trim()).ok();
+                        if let (Some(current), Some(token)) = (current_tenant, token_tenant) {
+                            if current != token {
+                                return error_response(
+                                    StatusCode::UNAUTHORIZED,
+                                    "STALE_SESSION",
+                                    "The workspace changed. Refresh the session and retry.",
+                                );
+                            }
+                        }
+                    }
+                    Ok(None) => {
+                        return error_response(
+                            StatusCode::UNAUTHORIZED,
+                            "UNAUTHORIZED",
+                            "This account no longer exists.",
+                        )
+                    }
+                    Err(err) => {
+                        tracing::error!("account status lookup failed: {}", err);
+                        return error_response(
+                            StatusCode::SERVICE_UNAVAILABLE,
+                            "SERVICE_UNAVAILABLE",
+                            "Unable to verify the account right now.",
+                        );
+                    }
+                }
+            }
             request.extensions_mut().insert(claims);
             next.run(request).await
         }

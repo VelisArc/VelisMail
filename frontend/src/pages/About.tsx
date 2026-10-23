@@ -1,7 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Lock, Zap, Globe, Users, ArrowRight, Shield, Menu, X, Award } from 'lucide-react';
-import { auth, isBusinessSetupReady } from '../api/client';
+import { Lock, Zap, Globe, Users, ArrowRight, Shield, Award } from 'lucide-react';
+import { auth } from '../api/client';
+import SiteNav from '../components/site/SiteNav';
+import SiteFooter from '../components/site/SiteFooter';
 import './About.css';
 
 const operatingPrinciples = [
@@ -27,72 +29,15 @@ const values = [
 
 export default function About() {
   const [user] = useState(auth.getSession());
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [scrolled, setScrolled] = useState(false);
-
-  useEffect(() => {
-    const handleScroll = () => setScrolled(window.scrollY > 24);
-    window.addEventListener('scroll', handleScroll, { passive: true });
-    return () => window.removeEventListener('scroll', handleScroll);
-  }, []);
-
-  const closeMobileMenu = () => setMobileMenuOpen(false);
 
   const getDashboardLink = () => {
     if (!user) return '/login?mode=register';
     return '/business';
   };
 
-  const getDashboardText = () => {
-    if (!user) return 'Get Started Free';
-    return isBusinessSetupReady(user) ? 'Open Dashboard' : 'Continue Setup';
-  };
-
   return (
     <div className="about-page">
-      {/* Nav */}
-      <nav className={`home-nav ${scrolled ? 'nav-scrolled' : ''}`} role="navigation" aria-label="Main navigation">
-        <div className="nav-inner">
-          <Link to="/" className="nav-logo" onClick={closeMobileMenu} aria-label="VelisMail home">
-            <img src="/ZeeResizer.png" alt="" className="home-logo-img" />
-            <span>VelisMail</span>
-          </Link>
-
-          <button
-            type="button"
-            className="nav-toggle"
-            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            aria-label={mobileMenuOpen ? 'Close menu' : 'Open menu'}
-            aria-expanded={mobileMenuOpen}
-          >
-            {mobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
-          </button>
-
-          <div className={`nav-overlay ${mobileMenuOpen ? 'open' : ''}`} onClick={closeMobileMenu} aria-hidden="true" />
-
-          <div className={`nav-links ${mobileMenuOpen ? 'open' : ''}`}>
-            <a href="/#features" className="nav-link" onClick={closeMobileMenu}>Features</a>
-            <a href="/#solutions" className="nav-link" onClick={closeMobileMenu}>Solutions</a>
-            <Link to="/pricing" className="nav-link" onClick={closeMobileMenu}>Pricing</Link>
-            <Link to="/about" className="nav-link" onClick={closeMobileMenu}>About</Link>
-            <div className="nav-divider" role="separator" />
-            {!user ? (
-              <div className="nav-actions">
-                <Link to="/login" className="nav-link" onClick={closeMobileMenu}>Log In</Link>
-                <Link to="/login?mode=register" className="btn btn-primary nav-cta" onClick={closeMobileMenu}>
-                  Get Started Free
-                </Link>
-              </div>
-            ) : (
-              <div className="nav-actions">
-                <Link to={getDashboardLink()} className="btn btn-primary nav-cta" onClick={closeMobileMenu}>
-                  {getDashboardText()}
-                </Link>
-              </div>
-            )}
-          </div>
-        </div>
-      </nav>
+      <SiteNav />
 
       {/* Hero */}
       <section className="about-hero">
@@ -222,55 +167,7 @@ export default function About() {
         </div>
       </section>
 
-      {/* Footer */}
-      <footer className="home-footer">
-        <div className="container">
-          <div className="footer-grid">
-            <div className="footer-brand">
-              <div className="nav-logo">
-                <img src="/ZeeResizer.png" alt="" className="home-logo-img" />
-                <span>VelisMail</span>
-              </div>
-              <p>Business email for modern teams.</p>
-            </div>
-
-            <div className="footer-column">
-              <h4>Product</h4>
-              <div className="footer-link-list">
-                <a href="/#features" className="footer-link">Features</a>
-                <Link to="/pricing" className="footer-link">Pricing</Link>
-                <Link to="/status" className="footer-link">Status</Link>
-                <Link to="/docs" className="footer-link">Docs</Link>
-              </div>
-            </div>
-            <div className="footer-column">
-              <h4>Company</h4>
-              <div className="footer-link-list">
-                <Link to="/about" className="footer-link">About</Link>
-                <Link to="/privacy" className="footer-link">Privacy</Link>
-                <Link to="/terms" className="footer-link">Terms</Link>
-                <Link to="/security" className="footer-link">Security</Link>
-              </div>
-            </div>
-            <div className="footer-column">
-              <h4>Connect</h4>
-              <div className="footer-link-list">
-                <a href="/#feedback" className="footer-link">Feedback</a>
-                <a href="mailto:support@velismail.online" className="footer-link">Support</a>
-              </div>
-            </div>
-          </div>
-
-          <div className="footer-bottom">
-            <p>&copy; 2026 VelisMail. All rights reserved.</p>
-            <div className="footer-bottom-links">
-              <Link to="/security" className="footer-link">Security</Link>
-              <Link to="/aup" className="footer-link">AUP</Link>
-              <Link to="/refund" className="footer-link">Refund</Link>
-            </div>
-          </div>
-        </div>
-      </footer>
+      <SiteFooter />
     </div>
   );
 }

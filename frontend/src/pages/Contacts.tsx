@@ -8,17 +8,19 @@ import { auth, isBusinessSetupReady, type Contact } from '../api/client';
 import { workspaceApi } from '../api/company';
 import './Contacts.css';
 
-export default function Contacts() {
+export default function Contacts({ embedded = false }: { embedded?: boolean }) {
   const navigate = useNavigate();
   const user = auth.getSession();
 
   useEffect(() => {
+    // The embedded view lives inside the already-guarded dashboard shell.
+    if (embedded) return;
     if (!user) {
       navigate('/login');
     } else if (!isBusinessSetupReady(user)) {
       navigate('/business');
     }
-  }, [navigate, user]);
+  }, [embedded, navigate, user]);
 
   const [contactList, setContactList] = useState<Contact[]>([]);
   const [loading, setLoading] = useState(true);
@@ -196,13 +198,15 @@ export default function Contacts() {
   if (!isBusinessSetupReady(user)) return <Navigate to="/business" replace />;
 
   return (
-    <div className="contacts-page">
+    <div className={`contacts-page${embedded ? ' contacts-embedded' : ''}${selectedContact ? ' contacts-showing-detail' : ''}`}>
       {/* Left Panel */}
       <aside className="contacts-sidebar glass">
         <div className="contacts-sidebar-header">
-          <button className="btn btn-ghost btn-sm" onClick={() => navigate('/business')}>
-            <ArrowLeft size={16} /> Back
-          </button>
+          {!embedded && (
+            <button className="btn btn-ghost btn-sm" onClick={() => navigate('/business')}>
+              <ArrowLeft size={16} /> Back
+            </button>
+          )}
           <h2><Users size={20} /> Contacts</h2>
         </div>
 
@@ -271,6 +275,17 @@ export default function Contacts() {
 
       {/* Detail Pane */}
       <main className="contacts-detail glass">
+        {selectedContact && (
+          <div className="contacts-detail-mobilebar">
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              onClick={() => { setSelectedContact(null); setEditMode(false); }}
+            >
+              <ArrowLeft size={16} /> All contacts
+            </button>
+          </div>
+        )}
         {selectedContact && !editMode ? (
           <div className="contact-detail-content animate-fade">
             <div className="contact-detail-header">

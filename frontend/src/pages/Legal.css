@@ -8,6 +8,13 @@
   color: var(--text-primary);
 }
 
+/* Keep the document header and footer on the same 1180px measure as the
+   policy/docs content instead of the wider marketing container. */
+.legal-page .legal-nav .container,
+.legal-page .legal-footer .container {
+  max-width: 1180px;
+}
+
 .legal-nav {
   position: sticky;
   top: 0;
@@ -30,16 +37,17 @@
 }
 
 .legal-brand,
-.nav-logo {
+.legal-page .nav-logo {
   display: inline-flex;
   align-items: center;
   gap: var(--space-2);
   color: var(--text-primary);
   text-decoration: none;
+  font-size: var(--text-lg);
 }
 
 .legal-nav-logo,
-.nav-logo img {
+.legal-page .nav-logo img {
   height: 24px;
   width: auto;
   flex-shrink: 0;
@@ -116,20 +124,6 @@
   flex-wrap: wrap;
   margin-bottom: var(--space-3);
   color: var(--text-muted);
-  font-size: var(--text-xs);
-  font-weight: var(--font-weight-bold);
-  letter-spacing: 0;
-  text-transform: uppercase;
-}
-
-.section-tag {
-  display: inline-flex;
-  align-items: center;
-  min-height: 26px;
-  padding: 4px 10px;
-  border: 1px solid var(--border-accent);
-  background: var(--bg-surface);
-  color: var(--text-primary);
   font-size: var(--text-xs);
   font-weight: var(--font-weight-bold);
   letter-spacing: 0;
@@ -328,6 +322,66 @@
 .legal-body strong {
   color: var(--text-primary);
   font-weight: var(--font-weight-bold);
+}
+
+/* Code samples and API tables used by the developer policy pages. Both keep
+   their own scroll container so a long key or curl example cannot push the
+   whole document wider than the phone. */
+.legal-code {
+  margin: var(--space-3) 0;
+  padding: var(--space-4);
+  border: 1px solid var(--border-primary);
+  background: var(--bg-surface-2);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  line-height: 1.65;
+  overflow-x: auto;
+  max-width: 100%;
+}
+
+.legal-table-wrap {
+  max-width: 100%;
+  margin: var(--space-3) 0;
+  overflow-x: auto;
+  border: 1px solid var(--border-primary);
+  background: var(--bg-surface);
+}
+
+.legal-table {
+  width: 100%;
+  min-width: 520px;
+  border-collapse: collapse;
+  font-size: var(--text-xs);
+}
+
+.legal-table th,
+.legal-table td {
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--border-primary);
+  text-align: left;
+  vertical-align: top;
+}
+
+.legal-table th {
+  background: var(--bg-surface-2);
+  color: var(--text-primary);
+  font-weight: var(--font-weight-bold);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wide);
+}
+
+.legal-table td {
+  color: var(--text-secondary);
+}
+
+.legal-table tr:last-child td {
+  border-bottom: 0;
+}
+
+.legal-document,
+.legal-body {
+  min-width: 0;
 }
 
 .privacy-cards {

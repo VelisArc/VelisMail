@@ -38,6 +38,47 @@ pub(crate) fn fail(status: StatusCode, message: &str) -> ApiError {
     (status, Json(json!({ "success": false, "error": message })))
 }
 
+/// Accept screenshots only as raster image data URLs.
+///
+/// Any http(s) value used to be passed through to the control plane UI, which
+/// made the administrator's browser fetch an attacker-chosen URL (blind
+/// intranet GET/SSRF). SVG is refused as well because it can contain script.
+fn valid_feedback_image(value: &str) -> bool {
+    use base64::engine::general_purpose::STANDARD;
+    use base64::Engine as _;
+
+    if value.len() > 7_000_000 {
+        return false;
+    }
+    let (prefix, encoded) = if let Some(rest) = value.strip_prefix("data:image/png;base64,") {
+        ("png", rest)
+    } else if let Some(rest) = value.strip_prefix("data:image/jpeg;base64,") {
+        ("jpeg", rest)
+    } else if let Some(rest) = value.strip_prefix("data:image/jpg;base64,") {
+        ("jpeg", rest)
+    } else if let Some(rest) = value.strip_prefix("data:image/gif;base64,") {
+        ("gif", rest)
+    } else if let Some(rest) = value.strip_prefix("data:image/webp;base64,") {
+        ("webp", rest)
+    } else {
+        return false;
+    };
+
+    let Ok(bytes) = STANDARD.decode(encoded) else {
+        return false;
+    };
+    if bytes.is_empty() || bytes.len() > 6 * 1024 * 1024 {
+        return false;
+    }
+    match prefix {
+        "png" => bytes.starts_with(&[0x89, b'P', b'N', b'G']),
+        "jpeg" => bytes.starts_with(&[0xFF, 0xD8, 0xFF]),
+        "gif" => bytes.starts_with(b"GIF87a") || bytes.starts_with(b"GIF89a"),
+        "webp" => bytes.len() > 12 && &bytes[0..4] == b"RIFF" && &bytes[8..12] == b"WEBP",
+        _ => false,
+    }
+}
+
 /// The gateway database. Workspace endpoints refuse to run without it.
 pub(crate) fn db_pool(state: &AppState) -> Result<&PgPool, ApiError> {
     state.db.as_ref().ok_or_else(|| {
@@ -68,7 +109,7 @@ fn bearer_token(headers: &HeaderMap) -> Option<String> {
 }
 
 /// Verify the bearer token and return its claims.
-fn session_claims(state: &AppState, headers: &HeaderMap) -> Result<Claims, ApiError> {
+pub(crate) fn session_claims(state: &AppState, headers: &HeaderMap) -> Result<Claims, ApiError> {
     let secret = state.config.jwt_secret.as_deref().ok_or_else(|| {
         (
             StatusCode::SERVICE_UNAVAILABLE,
@@ -232,12 +273,28 @@ pub(crate) async fn workspace_context(
 
     // The plan belongs to the workspace. It is never read from the account
     // settings, because a client can write those.
-    let plan: String = sqlx::query_scalar("SELECT plan_tier FROM tenants WHERE id = $1")
+    let tenant_row = sqlx::query("SELECT plan_tier, status FROM tenants WHERE id = $1")
         .bind(tenant_id)
         .fetch_optional(db)
         .await
         .ok()
-        .flatten()
+        .flatten();
+    if let Some(row) = tenant_row.as_ref() {
+        let tenant_status: String = row
+            .try_get("status")
+            .unwrap_or_else(|_| "active".to_string());
+        if matches!(
+            tenant_status.as_str(),
+            "suspended" | "disabled" | "deleted" | "pending_verification"
+        ) {
+            return Err(fail(
+                StatusCode::FORBIDDEN,
+                "This workspace is not active. Contact your administrator.",
+            ));
+        }
+    }
+    let plan: String = tenant_row
+        .and_then(|row| row.try_get("plan_tier").ok())
         .unwrap_or_else(|| "free".to_string());
 
     let membership = sqlx::query(
@@ -357,6 +414,12 @@ pub async fn submit_feedback(
             "Subject and message are required.",
         ));
     }
+    if subject.len() > 200 || body.len() > 10_000 {
+        return Err(fail(
+            StatusCode::BAD_REQUEST,
+            "Subject or message is too long.",
+        ));
+    }
     let category = payload
         .get("category")
         .and_then(|v| v.as_str())
@@ -372,10 +435,10 @@ pub async fn submit_feedback(
         .and_then(|v| v.as_str())
         .map(|s| s.to_string());
     if let Some(img) = &image {
-        if img.len() > 7_000_000 {
+        if !valid_feedback_image(img) {
             return Err(fail(
                 StatusCode::BAD_REQUEST,
-                "Image is too large (max ~5 MB).",
+                "Screenshot must be a PNG, JPEG, GIF or WebP data URL.",
             ));
         }
     }
@@ -1293,6 +1356,7 @@ pub async fn create_template(
     Json(payload): Json<TemplateRequest>,
 ) -> ApiResult {
     let context = workspace_context(&state, &headers).await?;
+    context.require_manage()?;
     let db = db_pool(&state)?;
 
     let name = payload.name.trim().to_string();
@@ -1347,6 +1411,7 @@ pub async fn delete_template(
     Path(id): Path<String>,
 ) -> ApiResult {
     let context = workspace_context(&state, &headers).await?;
+    context.require_manage()?;
     let db = db_pool(&state)?;
 
     let template_id =
@@ -2022,6 +2087,7 @@ pub async fn delete_domain(
 pub(crate) async fn domain_send_readiness(
     state: &AppState,
     db: &PgPool,
+    caller_tenant: Uuid,
     domain: &str,
 ) -> Option<(bool, Vec<String>, String)> {
     let row = sqlx::query(
@@ -2034,6 +2100,16 @@ pub(crate) async fn domain_send_readiness(
     .ok()
     .flatten()?;
     let tenant_id: Uuid = row.try_get("tenant_id").ok()?;
+    // A verified domain only vouches for the workspace that registered it.
+    // Without this check any customer could send as a competitor's domain
+    // through the platform relay.
+    if tenant_id != caller_tenant {
+        return Some((
+            false,
+            vec!["domain ownership".to_string()],
+            "This sending domain belongs to another workspace.".to_string(),
+        ));
+    }
     let status: String = row
         .try_get::<Option<String>, _>("verification_status")
         .ok()
@@ -2063,7 +2139,7 @@ pub(crate) async fn domain_send_readiness(
 ///
 /// The database is configured on the account that owns the workspace, so the
 /// owner of the company is asked first.
-async fn tenant_business_db_url(db: &PgPool, tenant_id: Uuid) -> Option<String> {
+pub(crate) async fn tenant_business_db_url(db: &PgPool, tenant_id: Uuid) -> Option<String> {
     let row = sqlx::query(
         "SELECT u.settings FROM users u
          JOIN company_members cm ON cm.user_id = u.id AND cm.tenant_id = $1 AND cm.status = 'active'
@@ -2126,15 +2202,26 @@ pub async fn remove_team_member(
     .fetch_one(db)
     .await
     .unwrap_or(0);
-    let target_is_owner: bool = sqlx::query_scalar(
-        "SELECT EXISTS (SELECT 1 FROM company_members
-         WHERE tenant_id = $1 AND LOWER(email) = $2 AND role = 'owner')",
+    let target_role: Option<String> = sqlx::query_scalar(
+        "SELECT role FROM company_members
+         WHERE tenant_id = $1 AND LOWER(email) = $2 AND status = 'active'",
     )
     .bind(context.tenant_id)
     .bind(&email)
-    .fetch_one(db)
+    .fetch_optional(db)
     .await
-    .unwrap_or(false);
+    .ok()
+    .flatten();
+    let target_is_owner = target_role.as_deref() == Some("owner");
+    // An admin may manage members and viewers, never a peer admin or an
+    // owner. Role hierarchy is enforced by the caller's role, not only by the
+    // last-owner rule.
+    if context.role != "owner" && matches!(target_role.as_deref(), Some("owner") | Some("admin")) {
+        return Err(fail(
+            StatusCode::FORBIDDEN,
+            "Only a workspace owner can remove another owner or administrator.",
+        ));
+    }
     if target_is_owner && owner_count <= 1 {
         return Err(fail(
             StatusCode::BAD_REQUEST,
@@ -2158,10 +2245,48 @@ pub async fn remove_team_member(
         ));
     }
 
-    // The sessions of the member are closed, so the access ends at once.
+    // The sessions and the refresh tokens of the member are closed, so the
+    // access ends at once and cannot be renewed after the access token
+    // expires. Refresh tokens are not tenant scoped, so they all go.
+    let removed_user: Option<Uuid> = sqlx::query_scalar(
+        "SELECT id FROM users WHERE LOWER(email) = LOWER($1) AND tenant_id = $2",
+    )
+    .bind(&email)
+    .bind(context.tenant_id)
+    .fetch_optional(db)
+    .await
+    .ok()
+    .flatten();
     let _ = sqlx::query(
         "UPDATE sessions SET is_active = false
          WHERE user_id IN (SELECT user_id FROM users WHERE LOWER(email) = $1 AND tenant_id = $2)",
+    )
+    .bind(&email)
+    .bind(context.tenant_id)
+    .execute(db)
+    .await;
+    if let Some(user_id) = removed_user {
+        let _ = sqlx::query("UPDATE refresh_tokens SET revoked = true WHERE user_id = $1")
+            .bind(user_id)
+            .execute(db)
+            .await;
+    }
+
+    // The removed account must not stay pinned to a workspace it can no
+    // longer open. Move it to another active membership when one exists, so
+    // an account that belongs to several businesses keeps working.
+    let _ = sqlx::query(
+        "UPDATE users u
+         SET tenant_id = COALESCE(
+             (SELECT cm.tenant_id FROM company_members cm
+               WHERE LOWER(cm.email) = LOWER(u.email)
+                 AND cm.status = 'active'
+                 AND cm.tenant_id <> $2
+               ORDER BY cm.joined_at ASC
+               LIMIT 1),
+             u.tenant_id
+         ), updated_at = NOW()
+         WHERE LOWER(u.email) = LOWER($1) AND u.tenant_id = $2",
     )
     .bind(&email)
     .bind(context.tenant_id)
@@ -2282,6 +2407,7 @@ pub async fn create_contact(
     Json(payload): Json<ContactRequest>,
 ) -> ApiResult {
     let context = workspace_context(&state, &headers).await?;
+    context.require_manage()?;
     let db = db_pool(&state)?;
 
     let name = payload.name.trim().to_string();
@@ -2409,6 +2535,7 @@ pub async fn delete_contact(
     Path(id): Path<String>,
 ) -> ApiResult {
     let context = workspace_context(&state, &headers).await?;
+    context.require_manage()?;
     let db = db_pool(&state)?;
 
     let contact_id =
@@ -2492,6 +2619,7 @@ pub async fn create_signature(
     Json(payload): Json<SignatureRequest>,
 ) -> ApiResult {
     let context = workspace_context(&state, &headers).await?;
+    context.require_manage()?;
     let db = db_pool(&state)?;
 
     let name = payload.name.trim().to_string();
@@ -2576,6 +2704,7 @@ pub async fn delete_signature(
     Path(id): Path<String>,
 ) -> ApiResult {
     let context = workspace_context(&state, &headers).await?;
+    context.require_manage()?;
     let db = db_pool(&state)?;
 
     let signature_id =

@@ -177,14 +177,7 @@ export type TeamAccessInvite = {
     'tenantId' |
     'displayName' |
     'businessDomain' |
-    'businessDbUrl' |
-    'businessApiKey' |
-    'businessMailProvider' |
-    'businessMailProviderEndpoint' |
-    'businessMailWebhookSecret' |
-    'businessMailboxAddress' |
     'businessDomainVerified' |
-    'businessProfile' |
     'isBusinessSetupComplete'
   >;
 };

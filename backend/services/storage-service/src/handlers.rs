@@ -79,6 +79,33 @@ fn assert_key_owner(key: &str, prefix: &str) -> Result<(), StatusCode> {
     }
 }
 
+/// Refuse an upload that would push the tenant over its storage quota.
+///
+/// Without this check any authenticated account could fill the VM disk (and
+/// the per-tenant quota advertised in the console was never enforced).
+async fn ensure_quota(
+    state: &StorageState,
+    tenant_id: Uuid,
+    additional_bytes: usize,
+) -> Result<(), StatusCode> {
+    let quota = state.config.default_quota_bytes;
+    if quota <= 0 {
+        return Ok(());
+    }
+    let used: i64 = sqlx::query_scalar(
+        "SELECT COALESCE(SUM(size_bytes), 0)::BIGINT FROM storage_objects WHERE tenant_id = $1",
+    )
+    .bind(tenant_id)
+    .fetch_one(&state.db)
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let requested = i64::try_from(additional_bytes).unwrap_or(i64::MAX);
+    if used.saturating_add(requested) > quota {
+        return Err(StatusCode::PAYLOAD_TOO_LARGE);
+    }
+    Ok(())
+}
+
 /// Deep health check — verifies DB and S3 connectivity.
 pub async fn health_check(
     State(state): State<StorageState>,
@@ -131,6 +158,9 @@ pub async fn upload(
     if plaintext.is_empty() || plaintext.len() > max_bytes {
         return Err(StatusCode::PAYLOAD_TOO_LARGE);
     }
+    let tenant_id =
+        Uuid::parse_str(claims.tenant_id.trim()).map_err(|_| StatusCode::UNAUTHORIZED)?;
+    ensure_quota(&state, tenant_id, plaintext.len()).await?;
 
     let attachment_id = Uuid::new_v4();
     let storage_key = format!("{prefix}attachments/{}/{}", attachment_id, filename);
@@ -153,7 +183,7 @@ pub async fn upload(
          VALUES ($1, $2, $3, $4, $5, $6, true)",
     )
     .bind(attachment_id)
-    .bind(Uuid::parse_str(claims.tenant_id.trim()).map_err(|_| StatusCode::UNAUTHORIZED)?)
+    .bind(tenant_id)
     .bind(&storage_key)
     .bind(&filename)
     .bind(&content_type)
@@ -213,6 +243,13 @@ pub async fn upload_multipart(
                 file_name, state.config.max_file_size_mb
             )));
         }
+        ensure_quota(&state, tenant_id, data.len())
+            .await
+            .map_err(|_| {
+                velismail_common::AppError::BadRequest(
+                    "The workspace storage quota is exhausted.".to_string(),
+                )
+            })?;
 
         let attachment_id = Uuid::new_v4();
         let storage_key = format!("{prefix}attachments/{}/{}", attachment_id, file_name);

@@ -38,12 +38,14 @@ impl MailConfig {
             .ok()
             .filter(|value| !value.trim().is_empty())
             .unwrap_or_else(|| "VelisMail".to_string());
+        let jwt_secret = required_env("JWT_SECRET")?;
+        velismail_common::config::require_strong_secret("JWT_SECRET", &jwt_secret)?;
 
         Ok(Self {
             host: std::env::var("MAIL_HOST").unwrap_or_else(|_| "0.0.0.0".to_string()),
             port,
             db_url: required_env("DATABASE_URL")?,
-            jwt_secret: required_env("JWT_SECRET")?,
+            jwt_secret,
             platform_resend_api_key: required_env("PLATFORM_RESEND_API_KEY")?,
             platform_from_email,
             platform_from_name,

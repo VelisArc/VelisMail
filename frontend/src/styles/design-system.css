@@ -7,6 +7,297 @@
    `index.css` and is intentionally left untouched here.
    ==================================================================== */
 
+/* ─── Section headings shared by About, legal and support pages ────── */
+
+.section-tag {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  padding: 4px 10px;
+  border: 1px solid var(--border-accent);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  font-size: var(--text-xs);
+  font-weight: var(--font-weight-bold);
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.section-header {
+  margin-bottom: var(--space-8);
+}
+
+.section-header .section-tag {
+  margin-bottom: var(--space-3);
+}
+
+.section-header h2 {
+  font-size: var(--text-2xl);
+  font-weight: var(--font-weight-extrabold);
+  letter-spacing: var(--tracking-tight);
+  text-transform: uppercase;
+}
+
+.section-header p {
+  margin-top: var(--space-2);
+  max-width: 620px;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+}
+
+/* ─── Shared component fallbacks ───
+   These names were used by the console and public forms with no rule behind
+   them. They now have one, so a panel looks the same no matter which page was
+   opened before it. */
+.empty-state-sm {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  padding: var(--space-8) var(--space-4);
+  text-align: center;
+  color: var(--text-muted);
+  border: 1px solid var(--border-primary);
+  background: var(--bg-surface-2);
+}
+
+.team-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.form-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-3);
+  margin-top: var(--space-4);
+}
+
+.invite-form {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.search-icon {
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.search-input,
+.mail-search-input {
+  width: 100%;
+  background: transparent;
+  border: 0;
+  outline: none;
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+}
+
+.mail-search-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 8px var(--space-3);
+  border: 1px solid var(--border-primary);
+  background: var(--bg-surface);
+}
+
+.dash-search {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* Confirmation and detail dialogs */
+.modal-body-center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-5);
+}
+
+.modal-icon-danger,
+.modal-icon-warning {
+  width: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+}
+
+.modal-icon-danger {
+  color: var(--danger-600);
+  background: var(--danger-50);
+  border-color: var(--danger-100);
+}
+
+.modal-icon-warning {
+  color: var(--warning-500);
+  background: var(--warning-50);
+  border-color: var(--warning-400);
+}
+
+.confirm-title,
+.logout-title,
+.role-change-title {
+  margin: 0;
+  font-size: var(--text-lg);
+  font-weight: var(--font-weight-extrabold);
+  letter-spacing: var(--tracking-tight);
+}
+
+.logout-text {
+  max-width: 38ch;
+  margin: 0 auto;
+}
+
+.logout-modal {
+  max-width: 400px;
+  align-items: center;
+  text-align: center;
+}
+
+.logout-modal .modal-icon-danger {
+  margin: 0 auto;
+}
+
+.modal-actions-border {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-3);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--border-primary);
+}
+
+.detail-grid-2 {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-5);
+}
+
+.detail-grid-2 > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.health-row,
+.member-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--border-primary);
+}
+
+.health-row:last-child,
+.member-row:last-child {
+  border-bottom: 0;
+}
+
+.health-row-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.health-row .badge {
+  margin-left: auto;
+}
+
+.invite-success {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-5);
+  text-align: center;
+}
+
+.invite-success-icon {
+  color: var(--success-600);
+}
+
+.invite-done-btn {
+  margin-top: var(--space-2);
+}
+
+.template-editor-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-5);
+}
+
+.template-preview-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-4) var(--space-5);
+}
+
+.template-preview-content {
+  min-height: 160px;
+  border: 1px solid var(--border-primary);
+  background: var(--bg-surface-2);
+  padding: var(--space-4);
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+}
+
+.dns-records-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--border-primary);
+  background: var(--bg-surface-2);
+}
+
+.dns-records-title {
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-bold);
+  text-transform: uppercase;
+}
+
+.dns-record-row-flex {
+  padding: var(--space-2) 0;
+  border-top: 1px solid var(--border-primary);
+}
+
+.dns-record-name {
+  min-width: 90px;
+  max-width: 32%;
+}
+
+.dns-record-value {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 640px) {
+  .detail-grid-2 {
+    grid-template-columns: 1fr;
+    padding: var(--space-3) var(--space-4);
+  }
+}
+
 /* ─── Modals: body and footer regions ──────────────────────────────── */
 
 .modal-header,

@@ -5,16 +5,19 @@
 .not-found-page {
   min-height: 100vh;
   display: flex;
-  align-items: center;
-  justify-content: center;
+  flex-direction: column;
   background: var(--bg-body);
-  padding: var(--space-6);
   position: relative;
   overflow: hidden;
 }
 
-.not-found-page::before {
-  display: none !important;
+.not-found-shell {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 140px var(--space-6) 80px;
+  width: 100%;
 }
 
 .not-found-content {

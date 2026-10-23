@@ -367,12 +367,10 @@ async fn resolve_tenant_for_email(
         .to_lowercase();
     if let Some(row) = sqlx::query(
         "SELECT id FROM tenants
-         WHERE deleted_at IS NULL
-           AND (organization_email = $1 OR LOWER(SPLIT_PART(organization_email, '@', 2)) = $2)
+         WHERE deleted_at IS NULL AND organization_email = $1
          ORDER BY created_at ASC LIMIT 1",
     )
     .bind(email)
-    .bind(&domain)
     .fetch_optional(db)
     .await?
     {

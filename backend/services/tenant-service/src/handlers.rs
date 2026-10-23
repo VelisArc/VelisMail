@@ -3,12 +3,13 @@
 use axum::{
     extract::{Path, State},
     http::StatusCode,
-    Json,
+    Extension, Json,
 };
 use serde_json::json;
 use tracing::info;
 use uuid::Uuid;
 
+use crate::middleware::TenantActor;
 use crate::models::{AddDomainRequest, CreateTenantRequest, UpdateTenantRequest};
 use crate::service::TenantService;
 use crate::state::TenantState;
@@ -99,6 +100,7 @@ pub async fn get_tenant(
 
 pub async fn update_tenant(
     State(state): State<TenantState>,
+    Extension(actor): Extension<TenantActor>,
     Path(id): Path<String>,
     Json(request): Json<UpdateTenantRequest>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
@@ -107,6 +109,18 @@ pub async fn update_tenant(
         Ok(id) => id,
         Err(_) => return Err(StatusCode::BAD_REQUEST),
     };
+
+    // Plan, status, quota and the billing identity are platform-controlled.
+    // A workspace administrator may rename the workspace and change its
+    // settings, but cannot upgrade itself or lift its limits.
+    if !actor.is_platform
+        && (request.plan_tier.is_some()
+            || request.status.is_some()
+            || request.limits.is_some()
+            || request.organization_email.is_some())
+    {
+        return Err(StatusCode::FORBIDDEN);
+    }
 
     match service.update_tenant(tenant_id, request).await {
         Ok(tenant) => Ok(Json(json!({

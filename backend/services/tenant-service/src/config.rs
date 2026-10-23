@@ -19,12 +19,14 @@ impl TenantConfig {
             .and_then(|p| p.parse().ok())
             .or_else(|| std::env::var("PORT").ok().and_then(|p| p.parse().ok()))
             .unwrap_or(3004);
+        let jwt_secret = required_env("JWT_SECRET")?;
+        velismail_common::config::require_strong_secret("JWT_SECRET", &jwt_secret)?;
 
         Ok(Self {
             host: std::env::var("TENANT_HOST").unwrap_or_else(|_| "0.0.0.0".to_string()),
             port,
             db_url: required_env("DATABASE_URL")?,
-            jwt_secret: required_env("JWT_SECRET")?,
+            jwt_secret,
         })
     }
 }

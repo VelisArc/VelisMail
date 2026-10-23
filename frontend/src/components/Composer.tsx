@@ -14,6 +14,16 @@ function avatarColor(name: string): string {
   return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
 }
 
+/** Escape plain text before inserting it into the HTML body of an email. */
+function escapeHtmlText(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 const resolveRecipientInfo = (email: string) => {
   const cleanEmail = email.toLowerCase().trim();
   
@@ -311,7 +321,10 @@ export default function Composer({
     }
 
     if (isQuoteHidden && quoteText) {
-      const formattedQuote = quoteText.replace(/\n/g, '<br>');
+      // The quoted mail is plain text from an external sender. Escape it
+      // before turning newlines into <br>, otherwise an HTML body in the
+      // quoted message would be injected into the outgoing mail.
+      const formattedQuote = escapeHtmlText(quoteText).replace(/\n/g, '<br>');
       finalBody = finalBody + formattedQuote;
     }
     onSend(to, subject, finalBody, attachments, deliveryMode === 'scheduled' ? scheduledAt : undefined);
@@ -319,7 +332,7 @@ export default function Composer({
 
   const handleExpandQuote = () => {
     if (editorRef.current && quoteText) {
-      const formattedQuote = quoteText.replace(/\n/g, '<br>');
+      const formattedQuote = escapeHtmlText(quoteText).replace(/\n/g, '<br>');
       const currentContent = editorRef.current.innerHTML;
       editorRef.current.innerHTML = currentContent + DOMPurify.sanitize(formattedQuote);
       setBodyHtml(editorRef.current.innerHTML);

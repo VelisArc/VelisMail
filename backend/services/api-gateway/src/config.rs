@@ -67,6 +67,15 @@ impl GatewayConfig {
 
         let otp_signing_secret = std::env::var("OTP_SIGNING_SECRET")
             .context("missing required environment variable OTP_SIGNING_SECRET")?;
+        velismail_common::config::require_strong_secret("OTP_SIGNING_SECRET", &otp_signing_secret)?;
+
+        let jwt_secret = std::env::var("JWT_SECRET")
+            .ok()
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty());
+        if let Some(secret) = jwt_secret.as_deref() {
+            velismail_common::config::require_strong_secret("JWT_SECRET", secret)?;
+        }
 
         let max_body_mb = std::env::var("GATEWAY_MAX_BODY_MB")
             .ok()
@@ -142,10 +151,7 @@ impl GatewayConfig {
             db_url: std::env::var("DATABASE_URL")
                 .ok()
                 .filter(|v| !v.trim().is_empty()),
-            jwt_secret: std::env::var("JWT_SECRET")
-                .ok()
-                .map(|value| value.trim().to_string())
-                .filter(|value| !value.is_empty()),
+            jwt_secret,
             platform_owner_uids: std::env::var("PLATFORM_OWNER_UIDS")
                 .or_else(|_| std::env::var("PLATFORM_OWNER_FIREBASE_UIDS"))
                 .unwrap_or_default()

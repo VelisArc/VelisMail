@@ -325,6 +325,7 @@ pub fn allow_private_database_hosts() -> bool {
 pub fn is_blocked_ip(ip: IpAddr) -> bool {
     match ip {
         IpAddr::V4(v4) => {
+            let octets = v4.octets();
             v4.is_loopback()
                 || v4.is_private()
                 || v4.is_link_local()
@@ -332,16 +333,24 @@ pub fn is_blocked_ip(ip: IpAddr) -> bool {
                 || v4.is_documentation()
                 || v4.is_unspecified()
                 || v4.is_multicast()
-                || v4.octets()[0] == 0
-                || v4.octets()[0] >= 224
-                || (v4.octets()[0] == 169 && v4.octets()[1] == 254)
+                || octets[0] == 0
+                || octets[0] >= 224
+                || (octets[0] == 169 && octets[1] == 254)
+                // Carrier-grade NAT (100.64.0.0/10).
+                || (octets[0] == 100 && (64..128).contains(&octets[1]))
+                // Benchmarking range (198.18.0.0/15).
+                || (octets[0] == 198 && (octets[1] == 18 || octets[1] == 19))
+                // IETF protocol assignments (192.0.0.0/24).
+                || (octets[0] == 192 && octets[1] == 0 && octets[2] == 0)
         }
         IpAddr::V6(v6) => {
+            let segments = v6.segments();
             v6.is_loopback()
                 || v6.is_unspecified()
                 || v6.is_multicast()
                 || v6.is_unique_local()
                 || v6.is_unicast_link_local()
+                || (segments[0] == 0x2001 && segments[1] == 0x0db8)
                 || v6
                     .to_ipv4_mapped()
                     .map(|v4| is_blocked_ip(IpAddr::V4(v4)))
@@ -396,6 +405,10 @@ mod tests {
         assert!(is_blocked_ip("127.0.0.1".parse().unwrap()));
         assert!(is_blocked_ip("10.0.0.5".parse().unwrap()));
         assert!(is_blocked_ip("169.254.169.254".parse().unwrap()));
+        assert!(is_blocked_ip("100.64.1.20".parse().unwrap()));
+        assert!(is_blocked_ip("198.19.0.7".parse().unwrap()));
+        assert!(is_blocked_ip("2001:db8::1".parse().unwrap()));
         assert!(!is_blocked_ip("8.8.8.8".parse().unwrap()));
+        assert!(!is_blocked_ip("2001:4860:4860::8888".parse().unwrap()));
     }
 }

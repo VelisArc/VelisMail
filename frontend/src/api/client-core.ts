@@ -1,4 +1,4 @@
-import { get, set, del } from 'idb-keyval';
+import { get, set, del, keys } from 'idb-keyval';
 import { getConnectionHostLabel } from '../config/providers';
 import type {
   User, DnsRecord,
@@ -18,6 +18,34 @@ export function safeRandomUUID(): string {
     const v = c === 'x' ? r : (r & 0x3) | 0x8;
     return v.toString(16);
   });
+}
+
+const DEVICE_ID_KEY = 'velismail_device_id';
+let volatileDeviceId: string | null = null;
+
+/**
+ * Stable identifier of this browser profile.
+ *
+ * Every request that issues or rotates a token sends it, so the auth service
+ * can revoke one device without signing out every other browser. A shared
+ * constant such as "web" made the session list and the per-device revocation
+ * meaningless.
+ */
+export function getDeviceId(): string {
+  try {
+    const existing = localStorage.getItem(DEVICE_ID_KEY);
+    if (existing && existing.length >= 8) {
+      return existing;
+    }
+    const created = `web-${safeRandomUUID()}`;
+    localStorage.setItem(DEVICE_ID_KEY, created);
+    return created;
+  } catch {
+    if (!volatileDeviceId) {
+      volatileDeviceId = `web-${safeRandomUUID()}`;
+    }
+    return volatileDeviceId;
+  }
 }
 
 // ---- Local Storage DB ----
@@ -286,6 +314,49 @@ export function clearBackendTokens() {
   localStorage.removeItem('velismail_refresh');
 }
 
+const PRESERVED_LOCAL_KEYS = new Set([
+  'velismail_theme',
+  'velismail_device_id',
+  'velismail_notification_enabled',
+  'velismail_sound_enabled',
+]);
+
+/**
+ * Remove every cached account artefact (mail, contacts, provider keys,
+ * database URLs, invite keys) from the browser.
+ *
+ * Logout used to leave all of this behind, so the next person on a shared
+ * browser could read the previous user's mailbox and provider credentials.
+ */
+export async function clearLocalAccountData(): Promise<void> {
+  try {
+    const localKeys = Object.keys(localStorage);
+    for (const key of localKeys) {
+      if (key.startsWith('velismail_') && !PRESERVED_LOCAL_KEYS.has(key)) {
+        localStorage.removeItem(key);
+      }
+    }
+    const sessionKeys = Object.keys(sessionStorage);
+    for (const key of sessionKeys) {
+      if (key.startsWith('velismail')) {
+        sessionStorage.removeItem(key);
+      }
+    }
+  } catch {
+    /* storage can be unavailable in private mode */
+  }
+  try {
+    const storedKeys = await keys();
+    await Promise.all(
+      storedKeys
+        .filter((key): key is string => typeof key === 'string' && key.startsWith('velismail_'))
+        .map((key) => del(key)),
+    );
+  } catch {
+    /* IndexedDB is optional */
+  }
+}
+
 let backendRefreshInFlight: Promise<boolean> | null = null;
 
 const AUTH_ENDPOINTS_WITHOUT_REFRESH = [
@@ -330,7 +401,7 @@ export function refreshBackendSession(): Promise<boolean> {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             refresh_token: refreshToken,
-            device_id: 'web',
+            device_id: getDeviceId(),
           }),
         });
 
@@ -616,14 +687,7 @@ export function buildTeamAccessInvite(params: CreateTeamAccessInviteParams): Tea
       tenantId: params.issuer.tenantId,
       displayName: params.issuer.displayName,
       businessDomain: params.issuer.businessDomain,
-      businessDbUrl: params.issuer.businessDbUrl,
-      businessApiKey: params.issuer.businessApiKey,
-      businessMailProvider: params.issuer.businessMailProvider,
-      businessMailProviderEndpoint: params.issuer.businessMailProviderEndpoint,
-      businessMailWebhookSecret: params.issuer.businessMailWebhookSecret,
-      businessMailboxAddress: params.issuer.businessMailboxAddress,
       businessDomainVerified: params.issuer.businessDomainVerified,
-      businessProfile: params.issuer.businessProfile,
       isBusinessSetupComplete: params.issuer.isBusinessSetupComplete,
     },
   };
@@ -638,7 +702,9 @@ export function cacheTeamAccessInvite(invite: TeamAccessInvite) {
 }
 
 export function hasTeamAccessWorkspace(invite?: TeamAccessInvite): invite is TeamAccessInvite {
-  return Boolean(invite?.workspace?.businessDbUrl && invite.workspace.businessApiKey && invite.workspace.businessMailProvider);
+  // The business database and provider keys are resolved server-side. The
+  // invite only needs to identify the workspace it grants access to.
+  return Boolean(invite?.workspace?.tenantId);
 }
 
 export function validateCachedTeamAccessToken(token: string): { ok: boolean; invite?: TeamAccessInvite; error?: string } {
@@ -1509,21 +1575,14 @@ export function normalizeBusinessEmailFromDb(raw: Partial<Email> & {
 }
 
 export async function syncBusinessEmailToDb(email: Email, options?: { force?: boolean; suppressError?: boolean }): Promise<void> {
-  const session = getSessionSafe();
-  if (!session?.businessDbUrl) return;
   if (businessEmailDbRouteUnavailable && !options?.force) {
     // If route was previously unavailable, reset and try once more
     businessEmailDbRouteUnavailable = false;
   }
-  const headers: Record<string, string> = {
-    'x-business-db-url': session.businessDbUrl
-  };
   try {
     await fetchAPI('/mail/business-emails', {
       method: 'POST',
-      headers,
       body: JSON.stringify({
-        dbUrl: session.businessDbUrl,
         email: {
           ...email,
           read: !email.unread,
@@ -1551,19 +1610,11 @@ export async function syncBusinessEmailToDb(email: Email, options?: { force?: bo
 }
 
 export async function deleteBusinessEmailFromDb(id: string): Promise<void> {
-  const session = getSessionSafe();
-  if (!session?.businessDbUrl || businessEmailDbRouteUnavailable) return;
-  const headers: Record<string, string> = {
-    'x-business-db-url': session.businessDbUrl
-  };
+  if (businessEmailDbRouteUnavailable) return;
   try {
     await fetchAPI('/mail/business-emails', {
       method: 'DELETE',
-      headers,
-      body: JSON.stringify({
-        dbUrl: session.businessDbUrl,
-        id,
-      }),
+      body: JSON.stringify({ id }),
     });
   } catch (err) {
     if (err instanceof Error && err.message.includes('route was not found')) {

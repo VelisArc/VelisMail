@@ -9,17 +9,12 @@ export class AdminApiError extends Error {
   }
 }
 
-async function call<T>(endpoint: string, options: RequestInit = {}, retried = false): Promise<T> {
+async function call<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
+  // fetchApiJsonDetailed already rotates an expired access token once (and
+  // shares that refresh across concurrent callers). A second refresh here
+  // rotated the same token again and could sign the user out.
   const response = await fetchApiJsonDetailed<T>(endpoint, options);
   if (!response.ok) {
-    if (
-      response.status === 401
-      && !retried
-      && !endpoint.includes('/auth/token/refresh')
-      && await refreshAdminSession()
-    ) {
-      return call<T>(endpoint, options, true);
-    }
     const body = response.data as Record<string, unknown> | null;
     const errorValue = body?.error;
     const message =
@@ -31,34 +26,6 @@ async function call<T>(endpoint: string, options: RequestInit = {}, retried = fa
     throw new AdminApiError(message, response.status);
   }
   return (response.data ?? ({} as T)) as T;
-}
-
-let refreshInFlight: Promise<boolean> | null = null;
-
-/** Rotate the stored admin session using the refresh token. */
-export function refreshAdminSession(): Promise<boolean> {
-  if (!refreshInFlight) {
-    refreshInFlight = (async () => {
-      const refresh = localStorage.getItem('velismail_refresh');
-      if (!refresh) return false;
-      const response = await fetchApiJsonDetailed<{
-        access_token?: string;
-        refresh_token?: string;
-      }>('/auth/token/refresh', {
-        method: 'POST',
-        body: JSON.stringify({ refresh_token: refresh, device_id: 'admin-web' }),
-      });
-      if (!response.ok || !response.data?.access_token) return false;
-      localStorage.setItem('velismail_token', response.data.access_token);
-      if (response.data.refresh_token) {
-        localStorage.setItem('velismail_refresh', response.data.refresh_token);
-      }
-      return true;
-    })().catch(() => false).finally(() => {
-      refreshInFlight = null;
-    });
-  }
-  return refreshInFlight;
 }
 
 function query(params: Record<string, string | number | undefined>): string {

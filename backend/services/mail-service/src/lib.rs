@@ -29,10 +29,6 @@ pub async fn run_service() -> anyhow::Result<()> {
         .route("/folders", axum::routing::get(handlers::list_folders))
         .route("/search", axum::routing::post(handlers::search_emails))
         .route(
-            "/inbound",
-            axum::routing::post(handlers::save_business_email),
-        )
-        .route(
             "/business-emails",
             axum::routing::get(handlers::get_business_emails)
                 .post(handlers::save_business_email)

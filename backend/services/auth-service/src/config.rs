@@ -62,21 +62,31 @@ impl AuthConfig {
             .filter(|value| !value.trim().is_empty())
             .unwrap_or_else(|| "VelisMail".to_string());
 
+        let otp_signing_secret = required_env("OTP_SIGNING_SECRET")?;
+        // Fail fast on a secret that an attacker can guess. Both secrets sign
+        // tokens for every account on the platform.
+        velismail_common::config::require_strong_secret("OTP_SIGNING_SECRET", &otp_signing_secret)?;
+
+        let jwt_secret = required_env("JWT_SECRET")?;
+        velismail_common::config::require_strong_secret("JWT_SECRET", &jwt_secret)?;
+
         Ok(Self {
             host: std::env::var("AUTH_HOST").unwrap_or_else(|_| "0.0.0.0".to_string()),
             port,
-            jwt_secret: required_env("JWT_SECRET")?,
-            // Access tokens last 24 hours. The dashboard also rotates them with
-            // the refresh token, so a long-lived token does not remove the
-            // ability to revoke a session.
+            jwt_secret,
+            // Short-lived access tokens are the first line of defence for
+            // logout, password changes and account suspension. A client can
+            // rotate them with the (revocable) refresh token at any time.
             jwt_expiry_seconds: std::env::var("JWT_EXPIRY_SECONDS")
                 .ok()
                 .and_then(|p| p.parse().ok())
-                .unwrap_or(86_400),
+                .unwrap_or(3_600)
+                .clamp(300, 86_400),
             refresh_token_expiry_days: std::env::var("REFRESH_TOKEN_EXPIRY_DAYS")
                 .ok()
                 .and_then(|p| p.parse().ok())
-                .unwrap_or(30),
+                .unwrap_or(30)
+                .clamp(1, 90),
             rate_limit_per_minute: std::env::var("AUTH_RATE_LIMIT_PER_MINUTE")
                 .ok()
                 .and_then(|p| p.parse().ok())
@@ -105,7 +115,7 @@ impl AuthConfig {
                 .ok()
                 .and_then(|p| p.parse().ok())
                 .unwrap_or(15),
-            otp_signing_secret: required_env("OTP_SIGNING_SECRET")?,
+            otp_signing_secret,
             otp_ttl_seconds: std::env::var("OTP_TTL_SECONDS")
                 .ok()
                 .and_then(|p| p.parse().ok())

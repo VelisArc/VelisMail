@@ -125,10 +125,18 @@ function sniffImageMimeType(encoded: string): string {
 /**
  * Read an image that was stored as base64 (optionally still carrying its data
  * url prefix) and turn it into the source that can be used on an <img>.
+ *
+ * Only raster data URLs are allowed. An http(s) value used to be rendered
+ * directly, which let a workspace member make an administrator's browser fetch
+ * an arbitrary intranet URL.
  */
 export function imageSourceFromBase64(value?: string | null): string {
   if (!value) return '';
-  if (value.startsWith('data:') || value.startsWith('blob:') || value.startsWith('http')) return value;
+  const dataUrl = /^data:image\/(png|jpe?g|gif|webp);base64,/i.exec(value);
+  if (dataUrl) return value;
+  if (value.startsWith('data:') || value.startsWith('blob:') || /^https?:/i.test(value)) {
+    return '';
+  }
   // A value with no prefix is a screenshot the gateway accepted before it kept
   // the mime type, so the type is read back from the image bytes themselves.
   return `data:${sniffImageMimeType(value)};base64,${value}`;
