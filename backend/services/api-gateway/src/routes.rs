@@ -753,16 +753,24 @@ pub struct SendMailPayload {
     body: String,
     /// The formatted body. Without it the receiver only gets the plain text
     /// version, so a mail that was written in the composer loses its layout.
+    #[serde(default)]
     pub html_body: Option<String>,
+    #[serde(default)]
     from: Option<String>,
+    #[serde(default)]
     from_name: Option<String>,
+    #[serde(default)]
     provider: Option<String>,
+    #[serde(default)]
     api_key: Option<String>,
     /// Kept for wire compatibility. The database is resolved from the
     /// verified session; a client-supplied URL is ignored.
+    #[serde(default)]
     #[allow(dead_code)]
     db_url: Option<String>,
+    #[serde(default)]
     provider_endpoint: Option<String>,
+    #[serde(default)]
     pub attachments: Option<Vec<AttachmentPayload>>,
 }
 
@@ -4952,6 +4960,7 @@ pub struct BusinessEmail {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SaveBusinessEmailRequest {
+    #[serde(default)]
     #[allow(dead_code)] // Ignored: the workspace database comes from the session.
     pub db_url: Option<String>,
     pub email: BusinessEmail,
@@ -4960,6 +4969,7 @@ pub struct SaveBusinessEmailRequest {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DeleteBusinessEmailRequest {
+    #[serde(default)]
     #[allow(dead_code)] // Ignored: the workspace database comes from the session.
     pub db_url: Option<String>,
     pub id: String,
@@ -4968,15 +4978,9 @@ pub struct DeleteBusinessEmailRequest {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BusinessEmailsQuery {
+    #[serde(default)]
     #[allow(dead_code)] // Ignored: the workspace database comes from the session.
     pub db_url: Option<String>,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct BusinessEmailsRequest {
-    #[allow(dead_code)] // Ignored: the workspace database comes from the session.
-    pub db_url: String,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -4999,6 +5003,7 @@ pub struct BusinessMailbox {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SaveBusinessMailboxRequest {
+    #[serde(default)]
     #[allow(dead_code)] // Ignored: the workspace database comes from the session.
     pub db_url: Option<String>,
     pub mailbox: BusinessMailbox,
@@ -5007,6 +5012,7 @@ pub struct SaveBusinessMailboxRequest {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DeleteBusinessMailboxRequest {
+    #[serde(default)]
     #[allow(dead_code)] // Ignored: the workspace database comes from the session.
     pub db_url: Option<String>,
     pub domain: String,
@@ -5016,17 +5022,11 @@ pub struct DeleteBusinessMailboxRequest {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BusinessMailboxesQuery {
+    #[serde(default)]
     #[allow(dead_code)] // Ignored: the workspace database comes from the session.
     pub db_url: Option<String>,
+    #[serde(default)]
     pub domain: Option<String>,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct BusinessMailboxesRequest {
-    #[allow(dead_code)] // Ignored: the workspace database comes from the session.
-    pub db_url: String,
-    pub domain: String,
 }
 
 /// Resolve the caller's business database from the server-side tenant
@@ -5954,14 +5954,20 @@ pub async fn get_business_mailboxes(
 pub async fn query_business_mailboxes(
     State(state): State<AppState>,
     headers: HeaderMap,
-    Json(payload): Json<BusinessMailboxesRequest>,
+    Json(payload): Json<BusinessMailboxesQuery>,
 ) -> (StatusCode, Json<Value>) {
     let db_url = match authorized_business_db_url(&state, &headers).await {
         Ok(url) => url,
         Err(response) => return response,
     };
+    let Some(domain) = payload.domain.as_deref() else {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({"success": false, "error": "Missing mailbox domain"})),
+        );
+    };
 
-    read_business_mailboxes(&db_url, payload.domain.trim()).await
+    read_business_mailboxes(&db_url, domain.trim()).await
 }
 
 /// Register a mailbox in the company business database.
@@ -6153,7 +6159,7 @@ pub async fn get_business_emails(
 pub async fn query_business_emails(
     State(state): State<AppState>,
     headers: HeaderMap,
-    Json(_payload): Json<BusinessEmailsRequest>,
+    Json(_payload): Json<BusinessEmailsQuery>,
 ) -> (StatusCode, Json<Value>) {
     let db_url = match authorized_business_db_url(&state, &headers).await {
         Ok(url) => url,
@@ -6284,6 +6290,9 @@ pub async fn delete_business_email(
 }
 #[cfg(test)]
 mod tests {
+    use super::*;
+    use serde_json::json;
+
     #[test]
     fn nested_auth_path_rewrites_to_upstream_root() {
         let path = "/auth/send-otp";
@@ -6296,6 +6305,49 @@ mod tests {
         let path = "/mail/emails";
         let remaining = path.strip_prefix("/mail").unwrap_or(path);
         assert_eq!(remaining, "/emails");
+    }
+
+    #[test]
+    fn business_queries_do_not_require_a_database_url() {
+        let emails: BusinessEmailsQuery =
+            serde_json::from_str("{}").expect("an empty email query is valid");
+        assert!(emails.db_url.is_none());
+
+        let mailboxes: BusinessMailboxesQuery =
+            serde_json::from_str(r#"{"domain":"example.com"}"#).expect("a mailbox query is valid");
+        assert!(mailboxes.db_url.is_none());
+        assert_eq!(mailboxes.domain.as_deref(), Some("example.com"));
+
+        let payload: SaveBusinessEmailRequest = serde_json::from_value(json!({
+            "email": {
+                "id": "e1",
+                "from": "sender@example.com",
+                "fromName": "Sender",
+                "to": ["recipient@example.net"],
+                "subject": "Hello",
+                "body": "Body",
+                "folder": "sent",
+                "date": "2026-10-23T00:00:00Z",
+                "read": false,
+                "starred": false
+            }
+        }))
+        .expect("a save payload without dbUrl is valid");
+        assert!(payload.db_url.is_none());
+    }
+
+    #[test]
+    fn send_payload_accepts_the_minimal_composer_body() {
+        let payload: SendMailPayload = serde_json::from_value(json!({
+            "to": ["recipient@example.net"],
+            "subject": "Hello",
+            "body": "Body"
+        }))
+        .expect("the composer does not have to send optional fields");
+        assert!(payload.html_body.is_none());
+        assert!(payload.from.is_none());
+        assert!(payload.db_url.is_none());
+        assert!(payload.attachments.is_none());
     }
 }
 
