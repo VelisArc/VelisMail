@@ -36,6 +36,7 @@ import {
 } from '../../../api/company';
 import type { BusinessMailbox } from '../../../api/types';
 import { loadTeamAccessInvites } from '../../../api/client-core';
+import { teamAccess } from '../../../api/client';
 import type { DashboardState } from '../types';
 import { AdminConfirmSelect } from '../AdminConfirm';
 import { useAdminConfirm } from '../useAdminConfirm';
@@ -226,6 +227,29 @@ export default function CompanyAdminPanel({ state }: { state: DashboardState }) 
       setError(err instanceof Error ? err.message : 'Unable to update team member.');
     } finally {
       setSavingMember('');
+    }
+  };
+
+  const revokeInvitation = async (invitation: WorkspaceInvitation) => {
+    setError('');
+    setNotice('');
+    const accessKey = invitation.accessKey || lookupAccessKey(invitation.email);
+    try {
+      await workspaceApi.revokeInvitation(invitation.id);
+      // The Team Access Key is also revoked so the invitee cannot sign in
+      // with a key that is no longer listed here.
+      if (accessKey) {
+        try {
+          await teamAccess.revoke(accessKey);
+        } catch {
+          // The workspace invitation is already revoked; a stale key will be
+          // rejected by the gateway when it expires.
+        }
+      }
+      setInvitations((current) => current.filter((entry) => entry.id !== invitation.id));
+      setNotice(`Invitation for ${invitation.email} was revoked.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unable to revoke the invitation.');
     }
   };
 
@@ -462,7 +486,7 @@ export default function CompanyAdminPanel({ state }: { state: DashboardState }) 
               </div>
               <div className="admin-table-wrap">
                 <table className="admin-table">
-                  <thead><tr><th>Email</th><th>Role</th><th>Team Access Key</th><th>Invited by</th><th>Expires</th><th>Status</th></tr></thead>
+                  <thead><tr><th>Email</th><th>Role</th><th>Team Access Key</th><th>Invited by</th><th>Expires</th><th>Status</th><th>Actions</th></tr></thead>
                   <tbody>
                     {invitations.map((invitation) => {
                       const accessKey = invitation.accessKey || lookupAccessKey(invitation.email);
@@ -495,6 +519,27 @@ export default function CompanyAdminPanel({ state }: { state: DashboardState }) 
                           <td>{invitation.invitedBy}</td>
                           <td>{date(invitation.expiresAt)}</td>
                           <td><Badge value={invitation.status}>{invitation.status}</Badge></td>
+                          <td>
+                            {invitation.status === 'pending' ? (
+                              <button
+                                type="button"
+                                className="btn btn-danger btn-sm"
+                                onClick={() => {
+                                  confirm({
+                                    title: 'Revoke invitation',
+                                    message: `The invitation for ${invitation.email} is cancelled and its Team Access Key stops working immediately.`,
+                                    confirmLabel: 'Revoke invitation',
+                                    tone: 'danger',
+                                    onConfirm: async () => { await revokeInvitation(invitation); },
+                                  });
+                                }}
+                              >
+                                <X size={14} /> Revoke
+                              </button>
+                            ) : (
+                              <span className="text-sm text-muted">—</span>
+                            )}
+                          </td>
                         </tr>
                       );
                     })}

@@ -24,10 +24,10 @@ import './Login.css';
 type Mode = 'login' | 'register';
 type RegisterStep = 'intro' | 'form' | 'otp';
 type LoginAccessMode = 'password' | 'team';
-type TeamAccessStep = 'key' | 'email' | 'otp';
+type TeamAccessStep = 'key' | 'signin';
 type MfaStep = 'none' | 'code' | 'recovery-email' | 'recovery-otp' | 'recovery-setup';
 
-const TEAM_STEP_ORDER: TeamAccessStep[] = ['key', 'email', 'otp'];
+const TEAM_STEP_ORDER: TeamAccessStep[] = ['key', 'signin'];
 
 // Common country codes for phone input
 const COUNTRY_CODES = [
@@ -125,8 +125,8 @@ export default function Login() {
   const [teamStep, setTeamStep] = useState<TeamAccessStep>('key');
   const [teamToken, setTeamToken] = useState('');
   const [teamEmail, setTeamEmail] = useState('');
-  const [teamOtp, setTeamOtp] = useState('');
-  const [teamChallengeToken, setTeamChallengeToken] = useState('');
+  const [teamPassword, setTeamPassword] = useState('');
+  const [showTeamPassword, setShowTeamPassword] = useState(false);
   const [teamInvite, setTeamInvite] = useState<TeamAccessInvite | null>(null);
   const [teamHint, setTeamHint] = useState('');
 
@@ -302,11 +302,10 @@ export default function Login() {
         throw new Error(validation.error || 'Invalid team access key.');
       }
       setTeamInvite(validation.invite);
-      setTeamEmail('');
-      setTeamOtp('');
-      setTeamChallengeToken('');
-      setTeamHint(`Key accepted for ${validation.invite.role} access. Verify the assigned email to continue.`);
-      setTeamStep('email');
+      setTeamEmail(validation.invite.email || '');
+      setTeamPassword('');
+      setTeamHint(`Key accepted for ${validation.invite.role} access. Enter the assigned email and a password to open the company dashboard.`);
+      setTeamStep('signin');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Invalid team access key.');
     } finally {
@@ -314,48 +313,25 @@ export default function Login() {
     }
   };
 
-  const handleTeamEmailSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    await requestTeamOtp();
-  };
-
-  const requestTeamOtp = async () => {
-    setLoading(true);
-    setError('');
-    try {
-      const response = await teamAccess.requestOtp(teamToken, teamEmail);
-      setTeamChallengeToken(response.challengeToken);
-      setTeamOtp('');
-      setTeamHint(`Verification code sent to ${response.maskedEmail} via ${response.provider}.`);
-      setTeamStep('otp');
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unable to send team access OTP.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleTeamOtpResend = async () => {
-    await requestTeamOtp();
-  };
-
-  const handleTeamOtpSubmit = async (e: React.FormEvent) => {
+  const handleTeamSigninSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError('');
     try {
+      if (teamPassword.length < 8) {
+        throw new Error('Password must be at least 8 characters.');
+      }
       const res = await teamAccess.completeLogin({
         token: teamToken,
         email: teamEmail,
-        otp: teamOtp,
-        challengeToken: teamChallengeToken,
+        password: teamPassword,
       });
       if (!res.success || !res.user) {
-        throw new Error(res.error || 'Team access login failed.');
+        throw new Error(res.error || 'Team access sign-in failed.');
       }
       navigate('/business');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Invalid team access OTP.');
+      setError(err instanceof Error ? err.message : 'Team access sign-in failed.');
     } finally {
       setLoading(false);
     }
@@ -380,7 +356,7 @@ export default function Login() {
 
   const completeRegistration = async (verifiedToken?: string) => {
     const res = await auth.register({
-      email: defaultBusinessMailboxAddress || otpTargetEmail,
+      email: otpTargetEmail,
       password: regPassword,
       displayName: regName,
       accountType: 'business',
@@ -561,8 +537,8 @@ export default function Login() {
     setTeamStep('key');
     setTeamToken('');
     setTeamEmail('');
-    setTeamOtp('');
-    setTeamChallengeToken('');
+    setTeamPassword('');
+    setShowTeamPassword(false);
     setTeamInvite(null);
     setTeamHint('');
 
@@ -870,12 +846,12 @@ export default function Login() {
                   {loginAccessMode === 'password' ? (
                     <form id="login-panel-password" role="tabpanel" aria-labelledby="login-tab-password" onSubmit={handleLogin} className="login-form" autoComplete="off">
                       <div className="form-group">
-                        <label htmlFor="login-email">Workspace Email</label>
+                        <label htmlFor="login-email">Email</label>
                         <input
                           id="login-email"
-                          type="text"
+                          type="email"
                           className="input"
-                          placeholder="admin@yourcompany.com"
+                          placeholder="you@example.com"
                           name="velismail-login-identifier"
                           autoComplete="username"
                           required
@@ -936,8 +912,8 @@ export default function Login() {
                     </form>
                   ) : (
                     <>
-                      <div className="login-stepper" aria-label={`Step ${teamStepNumber} of 3`}>
-                        <span className="login-stepper-label">Step {teamStepNumber} of 3</span>
+                      <div className="login-stepper" aria-label={`Step ${teamStepNumber} of ${TEAM_STEP_ORDER.length}`}>
+                        <span className="login-stepper-label">Step {teamStepNumber} of {TEAM_STEP_ORDER.length}</span>
                         <span className="login-stepper-track">
                           <span
                             className="login-stepper-fill"
@@ -984,55 +960,52 @@ export default function Login() {
                         </form>
                       )}
 
-                      {teamStep === 'email' && (
-                        <form onSubmit={handleTeamEmailSubmit} className="login-form" autoComplete="off">
+                      {teamStep === 'signin' && (
+                        <form onSubmit={handleTeamSigninSubmit} className="login-form" autoComplete="off">
                           <div className="form-group">
                             <label htmlFor="team-email">Assigned Email</label>
                             <input
                               id="team-email"
                               type="email"
                               className="input"
-                              placeholder="member@company.com"
+                              placeholder="name@example.com"
                               name="velismail-team-assigned-email"
-                              autoComplete="off"
+                              autoComplete="username"
                               required
                               value={teamEmail}
                               onChange={e => setTeamEmail(e.target.value)}
                               autoFocus
                             />
                           </div>
-                          {renderError()}
-                          <button type="submit" className="btn btn-primary w-full login-submit" disabled={loading}>
-                            {loading ? <LoadingSpinner size="sm" label="Sending OTP" /> : <>Send OTP <ArrowRight size={18} /></>}
-                          </button>
-                        </form>
-                      )}
-
-                      {teamStep === 'otp' && (
-                        <form onSubmit={handleTeamOtpSubmit} className="login-form" autoComplete="off">
                           <div className="form-group">
-                            <label htmlFor="team-otp">Verification Code</label>
-                            <input
-                              id="team-otp"
-                              type="text"
-                              className="input login-otp-input"
-                              placeholder="000000"
-                              name="velismail-team-otp"
-                              autoComplete="one-time-code"
-                              inputMode="numeric"
-                              maxLength={6}
-                              required
-                              value={teamOtp}
-                              onChange={e => setTeamOtp(e.target.value.replace(/\D/g, ''))}
-                              autoFocus
-                            />
+                            <label htmlFor="team-password">Password</label>
+                            <div className="login-field">
+                              <input
+                                id="team-password"
+                                type={showTeamPassword ? 'text' : 'password'}
+                                className="input"
+                                placeholder="Enter password"
+                                name="velismail-team-password"
+                                autoComplete="new-password"
+                                minLength={8}
+                                required
+                                value={teamPassword}
+                                onChange={e => setTeamPassword(e.target.value)}
+                              />
+                              <button
+                                type="button"
+                                className="login-field-action"
+                                onClick={() => setShowTeamPassword(v => !v)}
+                                aria-label={showTeamPassword ? 'Hide password' : 'Show password'}
+                                tabIndex={-1}
+                              >
+                                {showTeamPassword ? <EyeOff size={17} /> : <Eye size={17} />}
+                              </button>
+                            </div>
                           </div>
                           {renderError()}
                           <button type="submit" className="btn btn-primary w-full login-submit" disabled={loading}>
                             {loading ? <LoadingSpinner size="sm" label="Opening dashboard" /> : <>Open Team Dashboard <ArrowRight size={18} /></>}
-                          </button>
-                          <button type="button" className="login-link resend-inline" onClick={handleTeamOtpResend} disabled={loading || !teamEmail.trim()}>
-                            Resend OTP
                           </button>
                         </form>
                       )}
@@ -1052,12 +1025,12 @@ export default function Login() {
                 <>
                   <form onSubmit={handlePasswordResetRequest} className="login-form" autoComplete="off">
                     <div className="form-group">
-                      <label htmlFor="reset-identifier">Workspace Email</label>
+                      <label htmlFor="reset-identifier">Email</label>
                       <input
                         id="reset-identifier"
-                        type="text"
+                        type="email"
                         className="input"
-                        placeholder="admin@yourcompany.com"
+                        placeholder="you@example.com"
                         name="velismail-reset-identifier"
                         autoComplete="off"
                         required
@@ -1234,12 +1207,12 @@ export default function Login() {
                 </div>
 
                 <div className="form-group">
-                  <label htmlFor="reg-recovery">Recovery Email *</label>
+                  <label htmlFor="reg-recovery">Email (sign-in & recovery) *</label>
                   <input
                     id="reg-recovery"
                     type="email"
                     className="input"
-                    placeholder="you@gmail.com"
+                    placeholder="you@example.com"
                     name="velismail-new-account-recovery-contact"
                     autoComplete="email"
                     required
@@ -1247,7 +1220,7 @@ export default function Login() {
                     onChange={e => setRegRecoveryEmail(e.target.value)}
                   />
                   <span className="form-hint">
-                    Required. Verification codes and recovery links are sent here.
+                    Required. This is your sign-in email; verification codes and recovery links are sent here.
                   </span>
                 </div>
 
@@ -1280,24 +1253,6 @@ export default function Login() {
                   </div>
                   <span className="form-hint">
                     Optional. Used for future account recovery via SMS.
-                  </span>
-                </div>
-
-                <div className="form-group">
-                  <label htmlFor="reg-recovery">Recovery Email *</label>
-                  <input
-                    id="reg-recovery"
-                    type="email"
-                    className="input"
-                    placeholder="you@gmail.com"
-                    name="velismail-new-account-recovery-contact"
-                    autoComplete="email"
-                    required
-                    value={regRecoveryEmail}
-                    onChange={e => setRegRecoveryEmail(e.target.value)}
-                  />
-                  <span className="form-hint">
-                    Required. Verification codes and recovery links are sent here.
                   </span>
                 </div>
 

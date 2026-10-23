@@ -3122,20 +3122,61 @@ fn valid_team_role(value: &str) -> bool {
     matches!(value, "admin" | "member" | "viewer")
 }
 
+/// Read one invitation from the database.
+///
+/// The invitation lives in `team_invites`, so a key keeps working across a
+/// restart and a deploy. A missing database means the key is unknown, which is
+/// the safe answer.
 async fn load_team_invite(state: &AppState, token: &str) -> Option<TeamInviteRecord> {
-    let value = {
-        let invites = state.team_invites.read().await;
-        invites.get(token).cloned()
-    }?;
-    serde_json::from_value(value).ok()
+    let db = state.db.as_ref()?;
+    let row = match sqlx::query("SELECT data FROM team_invites WHERE code = $1")
+        .bind(token)
+        .fetch_optional(db)
+        .await
+    {
+        Ok(Some(row)) => row,
+        Ok(None) => return None,
+        Err(err) => {
+            tracing::error!("team invite lookup failed: {err}");
+            return None;
+        }
+    };
+    let data: Value = row.try_get("data").ok()?;
+    serde_json::from_value(data).ok()
 }
 
-async fn set_team_invite_status(state: &AppState, token: &str, status: &str) {
-    let mut invites = state.team_invites.write().await;
-    if let Some(value) = invites.get_mut(token) {
-        value["status"] = Value::String(status.to_string());
-        if status == "accepted" {
-            value["acceptedAt"] = Value::String(chrono::Utc::now().to_rfc3339());
+/// Write the new state of an invitation back to the database.
+///
+/// Returns false when the invitation does not exist or the database refused
+/// the write, so the caller never reports a success it did not get.
+async fn set_team_invite_status(state: &AppState, token: &str, status: &str) -> bool {
+    let Some(db) = state.db.as_ref() else {
+        return false;
+    };
+    let result = sqlx::query(
+        "UPDATE team_invites
+            SET data = data
+                    || jsonb_build_object('status', $2::text)
+                    || CASE
+                           WHEN $2::text = 'accepted'
+                           THEN jsonb_build_object(
+                               'acceptedAt',
+                               to_char(NOW() AT TIME ZONE 'utc', 'YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"')
+                           )
+                           ELSE '{}'::jsonb
+                       END,
+                revoked = ($2::text = 'revoked')
+          WHERE code = $1",
+    )
+    .bind(token)
+    .bind(status)
+    .execute(db)
+    .await;
+    match result {
+        Ok(done) => done.rows_affected() > 0,
+        Err(err) => {
+            tracing::error!("team invite status update failed: {err}");
+            false
         }
     }
 }
@@ -3271,9 +3312,44 @@ pub async fn create_team_invite(
         }
     };
 
-    {
-        let mut invites = state.team_invites.write().await;
-        invites.insert(token, serialized);
+    // The invitation is written to the database, so the key survives a
+    // restart and a deploy instead of disappearing with the process.
+    let Some(db) = state.db.as_ref() else {
+        return (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(json!({
+                "success": false,
+                "message": "The invitation store is not connected. Try again in a moment."
+            })),
+        );
+    };
+    let expires_at_ts: Option<chrono::DateTime<chrono::Utc>> = invite
+        .expires_at
+        .as_deref()
+        .and_then(|value| chrono::DateTime::parse_from_rfc3339(value).ok())
+        .map(|value| value.with_timezone(&chrono::Utc));
+    let stored = sqlx::query(
+        "INSERT INTO team_invites (code, data, expires_at, revoked)
+         VALUES ($1, $2, $3, false)
+         ON CONFLICT (code) DO UPDATE
+            SET data = EXCLUDED.data,
+                expires_at = EXCLUDED.expires_at,
+                revoked = false",
+    )
+    .bind(&token)
+    .bind(&serialized)
+    .bind(expires_at_ts)
+    .execute(db)
+    .await;
+    if let Err(err) = stored {
+        tracing::error!("team invite insert failed: {err}");
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({
+                "success": false,
+                "message": "Unable to save the team access key."
+            })),
+        );
     }
 
     (
@@ -3323,7 +3399,7 @@ pub async fn validate_team_invite(
         );
     }
     if team_invite_expired(&invite) {
-        set_team_invite_status(&state, token, "expired").await;
+        let _ = set_team_invite_status(&state, token, "expired").await;
         return (
             StatusCode::GONE,
             Json(json!({
@@ -3446,7 +3522,7 @@ pub async fn complete_team_invite(
         );
     }
     if team_invite_expired(&invite) {
-        set_team_invite_status(&state, token, "expired").await;
+        let _ = set_team_invite_status(&state, token, "expired").await;
         return (
             StatusCode::GONE,
             Json(json!({ "success": false, "message": "This team access key has expired." })),
@@ -3464,17 +3540,26 @@ pub async fn complete_team_invite(
         None => {
             return (
                 StatusCode::SERVICE_UNAVAILABLE,
-                Json(json!({ "success": false, "message": "The account database is not connected." })),
+                Json(
+                    json!({ "success": false, "message": "The account database is not connected." }),
+                ),
             )
         }
     };
 
-    let admin_tenant = match uuid::Uuid::parse_str(&invite.workspace.tenant_id) {
-        Ok(value) if value != uuid::Uuid::nil() => value,
+    let admin_tenant = match invite
+        .workspace
+        .tenant_id
+        .as_deref()
+        .and_then(|value| uuid::Uuid::parse_str(value).ok())
+    {
+        Some(value) if value != uuid::Uuid::nil() => value,
         _ => {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({ "success": false, "message": "The invite is missing its workspace. Ask the admin to generate a fresh access key." })),
+                Json(
+                    json!({ "success": false, "message": "The invite is missing its workspace. Ask the admin to generate a fresh access key." }),
+                ),
             )
         }
     };
@@ -3490,7 +3575,12 @@ pub async fn complete_team_invite(
         Ok(Some(row)) => {
             let uid: uuid::Uuid = match row.try_get("id") {
                 Ok(value) => value,
-                Err(_) => return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "success": false, "message": "Unable to load the account." }))),
+                Err(_) => {
+                    return (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        Json(json!({ "success": false, "message": "Unable to load the account." })),
+                    )
+                }
             };
             let tenant: Option<uuid::Uuid> = row.try_get("tenant_id").ok().flatten();
             let hash: Option<String> = row.try_get("password_hash").ok().flatten();
@@ -3499,21 +3589,27 @@ pub async fn complete_team_invite(
                 None => {
                     return (
                         StatusCode::UNAUTHORIZED,
-                        Json(json!({ "success": false, "message": "This email has no password set. Use Forgot Password first." })),
+                        Json(
+                            json!({ "success": false, "message": "This email has no password set. Use Forgot Password first." }),
+                        ),
                     )
                 }
             };
             if !verify_team_password(&password, &stored) {
                 return (
                     StatusCode::UNAUTHORIZED,
-                    Json(json!({ "success": false, "message": "Incorrect password for this email." })),
+                    Json(
+                        json!({ "success": false, "message": "Incorrect password for this email." }),
+                    ),
                 );
             }
             if let Some(t) = tenant {
                 if t != admin_tenant {
                     return (
                         StatusCode::FORBIDDEN,
-                        Json(json!({ "success": false, "message": "This email already has its own VelisMail workspace. Ask the admin to invite a different email address." })),
+                        Json(
+                            json!({ "success": false, "message": "This email already has its own VelisMail workspace. Ask the admin to invite a different email address." }),
+                        ),
                     );
                 }
             }
@@ -3525,7 +3621,9 @@ pub async fn complete_team_invite(
                 Err(status) => {
                     return (
                         status,
-                        Json(json!({ "success": false, "message": "Unable to prepare the account." })),
+                        Json(
+                            json!({ "success": false, "message": "Unable to prepare the account." }),
+                        ),
                     )
                 }
             };
@@ -3546,8 +3644,10 @@ pub async fn complete_team_invite(
                     tracing::warn!("team access user create failed for {email}: {err}");
                     return (
                         StatusCode::CONFLICT,
-                        Json(json!({ "success": false, "message": "Unable to create the team account. It may already exist with a different status." })),
-                    )
+                        Json(
+                            json!({ "success": false, "message": "Unable to create the team account. It may already exist with a different status." }),
+                        ),
+                    );
                 }
             }
         }
@@ -3556,7 +3656,7 @@ pub async fn complete_team_invite(
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(json!({ "success": false, "message": "Unable to load the account." })),
-            )
+            );
         }
     };
 
@@ -3586,11 +3686,14 @@ pub async fn complete_team_invite(
         tracing::warn!("team access membership upsert failed for {email}: {err}");
         return (
             StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({ "success": false, "message": "Unable to add you to the company workspace." })),
+            Json(
+                json!({ "success": false, "message": "Unable to add you to the company workspace." }),
+            ),
         );
     }
 
-    set_team_invite_status(&state, token, "accepted").await;
+    // The invitation is only marked accepted once the session exists. A
+    // failure while signing the session must not burn the key.
     let mut accepted_invite = invite.clone();
     accepted_invite.status = "accepted".to_string();
     accepted_invite.accepted_at = Some(chrono::Utc::now().to_rfc3339());
@@ -3666,6 +3769,10 @@ pub async fn complete_team_invite(
     .execute(db)
     .await;
 
+    if !set_team_invite_status(&state, token, "accepted").await {
+        tracing::warn!("team invite {token} could not be marked accepted after sign-in");
+    }
+
     (
         StatusCode::OK,
         Json(json!({
@@ -3701,21 +3808,37 @@ pub async fn revoke_team_invite(
         );
     }
 
-    let exists = {
-        let invites = state.team_invites.read().await;
-        invites.contains_key(token)
+    let invite = match load_team_invite(&state, token).await {
+        Some(value) => value,
+        None => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(json!({
+                    "success": false,
+                    "message": "Team access key was not found."
+                })),
+            )
+        }
     };
-    if !exists {
+    if invite.status != "pending" {
         return (
-            StatusCode::NOT_FOUND,
+            StatusCode::CONFLICT,
             Json(json!({
                 "success": false,
-                "message": "Team access key was not found."
+                "message": format!("This team access key is already {}.", invite.status)
             })),
         );
     }
 
-    set_team_invite_status(&state, token, "revoked").await;
+    if !set_team_invite_status(&state, token, "revoked").await {
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({
+                "success": false,
+                "message": "Unable to revoke the team access key."
+            })),
+        );
+    }
 
     (
         StatusCode::OK,

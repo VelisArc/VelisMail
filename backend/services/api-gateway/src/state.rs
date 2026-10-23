@@ -27,8 +27,6 @@ pub struct AppState {
     pub traffic: Arc<crate::traffic::DailyTraffic>,
     /// Persistent DB pool (when DATABASE_URL is set), else falls back to in-memory.
     pub db: Option<PgPool>,
-    /// Fallback in-memory store when no DB is configured.
-    pub team_invites: Arc<RwLock<HashMap<String, Value>>>,
     pub inbound_routes: Arc<RwLock<HashMap<String, Value>>>,
 }
 
@@ -93,7 +91,6 @@ impl AppState {
             started_at: Instant::now(),
             traffic: Arc::new(crate::traffic::DailyTraffic::default()),
             db,
-            team_invites: Arc::new(RwLock::new(HashMap::new())),
             inbound_routes: Arc::new(RwLock::new(HashMap::new())),
         })
     }

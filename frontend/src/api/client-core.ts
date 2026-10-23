@@ -575,6 +575,17 @@ export type TeamAccessApiResponse = {
   invite?: TeamAccessInvite;
   message?: string;
   error?: string;
+  accessToken?: string;
+  refreshToken?: string;
+  expiresIn?: number;
+  tokenType?: string;
+  user?: {
+    id?: string;
+    email?: string;
+    displayName?: string;
+    role?: string;
+    tenantId?: string;
+  };
 };
 
 export type CreateTeamAccessInviteParams = {
@@ -1355,7 +1366,10 @@ export function buildSessionUser(params: {
   const tokenSubject = stringFromRecord(tokenPayload, 'sub');
   const tokenTenantId = stringFromRecord(tokenPayload, 'tenant_id');
   const email = normalizeMailbox(profile.email || tokenEmail || params.email);
-  const domain = normalizeDomainInput(params.customDomain || email.split('@')[1] || params.existing?.businessDomain || '');
+  // The business sending domain is only ever the custom domain the user set up
+  // (or the one already on the session). A personal email domain such as
+  // gmail.com must never become the workspace mail domain.
+  const domain = normalizeDomainInput(params.customDomain || params.existing?.businessDomain || '');
   const businessMailboxAddress = domain ? `admin@${domain}` : email;
   return normalizeSessionUser({
     ...params.existing,
@@ -1412,11 +1426,11 @@ export function isInactiveAccount(status?: string): boolean {
   return normalized === 'suspended' || normalized === 'deactivated';
 }
 
-export function loginIdentifierCandidates(identifier: string): string[] {  const normalized = normalizeMailbox(identifier);
-  if (normalized && !normalized.includes('@')) {
-    return [`admin@${normalizeDomainInput(normalized)}`];
-  }
-  return normalized ? [normalized] : [];
+export function loginIdentifierCandidates(identifier: string): string[] {
+  const normalized = normalizeMailbox(identifier);
+  // Sign-in requires a full email address. The account can also be matched by
+  // its verified recovery email, but never by a bare name or domain.
+  return normalized.includes('@') ? [normalized] : [];
 }
 
 export function scopedExistingSession(email: string): User | null {

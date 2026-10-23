@@ -1227,8 +1227,7 @@ export const teamAccess = {
   async completeLogin(params: {
     token: string;
     email: string;
-    otp: string;
-    challengeToken: string;
+    password: string;
   }): Promise<{ success: boolean; user?: User; error?: string }> {
     try {
       const validation = await this.validateToken(params.token, params.email);
@@ -1239,38 +1238,45 @@ export const teamAccess = {
       if (normalizedEmail !== validation.invite.email) {
         throw new Error('Team access key and email do not match.');
       }
-      const otpResponse = await auth.verifyOtp({
-        email: normalizedEmail,
-        otp: params.otp,
-        challengeToken: params.challengeToken,
-        purpose: 'register',
-      });
 
-      let invite = validation.invite;
       const completion = await postTeamAccess('/team/invites/complete', {
         token: params.token.trim(),
         email: normalizedEmail,
-        verificationToken: otpResponse.verificationToken,
+        password: params.password,
       });
 
-      if (completion?.ok && completion.data?.invite) {
-        invite = completion.data.invite;
+      if (!completion?.ok) {
+        throw new Error(teamAccessApiError(completion?.data ?? null, 'Unable to sign in with this team access key.'));
+      }
+
+      const data = completion.data ?? {};
+      const accessToken = String(data.accessToken || '');
+      const refreshToken = String(data.refreshToken || '');
+      if (!accessToken) {
+        throw new Error('Team sign-in succeeded but no session token was returned.');
+      }
+      localStorage.setItem('velismail_token', accessToken);
+      if (refreshToken) {
+        localStorage.setItem('velismail_refresh', refreshToken);
+      }
+
+      let invite = validation.invite;
+      if (data.invite) {
+        invite = data.invite;
         if (hasTeamAccessWorkspace(invite)) {
           cacheTeamAccessInvite(invite);
         }
-      } else if (completion && completion.status !== 404) {
-        throw new Error(teamAccessApiError(completion.data, 'Unable to complete team access login.'));
       }
-
       if (!hasTeamAccessWorkspace(invite)) {
         throw new Error('Team workspace configuration is unavailable. Ask the admin to generate a fresh access key.');
       }
 
+      const profile = data.user || {};
       const user: User = normalizeSessionUser({
-        id: `team_${hashString(`${invite.id}:${normalizedEmail}`)}`,
-        tenantId: invite.workspace.tenantId,
+        id: profile.id || `team_${hashString(`${invite.id}:${normalizedEmail}`)}`,
+        tenantId: profile.tenantId || invite.workspace.tenantId,
         email: normalizedEmail,
-        displayName: invite.name,
+        displayName: profile.displayName || invite.name,
         plan: 'Team Access',
         accountType: 'business',
         isSetupComplete: true,
