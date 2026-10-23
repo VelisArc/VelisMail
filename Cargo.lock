@@ -4297,7 +4297,7 @@ checksum = "accd4ea62f7bb7a82fe23066fb0957d48ef677f6eeb8215f372f52e48bb32426"
 
 [[package]]
 name = "velismail-api-gateway"
-version = "5.1.0"
+version = "5.2.0"
 dependencies = [
  "anyhow",
  "argon2",
@@ -4330,7 +4330,7 @@ dependencies = [
 
 [[package]]
 name = "velismail-auth-service"
-version = "5.1.0"
+version = "5.2.0"
 dependencies = [
  "anyhow",
  "argon2",
@@ -4364,7 +4364,7 @@ dependencies = [
 
 [[package]]
 name = "velismail-common"
-version = "5.1.0"
+version = "5.2.0"
 dependencies = [
  "anyhow",
  "axum",
@@ -4384,7 +4384,7 @@ dependencies = [
 
 [[package]]
 name = "velismail-crypto"
-version = "5.1.0"
+version = "5.2.0"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -4397,7 +4397,7 @@ dependencies = [
 
 [[package]]
 name = "velismail-database"
-version = "5.1.0"
+version = "5.2.0"
 dependencies = [
  "anyhow",
  "chrono",
@@ -4414,7 +4414,7 @@ dependencies = [
 
 [[package]]
 name = "velismail-delivery-engine"
-version = "5.1.0"
+version = "5.2.0"
 dependencies = [
  "anyhow",
  "axum",
@@ -4440,7 +4440,7 @@ dependencies = [
 
 [[package]]
 name = "velismail-email"
-version = "5.1.0"
+version = "5.2.0"
 dependencies = [
  "reqwest 0.13.5",
  "serde",
@@ -4452,7 +4452,7 @@ dependencies = [
 
 [[package]]
 name = "velismail-external-api"
-version = "5.1.0"
+version = "5.2.0"
 dependencies = [
  "aes-gcm",
  "async-trait",
@@ -4479,7 +4479,7 @@ dependencies = [
 
 [[package]]
 name = "velismail-mail-service"
-version = "5.1.0"
+version = "5.2.0"
 dependencies = [
  "anyhow",
  "axum",
@@ -4502,7 +4502,7 @@ dependencies = [
 
 [[package]]
 name = "velismail-monolith"
-version = "5.1.0"
+version = "5.2.0"
 dependencies = [
  "anyhow",
  "tokio",
@@ -4519,7 +4519,7 @@ dependencies = [
 
 [[package]]
 name = "velismail-storage-service"
-version = "5.1.0"
+version = "5.2.0"
 dependencies = [
  "anyhow",
  "axum",
@@ -4541,7 +4541,7 @@ dependencies = [
 
 [[package]]
 name = "velismail-tenant-service"
-version = "5.1.0"
+version = "5.2.0"
 dependencies = [
  "anyhow",
  "axum",
