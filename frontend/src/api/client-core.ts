@@ -256,6 +256,32 @@ export function getPrimaryApiBase(): string {
   return getApiBaseCandidates()[0] || '';
 }
 
+/**
+ * Read a human message from any API error shape.
+ *
+ * The gateway answers with `{ error: { code, message } }` while older handlers
+ * return `{ error: "..." }`. Passing the object straight into `new Error()`
+ * rendered `[object Object]` in the UI.
+ */
+export function apiErrorMessage(payload: unknown, fallback: string): string {
+  if (typeof payload === 'string') {
+    const text = payload.trim();
+    return text || fallback;
+  }
+  if (payload && typeof payload === 'object') {
+    const record = payload as { message?: unknown; error?: unknown; detail?: unknown };
+    if (typeof record.message === 'string' && record.message.trim()) return record.message;
+    if (typeof record.error === 'string' && record.error.trim()) return record.error;
+    if (record.error && typeof record.error === 'object') {
+      const nested = record.error as { message?: unknown; code?: unknown };
+      if (typeof nested.message === 'string' && nested.message.trim()) return nested.message;
+      if (typeof nested.code === 'string' && nested.code.trim()) return nested.code;
+    }
+    if (typeof record.detail === 'string' && record.detail.trim()) return record.detail;
+  }
+  return fallback;
+}
+
 export function friendlyApiError(endpoint: string, status: number, fallback: string): string {
   const route = endpoint.toLowerCase();
   if (status === 401) {
@@ -359,6 +385,19 @@ export async function clearLocalAccountData(): Promise<void> {
 
 let backendRefreshInFlight: Promise<boolean> | null = null;
 
+/**
+ * The server rejected the refresh token: the session is over. Drop the cached
+ * account as well, otherwise the route guard keeps showing a signed-in shell
+ * where every request fails.
+ */
+function endExpiredSession() {
+  clearBackendTokens();
+  void clearLocalAccountData();
+  if (typeof window === 'undefined') return;
+  if (window.location.pathname === '/login') return;
+  window.location.assign('/login?session=expired');
+}
+
 const AUTH_ENDPOINTS_WITHOUT_REFRESH = [
   '/auth/login',
   '/auth/login/password',
@@ -435,7 +474,7 @@ export function refreshBackendSession(): Promise<boolean> {
       if (currentRefresh && currentRefresh !== refreshToken) {
         return Boolean(localStorage.getItem('velismail_token'));
       }
-      clearBackendTokens();
+      endExpiredSession();
     }
     return false;
   })();
@@ -454,6 +493,15 @@ async function fetchWithAuthRetry(
 ): Promise<Response> {
   let response = await fetch(url, { ...options, headers });
   if (response.status !== 401 || !shouldRefreshForEndpoint(endpoint)) {
+    return response;
+  }
+
+  if (!localStorage.getItem('velismail_refresh')) {
+    // Only tear down a session that the browser still thinks it has. A guest
+    // calling a public endpoint must not be signed out by a 401.
+    if (localStorage.getItem('velismail_session')) {
+      endExpiredSession();
+    }
     return response;
   }
 
@@ -509,7 +557,7 @@ export async function fetchApiResponse(endpoint: string, options: RequestInit = 
             })
         : [];
       const prefix = jsonError.errorType ? `[${jsonError.errorType}] ` : '';
-      errorMessage = `${prefix}${jsonError.message || errorMessage}${checkDetails.length ? ` ${checkDetails.join(' ')}` : ''}`;
+      errorMessage = `${prefix}${apiErrorMessage(jsonError, '') || errorMessage}${checkDetails.length ? ` ${checkDetails.join(' ')}` : ''}`;
     } catch {
       errorMessage = errorBody || errorMessage;
     }
@@ -550,13 +598,17 @@ export async function fetchApiJsonDetailed<T = unknown>(endpoint: string, option
       try {
         data = JSON.parse(rawText) as T;
       } catch {
-        const compactBody = rawText.replace(/\s+/g, ' ').trim();
-        const preview = compactBody.slice(0, 180);
-        throw new Error(
-          preview
-            ? `The VelisMail API returned an invalid JSON response: ${preview}`
-            : 'The VelisMail API returned an invalid JSON response.',
-        );
+        if (response.ok) {
+          const compactBody = rawText.replace(/\s+/g, ' ').trim();
+          const preview = compactBody.slice(0, 180);
+          throw new Error(
+            preview
+              ? `The VelisMail API returned an invalid JSON response: ${preview}`
+              : 'The VelisMail API returned an invalid JSON response.',
+          );
+        }
+        // Framework rejections (for example 422 or 413) are plain text. Keep
+        // the status and the raw body so callers can show a real message.
       }
     }
     if (response.status === 404 && index < apiBaseCandidates.length - 1) {

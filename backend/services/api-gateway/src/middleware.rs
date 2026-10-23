@@ -302,7 +302,12 @@ pub async fn require_auth(
             // so the client rotates the token and picks up the new tenant.
             if let Some(db) = state.db.as_ref() {
                 let account = sqlx::query(
-                    "SELECT u.status, u.tenant_id, t.status AS tenant_status
+                    "SELECT u.status, u.tenant_id, t.status AS tenant_status,
+                            (SELECT cm.status FROM company_members cm
+                             WHERE cm.tenant_id = u.tenant_id
+                               AND LOWER(cm.email) = LOWER(u.email)
+                             ORDER BY CASE cm.status WHEN 'active' THEN 0 ELSE 1 END
+                             LIMIT 1) AS membership_status
                      FROM users u
                      LEFT JOIN tenants t ON t.id = u.tenant_id AND t.deleted_at IS NULL
                      WHERE u.id = $1",
@@ -333,6 +338,24 @@ pub async fn require_auth(
                                     "This workspace is not active. Contact support.",
                                 );
                             }
+                        }
+                        // A removed or suspended membership ends the access
+                        // immediately, even while an older access token is
+                        // still within its lifetime. Platform control-plane
+                        // paths are governed by platform_admins instead.
+                        let membership_status: Option<String> =
+                            sqlx::Row::try_get(&row, "membership_status").ok().flatten();
+                        if !path.starts_with("/admin/platform")
+                            && !path.starts_with("/platform")
+                            && membership_status
+                                .as_deref()
+                                .is_some_and(|status| status != "active")
+                        {
+                            return error_response(
+                                StatusCode::FORBIDDEN,
+                                "MEMBERSHIP_INACTIVE",
+                                "Your workspace membership is not active. Contact a company administrator.",
+                            );
                         }
                         let token_tenant = uuid::Uuid::parse_str(claims.tenant_id.trim()).ok();
                         if let (Some(current), Some(token)) = (current_tenant, token_tenant) {

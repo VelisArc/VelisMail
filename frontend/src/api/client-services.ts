@@ -6,6 +6,7 @@ import {
   hashString,
   isJwtLikelyUsable, clearBackendTokens,
   clearLocalAccountData,
+  apiErrorMessage,
   normalizeSessionUser, buildSessionUser,
   loginIdentifierCandidates, scopedExistingSession,
   fetchAuthenticatedProfile,
@@ -835,7 +836,7 @@ function normalizeBusinessMailboxFromApi(entry: BusinessMailboxApiEntry, fallbac
 }
 
 function businessMailboxApiError(response: BusinessMailboxApiResponse | null, fallback: string): string {
-  return response?.message || response?.error || fallback;
+  return apiErrorMessage(response, fallback);
 }
 
 function isTransientBusinessDbError(status: number, message: string): boolean {
@@ -1304,7 +1305,7 @@ export const teamAccess = {
         businessDomain: invite.workspace.businessDomain,
         businessMailboxAddress: normalizedEmail,
         businessDomainVerified: invite.workspace.businessDomainVerified ?? true,
-        teamAccessRole: invite.role,
+        teamAccessRole: invite.role === 'owner' ? 'admin' : invite.role,
         teamAccessInviteId: invite.id,
         teamAccessOwnerEmail: invite.issuerEmail,
         createdAt: new Date().toISOString(),
@@ -1533,9 +1534,9 @@ export const mail = {
         saveEmailsSyncAndAsync(STORAGE_KEYS.emails, sourceEmails);
       } else if (response.status === 404) {
         setBusinessEmailDbRouteUnavailable(true);
-      } else if (isTransientBusinessDbError(response.status, String(response.data?.error || response.data?.message || 'Business email database query failed.'))) {
+      } else if (isTransientBusinessDbError(response.status, apiErrorMessage(response.data, 'Business email database query failed.'))) {
         if (response.status === 503) markBusinessDbUnreachable();
-        warnBackendSyncFailure(new Error(String(response.data?.error || response.data?.message || 'Business email database query failed.')));
+        warnBackendSyncFailure(new Error(apiErrorMessage(response.data, 'Business email database query failed.')));
       }
     }
 

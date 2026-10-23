@@ -716,9 +716,11 @@ proxy_handler!(proxy_storage, storage_service_url, "/storage");
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct VerifyInfrastructurePayload {
+    #[serde(default)]
     pub db_provider: Option<String>,
     db_url: String,
     api_provider: String,
+    #[serde(default)]
     api_endpoint: Option<String>,
     api_key: String,
 }
@@ -729,11 +731,16 @@ pub struct VerifyDomainPayload {
     domain: String,
     db_url: String,
     api_key: String,
+    #[serde(default)]
     webhook_secret: Option<String>,
     verification_token: String,
+    #[serde(default)]
     provider: Option<String>,
+    #[serde(default)]
     api_provider: Option<String>,
+    #[serde(default)]
     provider_endpoint: Option<String>,
+    #[serde(default)]
     api_endpoint: Option<String>,
 }
 
@@ -2917,6 +2924,54 @@ pub async fn send_mail(
         );
     }
 
+    // Viewers have read-only workspace access. The composer is hidden for
+    // them, but the API must enforce the same rule.
+    if let Some(db) = state.db.as_ref() {
+        let caller_tenant = Uuid::parse_str(claims.tenant_id.trim()).unwrap_or(Uuid::nil());
+        if caller_tenant != Uuid::nil() {
+            let role: Option<String> = sqlx::query_scalar(
+                "SELECT role FROM company_members
+                 WHERE tenant_id = $1 AND LOWER(email) = LOWER($2) AND status = 'active'
+                 LIMIT 1",
+            )
+            .bind(caller_tenant)
+            .bind(&claims.email)
+            .fetch_optional(db)
+            .await
+            .ok()
+            .flatten();
+            let is_platform = state
+                .config
+                .platform_owner_emails
+                .contains(&claims.email.to_lowercase())
+                || claims.firebase_uid.as_ref().is_some_and(|uid| {
+                    state
+                        .config
+                        .platform_owner_uids
+                        .iter()
+                        .any(|value| value == uid)
+                });
+            if role.is_none() && !is_platform {
+                return (
+                    StatusCode::FORBIDDEN,
+                    Json(json!({
+                        "success": false,
+                        "message": "This account is not an active member of the workspace."
+                    })),
+                );
+            }
+            if role.as_deref() == Some("viewer") && !is_platform {
+                return (
+                    StatusCode::FORBIDDEN,
+                    Json(json!({
+                        "success": false,
+                        "message": "Viewers cannot send mail. Ask an owner or admin to change your role."
+                    })),
+                );
+            }
+        }
+    }
+
     if let Some(from) = payload.from.as_deref() {
         if !is_valid_email_address(from) {
             return (
@@ -3208,10 +3263,15 @@ pub async fn send_mail(
 #[derive(Debug, Deserialize, Serialize, Clone, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct TeamInviteWorkspace {
+    #[serde(default)]
     pub tenant_id: Option<String>,
+    #[serde(default)]
     pub display_name: Option<String>,
+    #[serde(default)]
     pub business_domain: Option<String>,
+    #[serde(default)]
     pub business_domain_verified: Option<bool>,
+    #[serde(default)]
     pub is_business_setup_complete: Option<bool>,
 }
 
@@ -3219,8 +3279,10 @@ pub struct TeamInviteWorkspace {
 #[serde(rename_all = "camelCase")]
 pub struct CreateTeamInviteRequest {
     pub email: String,
+    #[serde(default)]
     pub name: String,
     pub role: String,
+    #[serde(default)]
     pub expires_in_hours: Option<i64>,
     // Kept in the wire format for older clients. The issuer and the workspace
     // always come from the verified session, never from these fields.
@@ -3236,6 +3298,7 @@ pub struct CreateTeamInviteRequest {
 #[serde(rename_all = "camelCase")]
 pub struct ValidateTeamInviteRequest {
     pub token: String,
+    #[serde(default)]
     pub email: Option<String>,
 }
 
@@ -3495,6 +3558,28 @@ pub async fn create_team_invite(
         );
     }
 
+    // A team access key reserves a seat exactly like a workspace invitation.
+    // Inviting an address that already holds a seat or a pending invitation
+    // only refreshes that invitation.
+    let allowance = crate::admin::tenant_allowance(db, context.tenant_id, &context.plan).await;
+    if allowance.seats > 0
+        && !crate::admin::workspace_email_reserved(db, context.tenant_id, &email).await
+    {
+        let seats_used = crate::admin::workspace_seat_usage(db, context.tenant_id).await;
+        if seats_used >= allowance.seats {
+            return (
+                StatusCode::CONFLICT,
+                Json(json!({
+                    "success": false,
+                    "message": format!(
+                        "All {} seats of this workspace are in use. Remove a member or raise the seat limit first.",
+                        allowance.seats
+                    )
+                })),
+            );
+        }
+    }
+
     let tenant_name: String = sqlx::query_scalar(
         "SELECT organization_name FROM tenants WHERE id = $1 AND deleted_at IS NULL",
     )
@@ -3585,6 +3670,21 @@ pub async fn create_team_invite(
         .as_deref()
         .and_then(|value| chrono::DateTime::parse_from_rfc3339(value).ok())
         .map(|value| value.with_timezone(&chrono::Utc));
+    // A fresh key replaces any earlier pending key for the same address, so an
+    // old link cannot be used after an administrator re-issued access.
+    let _ = sqlx::query(
+        "UPDATE team_invites
+            SET revoked = TRUE,
+                data = data || '{\"status\":\"revoked\"}'::jsonb
+          WHERE revoked = FALSE
+            AND data->>'status' = 'pending'
+            AND data->'workspace'->>'tenantId' = $1
+            AND LOWER(data->>'email') = LOWER($2)",
+    )
+    .bind(context.tenant_id.to_string())
+    .bind(&invite.email)
+    .execute(db)
+    .await;
     let stored = sqlx::query(
         "INSERT INTO team_invites (code, data, expires_at, revoked)
          VALUES ($1, $2, $3, false)
@@ -3856,6 +3956,42 @@ pub async fn complete_team_invite(
         );
     }
 
+    // The invitation already reserves a seat, so accepting it is allowed while
+    // the workspace is at its limit. If the limit was lowered afterwards the
+    // join is refused until an owner frees a seat.
+    let workspace_plan: String = sqlx::query_scalar("SELECT plan_tier FROM tenants WHERE id = $1")
+        .bind(admin_tenant)
+        .fetch_optional(db)
+        .await
+        .ok()
+        .flatten()
+        .unwrap_or_else(|| "free".to_string());
+    let allowance = crate::admin::tenant_allowance(db, admin_tenant, &workspace_plan).await;
+    if allowance.seats > 0 {
+        let already_active: bool = sqlx::query_scalar(
+            "SELECT EXISTS(
+                 SELECT 1 FROM company_members
+                 WHERE tenant_id = $1 AND LOWER(email) = LOWER($2) AND status = 'active'
+             )",
+        )
+        .bind(admin_tenant)
+        .bind(&email)
+        .fetch_one(db)
+        .await
+        .unwrap_or(false);
+        if !already_active
+            && crate::admin::workspace_seat_usage(db, admin_tenant).await > allowance.seats
+        {
+            return (
+                StatusCode::CONFLICT,
+                Json(json!({
+                    "success": false,
+                    "message": "This workspace has no free seat. Ask an administrator to free a seat first."
+                })),
+            );
+        }
+    }
+
     // Throttle password attempts for an existing account reached through an
     // invitation key. Without this the endpoint is a second, unthrottled
     // password login oracle.
@@ -4033,6 +4169,37 @@ pub async fn complete_team_invite(
     )
     .bind(admin_tenant)
     .bind(user_id)
+    .execute(db)
+    .await;
+
+    // Any other pending key for this address is now obsolete: acceptance is
+    // per address, not per key, so an old link must not open a second session.
+    let _ = sqlx::query(
+        "UPDATE team_invites
+            SET revoked = TRUE,
+                data = data || '{\"status\":\"revoked\"}'::jsonb
+          WHERE revoked = FALSE
+            AND data->>'status' = 'pending'
+            AND data->'workspace'->>'tenantId' = $1
+            AND LOWER(data->>'email') = LOWER($2)
+            AND code <> $3",
+    )
+    .bind(admin_tenant.to_string())
+    .bind(&email)
+    .bind(token)
+    .execute(db)
+    .await;
+
+    // The invite composer also records a workspace invitation. Complete it
+    // together with the team access key, otherwise the console keeps showing
+    // a pending invitation for somebody who has already joined.
+    let _ = sqlx::query(
+        "UPDATE workspace_invitations
+            SET status = 'accepted', accepted_at = NOW()
+          WHERE tenant_id = $1 AND LOWER(email) = LOWER($2) AND status = 'pending'",
+    )
+    .bind(admin_tenant)
+    .bind(&email)
     .execute(db)
     .await;
 
@@ -4219,6 +4386,20 @@ pub async fn revoke_team_invite(
         );
     }
 
+    // Keep the workspace invitation list in sync: both records are created by
+    // the same invite flow, so revoking one must revoke the other.
+    if let Some(db) = state.db.as_ref() {
+        let _ = sqlx::query(
+            "UPDATE workspace_invitations
+                SET status = 'revoked'
+              WHERE tenant_id = $1 AND LOWER(email) = LOWER($2) AND status = 'pending'",
+        )
+        .bind(context.tenant_id)
+        .bind(&invite.email)
+        .execute(db)
+        .await;
+    }
+
     (
         StatusCode::OK,
         Json(json!({
@@ -4231,9 +4412,13 @@ pub async fn revoke_team_invite(
 #[serde(rename_all = "camelCase")]
 pub struct PlatformUserUpdateRequest {
     pub email: String,
+    #[serde(default)]
     pub role: Option<String>,
+    #[serde(default)]
     pub status: Option<String>,
+    #[serde(default)]
     pub plan: Option<String>,
+    #[serde(default)]
     pub billing_cycle: Option<String>,
 }
 
@@ -5055,21 +5240,22 @@ async fn authorized_business_db_url(
             crate::company_api::fail(StatusCode::UNAUTHORIZED, "A bearer token is required.")
         })?;
 
-    let tenant_id = if token.starts_with(crate::api_keys::API_KEY_PREFIX) {
+    let (tenant_id, actor_email) = if token.starts_with(crate::api_keys::API_KEY_PREFIX) {
         crate::api_keys::resolve(state, token)
             .await
-            .map(|key| key.tenant_id)
+            .map(|key| (key.tenant_id, key.created_by.clone()))
             .map_err(|_| {
                 crate::company_api::fail(StatusCode::UNAUTHORIZED, "This API key is not valid.")
             })?
     } else {
         let claims = crate::company_api::session_claims(state, headers)?;
-        Uuid::parse_str(claims.tenant_id.trim()).map_err(|_| {
+        let tenant_id = Uuid::parse_str(claims.tenant_id.trim()).map_err(|_| {
             crate::company_api::fail(
                 StatusCode::UNAUTHORIZED,
                 "Invalid tenant identity in token.",
             )
-        })?
+        })?;
+        (tenant_id, claims.email.clone())
     };
 
     let db = state.db.as_ref().ok_or_else(|| {
@@ -5078,6 +5264,27 @@ async fn authorized_business_db_url(
             "The workspace database is not connected.",
         )
     })?;
+
+    // The tenant and the actor both come from the credential, but access still
+    // requires a live membership. A removed member or a key whose creator lost
+    // access must not read the tenant mail store.
+    let has_membership: bool = sqlx::query_scalar(
+        "SELECT EXISTS (
+             SELECT 1 FROM company_members
+             WHERE tenant_id = $1 AND LOWER(email) = LOWER($2) AND status = 'active'
+         )",
+    )
+    .bind(tenant_id)
+    .bind(actor_email.trim())
+    .fetch_one(db)
+    .await
+    .unwrap_or(false);
+    if !has_membership {
+        return Err(crate::company_api::fail(
+            StatusCode::FORBIDDEN,
+            "This account is no longer a member of the workspace.",
+        ));
+    }
 
     let tenant_status: Option<String> =
         sqlx::query_scalar("SELECT status FROM tenants WHERE id = $1 AND deleted_at IS NULL")
@@ -6022,6 +6229,15 @@ pub async fn save_business_mailbox(
     headers: HeaderMap,
     Json(payload): Json<SaveBusinessMailboxRequest>,
 ) -> (StatusCode, Json<Value>) {
+    // Mailbox configuration is a workspace setting, so a viewer or member
+    // cannot add or remove an address even though they can read mail.
+    let context = match crate::company_api::workspace_context(&state, &headers).await {
+        Ok(context) => context,
+        Err(response) => return response,
+    };
+    if let Err(response) = context.require_manage() {
+        return response;
+    }
     let db_url = match authorized_business_db_url(&state, &headers).await {
         Ok(url) => url,
         Err(response) => return response,
@@ -6098,6 +6314,13 @@ pub async fn delete_business_mailbox(
     headers: HeaderMap,
     Json(payload): Json<DeleteBusinessMailboxRequest>,
 ) -> (StatusCode, Json<Value>) {
+    let context = match crate::company_api::workspace_context(&state, &headers).await {
+        Ok(context) => context,
+        Err(response) => return response,
+    };
+    if let Err(response) = context.require_manage() {
+        return response;
+    }
     let db_url = match authorized_business_db_url(&state, &headers).await {
         Ok(url) => url,
         Err(response) => return response,
@@ -6354,11 +6577,15 @@ mod tests {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CreateOrderRequest {
+    #[serde(default)]
     pub amount: Option<u64>,
     pub currency: String,
+    #[serde(default)]
     pub plan: Option<String>,
+    #[serde(default)]
     pub billing: Option<String>,
     #[allow(dead_code)] // Kept for older clients; the account comes from the token.
+    #[serde(default)]
     pub email: Option<String>,
 }
 
@@ -6385,6 +6612,53 @@ fn expected_subscription_amount_paise(plan: &str, billing: &str) -> Option<u64> 
     Some(rupees * 100)
 }
 
+/// A subscription changes the plan of the whole workspace. Only an active
+/// owner or admin of the signed-in workspace may start a checkout. Personal
+/// accounts without a membership row are billed on their own account.
+async fn ensure_billing_manager(
+    db: &PgPool,
+    claims: &Claims,
+) -> Result<(), (StatusCode, Json<Value>)> {
+    let is_platform: bool = sqlx::query_scalar(
+        "SELECT EXISTS (
+             SELECT 1 FROM platform_admins
+             WHERE LOWER(email) = LOWER($1) AND status = 'active'
+         )",
+    )
+    .bind(claims.email.trim())
+    .fetch_one(db)
+    .await
+    .unwrap_or(false);
+    if is_platform {
+        return Ok(());
+    }
+    let Ok(tenant_id) = Uuid::parse_str(claims.tenant_id.trim()) else {
+        return Ok(());
+    };
+    let role: Option<String> = sqlx::query_scalar(
+        "SELECT role FROM company_members
+         WHERE tenant_id = $1 AND LOWER(email) = LOWER($2) AND status = 'active'
+         LIMIT 1",
+    )
+    .bind(tenant_id)
+    .bind(claims.email.trim())
+    .fetch_optional(db)
+    .await
+    .unwrap_or(None);
+    if let Some(role) = role {
+        if !matches!(role.as_str(), "owner" | "admin") {
+            return Err((
+                StatusCode::FORBIDDEN,
+                Json(json!({
+                    "success": false,
+                    "message": "Only a workspace owner or admin can change the plan."
+                })),
+            ));
+        }
+    }
+    Ok(())
+}
+
 pub async fn create_payment_order(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,
@@ -6399,6 +6673,20 @@ pub async fn create_payment_order(
                 "message": "Payment gateway is not configured on this server."
             })),
         );
+    }
+
+    let Some(db_pool) = state.db.as_ref() else {
+        tracing::error!("Database connection pool not available in api-gateway state");
+        return (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(json!({
+                "success": false,
+                "message": "Billing is temporarily unavailable."
+            })),
+        );
+    };
+    if let Err((status, body)) = ensure_billing_manager(db_pool, &claims).await {
+        return (status, body);
     }
 
     let plan = payload
@@ -6680,6 +6968,9 @@ pub async fn verify_payment(
             })),
         );
     };
+    if let Err((status, body)) = ensure_billing_manager(db_pool, &claims).await {
+        return (status, body);
+    }
 
     // A valid signature can be replayed. The invoice ledger is the
     // idempotency key: once a payment is recorded it never extends a plan

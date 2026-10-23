@@ -11,7 +11,7 @@
  * ecosystem: the VelisMail operator manages every company from there.
  */
 
-import { fetchApiJsonDetailed } from './client-core';
+import { apiErrorMessage, fetchApiJsonDetailed } from './client-core';
 import type {
   BusinessAuditEntry,
   BusinessMailbox,
@@ -116,9 +116,8 @@ export type WorkspaceAuditEntry = {
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetchApiJsonDetailed<T>(path, init);
   if (!response.ok) {
-    const body = response.data as { error?: string; message?: string } | null;
     throw new Error(
-      body?.error || body?.message || `Request failed with status ${response.status}`,
+      apiErrorMessage(response.data, `Request failed with status ${response.status}`),
     );
   }
   return (response.data ?? ({} as T)) as T;
@@ -342,11 +341,16 @@ export const workspaceApi = {
 
 /** Map a workspace member onto the dashboard team shape. */
 export function toTeamMember(member: WorkspaceMember): BusinessTeamMember {
+  const role = ['owner', 'admin', 'member', 'viewer', 'user'].includes(member.role)
+    ? member.role
+    : 'member';
   return {
     id: member.id,
     name: member.name || member.email,
     email: member.email,
-    role: (member.role === 'owner' ? 'admin' : member.role) as BusinessTeamMember['role'],
+    // The owner row keeps its role so the console can show the owner badge and
+    // only an owner can hand out the admin role.
+    role: role as BusinessTeamMember['role'],
     status: (member.status === 'active' ? 'active' : member.status) as BusinessTeamMember['status'],
     addedAt: member.joinedAt || member.lastActiveAt || '',
     lastActive: member.lastActiveAt || '',

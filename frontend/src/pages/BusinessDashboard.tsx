@@ -295,7 +295,12 @@ const [feedbackOpen, setFeedbackOpen] = useState(false);
   }, [showToast]);
 
   const handleLogout = useCallback(() => { auth.logout(); navigate('/login'); }, [navigate]);
+  const canCompose = user.role !== 'viewer';
   const openComposeWith = (to = '', subject = '', body = '', replyQuote = '') => {
+    if (!canCompose) {
+      showToast('Viewers cannot send mail. Ask an owner or admin to change your role.', 'error');
+      return;
+    }
     setComposeTo(to); setComposeSubject(subject); setComposeBody(body); setComposeReplyQuote(replyQuote); setComposeOpen(true);
   };
 
@@ -307,12 +312,10 @@ const [feedbackOpen, setFeedbackOpen] = useState(false);
     || (user?.firebaseUid && platformOwnerUids().includes(user.firebaseUid))
     || (user?.email && platformOwnerEmails().includes(user.email.toLowerCase())),
   );
+  const effectiveRole = user?.role || 'user';
   const hasRoleAccess = useCallback(
-    (tab: BizTab) => {
-      const effectiveRole = user?.role || 'user';
-      return (ROLE_ALLOWED_TABS[effectiveRole] || ROLE_ALLOWED_TABS.user).includes(tab);
-    },
-    [user?.role],
+    (tab: BizTab) => (ROLE_ALLOWED_TABS[effectiveRole] || ROLE_ALLOWED_TABS.user).includes(tab),
+    [effectiveRole],
   );
 
   useEffect(() => {

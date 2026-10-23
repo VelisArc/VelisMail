@@ -42,8 +42,17 @@ export const PLANS = [
 ];
 
 export const ROLE_ALLOWED_TABS: Record<string, BizTab[]> = {
+  owner: ['mail', 'templates', 'queue', 'domains', 'mailboxes', 'groups', 'team', 'analytics', 'audit', 'settings', 'billing', 'company-admin', 'contacts', 'deliverability'],
   admin: ['mail', 'templates', 'queue', 'domains', 'mailboxes', 'groups', 'team', 'analytics', 'audit', 'settings', 'billing', 'company-admin', 'contacts', 'deliverability'],
   member: ['mail', 'templates', 'queue', 'analytics', 'domains', 'mailboxes', 'groups', 'team', 'audit', 'settings', 'billing', 'contacts', 'deliverability'],
   viewer: ['mail', 'analytics', 'domains', 'mailboxes', 'groups', 'team', 'audit', 'settings', 'billing', 'contacts', 'deliverability'],
   user: ['mail', 'contacts', 'settings'],
 };
+
+/** Workspace configuration (domains, mailboxes, groups, team, billing). */
+export const canManageWorkspace = (role?: string): boolean =>
+  role === 'owner' || role === 'admin';
+
+/** Shared workspace content (templates, contacts, signatures). */
+export const canEditWorkspaceContent = (role?: string): boolean =>
+  role === 'owner' || role === 'admin' || role === 'member';

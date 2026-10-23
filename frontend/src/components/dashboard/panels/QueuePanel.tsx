@@ -3,12 +3,14 @@ import { Server, Filter, RefreshCcw, Zap, Trash2, Menu, X } from 'lucide-react';
 import { businessQueue } from '../../../api/client';
 import type { DashboardState } from '../types';
 import { formatRelative } from '../utils';
+import { canEditWorkspaceContent } from '../constants';
 
 interface QueuePanelProps {
   state: DashboardState;
 }
 
 export default function QueuePanel({ state }: QueuePanelProps) {
+  const canEdit = canEditWorkspaceContent(state.user?.role);
   const displayQueue = useMemo(() => {
     const q = state.mailQueue;
     if (state.queueStatusFilter === 'all') return q;
@@ -20,8 +22,12 @@ export default function QueuePanel({ state }: QueuePanelProps) {
       <div className="panel-header"><button className="toolbar-icon sidebar-toggle" onClick={() => state.setSidebarOpen(true)}><Menu size={16} /></button><h3><Server size={16} /> Mail Queue</h3><div className="panel-header-actions">
         <button className="btn btn-ghost btn-sm" onClick={() => state.setShowQueueFilters(!state.showQueueFilters)}><Filter size={12} /></button>
         <button className="btn btn-ghost btn-sm" onClick={state.refreshQueue}><RefreshCcw size={12} /></button>
-        <button className="btn btn-primary btn-sm" onClick={() => { businessQueue.runDue(state.activeDomainName); state.refreshQueue(); state.showToast('Due items triggered'); }}><Zap size={12} /> Run Due</button>
-        <button className="btn btn-ghost btn-sm" onClick={() => { const c = businessQueue.clearSent(state.activeDomainName); state.refreshQueue(); state.showToast(`Cleared ${c} sent items`); }}><Trash2 size={12} /> Clear Sent</button>
+        {canEdit && (
+          <>
+            <button className="btn btn-primary btn-sm" onClick={() => { businessQueue.runDue(state.activeDomainName); state.refreshQueue(); state.showToast('Due items triggered'); }}><Zap size={12} /> Run Due</button>
+            <button className="btn btn-ghost btn-sm" onClick={() => { const c = businessQueue.clearSent(state.activeDomainName); state.refreshQueue(); state.showToast(`Cleared ${c} sent items`); }}><Trash2 size={12} /> Clear Sent</button>
+          </>
+        )}
       </div></div>
       {state.showQueueFilters && (
         <div className="flex gap-2 queue-filters-bar">
@@ -42,8 +48,12 @@ export default function QueuePanel({ state }: QueuePanelProps) {
           <span className="text-sm truncate flex-2">{item.subject}</span>
           <span className="text-xs text-muted">{formatRelative(item.queuedAt)}</span>
           {item.error && <span className="text-xs text-danger">{item.error}</span>}
-          <button className="btn btn-ghost btn-sm" onClick={() => { businessQueue.retry(state.activeDomainName, item.id); state.refreshQueue(); }}><RefreshCcw size={12} /></button>
-          <button className="btn btn-ghost btn-sm" onClick={() => { businessQueue.remove(item.id); state.refreshQueue(); }}><X size={12} /></button>
+          {canEdit && (
+            <>
+              <button className="btn btn-ghost btn-sm" title="Retry" onClick={() => { businessQueue.retry(state.activeDomainName, item.id); state.refreshQueue(); }}><RefreshCcw size={12} /></button>
+              <button className="btn btn-ghost btn-sm" title="Remove" onClick={() => { businessQueue.remove(item.id); state.refreshQueue(); }}><X size={12} /></button>
+            </>
+          )}
         </div>
       ))}
     </div>

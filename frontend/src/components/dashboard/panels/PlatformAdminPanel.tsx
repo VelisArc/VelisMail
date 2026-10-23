@@ -1503,6 +1503,34 @@ export default function PlatformAdminPanel({ section, state }: PlatformAdminPane
                     }}
                     ariaLabel={`Role for ${admin.email}`}
                   />
+                  {admin.role !== 'owner' && (
+                    <button
+                      type="button"
+                      className={`btn btn-ghost btn-sm ${admin.status === 'active' ? 'btn-danger' : ''}`}
+                      onClick={() => {
+                        const next = admin.status === 'active' ? 'suspended' : 'active';
+                        confirm({
+                          title: next === 'suspended' ? 'Suspend administrator' : 'Reactivate administrator',
+                          message: next === 'suspended'
+                            ? `${admin.email} loses access to the control plane immediately and their sessions are closed.`
+                            : `${admin.email} can sign in to the control plane again.`,
+                          confirmLabel: next === 'suspended' ? 'Suspend' : 'Activate',
+                          tone: next === 'suspended' ? 'danger' : 'primary',
+                          onConfirm: async () => {
+                            try {
+                              await platformAdminApi.updateAdmin(admin.email, { status: next });
+                              notify(`${admin.email} is now ${next}`);
+                              void load();
+                            } catch (error) {
+                              notify(error instanceof Error ? error.message : 'Update failed', 'error');
+                            }
+                          },
+                        });
+                      }}
+                    >
+                      {admin.status === 'active' ? 'Suspend' : 'Activate'}
+                    </button>
+                  )}
                 </div>
               </div>
             ))}

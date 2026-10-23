@@ -1,12 +1,14 @@
 import { Layers, Plus, Menu, Eye, Trash2 } from 'lucide-react';
 import { workspaceApi } from '../../../api/company';
 import type { DashboardState } from '../types';
+import { canEditWorkspaceContent } from '../constants';
 
 interface TemplatesPanelProps {
   state: DashboardState;
 }
 
 export default function TemplatesPanel({ state }: TemplatesPanelProps) {
+  const canEdit = canEditWorkspaceContent(state.user?.role);
   const handleDelete = async (id: string) => {
     try {
       // The template is removed from the database of the company, so it does
@@ -21,7 +23,7 @@ export default function TemplatesPanel({ state }: TemplatesPanelProps) {
 
   return (
     <div className="dash-panel">
-      <div className="panel-header"><button className="toolbar-icon sidebar-toggle" onClick={() => state.setSidebarOpen(true)}><Menu size={16} /></button><h3><Layers size={16} /> Templates</h3><button className="btn btn-primary btn-sm" onClick={() => { state.setTemplateEditorOpen(true); state.setTemplateName(''); state.setTemplateSubject(''); state.setTemplateBody(''); }}><Plus size={12} /> New Template</button></div>
+      <div className="panel-header"><button className="toolbar-icon sidebar-toggle" onClick={() => state.setSidebarOpen(true)}><Menu size={16} /></button><h3><Layers size={16} /> Templates</h3>{canEdit && (<button className="btn btn-primary btn-sm" onClick={() => { state.setTemplateEditorOpen(true); state.setTemplateName(''); state.setTemplateSubject(''); state.setTemplateBody(''); }}><Plus size={12} /> New Template</button>)}</div>
       <input className="input mb-16" placeholder="Search templates..." value={state.templateSearch} onChange={e => state.setTemplateSearch(e.target.value)} />
       <div className="templates-grid">
         {state.templates.filter(t => t.name.toLowerCase().includes(state.templateSearch.toLowerCase())).map(t => (
@@ -31,7 +33,7 @@ export default function TemplatesPanel({ state }: TemplatesPanelProps) {
             <p className="text-xs text-muted">{t.body?.slice(0, 100)}...</p>
             <div className="flex gap-2 mt-8">
               <button className="btn btn-ghost btn-sm" onClick={() => state.setPreviewTemplate(t)}><Eye size={12} /> Preview</button>
-              <button className="btn btn-ghost btn-sm" onClick={() => void handleDelete(t.id)}><Trash2 size={12} /> Delete</button>
+              {canEdit && (<button className="btn btn-ghost btn-sm" onClick={() => void handleDelete(t.id)}><Trash2 size={12} /> Delete</button>)}
             </div>
           </div>
         ))}

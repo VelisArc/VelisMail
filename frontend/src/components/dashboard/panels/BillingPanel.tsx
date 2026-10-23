@@ -1,6 +1,6 @@
 import { CreditCard, Menu, Check } from 'lucide-react';
 import LoadingSpinner from '../../LoadingSpinner';
-import { PLANS, PLAN_LIMITS } from '../constants';
+import { PLANS, PLAN_LIMITS, canManageWorkspace } from '../constants';
 import type { DashboardState } from '../types';
 
 interface BillingPanelProps {
@@ -23,6 +23,9 @@ function number(value?: number | null): string {
 export default function BillingPanel({ state, handleBuyPlan }: BillingPanelProps) {
   const currentPlan = (state.user?.plan || 'Free').toLowerCase();
   const currentBilling = state.user?.billingCycle || 'monthly';
+  // Plan changes are billed to the whole workspace, so only an owner or admin
+  // may start a checkout. Everyone else can still review the current plan.
+  const canPurchase = canManageWorkspace(state.user?.role);
   // A plan without a published allowance (Enterprise) is negotiated per
   // customer, so it has no numbers to show here.
   const planAllowance = PLAN_LIMITS[currentPlan];
@@ -44,6 +47,9 @@ export default function BillingPanel({ state, handleBuyPlan }: BillingPanelProps
         </div>
         <span className="badge badge-neutral">Current: {state.user?.plan || 'Free'}</span>
       </div>
+      {!canPurchase && (
+        <p className="text-sm text-muted panel-section">Only an owner or admin can change the workspace plan. Your current plan is shown below.</p>
+      )}
 
       {currentPlan !== 'free' && (
         <div className="premium-status-card glass-card" style={{ padding: '16px', border: '1px solid var(--border-primary)', background: 'var(--bg-surface-2)', marginBottom: '24px', display: 'flex', flexDirection: 'column', gap: '8px', textAlign: 'left', borderRadius: '0' }}>
@@ -134,8 +140,8 @@ export default function BillingPanel({ state, handleBuyPlan }: BillingPanelProps
             ) : (
               <button
                 className={`btn ${isCurrent ? 'btn-secondary' : 'btn-primary'} w-full`}
-                disabled={state.loadingPayment === plan.id || (isCurrent && isSelectedCurrentBilling)}
-                onClick={() => handleBuyPlan(plan.id)}
+                disabled={!canPurchase || state.loadingPayment === plan.id || (isCurrent && isSelectedCurrentBilling)}
+                onClick={() => { if (canPurchase) void handleBuyPlan(plan.id); }}
               >
                 {state.loadingPayment === plan.id ? <LoadingSpinner size="sm" /> : isCurrent && isSelectedCurrentBilling ? 'Current Plan' : isCurrent ? 'Switch Billing' : 'Upgrade'}
               </button>

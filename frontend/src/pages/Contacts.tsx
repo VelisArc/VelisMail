@@ -6,11 +6,13 @@ import {
 } from 'lucide-react';
 import { auth, isBusinessSetupReady, type Contact } from '../api/client';
 import { workspaceApi } from '../api/company';
+import { canEditWorkspaceContent } from '../components/dashboard/constants';
 import './Contacts.css';
 
 export default function Contacts({ embedded = false }: { embedded?: boolean }) {
   const navigate = useNavigate();
   const user = auth.getSession();
+  const canEdit = canEditWorkspaceContent(user?.role);
 
   useEffect(() => {
     // The embedded view lives inside the already-guarded dashboard shell.
@@ -210,7 +212,7 @@ export default function Contacts({ embedded = false }: { embedded?: boolean }) {
           <h2><Users size={20} /> Contacts</h2>
         </div>
 
-        <button className="btn btn-primary contacts-add-btn" onClick={() => { resetForm(); setShowAddModal(true); }}>
+        <button className="btn btn-primary contacts-add-btn" onClick={() => { resetForm(); setShowAddModal(true); }} disabled={!canEdit} title={canEdit ? undefined : 'Viewers cannot add contacts'}>
           <UserPlus size={18} /> Add Contact
         </button>
 
@@ -264,7 +266,8 @@ export default function Contacts({ embedded = false }: { embedded?: boolean }) {
                 </div>
                 <button className={`star-btn ${c.favorite ? 'starred' : ''}`}
                   aria-label={c.favorite ? `Remove ${c.name} from favourites` : `Add ${c.name} to favourites`}
-                  onClick={(e) => { e.stopPropagation(); void handleToggleFav(c); }}>
+                  disabled={!canEdit}
+                  onClick={(e) => { e.stopPropagation(); if (canEdit) void handleToggleFav(c); }}>
                   <Star size={14} fill={c.favorite ? '#facc15' : 'none'} color={c.favorite ? '#facc15' : 'var(--text-muted)'} />
                 </button>
               </div>
@@ -297,8 +300,12 @@ export default function Contacts({ embedded = false }: { embedded?: boolean }) {
                 {selectedContact.company && <span className="contact-company"><Building2 size={14} /> {selectedContact.company}</span>}
               </div>
               <div className="contact-detail-actions">
-                <button aria-label="Edit" className="btn btn-ghost btn-icon" onClick={startEdit} title="Edit"><Edit3 size={16} /></button>
-                <button aria-label="Delete" className="btn btn-danger btn-icon btn-sm" disabled={saving} onClick={() => void handleDelete(selectedContact.id)} title="Delete"><Trash2 size={16} /></button>
+                {canEdit && (
+                  <>
+                    <button aria-label="Edit" className="btn btn-ghost btn-icon" onClick={startEdit} title="Edit"><Edit3 size={16} /></button>
+                    <button aria-label="Delete" className="btn btn-danger btn-icon btn-sm" disabled={saving} onClick={() => void handleDelete(selectedContact.id)} title="Delete"><Trash2 size={16} /></button>
+                  </>
+                )}
               </div>
             </div>
 
@@ -326,7 +333,7 @@ export default function Contacts({ embedded = false }: { embedded?: boolean }) {
             </div>
 
             <div className="contact-detail-footer">
-              <button className="btn btn-primary btn-sm" onClick={() => handleComposeToContact(selectedContact.email)}>
+              <button className="btn btn-primary btn-sm" onClick={() => handleComposeToContact(selectedContact.email)} disabled={user.role === 'viewer'} title={user.role === 'viewer' ? 'Viewers cannot send mail' : undefined}>
                 <Mail size={16} /> Send Email
               </button>
             </div>

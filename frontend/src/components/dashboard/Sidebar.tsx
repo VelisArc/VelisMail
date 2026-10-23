@@ -95,6 +95,7 @@ export default function Sidebar({
 }: SidebarProps) {
   const folderBadge = (f: BizFolder) => f.badge;
   const isControlPlane = viewMode === 'control-plane';
+  const canCompose = user?.role !== 'viewer';
 
   const handleNav = (tab: BizTab) => {
     setActiveBizTab(tab);
@@ -120,7 +121,7 @@ export default function Sidebar({
             </div>
           </Link>
         </div>
-        {!isControlPlane && (
+        {!isControlPlane && canCompose && (
           <button type="button" className="btn btn-primary side-compose" onClick={() => { setSidebarOpen(false); onCompose(); }}>
             <Plus size={16} /> New Message
           </button>

@@ -175,13 +175,30 @@ impl WorkspaceContext {
         self.role == "owner" || self.role == "admin"
     }
 
-    fn require_manage(&self) -> Result<(), ApiError> {
+    pub(crate) fn require_manage(&self) -> Result<(), ApiError> {
         if self.can_manage() {
             Ok(())
         } else {
             Err(fail(
                 StatusCode::FORBIDDEN,
                 "Only workspace owners and admins can perform this action.",
+            ))
+        }
+    }
+
+    /// Templates, contacts and signatures are shared workspace content, so
+    /// regular members may maintain them. Viewers stay read-only.
+    pub fn can_edit(&self) -> bool {
+        matches!(self.role.as_str(), "owner" | "admin" | "member")
+    }
+
+    fn require_edit(&self) -> Result<(), ApiError> {
+        if self.can_edit() {
+            Ok(())
+        } else {
+            Err(fail(
+                StatusCode::FORBIDDEN,
+                "Viewers cannot change workspace content.",
             ))
         }
     }
@@ -222,7 +239,12 @@ pub(crate) async fn workspace_context(
                         .filter(|role| {
                             matches!(role.as_str(), "owner" | "admin" | "member" | "viewer")
                         })
-                        .unwrap_or_else(|| "viewer".to_string());
+                        .ok_or_else(|| {
+                            fail(
+                                StatusCode::FORBIDDEN,
+                                "The account that created this API key is no longer a member of the workspace.",
+                            )
+                        })?;
                     let plan: String =
                         sqlx::query_scalar("SELECT plan_tier FROM tenants WHERE id = $1")
                             .bind(key.tenant_id)
@@ -347,23 +369,27 @@ pub(crate) async fn workspace_context(
         .as_ref()
         .and_then(|row| row.try_get::<String, _>("role").ok())
         .unwrap_or_default();
-    if role.is_empty() {
-        // The role always comes from the explicit membership record. It is
-        // never derived from the email domain or from client-supplied
-        // settings, otherwise anybody with a mail address on a company domain
-        // would inherit that access.
-        role = "member".to_string();
+    let Some(membership) = membership.as_ref() else {
+        // The account is attached to this tenant but was never invited to the
+        // workspace. Do not fall back to a role; that would hand workspace
+        // access to an orphaned or removed account.
+        return Err(fail(
+            StatusCode::FORBIDDEN,
+            "You are not a member of this workspace.",
+        ));
+    };
+    if !matches!(role.as_str(), "owner" | "admin" | "member" | "viewer") {
+        // An unknown role is treated as the least privileged known role.
+        role = "viewer".to_string();
     }
-    if let Some(row) = membership.as_ref() {
-        let member_status: String = row
-            .try_get("status")
-            .unwrap_or_else(|_| "active".to_string());
-        if member_status != "active" {
-            return Err(fail(
-                StatusCode::FORBIDDEN,
-                "Your company membership is not active. Contact a company administrator.",
-            ));
-        }
+    let member_status: String = membership
+        .try_get("status")
+        .unwrap_or_else(|_| "active".to_string());
+    if member_status != "active" {
+        return Err(fail(
+            StatusCode::FORBIDDEN,
+            "Your company membership is not active. Contact a company administrator.",
+        ));
     }
 
     Ok(WorkspaceContext {
@@ -414,6 +440,7 @@ pub struct WorkspaceInviteRequest {
     pub email: String,
     #[serde(default = "default_role")]
     pub role: String,
+    #[serde(default)]
     pub expires_in_hours: Option<i64>,
 }
 
@@ -622,11 +649,7 @@ pub async fn list_team(State(state): State<AppState>, headers: HeaderMap) -> Api
         })
         .collect();
 
-    let active_members = members
-        .iter()
-        .filter(|member| member.get("status").and_then(Value::as_str) == Some("active"))
-        .count();
-
+    let seats_used = crate::admin::workspace_seat_usage(db, context.tenant_id).await;
     let allowance = crate::admin::tenant_allowance(db, context.tenant_id, &context.plan).await;
 
     ok(json!({
@@ -634,7 +657,7 @@ pub async fn list_team(State(state): State<AppState>, headers: HeaderMap) -> Api
         "members": members,
         "invitations": invitations,
         "seatLimit": {
-            "used": active_members,
+            "used": seats_used,
             "max": allowance.seats,
             "capped": allowance.seats > 0,
         },
@@ -675,17 +698,13 @@ pub async fn create_invitation(
         Utc::now() + chrono::Duration::hours(payload.expires_in_hours.unwrap_or(168).clamp(1, 720));
 
     // The seat limit of the workspace is enforced. An invitation is refused
-    // when the seats are used up.
+    // when the seats are used up. An address that already has a seat or a
+    // pending invitation is only refreshed, so it does not need a new seat.
     let allowance = crate::admin::tenant_allowance(db, context.tenant_id, &context.plan).await;
-    if allowance.seats > 0 {
-        let seats_used: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*)::bigint FROM company_members
-             WHERE tenant_id = $1 AND status IN ('active', 'invited')",
-        )
-        .bind(context.tenant_id)
-        .fetch_one(db)
-        .await
-        .unwrap_or(0);
+    if allowance.seats > 0
+        && !crate::admin::workspace_email_reserved(db, context.tenant_id, &email).await
+    {
+        let seats_used = crate::admin::workspace_seat_usage(db, context.tenant_id).await;
         if seats_used >= allowance.seats {
             return Err(fail(
                 StatusCode::CONFLICT,
@@ -757,15 +776,34 @@ pub async fn revoke_invitation(
         .map_err(|_| fail(StatusCode::BAD_REQUEST, "Invalid invitation id."))?;
     let result = sqlx::query(
         "UPDATE workspace_invitations SET status = 'revoked'
-         WHERE id = $1 AND tenant_id = $2 AND status = 'pending'",
+         WHERE id = $1 AND tenant_id = $2 AND status = 'pending'
+         RETURNING email",
     )
     .bind(invitation_id)
     .bind(context.tenant_id)
-    .execute(db)
+    .fetch_optional(db)
     .await;
 
     match result {
-        Ok(done) if done.rows_affected() > 0 => {
+        Ok(Some(row)) => {
+            // The composer mints a workspace invitation and a team access key
+            // together. Revoking only one of them would leave the other key
+            // usable, so the paired key is revoked at the same time.
+            if let Ok(email) = row.try_get::<String, _>("email") {
+                let _ = sqlx::query(
+                    "UPDATE team_invites
+                        SET revoked = TRUE,
+                            data = data || '{\"status\":\"revoked\"}'::jsonb
+                      WHERE revoked = FALSE
+                        AND data->>'status' = 'pending'
+                        AND data->'workspace'->>'tenantId' = $1
+                        AND LOWER(data->>'email') = LOWER($2)",
+                )
+                .bind(context.tenant_id.to_string())
+                .bind(&email)
+                .execute(db)
+                .await;
+            }
             audit(
                 db,
                 &context.email,
@@ -779,7 +817,7 @@ pub async fn revoke_invitation(
             .await;
             ok(json!({ "success": true }))
         }
-        Ok(_) => Err(fail(StatusCode::NOT_FOUND, "Pending invitation not found.")),
+        Ok(None) => Err(fail(StatusCode::NOT_FOUND, "Pending invitation not found.")),
         Err(_) => Err(fail(
             StatusCode::INTERNAL_SERVER_ERROR,
             "Unable to revoke the invitation.",
@@ -1399,7 +1437,7 @@ pub async fn create_template(
     Json(payload): Json<TemplateRequest>,
 ) -> ApiResult {
     let context = workspace_context(&state, &headers).await?;
-    context.require_manage()?;
+    context.require_edit()?;
     let db = db_pool(&state)?;
 
     let name = payload.name.trim().to_string();
@@ -1454,7 +1492,7 @@ pub async fn delete_template(
     Path(id): Path<String>,
 ) -> ApiResult {
     let context = workspace_context(&state, &headers).await?;
-    context.require_manage()?;
+    context.require_edit()?;
     let db = db_pool(&state)?;
 
     let template_id =
@@ -2280,13 +2318,46 @@ pub async fn remove_team_member(
     .bind(&email)
     .execute(db)
     .await;
-    if let Err(err) = result {
-        tracing::error!("could not remove member {email}: {err}");
-        return Err(fail(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "Unable to remove the member.",
-        ));
+    match result {
+        Ok(done) if done.rows_affected() == 0 => {
+            return Err(fail(
+                StatusCode::NOT_FOUND,
+                "That member is not part of this workspace.",
+            ))
+        }
+        Ok(_) => {}
+        Err(err) => {
+            tracing::error!("could not remove member {email}: {err}");
+            return Err(fail(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Unable to remove the member.",
+            ));
+        }
     }
+
+    // Pending invitations of the removed address are closed as well. Without
+    // this the old email link or team access key could add the member back.
+    let _ = sqlx::query(
+        "UPDATE workspace_invitations SET status = 'revoked'
+         WHERE tenant_id = $1 AND LOWER(email) = LOWER($2) AND status = 'pending'",
+    )
+    .bind(context.tenant_id)
+    .bind(&email)
+    .execute(db)
+    .await;
+    let _ = sqlx::query(
+        "UPDATE team_invites
+            SET revoked = TRUE,
+                data = data || '{\"status\":\"revoked\"}'::jsonb
+          WHERE revoked = FALSE
+            AND data->>'status' = 'pending'
+            AND data->'workspace'->>'tenantId' = $1
+            AND LOWER(data->>'email') = LOWER($2)",
+    )
+    .bind(context.tenant_id.to_string())
+    .bind(&email)
+    .execute(db)
+    .await;
 
     // The sessions and the refresh tokens of the member are closed, so the
     // access ends at once and cannot be renewed after the access token
@@ -2444,13 +2515,19 @@ pub async fn list_contacts(
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ContactRequest {
+    #[serde(default)]
     pub id: Option<String>,
     pub name: String,
     pub email: String,
+    #[serde(default)]
     pub phone: Option<String>,
+    #[serde(default)]
     pub company: Option<String>,
+    #[serde(default)]
     pub group: Option<String>,
+    #[serde(default)]
     pub notes: Option<String>,
+    #[serde(default)]
     pub favorite: Option<bool>,
 }
 
@@ -2460,7 +2537,7 @@ pub async fn create_contact(
     Json(payload): Json<ContactRequest>,
 ) -> ApiResult {
     let context = workspace_context(&state, &headers).await?;
-    context.require_manage()?;
+    context.require_edit()?;
     let db = db_pool(&state)?;
 
     let name = payload.name.trim().to_string();
@@ -2588,7 +2665,7 @@ pub async fn delete_contact(
     Path(id): Path<String>,
 ) -> ApiResult {
     let context = workspace_context(&state, &headers).await?;
-    context.require_manage()?;
+    context.require_edit()?;
     let db = db_pool(&state)?;
 
     let contact_id =
@@ -2660,9 +2737,11 @@ pub async fn list_signatures(State(state): State<AppState>, headers: HeaderMap) 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SignatureRequest {
+    #[serde(default)]
     pub id: Option<String>,
     pub name: String,
     pub content: String,
+    #[serde(default)]
     pub is_default: Option<bool>,
 }
 
@@ -2672,7 +2751,7 @@ pub async fn create_signature(
     Json(payload): Json<SignatureRequest>,
 ) -> ApiResult {
     let context = workspace_context(&state, &headers).await?;
-    context.require_manage()?;
+    context.require_edit()?;
     let db = db_pool(&state)?;
 
     let name = payload.name.trim().to_string();
@@ -2757,7 +2836,7 @@ pub async fn delete_signature(
     Path(id): Path<String>,
 ) -> ApiResult {
     let context = workspace_context(&state, &headers).await?;
-    context.require_manage()?;
+    context.require_edit()?;
     let db = db_pool(&state)?;
 
     let signature_id =

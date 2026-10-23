@@ -1282,6 +1282,31 @@ pub struct RefreshTokenRequest {
     pub device_id: String,
 }
 
+/// Decide which device id a rotated refresh token is bound to.
+///
+/// Sessions created before per-browser ids existed stored the shared literal
+/// `web` (or nothing). Those tokens are treated as unbound so the next
+/// rotation can adopt the caller's real id instead of signing every existing
+/// user out at deploy time. Once a token is bound, a different browser is
+/// rejected.
+fn refresh_device_binding(stored: &str, requested: &str) -> Result<String, ()> {
+    let requested = requested.trim();
+    if stored == "team-access" {
+        return Ok(stored.to_string());
+    }
+    if stored.is_empty() || stored == "web" {
+        return Ok(if requested.is_empty() {
+            stored.to_string()
+        } else {
+            requested.to_string()
+        });
+    }
+    if !requested.is_empty() && stored != requested {
+        return Err(());
+    }
+    Ok(stored.to_string())
+}
+
 pub async fn refresh_token(
     State(state): State<AuthState>,
     headers: HeaderMap,
@@ -1316,19 +1341,10 @@ pub async fn refresh_token(
 
     // Bind the refresh token to the browser profile it was issued to. The
     // team-access flow signs in without a browser device id, so its stored
-    // value is exempt.
-    let device_id = if request.device_id.trim().is_empty() {
-        stored_device.clone()
-    } else {
-        request.device_id.trim().to_string()
-    };
-    if stored_device != "team-access"
-        && !stored_device.is_empty()
-        && !request.device_id.trim().is_empty()
-        && stored_device != request.device_id.trim()
-    {
-        return Err(StatusCode::UNAUTHORIZED);
-    }
+    // value is exempt. Legacy `web` tokens are upgraded to the caller's real
+    // device id on rotation.
+    let device_id = refresh_device_binding(&stored_device, &request.device_id)
+        .map_err(|_| StatusCode::UNAUTHORIZED)?;
 
     let user = sqlx::query(
         "SELECT email, tenant_id, totp_enabled, settings FROM users
@@ -3285,7 +3301,36 @@ pub async fn firebase_login(
 
 #[cfg(test)]
 mod tests {
-    use super::{constant_time_eq, verify_password, DUMMY_PASSWORD_HASH};
+    use super::{constant_time_eq, refresh_device_binding, verify_password, DUMMY_PASSWORD_HASH};
+
+    #[test]
+    fn legacy_refresh_tokens_adopt_the_real_device_id() {
+        assert_eq!(
+            refresh_device_binding("web", "web-1234").as_deref(),
+            Ok("web-1234")
+        );
+        assert_eq!(
+            refresh_device_binding("", "web-1234").as_deref(),
+            Ok("web-1234")
+        );
+    }
+
+    #[test]
+    fn refresh_tokens_stay_bound_to_their_device() {
+        assert_eq!(
+            refresh_device_binding("web-1234", "web-1234").as_deref(),
+            Ok("web-1234")
+        );
+        assert_eq!(refresh_device_binding("web-1234", "web-9999"), Err(()));
+        assert_eq!(
+            refresh_device_binding("web-1234", "").as_deref(),
+            Ok("web-1234")
+        );
+        assert_eq!(
+            refresh_device_binding("team-access", "").as_deref(),
+            Ok("team-access")
+        );
+    }
 
     #[test]
     fn constant_time_comparison_accepts_equal_hashes() {

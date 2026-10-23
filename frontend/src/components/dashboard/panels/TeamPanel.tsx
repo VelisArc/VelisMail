@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Shield, Plus, Menu, User, X } from 'lucide-react';
-import { ROLE_ALLOWED_TABS } from '../constants';
+import { ROLE_ALLOWED_TABS, canManageWorkspace } from '../constants';
 import type { DashboardState } from '../types';
 
 interface TeamPanelProps {
@@ -30,8 +30,11 @@ const PERMISSION_ROWS: { label: string; tab: string }[] = [
 export default function TeamPanel({ state }: TeamPanelProps) {
   const [removing, setRemoving] = useState('');
   const displayTeam = useMemo(() => {
-    if (state.teamFilter === 'all') return state.teamMembers;
-    return state.teamMembers.filter(m => m.role === state.teamFilter);
+    const current = state.teamMembers.filter(
+      (member) => member.status !== 'revoked' && member.status !== 'expired',
+    );
+    if (state.teamFilter === 'all') return current;
+    return current.filter(m => m.role === state.teamFilter);
   }, [state.teamMembers, state.teamFilter]);
 
   const handleRemove = async (email: string) => {
@@ -53,11 +56,20 @@ export default function TeamPanel({ state }: TeamPanelProps) {
   };
 
   const can = (role: string, tab: string) =>
-    (ROLE_ALLOWED_TABS[role] || []).includes(tab as never);
+    (ROLE_ALLOWED_TABS[role === 'owner' ? 'admin' : role] || []).includes(tab as never);
+
+  const selfEmail = (state.user?.email || '').toLowerCase();
+  const canManage = canManageWorkspace(state.user?.role);
+  const selfRole = state.teamMembers.find(
+    (member) => member.email.toLowerCase() === selfEmail
+      && member.status !== 'revoked'
+      && member.status !== 'expired',
+  )?.role;
+  const canAssignAdmin = selfRole === 'owner';
 
   return (
     <div className="dash-panel">
-      <div className="panel-header"><button className="toolbar-icon sidebar-toggle" onClick={() => state.setSidebarOpen(true)}><Menu size={20} /></button><h3><Shield size={16} /> Team Access</h3><button className="btn btn-primary btn-sm" onClick={() => state.setInviteOpen(true)}><Plus size={12} /> Invite Member</button></div>
+      <div className="panel-header"><button className="toolbar-icon sidebar-toggle" onClick={() => state.setSidebarOpen(true)}><Menu size={20} /></button><h3><Shield size={16} /> Team Access</h3>{canManage && (<button className="btn btn-primary btn-sm" onClick={() => state.setInviteOpen(true)}><Plus size={12} /> Invite Member</button>)}</div>
       <div className="flex gap-2 panel-section">
         {['all', 'admin', 'member', 'viewer'].map(f => (
           <button key={f} className={`btn btn-sm ${state.teamFilter === f ? 'btn-primary' : 'btn-ghost'}`} onClick={() => state.setTeamFilter(f)}>
@@ -72,12 +84,21 @@ export default function TeamPanel({ state }: TeamPanelProps) {
         <div key={m.email} className="team-member-row">
           <div className="avatar avatar-sm"><User size={14} /></div>
           <div className="team-member-info"><strong>{m.name || m.email}</strong><span className="text-muted">{m.email}</span></div>
-          <select className="input input-auto" value={m.role} onChange={e => {
-            if (e.target.value !== m.role) state.setPendingRoleChange({ id: m.email, role: e.target.value, step: 1 });
-          }}>
-            <option value="admin">Admin</option><option value="member">Member</option><option value="viewer">Viewer</option>
-          </select>
-          <button className="btn btn-ghost btn-sm btn-danger" disabled={removing === m.email} onClick={() => void handleRemove(m.email)}><X size={12} /> Revoke</button>
+          {m.role === 'owner' ? (
+            <span className="badge badge-success">Owner</span>
+          ) : canManage ? (
+            <select className="input input-auto" value={m.role} onChange={e => {
+              if (e.target.value !== m.role) state.setPendingRoleChange({ id: m.email, role: e.target.value, step: 1 });
+            }}>
+              {canAssignAdmin && <option value="admin">Admin</option>}
+              <option value="member">Member</option><option value="viewer">Viewer</option>
+            </select>
+          ) : (
+            <span className="badge badge-neutral">{m.role}</span>
+          )}
+          {canManage && m.role !== 'owner' && m.email.toLowerCase() !== selfEmail && (
+            <button className="btn btn-ghost btn-sm btn-danger" disabled={removing === m.email} onClick={() => void handleRemove(m.email)}><X size={12} /> Revoke</button>
+          )}
         </div>
       ))}
       <div className="roles-info-detailed">

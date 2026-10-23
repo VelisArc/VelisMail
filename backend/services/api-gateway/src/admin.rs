@@ -466,7 +466,7 @@ async fn authorize_company(
             .unwrap_or(false);
             if exists {
                 id
-            } else {
+            } else if is_platform {
                 resolve_tenant_for_email(db, &email, &plan)
                     .await
                     .map_err(|err| {
@@ -476,17 +476,30 @@ async fn authorize_company(
                             "Unable to resolve company workspace.",
                         )
                     })?
+            } else {
+                return Err(platform_api_error(
+                    StatusCode::FORBIDDEN,
+                    "This account is not attached to an active workspace.",
+                ));
             }
         }
-        None => resolve_tenant_for_email(db, &email, &plan)
-            .await
-            .map_err(|err| {
-                tracing::error!("tenant resolution failed: {}", err);
-                platform_api_error(
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    "Unable to resolve company workspace.",
-                )
-            })?,
+        None if is_platform => {
+            resolve_tenant_for_email(db, &email, &plan)
+                .await
+                .map_err(|err| {
+                    tracing::error!("tenant resolution failed: {}", err);
+                    platform_api_error(
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "Unable to resolve company workspace.",
+                    )
+                })?
+        }
+        None => {
+            return Err(platform_api_error(
+                StatusCode::FORBIDDEN,
+                "This account is not attached to a workspace yet.",
+            ));
+        }
     };
 
     let _ = sqlx::query("UPDATE users SET tenant_id = $1 WHERE email = $2 AND (tenant_id IS NULL OR tenant_id <> $1)")
@@ -495,73 +508,54 @@ async fn authorize_company(
         .execute(db)
         .await;
 
-    // The workspace role is taken from an explicit membership row (an
-    // invitation or the company console) or from the account that created the
-    // workspace. It is never derived from the email domain or from
-    // client-supplied settings, otherwise anybody holding a mail address on a
-    // company domain would silently join that workspace as an administrator.
-    let explicit_member_role: Option<String> = sqlx::query_scalar(
-        "SELECT role FROM company_members
-         WHERE tenant_id = $1 AND LOWER(email) = LOWER($2) AND status = 'active'",
+    // The workspace role is taken from an explicit membership row. Sharing a
+    // tenant or an email domain does not grant access on its own.
+    let explicit_membership: Option<(String, String)> = sqlx::query(
+        "SELECT role, status FROM company_members
+         WHERE tenant_id = $1 AND LOWER(email) = LOWER($2)
+         LIMIT 1",
     )
     .bind(tenant_id)
     .bind(&email)
     .fetch_optional(db)
     .await
     .ok()
-    .flatten();
-    let member_count: i64 =
-        sqlx::query_scalar("SELECT COUNT(*)::bigint FROM users WHERE tenant_id = $1")
+    .flatten()
+    .map(|row| {
+        (
+            row.try_get::<String, _>("role")
+                .unwrap_or_else(|_| "member".to_string()),
+            row.try_get::<String, _>("status")
+                .unwrap_or_else(|_| "active".to_string()),
+        )
+    });
+
+    let (mut company_role, membership_status) = match explicit_membership {
+        Some(entry) => entry,
+        None if is_platform => {
+            // Platform staff administer the platform itself, so their own
+            // workspace keeps an owning membership for the console.
+            let _ = sqlx::query(
+                "INSERT INTO company_members (tenant_id, user_id, email, display_name, role, status, joined_at, last_active_at)
+                 SELECT $1, id, email, display_name, 'owner', 'active', NOW(), NOW()
+                 FROM users WHERE id = $2
+                 ON CONFLICT (tenant_id, email) DO NOTHING",
+            )
             .bind(tenant_id)
-            .fetch_one(db)
-            .await
-            .unwrap_or(0);
-    let initial_role = if is_platform {
-        "owner"
-    } else if let Some(role) = explicit_member_role.as_deref() {
-        role
-    } else if member_count <= 1 {
-        "admin"
-    } else {
-        "member"
+            .bind(claims.sub.0)
+            .execute(db)
+            .await;
+            ("owner".to_string(), "active".to_string())
+        }
+        None => {
+            // Never create a membership implicitly. A removed member would
+            // otherwise regain access simply by calling the console again.
+            return Err(platform_api_error(
+                StatusCode::FORBIDDEN,
+                "You are not a member of this workspace.",
+            ));
+        }
     };
-    sqlx::query(
-        "INSERT INTO company_members (tenant_id, user_id, email, display_name, role, status, joined_at, last_active_at)
-         SELECT $1, id, email, display_name, $3, 'active', NOW(), NOW()
-         FROM users WHERE email = $2
-         ON CONFLICT (tenant_id, email) DO UPDATE
-         SET user_id = EXCLUDED.user_id,
-             display_name = CASE WHEN EXCLUDED.display_name = '' THEN company_members.display_name ELSE EXCLUDED.display_name END,
-             last_active_at = NOW(),
-             role = CASE
-                 WHEN company_members.role = 'owner' THEN 'owner'
-                 WHEN company_members.role = 'admin' AND EXCLUDED.role <> 'owner' THEN 'admin'
-                 ELSE EXCLUDED.role
-             END",
-    )
-    .bind(tenant_id)
-    .bind(&email)
-    .bind(initial_role)
-    .execute(db)
-    .await
-    .ok();
-    sqlx::query(
-        "INSERT INTO tenant_users (tenant_id, user_id, role)
-         SELECT $1, id, $3 FROM users WHERE email = $2
-         ON CONFLICT (tenant_id, user_id) DO UPDATE
-         SET role = CASE
-                 WHEN tenant_users.role = 'owner' THEN 'owner'
-                 WHEN tenant_users.role = 'admin' AND EXCLUDED.role <> 'owner' THEN 'admin'
-                 ELSE EXCLUDED.role
-             END,
-             updated_at = NOW()",
-    )
-    .bind(tenant_id)
-    .bind(&email)
-    .bind(initial_role)
-    .execute(db)
-    .await
-    .ok();
 
     let tenant =
         sqlx::query("SELECT organization_name, plan_tier, status FROM tenants WHERE id = $1")
@@ -612,35 +606,6 @@ async fn authorize_company(
         }
         _ => {}
     }
-
-    let membership = sqlx::query(
-        "SELECT role, status FROM company_members WHERE tenant_id = $1 AND email = $2 LIMIT 1",
-    )
-    .bind(tenant_id)
-    .bind(&email)
-    .fetch_optional(db)
-    .await
-    .map_err(|_| {
-        platform_api_error(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "Unable to resolve company membership.",
-        )
-    })?;
-    let (mut company_role, membership_status) = match membership {
-        Some(row) => (
-            row.try_get::<String, _>("role")
-                .unwrap_or_else(|_| "member".to_string()),
-            row.try_get::<String, _>("status")
-                .unwrap_or_else(|_| "active".to_string()),
-        ),
-        // No explicit membership row yet: the account that created the
-        // workspace owns it, everybody else joins with the lowest role. The
-        // role is never taken from the email domain or from client settings.
-        None => (
-            if member_count <= 1 { "admin" } else { "member" }.to_string(),
-            "active".to_string(),
-        ),
-    };
 
     if membership_status != "active" && !is_platform {
         return Err(platform_api_error(
@@ -1691,14 +1656,23 @@ pub async fn get_company(
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CompanyUpdateRequest {
+    #[serde(default)]
     pub plan: Option<String>,
+    #[serde(default)]
     pub status: Option<String>,
+    #[serde(default)]
     pub seat_limit: Option<i32>,
+    #[serde(default)]
     pub industry: Option<String>,
+    #[serde(default)]
     pub country: Option<String>,
+    #[serde(default)]
     pub timezone: Option<String>,
+    #[serde(default)]
     pub billing_email: Option<String>,
+    #[serde(default)]
     pub legal_name: Option<String>,
+    #[serde(default)]
     pub note: Option<String>,
 }
 
@@ -1714,8 +1688,11 @@ pub struct CompanyUpdateRequest {
 #[serde(rename_all = "camelCase")]
 pub struct PlatformCompanyAction {
     pub action: String,
+    #[serde(default)]
     pub plan: Option<String>,
+    #[serde(default)]
     pub seat_limit: Option<i32>,
+    #[serde(default)]
     pub reason: Option<String>,
 }
 
@@ -1957,7 +1934,9 @@ pub async fn company_action(
 #[serde(rename_all = "camelCase")]
 pub struct PlatformUserAction {
     pub action: String,
+    #[serde(default)]
     pub role: Option<String>,
+    #[serde(default)]
     pub reason: Option<String>,
 }
 
@@ -2067,6 +2046,40 @@ pub async fn platform_user_action(
                 }
                 _ => return fail(StatusCode::BAD_REQUEST, "Unknown workspace role."),
             };
+            if role == "owner" && !actor.is_configured_owner {
+                return fail(
+                    StatusCode::FORBIDDEN,
+                    "Only the platform owner can assign the workspace owner role.",
+                );
+            }
+            if role != "owner" {
+                // Demoting the last active owner of any workspace would leave
+                // that workspace without anybody who can administer it.
+                let last_owner: bool = sqlx::query_scalar(
+                    "SELECT EXISTS(
+                         SELECT 1 FROM company_members cm
+                         WHERE cm.user_id = $1
+                           AND cm.role = 'owner'
+                           AND cm.status = 'active'
+                           AND (
+                               SELECT COUNT(*) FROM company_members peer
+                               WHERE peer.tenant_id = cm.tenant_id
+                                 AND peer.role = 'owner'
+                                 AND peer.status = 'active'
+                           ) <= 1
+                     )",
+                )
+                .bind(user_id)
+                .fetch_one(db)
+                .await
+                .unwrap_or(false);
+                if last_owner {
+                    return fail(
+                        StatusCode::BAD_REQUEST,
+                        "This account is the last active owner of a workspace. Assign another owner first.",
+                    );
+                }
+            }
             let result = sqlx::query(
                 "UPDATE company_members SET role = $2, updated_at = NOW()
                  WHERE user_id = $1 AND status <> 'removed'",
@@ -2513,16 +2526,27 @@ pub async fn list_investigations(
 pub struct CreateInvestigationRequest {
     pub title: String,
     #[serde(rename = "type")]
+    #[serde(default)]
     pub investigation_type: Option<String>,
+    #[serde(default)]
     pub severity: Option<String>,
+    #[serde(default)]
     pub priority: Option<String>,
+    #[serde(default)]
     pub tenant_id: Option<String>,
+    #[serde(default)]
     pub tenant_name: Option<String>,
+    #[serde(default)]
     pub reporter_email: Option<String>,
+    #[serde(default)]
     pub assignee_email: Option<String>,
+    #[serde(default)]
     pub summary: Option<String>,
+    #[serde(default)]
     pub description: Option<String>,
+    #[serde(default)]
     pub tags: Option<Vec<String>>,
+    #[serde(default)]
     pub sla_hours: Option<i32>,
 }
 
@@ -2658,12 +2682,19 @@ pub async fn create_investigation(
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InvestigationUpdateRequest {
+    #[serde(default)]
     pub status: Option<String>,
+    #[serde(default)]
     pub severity: Option<String>,
+    #[serde(default)]
     pub priority: Option<String>,
+    #[serde(default)]
     pub assignee_email: Option<String>,
+    #[serde(default)]
     pub summary: Option<String>,
+    #[serde(default)]
     pub tags: Option<Vec<String>>,
+    #[serde(default)]
     pub note: Option<String>,
 }
 
@@ -2886,8 +2917,10 @@ pub async fn get_investigation(
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InvestigationEventRequest {
+    #[serde(default)]
     pub kind: Option<String>,
     pub message: String,
+    #[serde(default)]
     pub metadata: Option<Value>,
 }
 
@@ -3116,7 +3149,9 @@ pub async fn list_platform_team(State(state): State<AppState>, headers: HeaderMa
 #[serde(rename_all = "camelCase")]
 pub struct AddPlatformAdminRequest {
     pub email: String,
+    #[serde(default)]
     pub display_name: Option<String>,
+    #[serde(default)]
     pub role: Option<String>,
 }
 
@@ -3157,6 +3192,19 @@ pub async fn add_platform_admin(
         return fail(
             StatusCode::FORBIDDEN,
             "Only the platform owner can grant this role.",
+        );
+    }
+    let existing_role: Option<String> =
+        sqlx::query_scalar("SELECT role FROM platform_admins WHERE email = $1")
+            .bind(&email)
+            .fetch_optional(db)
+            .await
+            .ok()
+            .flatten();
+    if existing_role.as_deref() == Some("owner") {
+        return fail(
+            StatusCode::BAD_REQUEST,
+            "The platform owner cannot be overwritten through the team form.",
         );
     }
     let display_name = payload.display_name.unwrap_or_else(|| {
@@ -3210,8 +3258,11 @@ pub async fn add_platform_admin(
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UpdatePlatformAdminRequest {
+    #[serde(default)]
     pub role: Option<String>,
+    #[serde(default)]
     pub status: Option<String>,
+    #[serde(default)]
     pub display_name: Option<String>,
 }
 
@@ -3441,7 +3492,9 @@ pub async fn list_feature_flags(State(state): State<AppState>, headers: HeaderMa
 #[serde(rename_all = "camelCase")]
 pub struct FeatureFlagUpdateRequest {
     pub key: String,
+    #[serde(default)]
     pub enabled: Option<bool>,
+    #[serde(default)]
     pub rollout_percent: Option<i32>,
 }
 
@@ -3540,9 +3593,13 @@ pub async fn list_announcements(State(state): State<AppState>, headers: HeaderMa
 pub struct CreateAnnouncementRequest {
     pub title: String,
     pub body: String,
+    #[serde(default)]
     pub severity: Option<String>,
+    #[serde(default)]
     pub audience: Option<String>,
+    #[serde(default)]
     pub publish: Option<bool>,
+    #[serde(default)]
     pub expires_at: Option<String>,
 }
 
@@ -4329,8 +4386,11 @@ pub async fn list_support_tickets(State(state): State<AppState>, headers: Header
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SupportUpdateRequest {
+    #[serde(default)]
     pub status: Option<String>,
+    #[serde(default)]
     pub assignee_email: Option<String>,
+    #[serde(default)]
     pub priority: Option<String>,
 }
 
@@ -4447,7 +4507,9 @@ pub async fn update_support_ticket(
 #[serde(rename_all = "camelCase")]
 pub struct CreatePlatformApiKeyRequest {
     pub name: String,
+    #[serde(default)]
     pub scopes: Option<Vec<String>>,
+    #[serde(default)]
     pub expires_in_days: Option<i32>,
 }
 
@@ -4807,9 +4869,13 @@ pub async fn list_platform_feedback(
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PlatformFeedbackUpdate {
+    #[serde(default)]
     pub status: Option<String>,
+    #[serde(default)]
     pub priority: Option<String>,
+    #[serde(default)]
     pub assignee_email: Option<String>,
+    #[serde(default)]
     pub reply: Option<String>,
 }
 
@@ -5086,6 +5152,76 @@ pub(crate) async fn tenant_allowance(
         .flatten()
         .unwrap_or_else(|| json!({}));
     velismail_common::plans::effective_allowance(plan, &stored)
+}
+
+/// Seats a workspace has already promised.
+///
+/// Active members, pending workspace invitations and pending team-access keys
+/// all reserve a seat. The same email can exist in both invitation stores, so
+/// the union counts every address once.
+pub(crate) async fn workspace_seat_usage(db: &PgPool, tenant_id: Uuid) -> i64 {
+    sqlx::query_scalar(
+        "SELECT COUNT(*)::bigint FROM (
+            SELECT LOWER(email) AS email
+            FROM company_members
+            WHERE tenant_id = $1 AND status IN ('active', 'invited')
+            UNION
+            SELECT LOWER(email)
+            FROM workspace_invitations
+            WHERE tenant_id = $1 AND status = 'pending'
+              AND (expires_at IS NULL OR expires_at > NOW())
+            UNION
+            SELECT LOWER(data->>'email')
+            FROM team_invites
+            WHERE revoked = FALSE
+              AND data->>'status' = 'pending'
+              AND data->'workspace'->>'tenantId' = $2
+              AND CASE
+                      WHEN COALESCE(data->>'expiresAt', '') = '' THEN TRUE
+                      WHEN (data->>'expiresAt') ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}'
+                          THEN (data->>'expiresAt')::timestamptz > NOW()
+                      ELSE FALSE
+                  END
+        ) seats",
+    )
+    .bind(tenant_id)
+    .bind(tenant_id.to_string())
+    .fetch_one(db)
+    .await
+    .unwrap_or(0)
+}
+
+/// True when the address already holds a seat or a pending invitation, so an
+/// extra invitation does not consume another seat.
+pub(crate) async fn workspace_email_reserved(db: &PgPool, tenant_id: Uuid, email: &str) -> bool {
+    sqlx::query_scalar(
+        "SELECT EXISTS(
+            SELECT 1 FROM company_members
+            WHERE tenant_id = $1 AND LOWER(email) = LOWER($2)
+              AND status IN ('active', 'invited')
+            UNION ALL
+            SELECT 1 FROM workspace_invitations
+            WHERE tenant_id = $1 AND LOWER(email) = LOWER($2) AND status = 'pending'
+            UNION ALL
+            SELECT 1 FROM team_invites
+            WHERE revoked = FALSE
+              AND data->>'status' = 'pending'
+              AND data->'workspace'->>'tenantId' = $3
+              AND LOWER(data->>'email') = LOWER($2)
+              AND CASE
+                      WHEN COALESCE(data->>'expiresAt', '') = '' THEN TRUE
+                      WHEN (data->>'expiresAt') ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}'
+                          THEN (data->>'expiresAt')::timestamptz > NOW()
+                      ELSE FALSE
+                  END
+        )",
+    )
+    .bind(tenant_id)
+    .bind(email)
+    .bind(tenant_id.to_string())
+    .fetch_one(db)
+    .await
+    .unwrap_or(false)
 }
 
 pub async fn company_overview(State(state): State<AppState>, headers: HeaderMap) -> ApiResult {
@@ -5407,7 +5543,7 @@ pub async fn company_members(State(state): State<AppState>, headers: HeaderMap) 
         "members": members,
         "invitations": invitations,
         "seatLimit": {
-            "used": members.iter().filter(|m| m.get("status").and_then(Value::as_str) == Some("active")).count(),
+            "used": workspace_seat_usage(db, actor.tenant_id).await,
             "max": seats_max,
             "capped": allowance.seats > 0,
         },
@@ -5417,7 +5553,9 @@ pub async fn company_members(State(state): State<AppState>, headers: HeaderMap) 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CompanyMemberUpdateRequest {
+    #[serde(default)]
     pub role: Option<String>,
+    #[serde(default)]
     pub status: Option<String>,
 }
 
@@ -5455,6 +5593,9 @@ pub async fn company_update_member(
     let target_role: String = target
         .try_get("role")
         .unwrap_or_else(|_| "member".to_string());
+    let target_status: String = target
+        .try_get("status")
+        .unwrap_or_else(|_| "active".to_string());
     let target_user: Option<Uuid> = target.try_get("user_id").ok().flatten();
     let requested_role = payload.role.as_deref().map(str::to_lowercase);
 
@@ -5529,6 +5670,22 @@ pub async fn company_update_member(
 
     let new_role = payload.role.as_deref().map(str::to_lowercase);
     let new_status = payload.status.as_deref().map(str::to_lowercase);
+
+    // Reactivating a suspended member consumes a seat again.
+    if new_status.as_deref() == Some("active") && target_status != "active" {
+        let allowance = tenant_allowance(db, actor.tenant_id, &actor.plan).await;
+        if allowance.seats > 0 && workspace_seat_usage(db, actor.tenant_id).await >= allowance.seats
+        {
+            return fail(
+                StatusCode::CONFLICT,
+                &format!(
+                    "All {} seats of this workspace are in use. Remove a member or raise the seat limit first.",
+                    allowance.seats
+                ),
+            );
+        }
+    }
+
     let result = sqlx::query(
         "UPDATE company_members SET role = COALESCE($2, role), status = COALESCE($3, status), updated_at = NOW()
          WHERE id = $1",
@@ -5591,6 +5748,31 @@ pub async fn company_update_member(
     }
 
     if new_status.as_deref() == Some("suspended") || new_status.as_deref() == Some("removed") {
+        // A suspended or removed member must not keep a pending invitation
+        // alive in either invitation store. Otherwise the old email link or
+        // team access key could add them straight back.
+        let _ = sqlx::query(
+            "UPDATE workspace_invitations SET status = 'revoked'
+             WHERE tenant_id = $1 AND LOWER(email) = LOWER($2) AND status = 'pending'",
+        )
+        .bind(actor.tenant_id)
+        .bind(&target_email)
+        .execute(db)
+        .await;
+        let _ = sqlx::query(
+            "UPDATE team_invites
+                SET revoked = TRUE,
+                    data = data || '{\"status\":\"revoked\"}'::jsonb
+              WHERE revoked = FALSE
+                AND data->>'status' = 'pending'
+                AND data->'workspace'->>'tenantId' = $1
+                AND LOWER(data->>'email') = LOWER($2)",
+        )
+        .bind(actor.tenant_id.to_string())
+        .bind(&target_email)
+        .execute(db)
+        .await;
+
         let _ = sqlx::query(
             "INSERT INTO security_events (tenant_id, user_id, event_type, severity, details)
              VALUES ($1, $2, 'member_access_revoked', 'warning', $3)",
@@ -6003,7 +6185,9 @@ pub async fn list_company_api_keys(State(state): State<AppState>, headers: Heade
 #[serde(rename_all = "camelCase")]
 pub struct CreateCompanyApiKeyRequest {
     pub name: String,
+    #[serde(default)]
     pub scopes: Option<Vec<String>>,
+    #[serde(default)]
     pub expires_in_days: Option<i32>,
 }
 
@@ -6365,4 +6549,37 @@ pub async fn company_announcements(State(state): State<AppState>, headers: Heade
         })
         .collect();
     ok(json!({ "success": true, "announcements": items }))
+}
+
+#[cfg(test)]
+mod team_request_tests {
+    use super::*;
+
+    #[test]
+    fn partial_team_updates_deserialize_without_omitted_fields() {
+        let member: CompanyMemberUpdateRequest =
+            serde_json::from_str(r#"{"role":"admin"}"#).expect("role-only member update");
+        assert_eq!(member.role.as_deref(), Some("admin"));
+        assert!(member.status.is_none());
+
+        let member: CompanyMemberUpdateRequest =
+            serde_json::from_str(r#"{"status":"suspended"}"#).expect("status-only member update");
+        assert!(member.role.is_none());
+        assert_eq!(member.status.as_deref(), Some("suspended"));
+
+        let platform: UpdatePlatformAdminRequest =
+            serde_json::from_str(r#"{"status":"suspended"}"#).expect("status-only admin update");
+        assert!(platform.role.is_none());
+        assert_eq!(platform.status.as_deref(), Some("suspended"));
+
+        let added: AddPlatformAdminRequest =
+            serde_json::from_str(r#"{"email":"admin@example.com","role":"member_manager"}"#)
+                .expect("add without a display name");
+        assert!(added.display_name.is_none());
+
+        let action: PlatformUserAction =
+            serde_json::from_str(r#"{"action":"set_role","role":"viewer"}"#)
+                .expect("user action without a reason");
+        assert!(action.reason.is_none());
+    }
 }

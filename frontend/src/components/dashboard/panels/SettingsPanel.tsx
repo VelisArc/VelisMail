@@ -9,6 +9,7 @@ import { workspaceApi } from '../../../api/company';
 import type { DashboardState } from '../types';
 import type { Signature, Contact, EmailRule, EmailRuleCondition, EmailRuleAction, Label } from '../../../api/client';
 import LoadingSpinner from '../../LoadingSpinner';
+import { canEditWorkspaceContent, canManageWorkspace } from '../constants';
 
 interface SettingsPanelProps {
   state: DashboardState;
@@ -291,6 +292,8 @@ function RuleEditorModal({
 
 export default function SettingsPanel({ state }: SettingsPanelProps) {
   const [activeSettingsTab, setActiveSettingsTab] = useState<'notifications' | 'signatures' | 'contacts' | 'security' | 'autoreply' | 'labels' | 'rules' | 'connections'>('notifications');
+  const canEdit = canEditWorkspaceContent(state.user?.role);
+  const canManage = canManageWorkspace(state.user?.role);
   
   // Email Private Logo states and handlers
   const [emailLogo, setEmailLogo] = useState<string | null>(state.user?.emailLogoUrl || null);
@@ -536,7 +539,7 @@ export default function SettingsPanel({ state }: SettingsPanelProps) {
                   <h4>Email Signatures</h4>
                   <p className="text-xs text-muted">Create default endings to attach automatically to outgoing emails.</p>
                 </div>
-                <button className="btn btn-primary btn-sm" onClick={() => { state.setEditingSignatureId(null); state.setSignatureEditorOpen(true); }}><Plus size={12} /> Add Signature</button>
+                <button className="btn btn-primary btn-sm" onClick={() => { state.setEditingSignatureId(null); state.setSignatureEditorOpen(true); }} disabled={!canEdit} title={canEdit ? undefined : 'Viewers cannot edit signatures'}><Plus size={12} /> Add Signature</button>
               </div>
               
               {state.signatures.length === 0 ? (
@@ -552,11 +555,15 @@ export default function SettingsPanel({ state }: SettingsPanelProps) {
                       <div className="flex items-center gap-2">
                         {sig.isDefault ? (
                           <span className="badge badge-success">Default</span>
-                        ) : (
+                        ) : canEdit ? (
                           <button className="btn btn-ghost btn-sm" title="Set as default" onClick={async () => { try { await workspaceApi.saveSignature({ id: sig.id, name: sig.name, content: sig.content, isDefault: true }); await state.refreshSignatures(); state.showToast('Default signature updated'); } catch (e) { state.showToast(e instanceof Error ? e.message : 'Update failed', 'error'); } }}><Star size={12} /></button>
+                        ) : null}
+                        {canEdit && (
+                          <>
+                            <button className="btn btn-ghost btn-sm" title="Edit" onClick={() => { state.setEditingSignatureId(sig.id); state.setSignatureEditorOpen(true); }}><Edit3 size={12} /></button>
+                            <button className="btn btn-ghost btn-sm btn-danger" title="Delete" onClick={async () => { try { await workspaceApi.deleteSignature(sig.id); await state.refreshSignatures(); state.showToast('Deleted signature'); } catch (e) { console.error('delete signature failed', e); state.showToast(e instanceof Error ? e.message : 'Delete failed', 'error'); } }}><Trash2 size={12} /></button>
+                          </>
                         )}
-                        <button className="btn btn-ghost btn-sm" title="Edit" onClick={() => { state.setEditingSignatureId(sig.id); state.setSignatureEditorOpen(true); }}><Edit3 size={12} /></button>
-                        <button className="btn btn-ghost btn-sm btn-danger" title="Delete" onClick={async () => { try { await workspaceApi.deleteSignature(sig.id); await state.refreshSignatures(); state.showToast('Deleted signature'); } catch (e) { console.error('delete signature failed', e); state.showToast(e instanceof Error ? e.message : 'Delete failed', 'error'); } }}><Trash2 size={12} /></button>
                       </div>
                     </div>
                   ))}
@@ -572,7 +579,7 @@ export default function SettingsPanel({ state }: SettingsPanelProps) {
                   <h4>Contacts Directory</h4>
                   <p className="text-xs text-muted">Manage your addresses book and shortcut suggestions.</p>
                 </div>
-                <button className="btn btn-primary btn-sm" onClick={() => { state.setEditingContactId(null); state.setContactEditorOpen(true); }}><Plus size={12} /> Add Contact</button>
+                <button className="btn btn-primary btn-sm" onClick={() => { state.setEditingContactId(null); state.setContactEditorOpen(true); }} disabled={!canEdit} title={canEdit ? undefined : 'Viewers cannot edit contacts'}><Plus size={12} /> Add Contact</button>
               </div>
 
               <div className="dash-search mail-search-bar" style={{ padding: 0, marginBottom: 12 }}>
@@ -591,13 +598,19 @@ export default function SettingsPanel({ state }: SettingsPanelProps) {
                       <div className="avatar avatar-sm" style={{ background: `hsl(${c.name.charCodeAt(0) * 7 % 360}, 60%, 85%)`, color: `hsl(${c.name.charCodeAt(0) * 7 % 360}, 60%, 35%)` }}>{c.name.charAt(0).toUpperCase()}</div>
                       <div className="team-member-info">
                         <strong>{c.name}</strong>
-                        <span className="text-xs text-muted">{c.email}{c.company ? ` Ã‚Â· ${c.company}` : ''}</span>
+                        <span className="text-xs text-muted">{c.email}{c.company ? ` · ${c.company}` : ''}</span>
                       </div>
                       <div className="flex items-center gap-1">
-                        <button className="btn btn-ghost btn-sm" onClick={async () => { try { await workspaceApi.saveContact({ id: c.id, name: c.name, email: c.email, phone: c.phone, company: c.company, group: c.group, favorite: !c.favorite }); await state.refreshContacts(); } catch (e) { state.showToast(e instanceof Error ? e.message : 'Update failed', 'error'); } }}><Star size={12} className={c.favorite ? 'text-primary fill-primary' : 'text-muted'} /></button>
-                        <button className="btn btn-ghost btn-sm" onClick={() => { state.setEditingContactId(c.id); state.setContactEditorOpen(true); }}><Edit3 size={12} /></button>
+                        {canEdit && (
+                          <button className="btn btn-ghost btn-sm" title={c.favorite ? 'Remove favourite' : 'Mark favourite'} onClick={async () => { try { await workspaceApi.saveContact({ id: c.id, name: c.name, email: c.email, phone: c.phone, company: c.company, group: c.group, favorite: !c.favorite }); await state.refreshContacts(); } catch (e) { state.showToast(e instanceof Error ? e.message : 'Update failed', 'error'); } }}><Star size={12} className={c.favorite ? 'text-primary fill-primary' : 'text-muted'} /></button>
+                        )}
+                        {canEdit && (
+                          <button className="btn btn-ghost btn-sm" title="Edit" onClick={() => { state.setEditingContactId(c.id); state.setContactEditorOpen(true); }}><Edit3 size={12} /></button>
+                        )}
                         <button className="btn btn-ghost btn-sm" title="Copy Address" onClick={() => { state.copyToClipboard(c.email); }}><Copy size={12} /></button>
-                        <button className="btn btn-ghost btn-sm btn-danger" onClick={async () => { try { await workspaceApi.deleteContact(c.id); await state.refreshContacts(); state.showToast('Deleted contact'); } catch (e) { console.error('delete contact failed', e); state.showToast(e instanceof Error ? e.message : 'Delete failed', 'error'); } }}><Trash2 size={12} /></button>
+                        {canEdit && (
+                          <button className="btn btn-ghost btn-sm btn-danger" title="Delete" onClick={async () => { try { await workspaceApi.deleteContact(c.id); await state.refreshContacts(); state.showToast('Deleted contact'); } catch (e) { console.error('delete contact failed', e); state.showToast(e instanceof Error ? e.message : 'Delete failed', 'error'); } }}><Trash2 size={12} /></button>
+                        )}
                       </div>
                     </div>
                   ))}
@@ -928,7 +941,7 @@ export default function SettingsPanel({ state }: SettingsPanelProps) {
                         <strong className="text-sm font-semibold text-primary">{c.label}</strong>
                         <span className="text-xs text-muted font-mono block mt-1">{c.maskedValue} ({c.provider || 'N/A'})</span>
                       </div>
-                      <button className="btn btn-ghost btn-sm btn-danger border border-danger/10 hover:bg-danger-glow" onClick={() => state.setConfirmRevokeId(c.id)}><X size={12} /> Revoke</button>
+                      <button className="btn btn-ghost btn-sm btn-danger border border-danger/10 hover:bg-danger-glow" disabled={!canManage} title={canManage ? undefined : 'Only owners and admins can revoke a connection'} onClick={() => state.setConfirmRevokeId(c.id)}><X size={12} /> Revoke</button>
                     </div>
                   ))}
                 </div>
@@ -938,8 +951,8 @@ export default function SettingsPanel({ state }: SettingsPanelProps) {
         </div>
       </div>
 
-      <SignatureEditor state={state} sig={state.editingSignatureId ? state.signatures.find(s => s.id === state.editingSignatureId) : undefined} />
-      <ContactEditor state={state} contact={state.editingContactId ? state.contacts.find(c => c.id === state.editingContactId) : undefined} />
+      {canEdit && <SignatureEditor state={state} sig={state.editingSignatureId ? state.signatures.find(s => s.id === state.editingSignatureId) : undefined} />}
+      {canEdit && <ContactEditor state={state} contact={state.editingContactId ? state.contacts.find(c => c.id === state.editingContactId) : undefined} />}
       
       <RuleEditorModal
         open={ruleModalOpen}

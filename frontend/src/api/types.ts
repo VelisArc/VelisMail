@@ -153,7 +153,7 @@ export type BusinessTeamMember = {
   id: string;
   name: string;
   email: string;
-  role: 'admin' | 'member' | 'viewer' | 'user';
+  role: 'owner' | 'admin' | 'member' | 'viewer' | 'user';
   status?: 'pending' | 'active' | 'expired' | 'revoked';
   inviteToken?: string;
   inviteExpiresAt?: string | null;
@@ -167,7 +167,7 @@ export type TeamAccessInvite = {
   token: string;
   email: string;
   name: string;
-  role: 'admin' | 'member' | 'viewer' | 'user';
+  role: 'owner' | 'admin' | 'member' | 'viewer' | 'user';
   status: 'pending' | 'accepted' | 'expired' | 'revoked';
   createdAt: string;
   expiresAt: string | null;

@@ -163,6 +163,9 @@ export default function Login() {
     if (nextMode === 'register') {
       setRegisterStep('intro');
     }
+    if (searchParams.get('session') === 'expired') {
+      setError('Your session expired. Sign in again to continue.');
+    }
   }, [searchParams]);
   const businessDomainValue = normalizeDomain(regDomain);
   const defaultBusinessMailboxAddress = businessDomainValue ? `admin@${businessDomainValue}` : '';

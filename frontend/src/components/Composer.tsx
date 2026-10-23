@@ -76,6 +76,28 @@ const resolveRecipientInfo = (email: string) => {
   };
 };
 
+/**
+ * Build the brand-logo block appended to outgoing mail.
+ *
+ * The logo URL is a user setting, so it must never be interpolated raw into
+ * the message HTML: quotes would break out of the `src` attribute and run as
+ * markup in the recipient's client. Only raster images over https or an
+ * inline image data URL are accepted.
+ */
+function emailLogoMarkup(url: string): string | null {
+  const trimmed = url.trim();
+  if (!/^(https?:\/\/|data:image\/(?:png|jpe?g|gif|webp|svg\+xml);base64,)/i.test(trimmed)) {
+    return null;
+  }
+  const src = trimmed
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+  return `<br><br><div class="email-brand-logo" style="margin-top: 24px; padding-top: 12px; border-top: 1px solid #eaeaea;"><img src="${src}" alt="Sender Logo" style="max-height: 45px; max-width: 150px; object-fit: contain;" /></div>`;
+}
+
 const getRecipientAvatar = (name: string, avatarUrl: string | null) => {
   if (avatarUrl) {
     return (
@@ -314,8 +336,8 @@ export default function Composer({
     // Auto-append user email signature logo if configured
     const session = auth.getSession();
     if (session && session.emailLogoUrl) {
-      const logoHtml = `<br><br><div class="email-brand-logo" style="margin-top: 24px; padding-top: 12px; border-top: 1px solid #eaeaea;"><img src="${session.emailLogoUrl}" alt="Sender Logo" style="max-height: 45px; max-width: 150px; object-fit: contain;" /></div>`;
-      if (!finalBody.includes('class="email-brand-logo"')) {
+      const logoHtml = emailLogoMarkup(session.emailLogoUrl);
+      if (logoHtml && !finalBody.includes('class="email-brand-logo"')) {
         finalBody = finalBody + logoHtml;
       }
     }

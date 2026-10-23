@@ -156,9 +156,17 @@ export default function CompanyAdminPanel({ state }: { state: DashboardState }) 
     }
   };
 
+  // The team list carries the caller's own membership role, so owner-only
+  // controls stay available even when the overview tab was never opened.
+  const selfRole = members.find(
+    (member) => member.email.toLowerCase() === (state.user?.email || '').toLowerCase(),
+  )?.role;
   const canManage = state.user?.role === 'admin'
     || overview?.company?.role === 'owner'
-    || overview?.company?.role === 'admin';
+    || overview?.company?.role === 'admin'
+    || selfRole === 'owner'
+    || selfRole === 'admin';
+  const isOwner = overview?.company?.role === 'owner' || selfRole === 'owner';
 
   const load = useCallback(async (target: Tab) => {
     setLoading(true);
@@ -434,13 +442,15 @@ export default function CompanyAdminPanel({ state }: { state: DashboardState }) 
                     <td>
                       <AdminConfirmSelect
                         value={member.role}
-                        options={[{ value: 'owner', label: 'Owner' }, { value: 'admin', label: 'Admin' }, { value: 'member', label: 'Member' }, { value: 'viewer', label: 'Viewer' }]}
+                        options={isOwner
+                          ? [{ value: 'owner', label: 'Owner' }, { value: 'admin', label: 'Admin' }, { value: 'member', label: 'Member' }, { value: 'viewer', label: 'Viewer' }]
+                          : [{ value: 'member', label: 'Member' }, { value: 'viewer', label: 'Viewer' }]}
                         confirm={confirm}
                         title={(role) => `Change role to ${role}`}
                         message={(role) => `${member.email} changes from ${member.role} to ${role}. The new permissions apply right away.`}
                         confirmLabel="Change role"
                         tone={(role) => (role === 'owner' || role === 'admin' ? 'danger' : 'primary')}
-                        disabled={!canManage || savingMember === member.id}
+                        disabled={!canManage || (!isOwner && (member.role === 'owner' || member.role === 'admin')) || savingMember === member.id}
                         onApply={async (role) => { await updateMember(member, { role }); }}
                         ariaLabel={`Role for ${member.email}`}
                       />
@@ -460,7 +470,7 @@ export default function CompanyAdminPanel({ state }: { state: DashboardState }) 
                             : `${member.email} changes from ${member.status} to ${next}.`)}
                           confirmLabel={(next) => (next === 'removed' ? 'Remove member' : 'Change status')}
                           tone={(next) => (next === 'active' ? 'primary' : 'danger')}
-                          disabled={!canManage || savingMember === member.id}
+                          disabled={!canManage || (!isOwner && (member.role === 'owner' || member.role === 'admin')) || savingMember === member.id}
                           onApply={async (next) => { await updateMember(member, { status: next }); }}
                           ariaLabel={`Status for ${member.email}`}
                         />

@@ -3,6 +3,7 @@ import { ArrowRight, Database, Info, Mail, Plus, Menu, CheckCircle2, Inbox, Tras
 import { workspaceApi } from '../../../api/company';
 import type { DashboardState } from '../types';
 import type { BusinessMailbox } from '../../../api/client';
+import { canManageWorkspace } from '../constants';
 
 interface MailboxesPanelProps {
   state: DashboardState;
@@ -11,6 +12,7 @@ interface MailboxesPanelProps {
 export default function MailboxesPanel({ state }: MailboxesPanelProps) {
   const [savingMailbox, setSavingMailbox] = useState(false);
   const [deletingAddress, setDeletingAddress] = useState('');
+  const canManage = canManageWorkspace(state.user?.role);
 
   const handleCreateMailbox = async () => {
     const localPart = state.mailboxLocalPart.trim();
@@ -79,15 +81,17 @@ export default function MailboxesPanel({ state }: MailboxesPanelProps) {
           <Database size={12} /> {state.user?.businessDbUrl ? 'Database synced' : 'Local setup'}
         </span>
       </div>
-      <div className="panel-inline-form">
-        <input className="input input-max-200" placeholder="Local part (e.g., hello)" value={state.mailboxLocalPart} onChange={e => state.setMailboxLocalPart(e.target.value)} />
-        <span className="text-muted">@{state.activeDomainName}</span>
-        <input className="input input-max-200" placeholder="Display name" value={state.mailboxDisplayName} onChange={e => state.setMailboxDisplayName(e.target.value)} />
-        <select className="input input-max-140" value={state.mailboxKind} onChange={e => state.setMailboxKind(e.target.value as BusinessMailbox['kind'])}>
-          <option value="primary">Primary</option><option value="mailbox">Mailbox</option><option value="alias">Alias</option><option value="shared">Shared</option>
-        </select>
-        <button className="btn btn-primary btn-sm" disabled={savingMailbox} onClick={handleCreateMailbox}><Plus size={12} /> {savingMailbox ? 'Saving' : 'Add'}</button>
-      </div>
+      {canManage && (
+        <div className="panel-inline-form">
+          <input className="input input-max-200" placeholder="Local part (e.g., hello)" value={state.mailboxLocalPart} onChange={e => state.setMailboxLocalPart(e.target.value)} />
+          <span className="text-muted">@{state.activeDomainName}</span>
+          <input className="input input-max-200" placeholder="Display name" value={state.mailboxDisplayName} onChange={e => state.setMailboxDisplayName(e.target.value)} />
+          <select className="input input-max-140" value={state.mailboxKind} onChange={e => state.setMailboxKind(e.target.value as BusinessMailbox['kind'])}>
+            <option value="primary">Primary</option><option value="mailbox">Mailbox</option><option value="alias">Alias</option><option value="shared">Shared</option>
+          </select>
+          <button className="btn btn-primary btn-sm" disabled={savingMailbox} onClick={handleCreateMailbox}><Plus size={12} /> {savingMailbox ? 'Saving' : 'Add'}</button>
+        </div>
+      )}
       <div className="team-list">
         {state.domainMailboxes.map(mbx => (
           <div key={mbx.address} className={`team-member-row mailbox-row ${state.activeMailboxAddress === mbx.address ? 'active' : ''}`} onClick={() => openMailboxInbox(mbx)} role="button" tabIndex={0}>
@@ -98,7 +102,7 @@ export default function MailboxesPanel({ state }: MailboxesPanelProps) {
               <button className="btn btn-ghost btn-sm" onClick={e => { e.stopPropagation(); openMailboxInbox(mbx); }}><ArrowRight size={14} /> Inbox</button>
               <button className="btn btn-ghost btn-sm" onClick={e => { e.stopPropagation(); state.setSelectedFromAddress(mbx.address); state.showToast('Sender set'); }}><CheckCircle2 size={14} /> Sender</button>
               <button className="btn btn-ghost btn-sm" title="Mailbox details" onClick={e => { e.stopPropagation(); state.setMailboxDetails(mbx); }}><Info size={14} /></button>
-              <button className="btn btn-ghost btn-sm btn-danger" disabled={deletingAddress === mbx.address} onClick={e => { e.stopPropagation(); void handleDeleteMailbox(mbx.address); }}><Trash2 size={14} /></button>
+              {canManage && <button className="btn btn-ghost btn-sm btn-danger" disabled={deletingAddress === mbx.address} onClick={e => { e.stopPropagation(); void handleDeleteMailbox(mbx.address); }}><Trash2 size={14} /></button>}
             </div>
           </div>
         ))}

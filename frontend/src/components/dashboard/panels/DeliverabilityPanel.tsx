@@ -2,6 +2,7 @@ import { useState, useMemo, useCallback, useEffect } from 'react';
 import { Shield, Check, AlertCircle, Menu, RefreshCcw, Copy } from 'lucide-react';
 import { workspaceApi, type DnsRequirement } from '../../../api/company';
 import type { DashboardState } from '../types';
+import { canManageWorkspace } from '../constants';
 import './DeliverabilityPanel.css';
 
 interface DeliverabilityPanelProps {
@@ -9,6 +10,7 @@ interface DeliverabilityPanelProps {
 }
 
 export default function DeliverabilityPanel({ state }: DeliverabilityPanelProps) {
+  const canManage = canManageWorkspace(state.user?.role);
   const [selectedDomainId, setSelectedDomainId] = useState<string>(() => {
     if (state.domainsList.length > 0) {
       const active = state.domainsList.find(d => d.domain === state.activeDomainName);
@@ -132,7 +134,7 @@ export default function DeliverabilityPanel({ state }: DeliverabilityPanelProps)
         </button>
         <h3><Shield size={16} /> Deliverability Score</h3>
         {activeDomain && (
-          <button type="button" className="btn btn-ghost btn-sm" onClick={() => void handleVerify()} title="Verify Records">
+          <button type="button" className="btn btn-ghost btn-sm" onClick={() => void handleVerify()} disabled={!canManage} title={canManage ? 'Verify Records' : 'Only owners and admins can verify a domain'}>
             <RefreshCcw size={12} /> Verify
           </button>
         )}
@@ -269,7 +271,8 @@ export default function DeliverabilityPanel({ state }: DeliverabilityPanelProps)
                       type="button"
                       className="btn btn-ghost btn-sm"
                       onClick={() => void handleVerify()}
-                      disabled={dns.loading}
+                      disabled={dns.loading || !canManage}
+                      title={canManage ? undefined : 'Only owners and admins can verify a domain'}
                     >
                       <RefreshCcw size={12} /> Check DNS
                     </button>

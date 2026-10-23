@@ -58,10 +58,18 @@ const INVITE_ROLE_LABELS: Record<string, string> = {
 const INVITE_ROLE_ACCESS: Record<string, string> = {
   admin: 'Full workspace access: mailboxes, domains, groups, templates, team management, billing and audit log.',
   member: 'Sends and receives mail, manages templates and the queue, and can view domains, mailboxes, groups and the audit log.',
-  viewer: 'Read-only access to mail, domains, mailboxes, groups, analytics, billing and the audit log. Cannot change anything.',
+  viewer: 'Read-only workspace access: can read mail and reports, but cannot send mail or change domains, mailboxes, groups, templates or team settings.',
 };
 
-function InviteModal({ state }: { state: DashboardState }) {  return (
+function InviteModal({ state }: { state: DashboardState }) {
+  const selfEmail = (state.user?.email || '').toLowerCase();
+  const selfRole = state.teamMembers.find(
+    (member) => member.email.toLowerCase() === selfEmail
+      && member.status !== 'revoked'
+      && member.status !== 'expired',
+  )?.role;
+  const canInviteAdmin = selfRole === 'owner';
+  return (
     <div className="modal-overlay" onClick={() => { state.setInviteOpen(false); }} role="dialog" aria-modal="true" aria-label="Invite team member">
       <div className="biz-form-modal glass" onClick={e => e.stopPropagation()}>
         <div className="compose-header"><h3><UserCheck size={16} /> Invite Team Member</h3><button className="btn btn-ghost btn-icon" onClick={() => { state.setInviteOpen(false); }}><X size={16} /></button></div>
@@ -69,8 +77,8 @@ function InviteModal({ state }: { state: DashboardState }) {  return (
           <div className="invite-form">
             <input className="input" placeholder="Full name" aria-label="Full name" value={state.inviteName} onChange={e => state.setInviteName(e.target.value)} />
             <input className="input" placeholder="Email address" aria-label="Email address" type="email" value={state.inviteEmail} onChange={e => state.setInviteEmail(e.target.value)} />
-            <select className="input" aria-label="Role" value={state.inviteRole} onChange={e => state.setInviteRole(e.target.value as 'admin' | 'member' | 'viewer')}>
-              <option value="admin">Admin</option><option value="member">Member</option><option value="viewer">Viewer</option>
+            <select className="input" aria-label="Role" value={!canInviteAdmin && state.inviteRole === 'admin' ? 'member' : state.inviteRole} onChange={e => state.setInviteRole(e.target.value as 'admin' | 'member' | 'viewer')}>
+              {canInviteAdmin && <option value="admin">Admin</option>}<option value="member">Member</option><option value="viewer">Viewer</option>
             </select>
             <div className="invite-role-access">
               <strong>{INVITE_ROLE_LABELS[state.inviteRole] || state.inviteRole}</strong>
@@ -83,6 +91,10 @@ function InviteModal({ state }: { state: DashboardState }) {  return (
               const email = state.inviteEmail.trim();
               if (!email || !email.includes('@')) {
                 state.showToast('Enter a valid email address.', 'error');
+                return;
+              }
+              if (state.inviteRole === 'admin' && !canInviteAdmin) {
+                state.showToast('Only the workspace owner can invite another administrator.', 'error');
                 return;
               }
               state.setInviteSending(true);

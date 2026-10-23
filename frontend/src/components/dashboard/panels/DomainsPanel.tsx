@@ -1,5 +1,6 @@
 import { Globe, Plus, Menu, RefreshCcw, Copy, Shield, Trash2 } from 'lucide-react';
 import type { DashboardState } from '../types';
+import { canManageWorkspace } from '../constants';
 
 interface DomainsPanelProps {
   state: DashboardState;
@@ -9,14 +10,17 @@ interface DomainsPanelProps {
 }
 
 export default function DomainsPanel({ state, handleAddDomain, handleVerifyDomain, handleDeleteDomain }: DomainsPanelProps) {
+  const canManage = canManageWorkspace(state.user?.role);
   return (
     <div className="dash-panel">
       <div className="panel-header">
         <button className="toolbar-icon sidebar-toggle" onClick={() => state.setSidebarOpen(true)}><Menu size={16} /></button>
         <h3><Globe size={16} /> Domains</h3>
-        <button className="btn btn-primary btn-sm" onClick={() => state.setShowAddDomain(!state.showAddDomain)}><Plus size={12} /> Add Domain</button>
+        {canManage && (
+          <button className="btn btn-primary btn-sm" onClick={() => state.setShowAddDomain(!state.showAddDomain)}><Plus size={12} /> Add Domain</button>
+        )}
       </div>
-      {state.showAddDomain && (
+      {canManage && state.showAddDomain && (
         <div className="panel-inline-form">
           <input className="input" placeholder="example.com" value={state.newDomainInput} onChange={e => state.setNewDomainInput(e.target.value)} />
           <button className="btn btn-primary" onClick={handleAddDomain}><Plus size={12} /> Add</button>
@@ -37,9 +41,9 @@ export default function DomainsPanel({ state, handleAddDomain, handleVerifyDomai
                 ))}
               </div>
               <div className="domain-card-actions">
-                <button className="btn btn-ghost btn-sm" onClick={e => { e.stopPropagation(); handleVerifyDomain(dom.id); }}><RefreshCcw size={12} /> Verify</button>
+                {canManage && <button className="btn btn-ghost btn-sm" onClick={e => { e.stopPropagation(); handleVerifyDomain(dom.id); }}><RefreshCcw size={12} /> Verify</button>}
                 <button className="btn btn-ghost btn-sm" onClick={e => { e.stopPropagation(); state.copyToClipboard(dom.domain); }}><Copy size={12} /></button>
-                <button className="btn btn-ghost btn-sm btn-danger" onClick={e => { e.stopPropagation(); state.setConfirmAction({ title: 'Delete Domain', message: `Delete ${dom.domain}? Its mailboxes stop working and this cannot be undone.`, onConfirm: () => handleDeleteDomain(dom.id) }); }}><Trash2 size={12} /></button>
+                {canManage && <button className="btn btn-ghost btn-sm btn-danger" onClick={e => { e.stopPropagation(); state.setConfirmAction({ title: 'Delete Domain', message: `Delete ${dom.domain}? Its mailboxes stop working and this cannot be undone.`, onConfirm: () => handleDeleteDomain(dom.id) }); }}><Trash2 size={12} /></button>}
               </div>
             </div>
           ))}

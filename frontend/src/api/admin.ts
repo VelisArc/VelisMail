@@ -1,4 +1,4 @@
-import { fetchApiJsonDetailed } from './client-core';
+import { apiErrorMessage, fetchApiJsonDetailed } from './client-core';
 
 export class AdminApiError extends Error {
   status: number;
@@ -15,15 +15,10 @@ async function call<T>(endpoint: string, options: RequestInit = {}): Promise<T> 
   // rotated the same token again and could sign the user out.
   const response = await fetchApiJsonDetailed<T>(endpoint, options);
   if (!response.ok) {
-    const body = response.data as Record<string, unknown> | null;
-    const errorValue = body?.error;
-    const message =
-      typeof errorValue === 'string'
-        ? errorValue
-        : typeof body?.message === 'string'
-          ? body.message
-          : `Request failed with status ${response.status}`;
-    throw new AdminApiError(message, response.status);
+    throw new AdminApiError(
+      apiErrorMessage(response.data, `Request failed with status ${response.status}`),
+      response.status,
+    );
   }
   return (response.data ?? ({} as T)) as T;
 }
