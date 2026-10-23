@@ -3848,8 +3848,6 @@ pub async fn revoke_team_invite(
     )
 }
 
-const PLATFORM_ADMIN_DOMAIN: &str = "velismail.online";
-
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PlatformUserUpdateRequest {
@@ -3880,8 +3878,65 @@ fn normalize_platform_email(value: &str) -> String {
     value.trim().to_lowercase()
 }
 
-fn is_platform_admin_email(value: &str) -> bool {
-    normalize_platform_email(value).ends_with(&format!("@{PLATFORM_ADMIN_DOMAIN}"))
+/// Every address that is granted platform control-plane access.
+///
+/// The addresses that identify one account: the login address and its
+/// recovery email, which is the owner identity the platform grants.
+async fn platform_identities_for(pool: &PgPool, email: &str) -> Vec<String> {
+    fn push_identity(identities: &mut Vec<String>, value: String) {
+        let value = normalize_platform_email(&value);
+        if !value.is_empty() && !identities.contains(&value) {
+            identities.push(value);
+        }
+    }
+
+    let mut identities: Vec<String> = Vec::new();
+    push_identity(&mut identities, email.to_string());
+    if let Ok(Some(row)) = sqlx::query(
+        "SELECT email, recovery_email FROM users WHERE email = $1 OR recovery_email = $1 LIMIT 1",
+    )
+    .bind(email)
+    .fetch_optional(pool)
+    .await
+    {
+        if let Ok(primary) = row.try_get::<String, _>("email") {
+            push_identity(&mut identities, primary);
+        }
+        if let Ok(Some(recovery)) = row.try_get::<Option<String>, _>("recovery_email") {
+            push_identity(&mut identities, recovery);
+        }
+    }
+    identities
+}
+
+/// The addresses that are granted platform control-plane access.
+///
+/// Platform access never comes from the shape of an email address. It is
+/// granted by the configured owner list and by a row in `platform_admins`, so
+/// these are the accounts the platform must never let a member of staff
+/// suspend or delete by mistake.
+fn platform_owner_emails(state: &AppState) -> Vec<String> {
+    let mut emails: Vec<String> = state
+        .config
+        .platform_owner_emails
+        .iter()
+        .map(|value| normalize_platform_email(value))
+        .filter(|value| !value.is_empty())
+        .collect();
+    emails.sort();
+    emails.dedup();
+    emails
+}
+
+/// True when the address belongs to an account the platform itself grants
+/// access to.
+///
+/// This answers from the configured owner list, which is the address the
+/// platform owner is listed under. The `platform_admins` table is checked
+/// where a database pool is at hand, because it needs a query.
+fn is_platform_admin_email(state: &AppState, value: &str) -> bool {
+    let value = normalize_platform_email(value);
+    !value.is_empty() && platform_owner_emails(state).contains(&value)
 }
 
 fn bearer_token(headers: &HeaderMap) -> Option<String> {
@@ -3899,7 +3954,43 @@ fn bearer_token(headers: &HeaderMap) -> Option<String> {
         .map(str::to_string)
 }
 
-fn authorize_platform_admin(
+fn platform_admin_from_env(state: &AppState, emails: &[String], uid: &str) -> bool {
+    if !uid.is_empty()
+        && state
+            .config
+            .platform_owner_uids
+            .iter()
+            .any(|value| value == uid)
+    {
+        return true;
+    }
+    emails.iter().any(|value| {
+        state
+            .config
+            .platform_owner_emails
+            .iter()
+            .any(|owner| owner == value)
+    })
+}
+
+async fn user_platform_admin_async(pool: &PgPool, emails: &[String]) -> bool {
+    if emails.is_empty() {
+        return false;
+    }
+    matches!(
+        sqlx::query(
+            "SELECT 1 FROM platform_admins
+                 WHERE status <> 'removed'
+                   AND (email = ANY($1))",
+        )
+        .bind(emails)
+        .fetch_optional(pool)
+        .await,
+        Ok(Some(_))
+    )
+}
+
+async fn authorize_platform_admin(
     state: &AppState,
     headers: &HeaderMap,
 ) -> Result<String, (StatusCode, Json<Value>)> {
@@ -3925,10 +4016,36 @@ fn authorize_platform_admin(
     .map_err(|_| platform_api_error(StatusCode::UNAUTHORIZED, "Invalid bearer token."))?;
 
     let email = normalize_platform_email(&decoded.claims.email);
-    if !is_platform_admin_email(&email) {
+    let uid = decoded
+        .claims
+        .firebase_uid
+        .clone()
+        .unwrap_or_default()
+        .trim()
+        .to_lowercase();
+
+    // The account may be granted under the login address or under its recovery
+    // address, so both are resolved before any of the three checks.
+    let identities = match state.db.as_ref() {
+        Some(pool) => platform_identities_for(pool, &email).await,
+        None => vec![email.clone()],
+    };
+
+    // Platform access is granted by the configured owner list and the
+    // platform_admins table. An email address alone never grants it.
+    let authorized = platform_admin_from_env(state, &identities, &uid)
+        || platform_owner_emails(state)
+            .iter()
+            .any(|owner| owner == &email)
+        || match state.db.as_ref() {
+            Some(pool) => user_platform_admin_async(pool, &identities).await,
+            None => false,
+        };
+
+    if !authorized {
         return Err(platform_api_error(
             StatusCode::FORBIDDEN,
-            "Platform Admin access is limited to @velismail.online accounts.",
+            "Platform Admin access is limited to configured platform owners.",
         ));
     }
     Ok(email)
@@ -3960,7 +4077,7 @@ fn app_status_to_db_status(value: &str) -> Option<String> {
     }
 }
 
-fn platform_user_json(row: PgRow) -> Value {
+fn platform_user_json(row: PgRow, protected_emails: &[String]) -> Value {
     let id: uuid::Uuid = row.get("id");
     let tenant_id: uuid::Uuid = row.get("tenant_id");
     let email: String = row.get("email");
@@ -3978,7 +4095,7 @@ fn platform_user_json(row: PgRow) -> Value {
         .and_then(Value::as_str)
         .map(db_status_to_app_status)
         .unwrap_or_else(|| db_status_to_app_status(&db_status));
-    let platform_admin = is_platform_admin_email(&email);
+    let platform_admin = protected_emails.contains(&normalize_platform_email(&email));
 
     user.insert("id".to_string(), json!(id.to_string()));
     user.insert("tenantId".to_string(), json!(tenant_id.to_string()));
@@ -4030,14 +4147,14 @@ async fn fetch_platform_user(pool: &PgPool, email: &str) -> Option<Value> {
     .fetch_optional(pool)
     .await
     .ok()??;
-    Some(platform_user_json(row))
+    Some(platform_user_json(row, &[]))
 }
 
 pub async fn list_platform_users(
     State(state): State<AppState>,
     headers: HeaderMap,
 ) -> (StatusCode, Json<Value>) {
-    if let Err(response) = authorize_platform_admin(&state, &headers) {
+    if let Err(response) = authorize_platform_admin(&state, &headers).await {
         return response;
     }
     let pool = match gateway_db_pool(&state) {
@@ -4064,7 +4181,11 @@ pub async fn list_platform_users(
         }
     };
 
-    let users: Vec<Value> = rows.into_iter().map(platform_user_json).collect();
+    let protected_emails = platform_owner_emails(&state);
+    let users: Vec<Value> = rows
+        .into_iter()
+        .map(|row| platform_user_json(row, &protected_emails))
+        .collect();
     (
         StatusCode::OK,
         Json(json!({
@@ -4079,7 +4200,7 @@ pub async fn update_platform_user(
     headers: HeaderMap,
     Json(payload): Json<PlatformUserUpdateRequest>,
 ) -> (StatusCode, Json<Value>) {
-    let actor_email = match authorize_platform_admin(&state, &headers) {
+    let actor_email = match authorize_platform_admin(&state, &headers).await {
         Ok(email) => email,
         Err(response) => return response,
     };
@@ -4100,7 +4221,7 @@ pub async fn update_platform_user(
         let Some(next_db_status) = app_status_to_db_status(status) else {
             return platform_api_error(StatusCode::BAD_REQUEST, "Invalid user status.");
         };
-        if is_platform_admin_email(&target_email) && next_db_status != "active" {
+        if is_platform_admin_email(&state, &target_email) && next_db_status != "active" {
             return platform_api_error(
                 StatusCode::BAD_REQUEST,
                 "Platform-domain admin accounts cannot be suspended or deactivated.",
@@ -4129,7 +4250,7 @@ pub async fn update_platform_user(
         if !valid_team_role(&role) {
             return platform_api_error(StatusCode::BAD_REQUEST, "Invalid user role.");
         }
-        if is_platform_admin_email(&target_email) && role != "admin" {
+        if is_platform_admin_email(&state, &target_email) && role != "admin" {
             return platform_api_error(
                 StatusCode::BAD_REQUEST,
                 "Platform-domain accounts are locked to admin access.",
@@ -4138,7 +4259,7 @@ pub async fn update_platform_user(
         settings_patch.insert("role".to_string(), json!(role));
         settings_patch.insert(
             "isPlatformAdmin".to_string(),
-            json!(is_platform_admin_email(&target_email)),
+            json!(is_platform_admin_email(&state, &target_email)),
         );
     }
 
@@ -4211,9 +4332,15 @@ pub async fn update_platform_user(
 
     match result {
         Ok(done) if done.rows_affected() > 0 => {
-            let user = fetch_platform_user(pool, &target_email)
+            let mut user = fetch_platform_user(pool, &target_email)
                 .await
                 .unwrap_or_else(|| json!({ "email": target_email }));
+            // The protection list is rebuilt, so the answer reflects the
+            // current owner configuration rather than the one at sign-in.
+            let protected = is_platform_admin_email(&state, &target_email);
+            if let Some(object) = user.as_object_mut() {
+                object.insert("isPlatformAdmin".to_string(), json!(protected));
+            }
             (
                 StatusCode::OK,
                 Json(json!({
@@ -4238,7 +4365,7 @@ pub async fn delete_platform_user(
     headers: HeaderMap,
     Json(payload): Json<PlatformUserDeleteRequest>,
 ) -> (StatusCode, Json<Value>) {
-    if let Err(response) = authorize_platform_admin(&state, &headers) {
+    if let Err(response) = authorize_platform_admin(&state, &headers).await {
         return response;
     }
     let pool = match gateway_db_pool(&state) {
@@ -4247,7 +4374,7 @@ pub async fn delete_platform_user(
     };
 
     let target_email = normalize_platform_email(&payload.email);
-    if is_platform_admin_email(&target_email) {
+    if is_platform_admin_email(&state, &target_email) {
         return platform_api_error(
             StatusCode::BAD_REQUEST,
             "Platform-domain admin accounts cannot be deleted.",

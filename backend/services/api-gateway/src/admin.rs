@@ -116,7 +116,8 @@ fn uid_allowed(state: &AppState, claims: &Claims) -> bool {
         .unwrap_or(false)
 }
 
-/// True when the account email is listed in `PLATFORM_OWNER_EMAILS`.
+/// True when one of the account identities is listed in
+/// `PLATFORM_OWNER_EMAILS`.
 ///
 /// Owners are normally configured by email: a Firebase UID only exists after
 /// the very first verified sign-in, so it cannot be known while preparing the
@@ -126,9 +127,13 @@ fn email_allowed(state: &AppState, email: &str) -> bool {
     state.config.platform_owner_emails.contains(&email)
 }
 
-/// Ownership is granted by a listed Firebase UID **or** a listed email.
-fn owner_allowed(state: &AppState, claims: &Claims, email: &str) -> bool {
-    uid_allowed(state, claims) || email_allowed(state, email)
+/// Ownership is granted by a listed Firebase UID **or** a listed email, where
+/// either the login address or the recovery email may be the listed one.
+fn owner_allowed(state: &AppState, claims: &Claims, identities: &[String]) -> bool {
+    uid_allowed(state, claims)
+        || identities
+            .iter()
+            .any(|identity| email_allowed(state, identity))
 }
 
 #[derive(Debug, Clone)]
@@ -155,14 +160,43 @@ async fn authorize_platform(
     headers: &HeaderMap,
 ) -> Result<PlatformActor, ApiResult> {
     let claims = decode_claims(state, headers)?;
-    let email = normalize_email(&claims.email);
+    let login_email = normalize_email(&claims.email);
     let db = pool(state)?;
-    // Ownership is configured by Firebase UID and/or email address.
-    let is_configured_owner = owner_allowed(state, &claims, &email);
+    // Ownership is configured by Firebase UID and/or email address. Either the
+    // login address or the recovery address of the account may be the listed
+    // one, so both are resolved before the check.
+    //
+    // The recovery email is the personal identity, so it becomes the canonical
+    // control-plane address that roles and audit rows are stored against.
+    let mut identities: Vec<String> = vec![login_email.clone()];
+    let mut email = login_email;
+    if let Ok(Some(row)) = sqlx::query(
+        "SELECT email, recovery_email FROM users WHERE email = $1 OR recovery_email = $1 LIMIT 1",
+    )
+    .bind(&identities[0])
+    .fetch_optional(db)
+    .await
+    {
+        for column in ["email", "recovery_email"] {
+            if let Ok(Some(value)) = row.try_get::<Option<String>, _>(column) {
+                let value = normalize_email(&value);
+                if !value.is_empty() && !identities.contains(&value) {
+                    identities.push(value);
+                }
+            }
+        }
+        if let Ok(Some(recovery)) = row.try_get::<Option<String>, _>("recovery_email") {
+            let recovery = normalize_email(&recovery);
+            if !recovery.is_empty() {
+                email = recovery;
+            }
+        }
+    }
+    let is_configured_owner = owner_allowed(state, &claims, &identities);
 
     let existing =
-        sqlx::query("SELECT role, status, permissions FROM platform_admins WHERE email = $1")
-            .bind(&email)
+        sqlx::query("SELECT role, status, permissions FROM platform_admins WHERE email = ANY($1)")
+            .bind(&identities)
             .fetch_optional(db)
             .await
             .map_err(|err| {
@@ -239,9 +273,9 @@ async fn authorize_platform(
             status = "active".to_string();
             let _ = sqlx::query(
                 "UPDATE platform_admins SET role = 'owner', permissions = $2::jsonb, status = 'active', updated_at = NOW()
-                 WHERE email = $1",
+                 WHERE email = ANY($1)",
             )
-            .bind(&email)
+            .bind(&identities)
             .bind(json!(["*"]))
             .execute(db)
             .await;
@@ -262,8 +296,8 @@ async fn authorize_platform(
             "This platform administrator account is suspended.",
         ));
     }
-    let _ = sqlx::query("UPDATE platform_admins SET last_seen_at = NOW() WHERE email = $1")
-        .bind(&email)
+    let _ = sqlx::query("UPDATE platform_admins SET last_seen_at = NOW() WHERE email = ANY($1)")
+        .bind(&identities)
         .execute(db)
         .await;
 
@@ -294,10 +328,28 @@ async fn is_platform_staff(state: &AppState, claims: &Claims) -> bool {
     let Some(db) = state.db.as_ref() else {
         return false;
     };
+    // The recovery email identifies the person, so a membership recorded under
+    // it also counts as staff.
+    let row =
+        sqlx::query("SELECT recovery_email FROM users WHERE email = $1 OR recovery_email = $1")
+            .bind(&email)
+            .fetch_optional(db)
+            .await
+            .ok()
+            .flatten();
+    let mut identities: Vec<String> = vec![email];
+    if let Some(row) = row {
+        if let Ok(Some(recovery)) = row.try_get::<Option<String>, _>("recovery_email") {
+            let recovery = normalize_email(&recovery);
+            if !recovery.is_empty() && !identities.contains(&recovery) {
+                identities.push(recovery);
+            }
+        }
+    }
     sqlx::query_scalar::<_, bool>(
-        "SELECT EXISTS (SELECT 1 FROM platform_admins WHERE email = $1 AND status = 'active')",
+        "SELECT EXISTS (SELECT 1 FROM platform_admins WHERE email = ANY($1) AND status = 'active')",
     )
-    .bind(email)
+    .bind(identities)
     .fetch_one(db)
     .await
     .unwrap_or(false)
