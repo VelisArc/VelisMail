@@ -1,12 +1,14 @@
 import { useState, useEffect, useRef } from 'react';
 import {
   Settings, Menu, X, Plus, Edit3, Star, Trash2, Copy, Shield, Search, Power,
-  Bell, Users, RotateCcw, Tag, Sliders, Link
+  Bell, Users, RotateCcw, Tag, Sliders, Link, ShieldCheck, CheckCircle2, AlertCircle
 } from 'lucide-react';
+import { QRCodeSVG } from 'qrcode.react';
 import { auth, autoReply, labels, rules } from '../../../api/client';
 import { workspaceApi } from '../../../api/company';
 import type { DashboardState } from '../types';
 import type { Signature, Contact, EmailRule, EmailRuleCondition, EmailRuleAction, Label } from '../../../api/client';
+import LoadingSpinner from '../../LoadingSpinner';
 
 interface SettingsPanelProps {
   state: DashboardState;
@@ -330,6 +332,88 @@ export default function SettingsPanel({ state }: SettingsPanelProps) {
   const [ruleModalOpen, setRuleModalOpen] = useState(false);
   const [selectedRule, setSelectedRule] = useState<EmailRule | null>(null);
 
+  // Authenticator app (TOTP) states
+  const [mfaSetup, setMfaSetup] = useState<{ secret: string; otpauthUrl: string } | null>(null);
+  const [mfaEnabled, setMfaEnabled] = useState(Boolean(state.user?.totpEnabled));
+  const [mfaCode, setMfaCode] = useState('');
+  const [mfaError, setMfaError] = useState<string | null>(null);
+  const [mfaBusy, setMfaBusy] = useState(false);
+  const [showMfaDisable, setShowMfaDisable] = useState(false);
+  const [mfaDisablePassword, setMfaDisablePassword] = useState('');
+  const [mfaDisableCode, setMfaDisableCode] = useState('');
+
+  useEffect(() => {
+    setMfaEnabled(Boolean(state.user?.totpEnabled));
+  }, [state.user?.totpEnabled]);
+
+  const handleStartMfaSetup = async () => {
+    setMfaBusy(true);
+    setMfaError(null);
+    try {
+      const result = await auth.startMfaSetup();
+      if (!result.success || !result.secret || !result.otpauthUrl) {
+        throw new Error('Unable to start the authenticator setup.');
+      }
+      setMfaSetup({ secret: result.secret, otpauthUrl: result.otpauthUrl });
+      setMfaCode('');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unable to start the authenticator setup.';
+      setMfaError(message);
+      state.showToast(message, 'error');
+    } finally {
+      setMfaBusy(false);
+    }
+  };
+
+  const handleEnableMfa = async () => {
+    setMfaBusy(true);
+    setMfaError(null);
+    try {
+      const result = await auth.enableMfa(mfaCode.trim());
+      if (!result.success) {
+        throw new Error('Invalid authenticator code.');
+      }
+      setMfaSetup(null);
+      setMfaCode('');
+      setMfaEnabled(true);
+      state.showToast('Authenticator enabled');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Invalid authenticator code.';
+      setMfaError(message);
+      state.showToast(message, 'error');
+    } finally {
+      setMfaBusy(false);
+    }
+  };
+
+  const handleCancelMfaSetup = () => {
+    setMfaSetup(null);
+    setMfaCode('');
+    setMfaError(null);
+  };
+
+  const handleDisableMfa = async () => {
+    setMfaBusy(true);
+    setMfaError(null);
+    try {
+      const result = await auth.disableMfa(mfaDisablePassword, mfaDisableCode.trim());
+      if (!result.success) {
+        throw new Error('Unable to disable the authenticator.');
+      }
+      setShowMfaDisable(false);
+      setMfaDisablePassword('');
+      setMfaDisableCode('');
+      setMfaEnabled(false);
+      state.showToast('Authenticator disabled');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unable to disable the authenticator.';
+      setMfaError(message);
+      state.showToast(message, 'error');
+    } finally {
+      setMfaBusy(false);
+    }
+  };
+
   const filteredContacts = state.contacts.filter(c =>
     !state.contactsSearch || c.name.toLowerCase().includes(state.contactsSearch.toLowerCase()) || c.email.toLowerCase().includes(state.contactsSearch.toLowerCase())
   );
@@ -365,7 +449,7 @@ export default function SettingsPanel({ state }: SettingsPanelProps) {
     { id: 'notifications', label: 'Notifications', icon: Bell },
     { id: 'signatures', label: 'Signatures', icon: Edit3 },
     { id: 'contacts', label: 'Contacts', icon: Users },
-    { id: 'security', label: 'Active Sessions', icon: Shield },
+    { id: 'security', label: 'Security', icon: Shield },
     { id: 'autoreply', label: 'Auto-Reply', icon: RotateCcw },
     { id: 'labels', label: 'Labels', icon: Tag },
     { id: 'rules', label: 'Filtering Rules', icon: Sliders },
@@ -523,33 +607,162 @@ export default function SettingsPanel({ state }: SettingsPanelProps) {
           )}
 
           {activeSettingsTab === 'security' && (
-            <div className="glass-card animate-fade">
-              <div className="settings-section-header mb-6">
-                <h4>Active Sessions</h4>
-                <p className="text-xs text-muted">Review and disconnect devices that are signed into your workspace.</p>
-              </div>
-              {state.activeSessions.length === 0 ? (
-                <div className="empty-state-sm py-8">
-                  <p className="text-sm text-muted">No active sessions loaded.</p>
-                  <button className="btn btn-ghost btn-sm mt-4 border border-primary-10/20" onClick={state.refreshSessions}>Load Active Sessions</button>
+            <div className="flex flex-col gap-4">
+              <div className="glass-card animate-fade">
+                <div className="settings-section-header mb-6">
+                  <h4>Two-Factor Authentication</h4>
+                  <p className="text-xs text-muted">
+                    Add an extra layer of security. When it is on, every sign-in asks for a
+                    6-digit code from your authenticator app.
+                  </p>
                 </div>
-              ) : (
-                <div className="flex flex-col gap-3">
-                  {state.activeSessions.map(s => (
-                    <div key={s.id} className="team-member-row hover:border-accent-20 transition-all">
-                      <div className="avatar avatar-sm bg-primary-10/10 text-primary"><Shield size={12} /></div>
-                      <div className="team-member-info">
-                        <strong>{s.userAgent ? s.userAgent.slice(0, 45) : 'Unknown device'}</strong>
-                        <span className="text-xs text-muted">{s.ipAddress || 'IP not recorded'}{s.current ? ' - Active now' : ''}</span>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <span className="text-xs text-muted font-mono">{new Date(s.lastActive).toLocaleDateString()}</span>
-                        {!s.current && (
-                          <button className="btn btn-ghost btn-sm btn-danger px-2" onClick={async () => { try { await auth.revokeSession(s.id); state.refreshSessions(); state.showToast('Session revoked'); } catch (e) { console.error('revoke session failed', e); state.showToast('Failed', 'error'); } }}><X size={12} /> Revoke</button>
-                        )}
-                      </div>
+
+                {mfaBusy ? (
+                  <div className="form-success">
+                    <LoadingSpinner size="sm" label="Working on the authenticator" />
+                  </div>
+                ) : mfaEnabled ? (
+                  <>
+                    <div className="form-success">
+                      <ShieldCheck size={16} style={{ marginRight: 8, verticalAlign: 'middle' }} />
+                      <strong>Authenticator is enabled.</strong> A 6-digit code is required on every sign-in.
                     </div>
-                  ))}
+                    <button
+                      className="btn btn-danger btn-sm mt-4"
+                      type="button"
+                      onClick={() => { setMfaError(null); setShowMfaDisable(true); }}
+                    >
+                      <Trash2 size={14} /> Disable Authenticator
+                    </button>
+                  </>
+                ) : mfaSetup ? (
+                  <>
+                    <div style={{ textAlign: 'center' }}>
+                      <div style={{ margin: '16px auto', display: 'inline-block' }}>
+                        <QRCodeSVG value={mfaSetup.otpauthUrl} size={200} />
+                      </div>
+                      <p className="text-xs text-muted">
+                        Scan with Google Authenticator, Authy, 1Password, or enter this key manually:
+                      </p>
+                      <code style={{ display: 'block', padding: 12, background: 'var(--bg-elevated)', borderRadius: 8, fontSize: 14, letterSpacing: 2, textAlign: 'center', wordBreak: 'break-all', marginBottom: 16 }}>
+                        {mfaSetup.secret}
+                      </code>
+                    </div>
+                    <div className="flex flex-col gap-3 max-w-md">
+                      <input
+                        className="input"
+                        type="text"
+                        inputMode="numeric"
+                        maxLength={6}
+                        placeholder="6-digit code from authenticator app"
+                        value={mfaCode}
+                        onChange={(e) => setMfaCode(e.target.value.replace(/\D/g, ''))}
+                      />
+                    </div>
+                    {mfaError && <div className="form-error mt-2">{mfaError}</div>}
+                    <div className="flex items-center gap-3 mt-4">
+                      <button
+                        className="btn btn-primary btn-sm"
+                        type="button"
+                        onClick={handleEnableMfa}
+                        disabled={!mfaCode.trim()}
+                      >
+                        <CheckCircle2 size={16} /> Enable Authenticator
+                      </button>
+                      <button className="btn btn-ghost btn-sm" type="button" onClick={handleCancelMfaSetup}>
+                        Cancel
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-xs text-muted mb-4">
+                      Requires a verified recovery email. {state.user?.recoveryEmailVerified
+                        ? 'Your recovery email is verified, so you can set this up now.'
+                        : 'Verify your recovery email first, then come back here.'}
+                    </p>
+                    <button
+                      className="btn btn-primary btn-sm"
+                      type="button"
+                      onClick={handleStartMfaSetup}
+                      disabled={!state.user?.recoveryEmailVerified}
+                    >
+                      <ShieldCheck size={16} /> Set Up Authenticator
+                    </button>
+                  </>
+                )}
+              </div>
+
+              <div className="glass-card animate-fade">
+                <div className="settings-section-header mb-6">
+                  <h4>Active Sessions</h4>
+                  <p className="text-xs text-muted">Review and disconnect devices that are signed into your workspace.</p>
+                </div>
+                {state.activeSessions.length === 0 ? (
+                  <div className="empty-state-sm py-8">
+                    <p className="text-sm text-muted">No active sessions loaded.</p>
+                    <button className="btn btn-ghost btn-sm mt-4 border border-primary-10/20" onClick={state.refreshSessions}>Load Active Sessions</button>
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-3">
+                    {state.activeSessions.map(s => (
+                      <div key={s.id} className="team-member-row hover:border-accent-20 transition-all">
+                        <div className="avatar avatar-sm bg-primary-10/10 text-primary"><Shield size={12} /></div>
+                        <div className="team-member-info">
+                          <strong>{s.userAgent ? s.userAgent.slice(0, 45) : 'Unknown device'}</strong>
+                          <span className="text-xs text-muted">{s.ipAddress || 'IP not recorded'}{s.current ? ' - Active now' : ''}</span>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <span className="text-xs text-muted font-mono">{new Date(s.lastActive).toLocaleDateString()}</span>
+                          {!s.current && (
+                            <button className="btn btn-ghost btn-sm btn-danger px-2" onClick={async () => { try { await auth.revokeSession(s.id); state.refreshSessions(); state.showToast('Session revoked'); } catch (e) { console.error('revoke session failed', e); state.showToast('Failed', 'error'); } }}><X size={12} /> Revoke</button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {showMfaDisable && (
+                <div className="modal-overlay" onClick={() => setShowMfaDisable(false)}>
+                  <div className="glass-card animate-scale" style={{ maxWidth: 420, width: '100%', padding: 24 }} onClick={(e) => e.stopPropagation()}>
+                    <h3 style={{ margin: '0 0 8px', display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <AlertCircle size={20} color="var(--danger)" /> Disable Authenticator?
+                    </h3>
+                    <p className="text-xs text-muted" style={{ margin: '0 0 16px' }}>
+                      Your account falls back to the password alone. Confirm with your current
+                      password and a 6-digit code from the authenticator app.
+                    </p>
+                    <div className="flex flex-col gap-3">
+                      <input
+                        className="input"
+                        type="password"
+                        autoComplete="current-password"
+                        placeholder="Current password"
+                        value={mfaDisablePassword}
+                        onChange={(e) => setMfaDisablePassword(e.target.value)}
+                      />
+                      <input
+                        className="input"
+                        type="text"
+                        inputMode="numeric"
+                        maxLength={6}
+                        placeholder="6-digit authenticator code"
+                        value={mfaDisableCode}
+                        onChange={(e) => setMfaDisableCode(e.target.value.replace(/\D/g, ''))}
+                      />
+                    </div>
+                    {mfaError && <div className="form-error mt-2">{mfaError}</div>}
+                    <div className="flex items-center gap-3 mt-4">
+                      <button className="btn btn-secondary btn-sm" type="button" onClick={() => setShowMfaDisable(false)} disabled={mfaBusy}>
+                        Cancel
+                      </button>
+                      <button className="btn btn-danger btn-sm" type="button" onClick={handleDisableMfa} disabled={mfaBusy || !mfaDisableCode.trim()}>
+                        {mfaBusy ? <LoadingSpinner size="sm" label="Disabling" /> : <Trash2 size={16} />} Disable
+                      </button>
+                    </div>
+                  </div>
                 </div>
               )}
             </div>
