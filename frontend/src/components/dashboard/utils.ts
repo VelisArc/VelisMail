@@ -98,15 +98,40 @@ export function fileToBase64(file: File): Promise<string> {
 }
 
 /**
+ * The mime type of a screenshot that was stored before the gateway kept its
+ * type. The first bytes of the image identify it without any guesswork.
+ */
+function sniffImageMimeType(encoded: string): string {
+  let decoded: string;
+  try {
+    decoded = atob(encoded.slice(0, 32));
+  } catch {
+    return 'image/png';
+  }
+  const bytes = decoded;
+  let hex = '';
+  for (let index = 0; index < 12 && index < bytes.length; index += 1) {
+    hex += bytes.charCodeAt(index).toString(16).padStart(2, '0');
+  }
+  if (hex.startsWith('89504e470d0a1a0a')) return 'image/png';
+  if (hex.startsWith('ffd8ff')) return 'image/jpeg';
+  if (hex.startsWith('474946383761') || hex.startsWith('474946383961')) return 'image/gif';
+  if (hex.startsWith('424d')) return 'image/bmp';
+  if (hex.startsWith('00000100')) return 'image/x-icon';
+  if (hex.slice(0, 12) === '52494646' && hex.slice(16, 24) === '57454250') return 'image/webp';
+  return 'image/png';
+}
+
+/**
  * Read an image that was stored as base64 (optionally still carrying its data
  * url prefix) and turn it into the source that can be used on an <img>.
  */
 export function imageSourceFromBase64(value?: string | null): string {
   if (!value) return '';
   if (value.startsWith('data:') || value.startsWith('blob:') || value.startsWith('http')) return value;
-  // A value with no prefix is a png the gateway accepted before the mime type
-  // was stored, so the generic image type is the only safe guess left.
-  return `data:image/png;base64,${value}`;
+  // A value with no prefix is a screenshot the gateway accepted before it kept
+  // the mime type, so the type is read back from the image bytes themselves.
+  return `data:${sniffImageMimeType(value)};base64,${value}`;
 }
 
 /** The file extension for a stored screenshot, taken from its mime type. */
