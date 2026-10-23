@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef, type Dispatch, type SetStateAction } from 'react';
 import { Navigate, useNavigate, useLocation } from 'react-router-dom';
-import { Building2, Check, ChevronDown, ChevronUp, Crown, Globe, MessageSquare, Plus, X } from 'lucide-react';
+import { Building2, Check, ChevronDown, ChevronUp, Crown, MessageSquare, Plus, X } from 'lucide-react';
 import { auth, businessGroups, connections, contacts, fetchAPI, fetchAuthenticatedProfile, isBusinessSetupReady, mail, saveDB, signatures, STORAGE_KEYS, type BusinessAuditEntry, type BusinessGroup, type BusinessMailbox, type BusinessTeamMember, type BusinessTemplate, type ConnectionUsage, type Email, type PlatformAdminUserRecord, type Signature, type Contact, type ActiveSession, type User } from '../api/client';
 import { platformAdminApi } from '../api/admin';
 import Sidebar from '../components/dashboard/Sidebar';
@@ -1011,29 +1011,6 @@ const [feedbackOpen, setFeedbackOpen] = useState(false);
           <div className="dash-topbar-right">
             {viewMode === 'workspace' && (
               <>
-                {domainsList.length > 0 && (
-                  <label className="dash-domain-picker">
-                    <Globe size={14} />
-                    <span className="dash-domain-picker-label">Active domain</span>
-                    <select
-                      className="input input-sm"
-                      value={activeDomainName}
-                      onChange={(event) => {
-                        const domName = event.target.value;
-                        setActiveDomain(domName);
-                        showToast(`Switched active domain to ${domName}`);
-                      }}
-                      aria-label="Active domain"
-                    >
-                      {domainsList.map((domain) => (
-                        <option key={domain.id} value={domain.domain}>
-                          {domain.domain} ({domain.status})
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                )}
-
                 <button
                   type="button"
                   className="dash-feedback-trigger"
