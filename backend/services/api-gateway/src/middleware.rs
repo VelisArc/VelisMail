@@ -303,10 +303,15 @@ pub async fn require_auth(
             // gateway request. A tenant change (business switch) returns 401
             // so the client rotates the token and picks up the new tenant.
             if let Some(db) = state.db.as_ref() {
-                let account = sqlx::query("SELECT status, tenant_id FROM users WHERE id = $1")
-                    .bind(claims.sub.0)
-                    .fetch_optional(db)
-                    .await;
+                let account = sqlx::query(
+                    "SELECT u.status, u.tenant_id, t.status AS tenant_status
+                     FROM users u
+                     LEFT JOIN tenants t ON t.id = u.tenant_id AND t.deleted_at IS NULL
+                     WHERE u.id = $1",
+                )
+                .bind(claims.sub.0)
+                .fetch_optional(db)
+                .await;
                 match account {
                     Ok(Some(row)) => {
                         let status: String = sqlx::Row::try_get(&row, "status")
@@ -320,6 +325,17 @@ pub async fn require_auth(
                         }
                         let current_tenant: Option<uuid::Uuid> =
                             sqlx::Row::try_get(&row, "tenant_id").ok().flatten();
+                        if current_tenant.is_some() {
+                            let tenant_status: Option<String> =
+                                sqlx::Row::try_get(&row, "tenant_status").ok();
+                            if !matches!(tenant_status.as_deref(), Some("active")) {
+                                return error_response(
+                                    StatusCode::FORBIDDEN,
+                                    "WORKSPACE_UNAVAILABLE",
+                                    "This workspace is not active. Contact support.",
+                                );
+                            }
+                        }
                         let token_tenant = uuid::Uuid::parse_str(claims.tenant_id.trim()).ok();
                         if let (Some(current), Some(token)) = (current_tenant, token_tenant) {
                             if current != token {

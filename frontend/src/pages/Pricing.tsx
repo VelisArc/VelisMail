@@ -247,9 +247,6 @@ export default function Pricing() {
 
   return (
     <div className="pricing-page">
-      <div className="pricing-orb orb-a" />
-      <div className="pricing-orb orb-b" />
-
       <SiteNav />
 
       {/* Hero */}

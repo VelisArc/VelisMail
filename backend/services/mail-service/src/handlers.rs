@@ -34,6 +34,23 @@ async fn tenant_business_db_url(
     claims: &Claims,
 ) -> Result<String, velismail_common::AppError> {
     let tenant_id = tenant_uuid(claims)?;
+    let tenant_status: Option<String> =
+        sqlx::query_scalar("SELECT status FROM tenants WHERE id = $1 AND deleted_at IS NULL")
+            .bind(tenant_id)
+            .fetch_optional(&state.db)
+            .await
+            .map_err(|_| velismail_common::AppError::Internal)?;
+    if matches!(
+        tenant_status.as_deref(),
+        None | Some("suspended")
+            | Some("disabled")
+            | Some("deleted")
+            | Some("pending_verification")
+    ) {
+        return Err(velismail_common::AppError::Forbidden(
+            "This workspace is not active.".to_string(),
+        ));
+    }
     let row = sqlx::query(
         "SELECT u.settings FROM users u
          JOIN company_members cm ON cm.user_id = u.id
@@ -443,28 +460,32 @@ pub async fn send_email(
     let tenant_id = tenant_uuid(&claims)?;
 
     // The gateway checks this too, but the service also accepts direct
-    // loopback traffic, so it verifies the account state itself.
-    let account = sqlx::query("SELECT status, tenant_id FROM users WHERE id = $1")
-        .bind(claims.sub.0)
-        .fetch_optional(&state.db)
-        .await
-        .map_err(|_| velismail_common::AppError::Internal)?
-        .ok_or_else(|| {
-            velismail_common::AppError::Unauthorized("Account not found.".to_string())
-        })?;
-    let status: String = account
-        .try_get("status")
-        .unwrap_or_else(|_| "inactive".to_string());
-    if status != "active" {
-        return Err(velismail_common::AppError::Forbidden(
-            "This account is suspended.".to_string(),
-        ));
-    }
-    let current_tenant: Option<Uuid> = account.try_get("tenant_id").ok().flatten();
-    if current_tenant.is_some_and(|current| current != tenant_id) {
-        return Err(velismail_common::AppError::Unauthorized(
-            "The workspace changed. Refresh the session and retry.".to_string(),
-        ));
+    // loopback traffic, so it verifies the account state itself. Workspace API
+    // keys are exchanged for a service token whose subject is the tenant.
+    let is_api_key_session = claims.jti.starts_with("api-key:");
+    if !is_api_key_session {
+        let account = sqlx::query("SELECT status, tenant_id FROM users WHERE id = $1")
+            .bind(claims.sub.0)
+            .fetch_optional(&state.db)
+            .await
+            .map_err(|_| velismail_common::AppError::Internal)?
+            .ok_or_else(|| {
+                velismail_common::AppError::Unauthorized("Account not found.".to_string())
+            })?;
+        let status: String = account
+            .try_get("status")
+            .unwrap_or_else(|_| "inactive".to_string());
+        if status != "active" {
+            return Err(velismail_common::AppError::Forbidden(
+                "This account is suspended.".to_string(),
+            ));
+        }
+        let current_tenant: Option<Uuid> = account.try_get("tenant_id").ok().flatten();
+        if current_tenant.is_some_and(|current| current != tenant_id) {
+            return Err(velismail_common::AppError::Unauthorized(
+                "The workspace changed. Refresh the session and retry.".to_string(),
+            ));
+        }
     }
 
     // Validate request

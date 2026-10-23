@@ -588,7 +588,7 @@ export default function Login() {
           <img src="/ZeeResizer.png" alt="" className="login-brandmark-logo" />
           <span className="login-brandmark-name">VelisMail</span>
         </Link>
-        <Link to="/" className="login-home-link">
+        <Link to="/" className="login-home-link" aria-label="Back to site">
           <ArrowLeft size={15} />
           <span>Back to site</span>
         </Link>

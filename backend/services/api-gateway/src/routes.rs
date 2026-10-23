@@ -496,6 +496,29 @@ async fn proxy_generic(
 ) -> Response {
     let path = uri.path();
     let remaining = path.strip_prefix(strip_prefix).unwrap_or(path);
+    // Reject dot segments before they are normalised by the upstream URL
+    // parser. Otherwise /mail/../auth/... could reach a route on the mail
+    // service that the gateway never intended to expose.
+    let lower_remaining = remaining.to_ascii_lowercase();
+    if remaining
+        .split('/')
+        .any(|segment| segment == "." || segment == "..")
+        || lower_remaining.contains("%2e")
+        || lower_remaining.contains("%2f")
+        || lower_remaining.contains('\\')
+    {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({
+                "success": false,
+                "error": {
+                    "code": "INVALID_PATH",
+                    "message": "The request path is not valid."
+                }
+            })),
+        )
+            .into_response();
+    }
     let query = uri.query().map(|q| format!("?{}", q)).unwrap_or_default();
     let target = format!(
         "{}{}{}",
@@ -3917,7 +3940,12 @@ pub async fn complete_team_invite(
          ON CONFLICT (tenant_id, email)
          DO UPDATE SET user_id = EXCLUDED.user_id,
                        display_name = EXCLUDED.display_name,
-                       role = EXCLUDED.role,
+                       role = CASE
+                           WHEN company_members.role = 'owner' THEN 'owner'
+                           WHEN company_members.role = 'admin'
+                                AND EXCLUDED.role <> 'owner' THEN 'admin'
+                           ELSE EXCLUDED.role
+                       END,
                        status = 'active',
                        updated_at = NOW()",
     )
@@ -3938,6 +3966,17 @@ pub async fn complete_team_invite(
         );
     }
 
+    // A user who had no workspace yet is now attached to this one, so the
+    // session tenant and the account row stay in sync.
+    let _ = sqlx::query(
+        "UPDATE users SET tenant_id = $1, updated_at = NOW()
+         WHERE id = $2 AND (tenant_id IS NULL OR tenant_id = $1)",
+    )
+    .bind(admin_tenant)
+    .bind(user_id)
+    .execute(db)
+    .await;
+
     // The invitation is only marked accepted once the session exists. A
     // failure while signing the session must not burn the key.
     let mut accepted_invite = invite.clone();
@@ -3954,7 +3993,8 @@ pub async fn complete_team_invite(
     let expiry_seconds: i64 = std::env::var("JWT_EXPIRY_SECONDS")
         .ok()
         .and_then(|v| v.parse().ok())
-        .unwrap_or(86400);
+        .unwrap_or(3_600)
+        .clamp(300, 86_400);
     let now = chrono::Utc::now();
     let device_id = payload
         .device_id
@@ -4987,6 +5027,26 @@ async fn authorized_business_db_url(
             "The workspace database is not connected.",
         )
     })?;
+
+    let tenant_status: Option<String> =
+        sqlx::query_scalar("SELECT status FROM tenants WHERE id = $1 AND deleted_at IS NULL")
+            .bind(tenant_id)
+            .fetch_optional(db)
+            .await
+            .ok()
+            .flatten();
+    if matches!(
+        tenant_status.as_deref(),
+        None | Some("suspended")
+            | Some("disabled")
+            | Some("deleted")
+            | Some("pending_verification")
+    ) {
+        return Err(crate::company_api::fail(
+            StatusCode::FORBIDDEN,
+            "This workspace is not active.",
+        ));
+    }
 
     crate::company_api::tenant_business_db_url(db, tenant_id)
         .await

@@ -1755,6 +1755,20 @@ pub async fn company_action(
             .bind(tenant_id)
             .execute(db)
             .await;
+            let _ = sqlx::query(
+                "UPDATE sessions SET is_active = FALSE
+                 WHERE user_id IN (SELECT id FROM users WHERE tenant_id = $1)",
+            )
+            .bind(tenant_id)
+            .execute(db)
+            .await;
+            let _ = sqlx::query(
+                "UPDATE refresh_tokens SET revoked = TRUE
+                 WHERE user_id IN (SELECT id FROM users WHERE tenant_id = $1) AND revoked = FALSE",
+            )
+            .bind(tenant_id)
+            .execute(db)
+            .await;
             match result {
                 Ok(done) => done.rows_affected(),
                 Err(_) => {
@@ -1978,6 +1992,18 @@ pub async fn platform_user_action(
             .bind(user_id)
             .execute(db)
             .await;
+            let _ = sqlx::query(
+                "UPDATE sessions SET is_active = FALSE WHERE user_id = $1 AND is_active",
+            )
+            .bind(user_id)
+            .execute(db)
+            .await;
+            let _ = sqlx::query(
+                "UPDATE refresh_tokens SET revoked = TRUE WHERE user_id = $1 AND revoked = FALSE",
+            )
+            .bind(user_id)
+            .execute(db)
+            .await;
             match result {
                 Ok(done) => done.rows_affected(),
                 Err(_) => {
@@ -2007,6 +2033,12 @@ pub async fn platform_user_action(
         "terminate_sessions" => {
             let result = sqlx::query(
                 "UPDATE sessions SET is_active = FALSE WHERE user_id = $1 AND is_active",
+            )
+            .bind(user_id)
+            .execute(db)
+            .await;
+            let _ = sqlx::query(
+                "UPDATE refresh_tokens SET revoked = TRUE WHERE user_id = $1 AND revoked = FALSE",
             )
             .bind(user_id)
             .execute(db)
@@ -5446,11 +5478,14 @@ pub async fn company_update_member(
     let requested_role = payload.role.as_deref().map(str::to_lowercase);
 
     if actor.role != "owner"
-        && (target_role == "owner" || requested_role.as_deref() == Some("owner"))
+        && (target_role == "owner"
+            || target_role == "admin"
+            || requested_role.as_deref() == Some("owner")
+            || requested_role.as_deref() == Some("admin"))
     {
         return fail(
             StatusCode::FORBIDDEN,
-            "Only a workspace owner can change owner-level access.",
+            "Only a workspace owner can change owner- or admin-level access.",
         );
     }
 
@@ -5561,6 +5596,14 @@ pub async fn company_update_member(
                 "UPDATE refresh_tokens SET revoked = TRUE WHERE user_id = $1 AND revoked = FALSE",
             )
             .bind(user_id)
+            .execute(db)
+            .await;
+            let _ = sqlx::query(
+                "UPDATE company_api_keys SET revoked_at = NOW()
+                 WHERE tenant_id = $1 AND LOWER(created_by) = LOWER($2) AND revoked_at IS NULL",
+            )
+            .bind(actor.tenant_id)
+            .bind(&target_email)
             .execute(db)
             .await;
         }

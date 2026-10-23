@@ -437,7 +437,7 @@ export default function SettingsPanel({ state }: SettingsPanelProps) {
                   </div>
                   <div>
                     <input ref={logoInputRef} type="file" accept="image/*" hidden onChange={handleLogoChange} />
-                    <button type="button" className="btn btn-sm" onClick={() => logoInputRef.current?.click()}>Upload Logo</button>
+                    <button type="button" className="btn btn-secondary btn-sm" onClick={() => logoInputRef.current?.click()}>Upload Logo</button>
                     {emailLogo && <button type="button" className="btn btn-sm btn-ghost settings-ml-xs" onClick={handleRemoveLogo}>Remove</button>}
                   </div>
                 </div>

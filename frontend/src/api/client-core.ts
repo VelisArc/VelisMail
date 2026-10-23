@@ -302,7 +302,7 @@ export function isJwtLikelyUsable(token: string | null): boolean {
     const payloadPart = parts[1].replace(/-/g, '+').replace(/_/g, '/');
     const paddedPayload = payloadPart.padEnd(payloadPart.length + ((4 - (payloadPart.length % 4)) % 4), '=');
     const payload = JSON.parse(atob(paddedPayload));
-    if (typeof payload.exp !== 'number') return true;
+    if (typeof payload.exp !== 'number' || typeof payload.sub !== 'string') return false;
     return payload.exp * 1000 > Date.now() + 30_000;
   } catch {
     return false;
@@ -427,7 +427,16 @@ export function refreshBackendSession(): Promise<boolean> {
       }
     }
 
-    if (rejected) clearBackendTokens();
+    if (rejected) {
+      // Another tab may have rotated the same refresh token first. Only clear
+      // the session when the stored token is still the one that was rejected;
+      // otherwise keep the tokens the winning tab just saved.
+      const currentRefresh = localStorage.getItem('velismail_refresh');
+      if (currentRefresh && currentRefresh !== refreshToken) {
+        return Boolean(localStorage.getItem('velismail_token'));
+      }
+      clearBackendTokens();
+    }
     return false;
   })();
 
@@ -620,7 +629,24 @@ export function saveUserDB<T>(key: string, data: T) {
 export function loadTeamAccessInvites(): TeamAccessInvite[] {
   try {
     const raw = localStorage.getItem(TEAM_INVITES_KEY) || sessionStorage.getItem(TEAM_INVITES_KEY);
-    return raw ? JSON.parse(raw) : [];
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as TeamAccessInvite[];
+    if (!Array.isArray(parsed)) return [];
+    // Invitations created by older builds embedded database URLs and provider
+    // keys. Strip them when reading so they do not linger in browser storage.
+    const sanitized = parsed.map((invite) => ({
+      ...invite,
+      workspace: {
+        tenantId: invite.workspace?.tenantId,
+        displayName: invite.workspace?.displayName,
+        businessDomain: invite.workspace?.businessDomain,
+        businessDomainVerified: invite.workspace?.businessDomainVerified,
+        isBusinessSetupComplete: invite.workspace?.isBusinessSetupComplete,
+      },
+    }));
+    localStorage.setItem(TEAM_INVITES_KEY, JSON.stringify(sanitized));
+    sessionStorage.setItem(TEAM_INVITES_KEY, JSON.stringify(sanitized));
+    return sanitized;
   } catch {
     return [];
   }

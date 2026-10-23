@@ -195,7 +195,7 @@ fn mask_email(email: &str) -> String {
 /// OTP purposes this endpoint may issue. Without an allowlist a caller could
 /// invent a new purpose for every request, bypass the per-email daily quota and
 /// use the auth service as an email bomb.
-const OTP_PURPOSES: &[&str] = &["register", "password_reset"];
+const OTP_PURPOSES: &[&str] = &["register", "password_reset", "recovery_email"];
 
 fn validate_otp_purpose(purpose: &str) -> Result<&str, velismail_common::AppError> {
     OTP_PURPOSES
@@ -727,6 +727,10 @@ async fn login_password_inner(
         "SELECT id, tenant_id, email, password_hash, recovery_email, recovery_email_verified, totp_enabled, display_name
          FROM users
          WHERE (email = $1 OR recovery_email = $1) AND status = 'active'
+           AND (tenant_id IS NULL OR EXISTS (
+               SELECT 1 FROM tenants t
+               WHERE t.id = users.tenant_id AND t.deleted_at IS NULL AND t.status = 'active'
+           ))
          ORDER BY CASE WHEN email = $1 THEN 0 ELSE 1 END
          LIMIT 1",
     )
@@ -1157,7 +1161,7 @@ pub async fn reset_password(
     }
 
     let row = sqlx::query(
-        "SELECT id FROM users
+        "SELECT id, email FROM users
          WHERE (email = $1 OR recovery_email = $1) AND status = 'active'
          ORDER BY CASE WHEN email = $1 THEN 0 ELSE 1 END
          LIMIT 1",
@@ -1171,6 +1175,9 @@ pub async fn reset_password(
     let user_id: Uuid = row
         .try_get("id")
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let account_email: String = row
+        .try_get("email")
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     let password_hash = hash_password(&request.new_password)?;
     sqlx::query("UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2")
@@ -1179,6 +1186,11 @@ pub async fn reset_password(
         .execute(&state.db)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let _ = state
+        .account_lock
+        .clear_failed_attempts(&account_email)
+        .await;
 
     // A reset is a recovery action: anything that was signed in before the
     // reset must not be able to renew itself afterwards.
@@ -1320,7 +1332,11 @@ pub async fn refresh_token(
 
     let user = sqlx::query(
         "SELECT email, tenant_id, totp_enabled, settings FROM users
-         WHERE id = $1 AND status = 'active'",
+         WHERE id = $1 AND status = 'active'
+           AND (tenant_id IS NULL OR EXISTS (
+               SELECT 1 FROM tenants t
+               WHERE t.id = users.tenant_id AND t.deleted_at IS NULL AND t.status = 'active'
+           ))",
     )
     .bind(user_id)
     .fetch_optional(&mut *tx)
@@ -1473,6 +1489,22 @@ async fn issue_tokens_for_user(
     user_agent: Option<String>,
     mfa_verified: bool,
 ) -> Result<TokenPairResponse, StatusCode> {
+    if tenant_id != Uuid::nil() {
+        let tenant_active: bool = sqlx::query_scalar(
+            "SELECT EXISTS(
+                 SELECT 1 FROM tenants
+                 WHERE id = $1 AND deleted_at IS NULL AND status = 'active'
+             )",
+        )
+        .bind(tenant_id)
+        .fetch_one(&state.db)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        if !tenant_active {
+            return Err(StatusCode::FORBIDDEN);
+        }
+    }
+
     let access_token = state
         .jwt_manager
         .generate_access_token(
@@ -2519,12 +2551,70 @@ pub async fn update_account(
     Json(request): Json<serde_json::Value>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
     let user_id = claims.sub.0;
+    let request_object = request.as_object().ok_or(StatusCode::BAD_REQUEST)?;
+
+    // A recovery address is only accepted together with proof that the caller
+    // controls it. The browser cannot mark an address verified on its own.
+    if let Some(new_recovery) = request_object
+        .get("recoveryEmail")
+        .and_then(|value| value.as_str())
+        .map(|value| value.trim().to_lowercase())
+        .filter(|value| !value.is_empty())
+    {
+        let token = request_object
+            .get("recoveryVerificationToken")
+            .and_then(|value| value.as_str())
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .ok_or(StatusCode::BAD_REQUEST)?;
+        if !new_recovery.validate_email() {
+            return Err(StatusCode::BAD_REQUEST);
+        }
+
+        let validation = Validation {
+            validate_aud: false,
+            ..Default::default()
+        };
+        let decoded = decode::<OtpVerificationClaims>(
+            token,
+            &DecodingKey::from_secret(state.config.otp_signing_secret.as_bytes()),
+            &validation,
+        )
+        .map_err(|_| StatusCode::UNAUTHORIZED)?;
+        if decoded.claims.purpose != "recovery_email" || decoded.claims.sub != new_recovery {
+            return Err(StatusCode::UNAUTHORIZED);
+        }
+
+        let taken: bool = sqlx::query_scalar(
+            "SELECT EXISTS(
+                 SELECT 1 FROM users
+                 WHERE id <> $1 AND (email = $2 OR recovery_email = $2)
+             )",
+        )
+        .bind(user_id)
+        .bind(&new_recovery)
+        .fetch_one(&state.db)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        if taken {
+            return Err(StatusCode::CONFLICT);
+        }
+
+        sqlx::query(
+            "UPDATE users SET recovery_email = $1, recovery_email_verified = TRUE,
+                              updated_at = NOW()
+             WHERE id = $2 AND status = 'active'",
+        )
+        .bind(&new_recovery)
+        .bind(user_id)
+        .execute(&state.db)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    }
 
     // Only the known settings are written. Everything else in the request is
     // dropped instead of being merged into the account.
-    let allowed = request
-        .as_object()
-        .ok_or(StatusCode::BAD_REQUEST)?
+    let allowed = request_object
         .iter()
         .filter(|(key, _)| WRITABLE_SETTINGS.contains(&key.as_str()))
         .map(|(key, value)| (key.clone(), value.clone()))
@@ -2952,6 +3042,19 @@ pub async fn firebase_login(
 
     // Resolve (or provision) the company workspace for this email domain.
     let tenant_id: Uuid = resolve_or_create_tenant(&state, &email, "google").await?;
+    let tenant_active: bool = sqlx::query_scalar(
+        "SELECT EXISTS(
+             SELECT 1 FROM tenants
+             WHERE id = $1 AND deleted_at IS NULL AND status = 'active'
+         )",
+    )
+    .bind(tenant_id)
+    .fetch_one(&state.db)
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    if !tenant_active {
+        return Err(StatusCode::FORBIDDEN);
+    }
 
     let existing = sqlx::query(
         "SELECT id, email, display_name, status, settings

@@ -1,0 +1,17 @@
+# Security headers for the Cloudflare Pages deployment.
+# The backend sets the same headers on API responses; this file protects the
+# dashboard HTML (which is otherwise framable and has no CSP).
+
+/*
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: DENY
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(self "https://checkout.razorpay.com")
+  Strict-Transport-Security: max-age=31536000; includeSubDomains
+  Content-Security-Policy: default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self' 'unsafe-inline' https://checkout.razorpay.com https://*.razorpay.com https://apis.google.com https://accounts.google.com https://*.firebaseapp.com https://www.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' https://api.velismail.online wss://api.velismail.online https://*.googleapis.com https://*.firebaseio.com wss://*.firebaseio.com https://checkout.razorpay.com https://*.razorpay.com; frame-src https://*.firebaseapp.com https://accounts.google.com https://checkout.razorpay.com https://*.razorpay.com; worker-src 'self' blob:; upgrade-insecure-requests
+
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+
+/sw.js
+  Cache-Control: no-cache

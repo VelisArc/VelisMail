@@ -1029,6 +1029,9 @@ textarea.input {
 .font-medium { font-weight: var(--font-weight-medium); }
 .font-semibold { font-weight: var(--font-weight-semibold); }
 .font-bold { font-weight: var(--font-weight-bold); }
+.uppercase { text-transform: uppercase; }
+.transition-all { transition: all var(--transition-fast); }
+.backdrop-blur-sm { backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); }
 
 .w-full { width: 100%; }
 

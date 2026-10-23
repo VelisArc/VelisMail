@@ -6,6 +6,11 @@ on:
   pull_request:
     branches: [main]
 
+# Read-only by default: CI never needs to write to the repository, and an
+# unset permissions block gives the token more access than this workflow uses.
+permissions:
+  contents: read
+
 jobs:
   backend:
     name: Backend Checks

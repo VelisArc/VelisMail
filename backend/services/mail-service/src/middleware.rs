@@ -29,6 +29,42 @@ pub async fn auth_layer(
     let mut request = request;
     let claims = velismail_common::validate_bearer(request.headers(), &state.config.jwt_secret)
         .map_err(|_| StatusCode::UNAUTHORIZED)?;
+
+    // Signature validity is not enough after a suspension or a workspace
+    // shutdown; the account row is authoritative. A workspace API key is
+    // exchanged by the gateway for a short-lived service token whose subject
+    // is the tenant, so only the tenant state applies there.
+    let is_api_key_session = claims.jti.starts_with("api-key:");
+    let allowed: bool = if is_api_key_session {
+        sqlx::query_scalar(
+            "SELECT EXISTS(
+                 SELECT 1 FROM tenants
+                 WHERE id = $1 AND deleted_at IS NULL AND status = 'active'
+             )",
+        )
+        .bind(uuid::Uuid::parse_str(claims.tenant_id.trim()).unwrap_or(uuid::Uuid::nil()))
+        .fetch_one(&state.db)
+        .await
+    } else {
+        sqlx::query_scalar(
+            "SELECT EXISTS(
+                 SELECT 1 FROM users u
+                 JOIN tenants t ON t.id = u.tenant_id AND t.deleted_at IS NULL
+                 WHERE u.id = $1 AND u.status = 'active' AND t.status = 'active'
+             )",
+        )
+        .bind(claims.sub.0)
+        .fetch_one(&state.db)
+        .await
+    }
+    .map_err(|err| {
+        tracing::error!("mail account status lookup failed: {}", err);
+        StatusCode::SERVICE_UNAVAILABLE
+    })?;
+    if !allowed {
+        return Err(StatusCode::FORBIDDEN);
+    }
+
     request.extensions_mut().insert(claims);
 
     Ok(next.run(request).await)

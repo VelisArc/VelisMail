@@ -41,7 +41,6 @@ export default function About() {
 
       {/* Hero */}
       <section className="about-hero">
-        <div className="about-hero-orb" />
         <div className="container about-hero-inner">
           <span className="section-tag">ABOUT US</span>
           <h1 className="animate-slide-up">We're building email<br />for the <span className="gradient-text">business era.</span></h1>

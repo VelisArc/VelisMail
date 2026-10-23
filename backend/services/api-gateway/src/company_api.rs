@@ -202,13 +202,43 @@ pub(crate) async fn workspace_context(
     if let Some(token) = bearer_token(headers) {
         if token.starts_with(crate::api_keys::API_KEY_PREFIX) {
             return match crate::api_keys::resolve(state, &token).await {
-                Ok(key) => Ok(WorkspaceContext {
-                    tenant_id: key.tenant_id,
-                    user_id: key.tenant_id,
-                    email: key.created_by.clone(),
-                    role: "owner".to_string(),
-                    plan: "Business".to_string(),
-                }),
+                Ok(key) => {
+                    let db = db_pool(state)?;
+                    // The key acts with the creator's current role, not as an
+                    // implicit owner. Otherwise an admin could mint a key and
+                    // use it to remove owners, bypassing the role hierarchy.
+                    let creator_role: Option<String> = sqlx::query_scalar(
+                        "SELECT role FROM company_members
+                         WHERE tenant_id = $1 AND LOWER(email) = LOWER($2)
+                           AND status = 'active' LIMIT 1",
+                    )
+                    .bind(key.tenant_id)
+                    .bind(&key.created_by)
+                    .fetch_optional(db)
+                    .await
+                    .ok()
+                    .flatten();
+                    let role = creator_role
+                        .filter(|role| {
+                            matches!(role.as_str(), "owner" | "admin" | "member" | "viewer")
+                        })
+                        .unwrap_or_else(|| "viewer".to_string());
+                    let plan: String =
+                        sqlx::query_scalar("SELECT plan_tier FROM tenants WHERE id = $1")
+                            .bind(key.tenant_id)
+                            .fetch_optional(db)
+                            .await
+                            .ok()
+                            .flatten()
+                            .unwrap_or_else(|| "free".to_string());
+                    Ok(WorkspaceContext {
+                        tenant_id: key.tenant_id,
+                        user_id: key.tenant_id,
+                        email: key.created_by.clone(),
+                        role,
+                        plan,
+                    })
+                }
                 Err(_) => Err((
                     StatusCode::UNAUTHORIZED,
                     Json(json!({
@@ -279,23 +309,27 @@ pub(crate) async fn workspace_context(
         .await
         .ok()
         .flatten();
-    if let Some(row) = tenant_row.as_ref() {
-        let tenant_status: String = row
-            .try_get("status")
-            .unwrap_or_else(|_| "active".to_string());
-        if matches!(
-            tenant_status.as_str(),
-            "suspended" | "disabled" | "deleted" | "pending_verification"
-        ) {
-            return Err(fail(
-                StatusCode::FORBIDDEN,
-                "This workspace is not active. Contact your administrator.",
-            ));
-        }
+    let Some(tenant_row) = tenant_row.as_ref() else {
+        return Err(fail(
+            StatusCode::FORBIDDEN,
+            "This workspace no longer exists. Contact support.",
+        ));
+    };
+    let tenant_status: String = tenant_row
+        .try_get("status")
+        .unwrap_or_else(|_| "active".to_string());
+    if matches!(
+        tenant_status.as_str(),
+        "suspended" | "disabled" | "deleted" | "pending_verification"
+    ) {
+        return Err(fail(
+            StatusCode::FORBIDDEN,
+            "This workspace is not active. Contact your administrator.",
+        ));
     }
     let plan: String = tenant_row
-        .and_then(|row| row.try_get("plan_tier").ok())
-        .unwrap_or_else(|| "free".to_string());
+        .try_get("plan_tier")
+        .unwrap_or_else(|_| "free".to_string());
 
     let membership = sqlx::query(
         "SELECT role, status FROM company_members
@@ -625,6 +659,12 @@ pub async fn create_invitation(
         return Err(fail(
             StatusCode::BAD_REQUEST,
             "Invitations can only be created for admin, member or viewer roles.",
+        ));
+    }
+    if role == "admin" && context.role != "owner" {
+        return Err(fail(
+            StatusCode::FORBIDDEN,
+            "Only a workspace owner can invite another administrator.",
         ));
     }
 
@@ -2271,6 +2311,16 @@ pub async fn remove_team_member(
             .execute(db)
             .await;
     }
+
+    // Keys minted by the removed member must not outlive their access.
+    let _ = sqlx::query(
+        "UPDATE company_api_keys SET revoked_at = NOW()
+         WHERE tenant_id = $1 AND LOWER(created_by) = LOWER($2) AND revoked_at IS NULL",
+    )
+    .bind(context.tenant_id)
+    .bind(&email)
+    .execute(db)
+    .await;
 
     // The removed account must not stay pinned to a workspace it can no
     // longer open. Move it to another active membership when one exists, so

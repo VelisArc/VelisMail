@@ -36,7 +36,7 @@ export default function Documentation() {
           </p>
         </header>
 
-        <div className="container legal-shell docs-shell">
+        <div className="container legal-shell">
           <aside className="legal-aside" aria-label="Documentation sections">
             <p className="legal-aside-title">On this page</p>
             <div className="legal-policy-links">

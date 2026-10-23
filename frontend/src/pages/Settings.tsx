@@ -333,17 +333,16 @@ export default function SettingsPage() {
 
     setRecoveryVerifying(true);
     try {
-      await auth.verifyOtp({
+      const verification = await auth.verifyOtp({
         email: recoveryEmailDraft.trim(),
         otp: recoveryOtp.trim(),
         challengeToken: recoveryChallengeToken,
         purpose: 'recovery_email',
       });
-      const result = auth.updateSettings({
-        recoveryEmail: recoveryEmailDraft.trim(),
-        recoveryEmailVerified: true,
-        pendingRecoveryEmail: undefined,
-      });
+      const result = await auth.updateRecoveryEmail(
+        recoveryEmailDraft.trim(),
+        verification.verificationToken,
+      );
       if (!result.success || !result.user) {
         throw new Error(result.error || 'Failed to save recovery email.');
       }
@@ -420,7 +419,7 @@ export default function SettingsPage() {
                       <span className="badge badge-primary">{user.plan} Plan</span>
                       <div className="settings-spacer-xs">
                         <input ref={fileInputRef} type="file" accept="image/*" hidden onChange={handleImageChange} />
-                        <button type="button" className="btn btn-sm" onClick={() => fileInputRef.current?.click()}>Upload Image</button>
+                        <button type="button" className="btn btn-secondary btn-sm" onClick={() => fileInputRef.current?.click()}>Upload Image</button>
                         {profileImage && <button type="button" className="btn btn-sm btn-ghost settings-ml-xs" onClick={handleRemoveImage}>Remove</button>}
                       </div>
                     </div>
@@ -437,7 +436,7 @@ export default function SettingsPage() {
                       <p style={{ fontSize: '10px', color: 'var(--text-muted)', margin: '0 0 8px 0', lineHeight: '1.3' }}>This logo will be automatically appended as your professional brand logo in outgoing emails.</p>
                       <div>
                         <input ref={logoInputRef} type="file" accept="image/*" hidden onChange={handleLogoChange} />
-                        <button type="button" className="btn btn-sm" onClick={() => logoInputRef.current?.click()}>Upload Logo</button>
+                        <button type="button" className="btn btn-secondary btn-sm" onClick={() => logoInputRef.current?.click()}>Upload Logo</button>
                         {emailLogo && <button type="button" className="btn btn-sm btn-ghost settings-ml-xs" onClick={handleRemoveLogo}>Remove</button>}
                       </div>
                     </div>

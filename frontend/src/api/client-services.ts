@@ -616,6 +616,31 @@ export const auth = {
     return { success: true, user: nextUser };
   },
 
+  async updateRecoveryEmail(email: string, verificationToken: string): Promise<{ success: boolean; user?: User; error?: string }> {
+    const session = this.getSession();
+    if (!session) return { success: false, error: 'Session not found.' };
+    try {
+      await fetchAPI('/auth/account', {
+        method: 'PATCH',
+        body: JSON.stringify({
+          recoveryEmail: normalizeMailbox(email),
+          recoveryVerificationToken: verificationToken,
+        }),
+      });
+      const nextUser = {
+        ...session,
+        recoveryEmail: normalizeMailbox(email),
+        recoveryEmailVerified: true,
+      };
+      saveDB(STORAGE_KEYS.session, nextUser);
+      saveUserToPersistentStore(nextUser);
+      reloadAccountCaches();
+      return { success: true, user: nextUser };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Failed to save recovery email.' };
+    }
+  },
+
   async changePassword(currentPassword: string, nextPassword: string): Promise<{ success: boolean; error?: string }> {
     const session = this.getSession();
     if (!session) return { success: false, error: 'Session not found.' };

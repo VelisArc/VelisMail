@@ -24,6 +24,27 @@ pub async fn auth_layer(
     let mut request = request;
     let claims = velismail_common::validate_bearer(request.headers(), &state.config.jwt_secret)
         .map_err(|_| StatusCode::UNAUTHORIZED)?;
+
+    // A signed token outlives a suspension. Check the account and workspace
+    // state so a suspended user cannot keep uploading or downloading files.
+    let account_status: Option<String> = sqlx::query_scalar(
+        "SELECT u.status FROM users u
+         JOIN tenants t ON t.id = u.tenant_id AND t.deleted_at IS NULL
+         WHERE u.id = $1 AND t.status = 'active'",
+    )
+    .bind(claims.sub.0)
+    .fetch_optional(&state.db)
+    .await
+    .map_err(|err| {
+        tracing::error!("storage account status lookup failed: {}", err);
+        StatusCode::SERVICE_UNAVAILABLE
+    })?;
+    match account_status.as_deref() {
+        Some("active") => {}
+        Some(_) => return Err(StatusCode::FORBIDDEN),
+        None => return Err(StatusCode::UNAUTHORIZED),
+    }
+
     request.extensions_mut().insert(claims);
 
     Ok(next.run(request).await)

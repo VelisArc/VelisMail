@@ -129,6 +129,25 @@ pub async fn require_auth(
         None => return Err(StatusCode::UNAUTHORIZED),
     }
 
+    let tenant_active: bool = sqlx::query_scalar(
+        "SELECT EXISTS(
+             SELECT 1 FROM users u
+             LEFT JOIN tenants t ON t.id = u.tenant_id AND t.deleted_at IS NULL
+             WHERE u.id = $1
+               AND (u.tenant_id IS NULL OR t.status = 'active')
+         )",
+    )
+    .bind(claims.sub.0)
+    .fetch_one(&state.db)
+    .await
+    .map_err(|err| {
+        tracing::error!("tenant status lookup failed during auth: {}", err);
+        StatusCode::SERVICE_UNAVAILABLE
+    })?;
+    if !tenant_active {
+        return Err(StatusCode::FORBIDDEN);
+    }
+
     request.extensions_mut().insert(claims);
 
     Ok(next.run(request).await)
