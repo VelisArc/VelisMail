@@ -212,6 +212,10 @@ pub async fn create_business(
     Json(payload): Json<CreateBusinessRequest>,
 ) -> ApiResult {
     let context = workspace_context(&state, &headers).await?;
+    // Creating a business mints a tenant with the caller as its owner, so a
+    // plain member or viewer must not be able to do it from inside a
+    // workspace they only observe.
+    context.require_manage()?;
     let db = db_pool(&state)?;
 
     let name = payload.name.trim();

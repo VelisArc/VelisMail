@@ -6007,6 +6007,14 @@ pub async fn company_update_member(
         Ok(actor) => actor,
         Err(response) => return response,
     };
+    // Members and viewers can see the roster but never change it. Without
+    // this an observer could suspend teammates or rewrite a role.
+    if !matches!(actor.role.as_str(), "owner" | "admin") {
+        return fail(
+            StatusCode::FORBIDDEN,
+            "Only workspace owners and admins can change members.",
+        );
+    }
     let db = match pool(&state) {
         Ok(db) => db,
         Err(response) => return response,
@@ -6659,6 +6667,14 @@ pub async fn create_company_api_key(
         Ok(actor) => actor,
         Err(response) => return response,
     };
+    // A key inherits the workspace's reach, so only the roles that already
+    // administer the workspace may mint one.
+    if !matches!(actor.role.as_str(), "owner" | "admin") {
+        return fail(
+            StatusCode::FORBIDDEN,
+            "Only workspace owners and admins can create API keys.",
+        );
+    }
     let db = match pool(&state) {
         Ok(db) => db,
         Err(response) => return response,
@@ -6765,6 +6781,12 @@ pub async fn revoke_company_api_key(
         Ok(actor) => actor,
         Err(response) => return response,
     };
+    if !matches!(actor.role.as_str(), "owner" | "admin") {
+        return fail(
+            StatusCode::FORBIDDEN,
+            "Only workspace owners and admins can revoke API keys.",
+        );
+    }
     let db = match pool(&state) {
         Ok(db) => db,
         Err(response) => return response,

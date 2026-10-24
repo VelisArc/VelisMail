@@ -535,9 +535,14 @@ pub async fn submit_feedback(
 /// List the feedback notes submitted by this workspace.
 pub async fn list_feedback(State(state): State<AppState>, headers: HeaderMap) -> ApiResult {
     let context = workspace_context(&state, &headers).await?;
-    // Feedback can contain screenshots and account details; only workspace
-    // administrators may read the inbox.
-    context.require_manage()?;
+    // Feedback can contain screenshots and account details. Managers read the
+    // whole workspace inbox; every other role only sees its own submissions,
+    // so the history tab works without exposing teammates' reports.
+    let scope_user = if context.can_manage() {
+        None
+    } else {
+        Some(context.user_id)
+    };
     let db = db_pool(&state)?;
     let rows = sqlx::query(
         "SELECT id, subject, body, category, priority, status, reply, image_base64, has_image, created_at, updated_at, resolved_at
@@ -548,11 +553,13 @@ pub async fn list_feedback(State(state): State<AppState>, headers: HeaderMap) ->
                    created_at, updated_at, resolved_at
             FROM feedback
             WHERE tenant_id = $1
+              AND ($2::uuid IS NULL OR user_id = $2)
          ) t
          ORDER BY created_at DESC
          LIMIT 100",
     )
     .bind(context.tenant_id)
+    .bind(scope_user)
     .fetch_all(db)
     .await
     .unwrap_or_default();

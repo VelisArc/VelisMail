@@ -28,10 +28,11 @@ use sqlx::{
 };
 use std::collections::HashMap;
 use std::net::{IpAddr, SocketAddr};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Instant;
 use tokio::{
     net::{lookup_host, TcpStream},
+    sync::{OwnedSemaphorePermit, Semaphore},
     time::{sleep, timeout, Duration},
 };
 use uuid::Uuid;
@@ -456,11 +457,26 @@ pub async fn not_found(method: Method, uri: Uri) -> Response {
         .into_response()
 }
 
-pub async fn ws_handler(ws: WebSocketUpgrade) -> Response {
-    ws.on_upgrade(handle_socket)
+/// Cap the number of open keepalive sockets. The dashboard reconnects
+/// aggressively, so a small allowance per browser is plenty, while an
+/// unauthenticated client can no longer exhaust file descriptors.
+fn ws_connection_slots() -> &'static Arc<Semaphore> {
+    static SLOTS: OnceLock<Arc<Semaphore>> = OnceLock::new();
+    SLOTS.get_or_init(|| Arc::new(Semaphore::new(256)))
 }
 
-async fn handle_socket(mut socket: WebSocket) {
+pub async fn ws_handler(ws: WebSocketUpgrade) -> Response {
+    let Ok(permit) = ws_connection_slots().clone().try_acquire_owned() else {
+        return (
+            StatusCode::SERVICE_UNAVAILABLE,
+            "Too many WebSocket connections.",
+        )
+            .into_response();
+    };
+    ws.on_upgrade(move |socket| handle_socket(socket, permit))
+}
+
+async fn handle_socket(mut socket: WebSocket, _permit: OwnedSemaphorePermit) {
     tracing::info!("New WebSocket connection established");
     // Send a welcome message
     if let Err(e) = socket
@@ -2466,6 +2482,7 @@ pub async fn get_supported_providers() -> Json<serde_json::Value> {
 
 pub async fn verify_infrastructure(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Json(payload): Json<VerifyInfrastructurePayload>,
 ) -> (StatusCode, Json<serde_json::Value>) {
     let _ = payload.db_provider;
@@ -2473,6 +2490,44 @@ pub async fn verify_infrastructure(
     let api_provider = payload.api_provider.trim();
     let api_key = payload.api_key.trim();
     let api_endpoint = payload.api_endpoint.as_deref().map(str::trim);
+
+    // Setup checks connect to a customer database and call the provider with a
+    // supplied key, so they are a workspace-management action, never something
+    // an ordinary member can trigger.
+    let context = match crate::company_api::workspace_context(&state, &headers).await {
+        Ok(context) => context,
+        Err(response) => return response,
+    };
+    if !context.can_manage() {
+        return crate::company_api::fail(
+            StatusCode::FORBIDDEN,
+            "Only workspace owners and admins can run infrastructure checks.",
+        );
+    }
+
+    let db_validation = if db_url.is_empty() {
+        Ok(())
+    } else {
+        velismail_common::traffic::validate_external_db_url(db_url)
+            .await
+            .map(|_| ())
+    };
+    if let Err(reason) = db_validation {
+        return verify_infrastructure_response(
+            StatusCode::BAD_REQUEST,
+            false,
+            &reason,
+            api_provider,
+            db_url,
+            vec![runtime_check_failure(
+                "database",
+                "Database Runtime Check",
+                &reason,
+                "config",
+                "Use a publicly reachable PostgreSQL connection string.",
+            )],
+        );
+    }
 
     if db_url.is_empty() || api_provider.is_empty() || api_key.is_empty() {
         return verify_infrastructure_response(
@@ -2633,6 +2688,7 @@ pub async fn verify_infrastructure(
 
 pub async fn verify_domain(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Json(payload): Json<VerifyDomainPayload>,
 ) -> (StatusCode, Json<serde_json::Value>) {
     let domain = payload.domain.trim().to_lowercase();
@@ -2640,6 +2696,27 @@ pub async fn verify_domain(
     let api_key = payload.api_key.trim();
     let verification_token = payload.verification_token.trim();
     let provider = provider_name(&payload);
+
+    let context = match crate::company_api::workspace_context(&state, &headers).await {
+        Ok(context) => context,
+        Err(response) => return response,
+    };
+    if !context.can_manage() {
+        return crate::company_api::fail(
+            StatusCode::FORBIDDEN,
+            "Only workspace owners and admins can verify a domain.",
+        );
+    }
+    if let Err(reason) = velismail_common::traffic::validate_external_db_url(db_url).await {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({
+                "success": false,
+                "errorType": "DatabaseConnectionError",
+                "message": reason,
+            })),
+        );
+    }
 
     if !is_valid_domain(&domain) {
         return (
@@ -4383,10 +4460,8 @@ async fn activate_platform_invite(
         };
 
     if !set_team_invite_status(state, &invite.token, "accepted").await {
-        tracing::warn!(
-            "platform invite {} could not be marked accepted",
-            invite.token
-        );
+        // Never log the token itself: it is a bearer credential.
+        tracing::warn!("platform invite could not be marked accepted");
     }
     let mut accepted_invite = invite.clone();
     accepted_invite.status = "accepted".to_string();
@@ -4798,7 +4873,7 @@ pub async fn complete_team_invite(
     };
 
     if !set_team_invite_status(&state, token, "accepted").await {
-        tracing::warn!("team invite {token} could not be marked accepted after sign-in");
+        tracing::warn!("team invite could not be marked accepted after sign-in");
     }
 
     (
@@ -5514,8 +5589,34 @@ fn recent_failed_pool(url: &str) -> Option<String> {
     }
 }
 
+/// Maximum number of tenant database pools kept open at once. Each pool can
+/// hold a few connections, so an unbounded cache would exhaust PostgreSQL.
+const MAX_CACHED_TENANT_POOLS: usize = 8;
+
 async fn get_tenant_pool(db_url: &str) -> Result<PgPool, String> {
-    let normalized_url = velismail_common::traffic::validate_external_db_url(db_url).await?;
+    let cache_key = db_url.trim().to_string();
+    if cache_key.is_empty() {
+        return Err("Database URL is empty.".to_string());
+    }
+
+    if let Some(pool) = {
+        let pools = POOLS
+            .lock()
+            .map_err(|_| "Tenant pool cache lock poisoned".to_string())?;
+        pools.get(&cache_key).cloned()
+    } {
+        if !pool.is_closed() {
+            return Ok(pool);
+        }
+        if let Ok(mut pools) = POOLS.lock() {
+            pools.remove(&cache_key);
+        }
+    }
+
+    // DNS validation and private-address checks are only needed when a new
+    // client is created; doing it on every request added a resolver round
+    // trip to each query.
+    let normalized_url = velismail_common::traffic::validate_external_db_url(&cache_key).await?;
 
     if let Some(reason) = recent_failed_pool(&normalized_url) {
         return Err(format!(
@@ -5524,28 +5625,14 @@ async fn get_tenant_pool(db_url: &str) -> Result<PgPool, String> {
         ));
     }
 
-    if let Some(pool) = {
-        let pools = POOLS
-            .lock()
-            .map_err(|_| "Tenant pool cache lock poisoned".to_string())?;
-        pools.get(&normalized_url).cloned()
-    } {
-        if !pool.is_closed() {
-            return Ok(pool);
-        }
-        if let Ok(mut pools) = POOLS.lock() {
-            pools.remove(&normalized_url);
-        }
-    }
-
     let pool: PgPool = match timeout(
         TENANT_DB_CONNECT_TIMEOUT,
         PgPoolOptions::new()
-            .max_connections(8)
+            .max_connections(4)
             .min_connections(0)
-            .idle_timeout(Some(Duration::from_secs(60)))
+            .idle_timeout(Some(Duration::from_secs(30)))
             .max_lifetime(Some(Duration::from_secs(300)))
-            .acquire_timeout(Duration::from_secs(10))
+            .acquire_timeout(Duration::from_secs(5))
             .connect(&normalized_url),
     )
     .await
@@ -5566,11 +5653,24 @@ async fn get_tenant_pool(db_url: &str) -> Result<PgPool, String> {
         }
     };
 
-    {
+    let evicted = {
         let mut pools = POOLS
             .lock()
             .map_err(|_| "Tenant pool cache lock poisoned".to_string())?;
-        pools.insert(normalized_url, pool.clone());
+        let evicted = if pools.len() >= MAX_CACHED_TENANT_POOLS && !pools.contains_key(&cache_key) {
+            pools
+                .keys()
+                .next()
+                .cloned()
+                .and_then(|key| pools.remove(&key))
+        } else {
+            None
+        };
+        pools.insert(cache_key, pool.clone());
+        evicted
+    };
+    if let Some(old) = evicted {
+        old.close().await;
     }
 
     Ok(pool)
@@ -5616,6 +5716,7 @@ async fn ensure_business_emails_table(pool: &PgPool) -> Result<(), String> {
     }
 
     for index in [
+        "CREATE INDEX IF NOT EXISTS idx_business_emails_created ON business_emails(created_at DESC);",
         "CREATE INDEX IF NOT EXISTS idx_business_emails_folder_created ON business_emails(folder, created_at DESC);",
         "CREATE INDEX IF NOT EXISTS idx_business_emails_message_id ON business_emails(message_id);",
         "CREATE INDEX IF NOT EXISTS idx_business_emails_thread_id ON business_emails(thread_id);",
@@ -6659,7 +6760,7 @@ async fn read_business_emails(db_url: &str) -> (StatusCode, Json<Value>) {
     }
 
     let query = sqlx::query(
-        "SELECT id, sender, sender_name, recipients, subject, body, folder, created_at, is_read, is_starred, has_attachment, html_body, in_reply_to, thread_id, message_id FROM business_emails ORDER BY created_at DESC",
+        "SELECT id, sender, sender_name, recipients, subject, body, folder, created_at, is_read, is_starred, has_attachment, html_body, in_reply_to, thread_id, message_id FROM business_emails ORDER BY created_at DESC LIMIT 2000",
     );
     let rows = match timeout(TENANT_DB_QUERY_TIMEOUT, query.fetch_all(&pool)).await {
         Ok(Ok(rows)) => rows,

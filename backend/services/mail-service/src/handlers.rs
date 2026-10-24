@@ -201,6 +201,7 @@ async fn ensure_business_emails_table(pool: &PgPool) -> Result<(), String> {
     }
 
     for index in [
+        "CREATE INDEX IF NOT EXISTS idx_business_emails_created ON business_emails(created_at DESC);",
         "CREATE INDEX IF NOT EXISTS idx_business_emails_folder_created ON business_emails(folder, created_at DESC);",
         "CREATE INDEX IF NOT EXISTS idx_business_emails_message_id ON business_emails(message_id);",
         "CREATE INDEX IF NOT EXISTS idx_business_emails_thread_id ON business_emails(thread_id);",
@@ -272,7 +273,9 @@ async fn read_business_emails(db_url: &str) -> Result<Json<Value>, velismail_com
         .map_err(|_| velismail_common::AppError::Internal)?;
 
     let rows = sqlx::query(
-        "SELECT id, sender, sender_name, recipients, subject, body, folder, created_at, is_read, is_starred, has_attachment, html_body, in_reply_to, thread_id, message_id FROM business_emails ORDER BY created_at DESC",
+        // Bound the payload: a mailbox with years of history must not pull the
+        // entire table into memory on every dashboard load.
+        "SELECT id, sender, sender_name, recipients, subject, body, folder, created_at, is_read, is_starred, has_attachment, html_body, in_reply_to, thread_id, message_id FROM business_emails ORDER BY created_at DESC LIMIT 2000",
     )
     .fetch_all(&pool)
     .await
@@ -488,6 +491,26 @@ pub async fn send_email(
         }
     }
 
+    // A viewer may read the workspace but never send mail. The gateway route
+    // for /mail/send enforces this, while /mail/emails reaches this service
+    // through the proxy, so the rule is repeated here.
+    let sender_role: Option<String> = sqlx::query_scalar(
+        "SELECT role FROM company_members
+         WHERE tenant_id = $1 AND LOWER(email) = LOWER($2) AND status = 'active'
+         LIMIT 1",
+    )
+    .bind(tenant_id)
+    .bind(&claims.email)
+    .fetch_optional(&state.db)
+    .await
+    .ok()
+    .flatten();
+    if sender_role.as_deref() == Some("viewer") {
+        return Err(velismail_common::AppError::Forbidden(
+            "Viewers cannot send email.".to_string(),
+        ));
+    }
+
     // Validate request
     if request.to.is_empty() {
         return Err(velismail_common::AppError::BadRequest(
@@ -525,8 +548,8 @@ pub async fn send_email(
             ));
         }
     } else if !from_domain.is_empty() {
-        let domain_owner: Option<Uuid> = sqlx::query_scalar(
-            "SELECT tenant_id FROM custom_domains
+        let domain_record = sqlx::query(
+            "SELECT tenant_id, verification_status FROM custom_domains
              WHERE LOWER(domain_name) = LOWER($1) LIMIT 1",
         )
         .bind(&from_domain)
@@ -534,7 +557,16 @@ pub async fn send_email(
         .await
         .ok()
         .flatten();
-        if domain_owner.is_some_and(|owner| owner != tenant_id) {
+        let Some(domain_record) = domain_record else {
+            return Err(velismail_common::AppError::Forbidden(
+                "Add and verify this domain before sending from it.".to_string(),
+            ));
+        };
+        let domain_owner: Uuid = domain_record.try_get("tenant_id").unwrap_or_default();
+        let domain_status: String = domain_record
+            .try_get("verification_status")
+            .unwrap_or_default();
+        if domain_owner != tenant_id {
             // A platform broadcast may pick a mailbox from any workspace. Staff
             // may only use an address that really exists as an active mailbox,
             // never an arbitrary local part on somebody else's domain.
@@ -571,6 +603,10 @@ pub async fn send_email(
                     "This sending domain belongs to another workspace.".to_string(),
                 ));
             }
+        } else if domain_status != "verified" {
+            return Err(velismail_common::AppError::Forbidden(
+                "This sending domain is not verified yet.".to_string(),
+            ));
         }
     }
 

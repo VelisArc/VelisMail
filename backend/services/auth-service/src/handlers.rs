@@ -2571,6 +2571,61 @@ pub async fn update_account(
     let user_id = claims.sub.0;
     let request_object = request.as_object().ok_or(StatusCode::BAD_REQUEST)?;
 
+    // Workspace infrastructure settings live on the account, but they are not
+    // personal preferences: they decide which database the whole workspace
+    // reads and which provider key sends its mail. Writing them must follow
+    // the same owner/admin rule and SSRF checks as the setup endpoints.
+    const WORKSPACE_SETTINGS: &[&str] = &[
+        "businessDbUrl",
+        "businessApiKey",
+        "businessMailProvider",
+        "businessMailProviderEndpoint",
+        "businessMailWebhookSecret",
+        "businessDomain",
+        "businessDomainVerified",
+        "isBusinessSetupComplete",
+        "dkimStatus",
+        "spfStatus",
+        "dmarcStatus",
+        "customDomain",
+        "mailProvider",
+        "mailProviderEndpoint",
+        "apiKey",
+        "isSetupComplete",
+    ];
+    let touches_workspace = request_object
+        .keys()
+        .any(|key| WORKSPACE_SETTINGS.contains(&key.as_str()));
+    if touches_workspace {
+        let role: Option<String> = sqlx::query_scalar(
+            "SELECT role FROM company_members
+             WHERE user_id = $1 AND status = 'active'
+             ORDER BY CASE role WHEN 'owner' THEN 0 WHEN 'admin' THEN 1 ELSE 2 END
+             LIMIT 1",
+        )
+        .bind(user_id)
+        .fetch_optional(&state.db)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        if !matches!(role.as_deref(), Some("owner") | Some("admin")) {
+            return Err(StatusCode::FORBIDDEN);
+        }
+    }
+
+    // A workspace database URL is dialled by the backend, so a browser must
+    // never be able to point it at an internal host.
+    let mut normalized_business_db_url: Option<String> = None;
+    if let Some(raw) = request_object
+        .get("businessDbUrl")
+        .and_then(|value| value.as_str())
+        .filter(|value| !value.trim().is_empty())
+    {
+        normalized_business_db_url =
+            Some(velismail_common::traffic::validate_external_db_url(raw)
+                .await
+                .map_err(|_| StatusCode::BAD_REQUEST)?);
+    }
+
     // A recovery address is only accepted together with proof that the caller
     // controls it. The browser cannot mark an address verified on its own.
     if let Some(new_recovery) = request_object
@@ -2635,7 +2690,14 @@ pub async fn update_account(
     let allowed = request_object
         .iter()
         .filter(|(key, _)| WRITABLE_SETTINGS.contains(&key.as_str()))
-        .map(|(key, value)| (key.clone(), value.clone()))
+        .map(|(key, value)| {
+            if key == "businessDbUrl" {
+                if let Some(ref normalized) = normalized_business_db_url {
+                    return (key.clone(), serde_json::Value::String(normalized.clone()));
+                }
+            }
+            (key.clone(), value.clone())
+        })
         .collect::<serde_json::Map<String, serde_json::Value>>();
     if allowed.is_empty() {
         return Ok(Json(json!({
