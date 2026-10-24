@@ -104,37 +104,3 @@ pub async fn upsert(pool: &PgPool, mailbox: &MailboxValues<'_>) -> Result<(), St
     .map(|_| ())
     .map_err(|err| err.to_string())
 }
-
-/// Write a mailbox into the central index of the platform.
-pub async fn upsert_central(
-    pool: &PgPool,
-    tenant_id: uuid::Uuid,
-    mailbox: &MailboxValues<'_>,
-) -> Result<(), String> {
-    sqlx::query(
-        "INSERT INTO business_mailboxes
-            (id, tenant_id, domain, address, display_name, kind, aliases, active, source, created_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-         ON CONFLICT (domain, address) DO UPDATE SET
-            display_name = EXCLUDED.display_name,
-            kind = EXCLUDED.kind,
-            aliases = EXCLUDED.aliases,
-            active = EXCLUDED.active,
-            source = EXCLUDED.source,
-            tenant_id = EXCLUDED.tenant_id",
-    )
-    .bind(mailbox.id)
-    .bind(tenant_id)
-    .bind(mailbox.domain.trim().to_lowercase())
-    .bind(mailbox.address.trim().to_lowercase())
-    .bind(mailbox.display_name)
-    .bind(mailbox.kind)
-    .bind(mailbox.aliases)
-    .bind(mailbox.active)
-    .bind(mailbox.source)
-    .bind(now_string())
-    .execute(pool)
-    .await
-    .map(|_| ())
-    .map_err(|err| err.to_string())
-}
