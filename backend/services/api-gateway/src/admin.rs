@@ -6186,9 +6186,9 @@ pub async fn company_update_member(
     }
 
     if new_status.as_deref() == Some("suspended") || new_status.as_deref() == Some("removed") {
-        // A suspended or removed member must not keep a pending invitation
-        // alive in either invitation store. Otherwise the old email link or
-        // team access key could add them straight back.
+        // A suspended or removed member must not keep an invitation or an
+        // accepted team access key alive in either store. Otherwise the old
+        // email link or key could add them straight back.
         let _ = sqlx::query(
             "UPDATE workspace_invitations SET status = 'revoked'
              WHERE tenant_id = $1 AND LOWER(email) = LOWER($2) AND status = 'pending'",
@@ -6202,7 +6202,7 @@ pub async fn company_update_member(
                 SET revoked = TRUE,
                     data = data || '{\"status\":\"revoked\"}'::jsonb
               WHERE revoked = FALSE
-                AND data->>'status' = 'pending'
+                AND data->>'status' IN ('pending', 'accepted')
                 AND data->'workspace'->>'tenantId' = $1
                 AND LOWER(data->>'email') = LOWER($2)",
         )

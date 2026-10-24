@@ -3496,6 +3496,20 @@ async fn set_team_invite_status(state: &AppState, token: &str, status: &str) -> 
     }
 }
 
+/// A team access key is a sign-in credential, not a one-time coupon.
+///
+/// Workspace keys stay usable until they expire or are revoked, so logging out
+/// and signing in again with the same key works. A control-plane invitation is
+/// an activation key: the platform account signs in with its email and password
+/// afterwards, so it stays single-use.
+fn team_invite_can_sign_in(status: &str, scope: Option<&str>) -> bool {
+    match status {
+        "pending" => true,
+        "accepted" => scope != Some("platform"),
+        _ => false,
+    }
+}
+
 fn team_invite_expired(invite: &TeamInviteRecord) -> bool {
     invite
         .expires_at
@@ -3844,12 +3858,23 @@ pub async fn validate_team_invite(
             })),
         );
     }
-    if invite.status != "pending" {
+    if invite.status != "pending"
+        && !team_invite_can_sign_in(&invite.status, invite.scope.as_deref())
+    {
+        let message = if invite.status == "accepted"
+            && invite.scope.as_deref() == Some("platform")
+        {
+            "This platform invitation was already accepted. Sign in with your email and password."
+        } else if invite.status == "expired" {
+            "This team access key has expired."
+        } else {
+            "This team access key was already used."
+        };
         return (
             StatusCode::CONFLICT,
             Json(json!({
                 "success": false,
-                "message": "This team access key was already used."
+                "message": message
             })),
         );
     }
@@ -4417,10 +4442,21 @@ pub async fn complete_team_invite(
             Json(json!({ "success": false, "message": "This team access key was revoked." })),
         );
     }
-    if invite.status != "pending" {
+    if invite.status != "pending"
+        && !team_invite_can_sign_in(&invite.status, invite.scope.as_deref())
+    {
+        let message = if invite.status == "accepted"
+            && invite.scope.as_deref() == Some("platform")
+        {
+            "This platform invitation was already accepted. Sign in with your email and password."
+        } else if invite.status == "expired" {
+            "This team access key has expired."
+        } else {
+            "This team access key was already used."
+        };
         return (
             StatusCode::CONFLICT,
-            Json(json!({ "success": false, "message": "This team access key was already used." })),
+            Json(json!({ "success": false, "message": message })),
         );
     }
     if team_invite_expired(&invite) {
@@ -4829,7 +4865,7 @@ pub async fn revoke_team_invite(
         );
     }
 
-    if invite.status != "pending" {
+    if invite.status != "pending" && invite.status != "accepted" {
         return (
             StatusCode::CONFLICT,
             Json(json!({
@@ -7071,6 +7107,28 @@ mod tests {
         assert!(payload.from.is_none());
         assert!(payload.db_url.is_none());
         assert!(payload.attachments.is_none());
+    }
+
+    #[test]
+    fn a_workspace_team_key_can_sign_in_again_after_logout() {
+        assert!(team_invite_can_sign_in("pending", None));
+        assert!(team_invite_can_sign_in("pending", Some("workspace")));
+        // The key is a sign-in credential until it expires or is revoked.
+        assert!(team_invite_can_sign_in("accepted", None));
+        assert!(team_invite_can_sign_in("accepted", Some("workspace")));
+    }
+
+    #[test]
+    fn a_platform_activation_key_stays_single_use() {
+        assert!(team_invite_can_sign_in("pending", Some("platform")));
+        assert!(!team_invite_can_sign_in("accepted", Some("platform")));
+    }
+
+    #[test]
+    fn revoked_or_expired_team_keys_cannot_sign_in() {
+        assert!(!team_invite_can_sign_in("revoked", None));
+        assert!(!team_invite_can_sign_in("expired", None));
+        assert!(!team_invite_can_sign_in("revoked", Some("workspace")));
     }
 }
 

@@ -2673,8 +2673,9 @@ pub async fn remove_team_member(
         }
     }
 
-    // Pending invitations of the removed address are closed as well. Without
-    // this the old email link or team access key could add the member back.
+    // Pending and accepted invitations of the removed address are closed as
+    // well. A team access key stays usable until it expires, so an accepted
+    // key must be revoked here or the removed member could sign back in.
     let _ = sqlx::query(
         "UPDATE workspace_invitations SET status = 'revoked'
          WHERE tenant_id = $1 AND LOWER(email) = LOWER($2) AND status = 'pending'",
@@ -2688,7 +2689,7 @@ pub async fn remove_team_member(
             SET revoked = TRUE,
                 data = data || '{\"status\":\"revoked\"}'::jsonb
           WHERE revoked = FALSE
-            AND data->>'status' = 'pending'
+            AND data->>'status' IN ('pending', 'accepted')
             AND data->'workspace'->>'tenantId' = $1
             AND LOWER(data->>'email') = LOWER($2)",
     )
