@@ -60,6 +60,8 @@ export type WorkspaceDomain = {
   dmarcRecord?: string | null;
   createdAt?: string | null;
   verifiedAt?: string | null;
+  /** True once the provider receiving webhook is verified for this domain. */
+  webhookVerified?: boolean;
   mailboxes?: number;
 };
 
@@ -98,6 +100,16 @@ export type DnsRequirements = {
   records: DnsRequirement[];
   missing: string[];
   message: string;
+  /**
+   * Result of the provider receiving-webhook check. Present for Resend: the
+   * domain is not complete until the webhook URL exists with email.received
+   * enabled and the route is registered.
+   */
+  webhook?: {
+    status: string;
+    detail?: string;
+    recommendation?: string | null;
+  } | null;
 };
 
 export type WorkspaceAuditEntry = {

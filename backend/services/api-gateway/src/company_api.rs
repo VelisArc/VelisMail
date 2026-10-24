@@ -971,7 +971,7 @@ pub async fn list_domains(State(state): State<AppState>, headers: HeaderMap) -> 
     let rows = sqlx::query(
         "SELECT cd.id, cd.domain_name, cd.verification_status, cd.verification_method,
                 cd.dns_records, cd.mx_records, cd.spf_record, cd.dkim_record, cd.dmarc_record,
-                cd.created_at, cd.verified_at,
+                cd.created_at, cd.verified_at, cd.inbound_webhook_verified_at,
                 (SELECT COUNT(*)::bigint FROM business_mailboxes bm
                  WHERE bm.domain = cd.domain_name AND bm.tenant_id = cd.tenant_id) AS mailboxes
          FROM custom_domains cd
@@ -1003,6 +1003,7 @@ pub async fn list_domains(State(state): State<AppState>, headers: HeaderMap) -> 
                 "dmarcRecord": row.try_get::<Option<String>, _>("dmarc_record").ok().flatten(),
                 "createdAt": row.try_get::<Option<DateTime<Utc>>, _>("created_at").ok().flatten().map(|v| v.to_rfc3339()),
                 "verifiedAt": row.try_get::<Option<DateTime<Utc>>, _>("verified_at").ok().flatten().map(|v| v.to_rfc3339()),
+                "webhookVerified": row.try_get::<Option<DateTime<Utc>>, _>("inbound_webhook_verified_at").ok().flatten().is_some(),
                 "mailboxes": row.try_get::<i64, _>("mailboxes").unwrap_or(0),
             })
         })
@@ -1908,7 +1909,8 @@ pub async fn verify_domain(
     let db = db_pool(&state)?;
 
     let row = sqlx::query(
-        "SELECT domain_name FROM custom_domains WHERE tenant_id = $1 AND id::text = $2 LIMIT 1",
+        "SELECT domain_name, verification_status FROM custom_domains
+         WHERE tenant_id = $1 AND id::text = $2 LIMIT 1",
     )
     .bind(context.tenant_id)
     .bind(&path.id)
@@ -1916,6 +1918,10 @@ pub async fn verify_domain(
     .await
     .ok()
     .flatten();
+    let previously_verified = row
+        .as_ref()
+        .and_then(|row| row.try_get::<String, _>("verification_status").ok())
+        .is_some_and(|status| status == "verified");
     let domain = match row {
         Some(row) => row
             .try_get::<String, _>("domain_name")
@@ -2002,11 +2008,123 @@ pub async fn verify_domain(
         }
     }
 
-    let status = if report.complete {
-        "verified"
-    } else {
-        "pending"
-    };
+    // Perfect DNS is not a working inbox: Resend must also have a webhook for
+    // the platform URL with the email.received event enabled. Verify that
+    // server-side so setup cannot be marked complete with receiving broken.
+    let mut webhook_check = None;
+    {
+        let settings = workspace_setup_state(db, context.tenant_id)
+            .await
+            .map(|state| state.settings)
+            .unwrap_or_else(|_| json!({}));
+        let setting = |key: &str| {
+            settings
+                .get(key)
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .unwrap_or("")
+                .to_string()
+        };
+        let provider = setting("businessMailProvider");
+        if provider.eq_ignore_ascii_case("resend") {
+            let api_key = setting("businessApiKey");
+            let db_url = setting("businessDbUrl");
+            let mut webhook_secret = setting("businessMailWebhookSecret");
+            let mut provision_error = None;
+
+            // Create the Resend webhook when the account has none, so the
+            // customer does not have to wire it up by hand. The returned
+            // signing secret is stored with the workspace owner.
+            if !api_key.is_empty() && !db_url.is_empty() {
+                match crate::routes::ensure_resend_inbound_webhook(&state.http_client, &api_key)
+                    .await
+                {
+                    Ok(Some(secret)) => {
+                        match store_workspace_webhook_secret(db, context.tenant_id, &secret).await {
+                            Ok(()) => webhook_secret = secret,
+                            Err(err) => {
+                                tracing::error!("webhook secret could not be stored: {}", err);
+                                provision_error = Some(
+                                    "Resend created the webhook but its signing secret could not be saved."
+                                        .to_string(),
+                                );
+                            }
+                        }
+                    }
+                    Ok(None) => {}
+                    Err(err) => provision_error = Some(err),
+                }
+            }
+
+            if api_key.is_empty() || db_url.is_empty() {
+                webhook_check = Some(crate::routes::RuntimeCheckResult {
+                    key: "resendInboundWebhook",
+                    label: "Resend Receiving Webhook",
+                    status: "failed",
+                    detail: "Receiving is not configured for this workspace yet.".to_string(),
+                    category: "config",
+                    recommendation: Some(
+                        "Save the database and Resend API key before verifying the domain."
+                            .to_string(),
+                    ),
+                });
+            } else if webhook_secret.is_empty()
+                || !webhook_secret.starts_with("whsec_")
+                || webhook_secret.len() < 12
+            {
+                webhook_check = Some(crate::routes::RuntimeCheckResult {
+                    key: "resendInboundWebhook",
+                    label: "Resend Receiving Webhook",
+                    status: "failed",
+                    detail: provision_error.unwrap_or_else(|| {
+                        "A webhook already exists for this URL, but its signing secret is not saved. Paste it from Resend → Webhooks."
+                            .to_string()
+                    }),
+                    category: "config",
+                    recommendation: Some(
+                        "Open Resend → Webhooks, copy the signing secret for the VelisMail endpoint and save it in the setup."
+                            .to_string(),
+                    ),
+                });
+            } else {
+                let check =
+                    crate::routes::verify_resend_inbound_webhook(&state.http_client, &api_key)
+                        .await;
+                let check = if check.status == "verified" {
+                    crate::routes::register_inbound_route(
+                        &state,
+                        &domain,
+                        &db_url,
+                        &provider,
+                        &api_key,
+                        &webhook_secret,
+                    )
+                    .await
+                } else {
+                    check
+                };
+                webhook_check = Some(check);
+            }
+        }
+    }
+
+    let webhook_verified = webhook_check
+        .as_ref()
+        .map(|check| check.status == "verified")
+        .unwrap_or(true);
+    let config_blocked = webhook_check
+        .as_ref()
+        .is_some_and(|check| check.status != "verified" && check.category == "config");
+    let complete = report.complete && webhook_verified;
+    // A transient Resend network/rate-limit failure must not revoke a domain
+    // that was verified before. A configuration failure always does, and a
+    // domain that was never verified stays pending until the check passes.
+    let status =
+        if report.complete && (webhook_verified || (previously_verified && !config_blocked)) {
+            "verified"
+        } else {
+            "pending"
+        };
     let _ = sqlx::query(
         "UPDATE custom_domains
          SET verification_status = $1,
@@ -2015,7 +2133,12 @@ pub async fn verify_domain(
              dkim_record = COALESCE($3, dkim_record),
              dmarc_record = COALESCE($4, dmarc_record),
              dns_records = $5,
-             mx_records = $6
+             mx_records = $6,
+             inbound_webhook_verified_at = CASE
+                 WHEN $9 THEN NOW()
+                 WHEN $10 THEN NULL
+                 ELSE inbound_webhook_verified_at
+             END
          WHERE tenant_id = $7 AND id::text = $8",
     )
     .bind(status)
@@ -2026,6 +2149,8 @@ pub async fn verify_domain(
     .bind(json!(mx))
     .bind(context.tenant_id)
     .bind(&path.id)
+    .bind(webhook_verified)
+    .bind(config_blocked)
     .execute(db)
     .await;
 
@@ -2039,11 +2164,20 @@ pub async fn verify_domain(
         "domain",
         Some(&path.id),
         context.tenant_id,
-        json!({ "domain": domain, "complete": report.complete, "missing": report.missing }),
+        json!({ "domain": domain, "complete": complete, "missing": report.missing }),
     )
     .await;
 
-    ok(report.to_json(&domain, status))
+    let mut response = report.to_json(&domain, status);
+    response["complete"] = json!(complete);
+    if let Some(check) = &webhook_check {
+        response["webhook"] = json!({
+            "status": check.status,
+            "detail": check.detail,
+            "recommendation": check.recommendation,
+        });
+    }
+    ok(response)
 }
 
 /// Remove a domain from the workspace.
@@ -2201,6 +2335,120 @@ pub(crate) async fn tenant_business_db_url(db: &PgPool, tenant_id: Uuid) -> Opti
         .and_then(Value::as_str)
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty())
+}
+
+/// Server-side setup state of a workspace.
+///
+/// The client-writable `isBusinessSetupComplete` flag is never trusted for
+/// access decisions. A workspace is ready when the owner has stored the
+/// database, mail provider credentials and at least one custom domain is
+/// verified. Resend workspaces also need a verified receiving webhook, which
+/// is recorded by the domain verification flow.
+pub(crate) struct WorkspaceSetupState {
+    pub settings: Value,
+    pub verified_domain: bool,
+    pub webhook_verified_domain: bool,
+}
+
+impl WorkspaceSetupState {
+    pub(crate) fn is_complete(&self) -> bool {
+        let value = |key: &str| {
+            self.settings
+                .get(key)
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+        };
+        let Some(provider) = value("businessMailProvider") else {
+            return false;
+        };
+        if value("businessDbUrl").is_none()
+            || value("businessApiKey").is_none()
+            || !self.verified_domain
+        {
+            return false;
+        }
+        if provider.eq_ignore_ascii_case("resend") && !self.webhook_verified_domain {
+            return false;
+        }
+        true
+    }
+}
+
+pub(crate) async fn workspace_setup_state(
+    db: &PgPool,
+    tenant_id: Uuid,
+) -> Result<WorkspaceSetupState, sqlx::Error> {
+    let row = sqlx::query(
+        "SELECT
+            (SELECT u.settings FROM users u
+             JOIN company_members cm ON cm.user_id = u.id
+                  AND cm.tenant_id = $1
+                  AND cm.status = 'active'
+             ORDER BY (cm.role = 'owner') DESC, cm.created_at ASC
+             LIMIT 1) AS settings,
+            EXISTS(
+                SELECT 1 FROM custom_domains cd
+                JOIN tenants t ON t.id = cd.tenant_id
+                     AND t.deleted_at IS NULL
+                     AND t.status = 'active'
+                WHERE cd.tenant_id = $1
+                  AND cd.verification_status = 'verified'
+            ) AS verified_domain,
+            EXISTS(
+                SELECT 1 FROM custom_domains cd
+                JOIN tenants t ON t.id = cd.tenant_id
+                     AND t.deleted_at IS NULL
+                     AND t.status = 'active'
+                WHERE cd.tenant_id = $1
+                  AND cd.verification_status = 'verified'
+                  AND cd.inbound_webhook_verified_at IS NOT NULL
+            ) AS webhook_verified_domain",
+    )
+    .bind(tenant_id)
+    .fetch_one(db)
+    .await?;
+
+    Ok(WorkspaceSetupState {
+        settings: row
+            .try_get::<Option<Value>, _>("settings")
+            .ok()
+            .flatten()
+            .unwrap_or_else(|| json!({})),
+        verified_domain: row.try_get::<bool, _>("verified_domain").unwrap_or(false),
+        webhook_verified_domain: row
+            .try_get::<bool, _>("webhook_verified_domain")
+            .unwrap_or(false),
+    })
+}
+
+/// Store a signing secret that the gateway obtained from the provider. The
+/// owner settings are the authoritative credential store used by the inbound
+/// webhook, so the browser never has to copy the secret by hand.
+async fn store_workspace_webhook_secret(
+    db: &PgPool,
+    tenant_id: Uuid,
+    secret: &str,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        "UPDATE users
+         SET settings = COALESCE(settings, '{}'::jsonb)
+                        || jsonb_build_object('businessMailWebhookSecret', $2::text),
+             updated_at = NOW()
+         WHERE id = (
+             SELECT u.id FROM users u
+             JOIN company_members cm ON cm.user_id = u.id
+                  AND cm.tenant_id = $1
+                  AND cm.status = 'active'
+             ORDER BY (cm.role = 'owner') DESC, cm.created_at ASC
+             LIMIT 1
+         )",
+    )
+    .bind(tenant_id)
+    .bind(secret)
+    .execute(db)
+    .await
+    .map(|_| ())
 }
 
 // ---------------------------------------------------------------------------

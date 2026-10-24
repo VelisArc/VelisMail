@@ -1197,7 +1197,9 @@ export const teamAccess = {
     });
 
     if (response?.ok && response.data?.invite) {
-      if (hasTeamAccessWorkspace(response.data.invite)) {
+      // Only workspace keys are cached. A platform invitation must be checked
+      // against the server every time so a revocation takes effect at once.
+      if (response.data.invite.scope !== 'platform' && hasTeamAccessWorkspace(response.data.invite)) {
         cacheTeamAccessInvite(response.data.invite);
       }
       return { ok: true, invite: response.data.invite };
@@ -1265,31 +1267,40 @@ export const teamAccess = {
       let invite = validation.invite;
       if (data.invite) {
         invite = data.invite;
-        if (hasTeamAccessWorkspace(invite)) {
+        if (invite.scope !== 'platform' && hasTeamAccessWorkspace(invite)) {
           cacheTeamAccessInvite(invite);
         }
       }
-      if (!hasTeamAccessWorkspace(invite)) {
+      const platformInvite = invite.scope === 'platform';
+      if (!platformInvite && !hasTeamAccessWorkspace(invite)) {
         throw new Error('Team workspace configuration is unavailable. Ask the admin to generate a fresh access key.');
       }
+      const workspaceRole: 'admin' | 'member' | 'viewer' =
+        invite.role === 'owner' || invite.role === 'admin'
+          ? 'admin'
+          : invite.role === 'viewer'
+            ? 'viewer'
+            : 'member';
 
       const profile = data.user || {};
       const user: User = normalizeSessionUser({
         id: profile.id || `team_${hashString(`${invite.id}:${normalizedEmail}`)}`,
-        tenantId: profile.tenantId || invite.workspace.tenantId,
+        tenantId: profile.tenantId || invite.workspace?.tenantId || '',
         email: normalizedEmail,
         displayName: profile.displayName || invite.name,
-        plan: 'Team Access',
+        plan: platformInvite ? 'Platform Access' : 'Team Access',
         accountType: 'business',
         isSetupComplete: true,
         isBusinessSetupComplete: true,
-        customDomain: invite.workspace.businessDomain,
-        businessDomain: invite.workspace.businessDomain,
+        customDomain: invite.workspace?.businessDomain,
+        businessDomain: invite.workspace?.businessDomain,
         businessMailboxAddress: normalizedEmail,
-        businessDomainVerified: invite.workspace.businessDomainVerified ?? true,
-        teamAccessRole: invite.role === 'owner' ? 'admin' : invite.role,
+        businessDomainVerified: invite.workspace?.businessDomainVerified ?? true,
+        // A platform invite opens the control plane, not a company role.
+        teamAccessRole: platformInvite ? 'admin' : workspaceRole,
         teamAccessInviteId: invite.id,
         teamAccessOwnerEmail: invite.issuerEmail,
+        isPlatformAdmin: platformInvite ? true : undefined,
         createdAt: new Date().toISOString(),
       });
 

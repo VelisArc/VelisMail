@@ -150,6 +150,7 @@ const readiness: WorkspaceReadiness = {
     domain: 'velismail.online',
     status: 'pending',
     primary: true,
+    webhookVerified: false,
   },
   ready: false,
   reload: vi.fn().mockResolvedValue(undefined),

@@ -36,6 +36,8 @@ export type ReadinessDomain = {
   domain: string;
   status: string;
   primary: boolean;
+  /** True once the provider receiving webhook is verified on the server. */
+  webhookVerified: boolean;
 };
 
 export type WorkspaceReadiness = {
@@ -122,6 +124,7 @@ export default function useWorkspaceReadiness(user: User | null): WorkspaceReadi
             domain: entry.domain,
             status: entry.status,
             primary: Boolean(entry.primary),
+            webhookVerified: Boolean(entry.webhookVerified),
           }))
           .sort((left, right) => Number(right.primary) - Number(left.primary));
         setDomains(summary);
@@ -139,15 +142,26 @@ export default function useWorkspaceReadiness(user: User | null): WorkspaceReadi
         setComplete(requirements.complete);
         setChecked(true);
 
-        // The stored verification status is kept in sync with the live DNS, so
-        // a workspace that is already fully published never stays locked.
-        if (requirements.complete && primary.status !== 'verified') {
-          await workspaceApi.verifyDomain(primary.id).catch(() => undefined);
-          setDomains((current) =>
-            current.map((entry) =>
-              entry.id === primary.id ? { ...entry, status: 'verified' } : entry,
-            ),
-          );
+        // The stored verification status is kept in sync with the live DNS and
+        // the provider webhook. A domain is only marked verified when both are
+        // ready, so setup cannot open a workspace whose inbound path is broken.
+        if (requirements.complete && (primary.status !== 'verified' || !primary.webhookVerified)) {
+          const verification = await workspaceApi.verifyDomain(primary.id).catch(() => null);
+          if (verification?.complete) {
+            setDomains((current) =>
+              current.map((entry) =>
+                entry.id === primary.id
+                  ? { ...entry, status: 'verified', webhookVerified: true }
+                  : entry,
+              ),
+            );
+          } else {
+            setComplete(false);
+            const webhook = verification?.webhook;
+            if (webhook && webhook.status !== 'verified') {
+              setError(webhook.detail || 'The provider receiving webhook could not be verified.');
+            }
+          }
         }
       } catch (err) {
         setError(readableCheckError(err));
@@ -184,9 +198,11 @@ export default function useWorkspaceReadiness(user: User | null): WorkspaceReadi
   const checks = useMemo<SetupCheck[]>(() => {
     const primary = domains.find((entry) => entry.primary) || domains[0];
     const dnsReady = checked && complete && records.length > 0;
-    // The live DNS is the truth: a domain whose records are all active is
-    // ready, even when the stored status is still out of date.
-    const domainReady = Boolean(primary) && (primary.status === 'verified' || dnsReady);
+    // The server only marks a domain verified after the DNS and the provider
+    // receiving webhook pass. Trust that status instead of DNS alone, so a
+    // broken webhook keeps the setup gate closed.
+    const domainReady = Boolean(primary) && primary.status === 'verified' && primary.webhookVerified;
+    const domainVerified = domainReady;
 
     return [
       {
@@ -218,12 +234,14 @@ export default function useWorkspaceReadiness(user: User | null): WorkspaceReadi
         label: 'Inbound webhook',
         description: 'The provider posts incoming mail to the platform, without it nothing arrives.',
         icon: Webhook,
-        done: provider.toLowerCase() === 'resend' ? Boolean(webhookSecret) : true,
+        done: provider.toLowerCase() === 'resend' ? Boolean(webhookSecret) || domainVerified : true,
         detail:
           provider.toLowerCase() === 'resend'
             ? webhookSecret
               ? 'Configured'
-              : 'No webhook secret yet'
+              : domainVerified
+                ? 'Created automatically and verified'
+                : 'Created automatically when you verify the domain'
             : 'Not needed for this provider',
       },
       {

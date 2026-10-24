@@ -355,7 +355,7 @@ async fn is_platform_staff(state: &AppState, claims: &Claims) -> bool {
     .unwrap_or(false)
 }
 
-async fn resolve_tenant_for_email(
+pub(crate) async fn resolve_tenant_for_email(
     db: &PgPool,
     email: &str,
     plan: &str,
@@ -3137,9 +3137,43 @@ pub async fn list_platform_team(State(state): State<AppState>, headers: HeaderMa
             })
         })
         .collect();
+
+    // Control-plane invitations use the same key store as workspace
+    // invitations. Only pending, unexpired keys are shown; the key itself is
+    // returned so the console can hand it to the invitee exactly once more.
+    let invitation_rows = sqlx::query(
+        "SELECT data FROM team_invites
+         WHERE revoked = FALSE
+           AND data->>'status' = 'pending'
+           AND data->>'scope' = 'platform'
+           AND (expires_at IS NULL OR expires_at > NOW())
+         ORDER BY created_at DESC LIMIT 100",
+    )
+    .fetch_all(db)
+    .await
+    .unwrap_or_default();
+    let invitations: Vec<Value> = invitation_rows
+        .iter()
+        .filter_map(|row| row.try_get::<Value, _>("data").ok())
+        .map(|data| {
+            json!({
+                "id": data.get("id").and_then(Value::as_str).unwrap_or_default(),
+                "email": data.get("email").and_then(Value::as_str).unwrap_or_default(),
+                "name": data.get("name").and_then(Value::as_str).unwrap_or_default(),
+                "role": data.get("role").and_then(Value::as_str).unwrap_or_default(),
+                "status": data.get("status").and_then(Value::as_str).unwrap_or("pending"),
+                "invitedBy": data.get("issuerEmail").and_then(Value::as_str).unwrap_or_default(),
+                "accessKey": data.get("token").and_then(Value::as_str).unwrap_or_default(),
+                "expiresAt": data.get("expiresAt").cloned().unwrap_or(Value::Null),
+                "createdAt": data.get("createdAt").cloned().unwrap_or(Value::Null),
+            })
+        })
+        .collect();
+
     ok(json!({
         "success": true,
         "admins": admins,
+        "invitations": invitations,
         "roles": roles,
         "viewerRole": actor.role,
         "isOwner": is_owner,
@@ -3362,7 +3396,7 @@ pub async fn update_platform_admin(
     )
     .bind(&email)
     .bind(payload.role.as_deref().map(str::to_lowercase))
-    .bind(status)
+    .bind(status.as_deref())
     .bind(payload.display_name.as_deref())
     .bind(permissions)
     .execute(db)
@@ -3373,6 +3407,22 @@ pub async fn update_platform_admin(
             StatusCode::INTERNAL_SERVER_ERROR,
             "Unable to update platform administrator.",
         );
+    }
+    if status.as_deref() == Some("suspended") {
+        // A suspended administrator must not keep a pending invitation alive
+        // that could reactivate them at the next acceptance.
+        let _ = sqlx::query(
+            "UPDATE team_invites
+                SET revoked = TRUE,
+                    data = data || '{\"status\":\"revoked\"}'::jsonb
+              WHERE revoked = FALSE
+                AND data->>'status' = 'pending'
+                AND data->>'scope' = 'platform'
+                AND LOWER(data->>'email') = LOWER($1)",
+        )
+        .bind(&email)
+        .execute(db)
+        .await;
     }
     audit(
         db,
@@ -3388,6 +3438,231 @@ pub async fn update_platform_admin(
     )
     .await;
     ok(json!({ "success": true }))
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InvitePlatformAdminRequest {
+    pub email: String,
+    #[serde(default)]
+    pub display_name: Option<String>,
+    #[serde(default)]
+    pub role: Option<String>,
+    #[serde(default)]
+    pub expires_in_hours: Option<i64>,
+}
+
+/// Invite somebody into the control plane.
+///
+/// The invitation is a real record with an expiry and a Team Access Key, just
+/// like a workspace invitation. Nobody becomes staff until the invited address
+/// accepts the key, so an invitation can never silently grant access.
+pub async fn invite_platform_admin(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(payload): Json<InvitePlatformAdminRequest>,
+) -> ApiResult {
+    let actor = match authorize_platform(&state, &headers).await {
+        Ok(actor) => actor,
+        Err(response) => return response,
+    };
+    if let Err(response) = require_permission(&actor, "team.write") {
+        return response;
+    }
+    let db = match pool(&state) {
+        Ok(db) => db,
+        Err(response) => return response,
+    };
+    let email = normalize_email(&payload.email);
+    if email.len() < 5 || !email.contains('@') || email.starts_with('@') || email.ends_with('@') {
+        return fail(StatusCode::BAD_REQUEST, "A valid email is required.");
+    }
+    let role = payload
+        .role
+        .unwrap_or_else(|| "admin".to_string())
+        .to_lowercase();
+    let valid: bool =
+        sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM platform_roles WHERE key = $1)")
+            .bind(&role)
+            .fetch_one(db)
+            .await
+            .unwrap_or(false);
+    if !valid || role == "owner" {
+        return fail(StatusCode::BAD_REQUEST, "Invalid platform role.");
+    }
+    if is_owner_only_role(&role) && actor.role != "owner" {
+        return fail(
+            StatusCode::FORBIDDEN,
+            "Only the platform owner can grant this role.",
+        );
+    }
+
+    let existing = sqlx::query("SELECT role, status FROM platform_admins WHERE email = $1")
+        .bind(&email)
+        .fetch_optional(db)
+        .await
+        .ok()
+        .flatten();
+    if let Some(row) = existing {
+        let existing_role: String = row.try_get("role").unwrap_or_default();
+        let existing_status: String = row.try_get("status").unwrap_or_default();
+        if existing_role == "owner" {
+            return fail(
+                StatusCode::BAD_REQUEST,
+                "The platform owner cannot be invited again.",
+            );
+        }
+        if existing_status == "active" {
+            return fail(
+                StatusCode::CONFLICT,
+                "This address is already a platform administrator. Change their role in the team list instead.",
+            );
+        }
+    }
+
+    let display_name = payload.display_name.unwrap_or_else(|| {
+        email
+            .split('@')
+            .next()
+            .unwrap_or("Platform Admin")
+            .to_string()
+    });
+    let now = Utc::now();
+    let expires_at =
+        now + chrono::Duration::hours(payload.expires_in_hours.unwrap_or(48).clamp(1, 720));
+    let token = format!("vmt_{}{}", Uuid::new_v4().simple(), Uuid::new_v4().simple());
+    let invitation_id = Uuid::new_v4();
+    let record = json!({
+        "id": invitation_id.to_string(),
+        "token": token,
+        "email": email,
+        "name": display_name,
+        "role": role,
+        "status": "pending",
+        "createdAt": now.to_rfc3339(),
+        "expiresAt": expires_at.to_rfc3339(),
+        "acceptedAt": null,
+        "issuerEmail": actor.email,
+        "scope": "platform",
+        "workspace": {},
+    });
+
+    // A fresh key replaces the earlier pending key for the same address, so an
+    // old link cannot be used after an administrator re-issued access.
+    let _ = sqlx::query(
+        "UPDATE team_invites
+            SET revoked = TRUE,
+                data = data || '{\"status\":\"revoked\"}'::jsonb
+          WHERE revoked = FALSE
+            AND data->>'status' = 'pending'
+            AND data->>'scope' = 'platform'
+            AND LOWER(data->>'email') = LOWER($1)",
+    )
+    .bind(&email)
+    .execute(db)
+    .await;
+
+    let stored = sqlx::query(
+        "INSERT INTO team_invites (code, data, expires_at, revoked)
+         VALUES ($1, $2, $3, false)",
+    )
+    .bind(&token)
+    .bind(record.clone())
+    .bind(expires_at)
+    .execute(db)
+    .await;
+    if let Err(err) = stored {
+        tracing::error!("platform invitation insert failed: {}", err);
+        return fail(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Unable to create the platform invitation.",
+        );
+    }
+
+    audit(
+        db,
+        &actor.email,
+        &actor.role,
+        "platform_invitation.created",
+        "team",
+        "platform_invitation",
+        Some(&invitation_id.to_string()),
+        None,
+        json!({ "email": email, "role": role, "expiresAt": expires_at.to_rfc3339() }),
+        "warning",
+    )
+    .await;
+    ok(json!({ "success": true, "invite": record }))
+}
+
+pub async fn revoke_platform_invitation(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+) -> ApiResult {
+    let actor = match authorize_platform(&state, &headers).await {
+        Ok(actor) => actor,
+        Err(response) => return response,
+    };
+    if let Err(response) = require_permission(&actor, "team.write") {
+        return response;
+    }
+    let db = match pool(&state) {
+        Ok(db) => db,
+        Err(response) => return response,
+    };
+    let id = id.trim();
+    if id.is_empty() {
+        return fail(StatusCode::BAD_REQUEST, "Invalid invitation id.");
+    }
+    let result = sqlx::query(
+        "UPDATE team_invites
+            SET revoked = TRUE,
+                data = data || '{\"status\":\"revoked\"}'::jsonb
+          WHERE revoked = FALSE
+            AND data->>'status' = 'pending'
+            AND data->>'scope' = 'platform'
+            AND data->>'id' = $1
+          RETURNING data",
+    )
+    .bind(id)
+    .fetch_optional(db)
+    .await;
+    match result {
+        Ok(Some(row)) => {
+            let email = row
+                .try_get::<Value, _>("data")
+                .ok()
+                .and_then(|data| {
+                    data.get("email")
+                        .and_then(Value::as_str)
+                        .map(str::to_string)
+                })
+                .unwrap_or_default();
+            audit(
+                db,
+                &actor.email,
+                &actor.role,
+                "platform_invitation.revoked",
+                "team",
+                "platform_invitation",
+                Some(id),
+                None,
+                json!({ "email": email }),
+                "warning",
+            )
+            .await;
+            ok(json!({ "success": true }))
+        }
+        Ok(None) => fail(StatusCode::NOT_FOUND, "Pending invitation not found."),
+        Err(err) => {
+            tracing::error!("platform invitation revoke failed: {}", err);
+            fail(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Unable to revoke the invitation.",
+            )
+        }
+    }
 }
 
 pub async fn platform_billing(State(state): State<AppState>, headers: HeaderMap) -> ApiResult {

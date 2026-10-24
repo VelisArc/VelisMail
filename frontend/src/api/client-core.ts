@@ -780,9 +780,10 @@ export function cacheTeamAccessInvite(invite: TeamAccessInvite) {
 }
 
 export function hasTeamAccessWorkspace(invite?: TeamAccessInvite): invite is TeamAccessInvite {
-  // The business database and provider keys are resolved server-side. The
-  // invite only needs to identify the workspace it grants access to.
-  return Boolean(invite?.workspace?.tenantId);
+  // The business database and provider keys are resolved server-side. A
+  // workspace invite identifies the workspace it grants access to; a platform
+  // invite grants control-plane access and deliberately has no workspace.
+  return Boolean(invite?.scope === 'platform' || invite?.workspace?.tenantId);
 }
 
 export function validateCachedTeamAccessToken(token: string): { ok: boolean; invite?: TeamAccessInvite; error?: string } {

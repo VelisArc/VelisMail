@@ -119,6 +119,14 @@ pub fn api_v1_routes(_state: &AppState) -> Router<AppState> {
             get(admin::list_platform_team).post(admin::add_platform_admin),
         )
         .route(
+            "/admin/platform/team/invitations",
+            post(admin::invite_platform_admin),
+        )
+        .route(
+            "/admin/platform/team/invitations/{id}/revoke",
+            post(admin::revoke_platform_invitation),
+        )
+        .route(
             "/admin/platform/team/{email}",
             patch(admin::update_platform_admin),
         )
@@ -810,13 +818,13 @@ struct ProviderDnsRecord {
 }
 
 #[derive(Debug, Serialize)]
-struct RuntimeCheckResult {
-    key: &'static str,
-    label: &'static str,
-    status: &'static str,
-    detail: String,
-    category: &'static str,
-    recommendation: Option<String>,
+pub(crate) struct RuntimeCheckResult {
+    pub(crate) key: &'static str,
+    pub(crate) label: &'static str,
+    pub(crate) status: &'static str,
+    pub(crate) detail: String,
+    pub(crate) category: &'static str,
+    pub(crate) recommendation: Option<String>,
 }
 
 fn runtime_check_failure(
@@ -1994,7 +2002,92 @@ fn extract_provider_dns_records(records: &Value) -> Vec<ProviderDnsRecord> {
         .collect()
 }
 
-async fn verify_resend_inbound_webhook(
+/// Make sure the Resend account has a webhook for the platform inbound URL.
+///
+/// The browser should not have to create the webhook by hand. When the Resend
+/// account has no webhook for this endpoint, create one for email.received and
+/// return the signing secret so it can be stored with the workspace. Returns
+/// `Ok(None)` when the webhook already exists (Resend does not expose an
+/// existing secret, so the stored one is used).
+pub(crate) async fn ensure_resend_inbound_webhook(
+    client: &reqwest::Client,
+    api_key: &str,
+) -> Result<Option<String>, String> {
+    let expected_url = expected_resend_inbound_webhook_url();
+
+    let listed = timeout(
+        Duration::from_secs(10),
+        client
+            .get("https://api.resend.com/webhooks")
+            .bearer_auth(api_key)
+            .send(),
+    )
+    .await
+    .map_err(|_| "Resend webhook lookup timed out.".to_string())?
+    .map_err(|err| format!("Resend webhook lookup failed: {err}"))?;
+
+    if !listed.status().is_success() {
+        return Err(format!(
+            "Resend rejected the webhook lookup with status {}.",
+            listed.status()
+        ));
+    }
+
+    let payload = listed.json::<Value>().await.unwrap_or(Value::Null);
+    let webhooks = payload
+        .get("data")
+        .and_then(Value::as_array)
+        .or_else(|| payload.as_array());
+    let expected_normalized = normalize_webhook_url(&expected_url);
+    let exists = webhooks.is_some_and(|items| {
+        items.iter().any(|webhook| {
+            webhook
+                .get("endpoint")
+                .or_else(|| webhook.get("url"))
+                .or_else(|| webhook.get("endpoint_url"))
+                .and_then(Value::as_str)
+                .map(normalize_webhook_url)
+                .is_some_and(|endpoint| endpoint == expected_normalized)
+        })
+    });
+    if exists {
+        return Ok(None);
+    }
+
+    let created = timeout(
+        Duration::from_secs(10),
+        client
+            .post("https://api.resend.com/webhooks")
+            .bearer_auth(api_key)
+            .json(&json!({
+                "endpoint": expected_url,
+                "events": ["email.received"],
+            }))
+            .send(),
+    )
+    .await
+    .map_err(|_| "Resend webhook creation timed out.".to_string())?
+    .map_err(|err| format!("Resend webhook creation failed: {err}"))?;
+
+    if !created.status().is_success() {
+        let status = created.status();
+        let body = created.text().await.unwrap_or_default();
+        return Err(format!(
+            "Resend rejected webhook creation with status {status}: {}",
+            body.trim()
+        ));
+    }
+
+    let body = created.json::<Value>().await.unwrap_or(Value::Null);
+    body.get("signing_secret")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|secret| !secret.is_empty())
+        .map(|secret| Some(secret.to_string()))
+        .ok_or_else(|| "Resend created the webhook but returned no signing secret.".to_string())
+}
+
+pub(crate) async fn verify_resend_inbound_webhook(
     client: &reqwest::Client,
     api_key: &str,
 ) -> RuntimeCheckResult {
@@ -3319,6 +3412,11 @@ pub struct TeamInviteRecord {
     pub expires_at: Option<String>,
     pub accepted_at: Option<String>,
     pub issuer_email: String,
+    /// "workspace" for a company team key, "platform" for a control-plane
+    /// invitation. Older rows have no scope and mean workspace.
+    #[serde(default)]
+    pub scope: Option<String>,
+    #[serde(default)]
     pub workspace: TeamInviteWorkspace,
 }
 
@@ -3418,6 +3516,7 @@ fn public_team_invite(invite: &TeamInviteRecord) -> Value {
         "expiresAt": invite.expires_at.clone(),
         "acceptedAt": invite.accepted_at.clone(),
         "issuerEmail": invite.issuer_email.clone(),
+        "scope": invite.scope.clone().unwrap_or_else(|| "workspace".to_string()),
         // Only non-secret workspace metadata. Database URLs, provider keys and
         // webhook secrets are resolved server-side from the tenant and are
         // never handed to an unauthenticated invite page.
@@ -3631,6 +3730,7 @@ pub async fn create_team_invite(
         expires_at,
         accepted_at: None,
         issuer_email: context.email.clone(),
+        scope: Some("workspace".to_string()),
         workspace: TeamInviteWorkspace {
             tenant_id: Some(context.tenant_id.to_string()),
             display_name: Some(tenant_name),
@@ -3833,6 +3933,382 @@ fn hash_refresh_token(token: &str) -> String {
     hex::encode(hasher.finalize())
 }
 
+/// Sign an access token and store its refresh token for an invited account.
+///
+/// Workspace and platform invitations issue the same kind of session, so both
+/// acceptance paths use this helper instead of two copies of the signing code.
+async fn issue_invite_session(
+    state: &AppState,
+    headers: &HeaderMap,
+    user_id: uuid::Uuid,
+    tenant_id: uuid::Uuid,
+    email: &str,
+    device_id: Option<String>,
+) -> Result<(String, String, i64), (StatusCode, Json<Value>)> {
+    let jwt_secret = state.config.jwt_secret.as_deref().unwrap_or_default();
+    if jwt_secret.is_empty() {
+        return Err((
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(json!({ "success": false, "message": "Session signing is not configured." })),
+        ));
+    }
+    let expiry_seconds: i64 = std::env::var("JWT_EXPIRY_SECONDS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(3_600)
+        .clamp(300, 86_400);
+    let now = chrono::Utc::now();
+    let device_id = device_id
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| "team-access".to_string());
+    let claims = velismail_common::Claims {
+        sub: velismail_common::types::UserId(user_id),
+        tenant_id: tenant_id.to_string(),
+        email: email.to_string(),
+        iat: now.timestamp(),
+        exp: (now + chrono::Duration::seconds(expiry_seconds)).timestamp(),
+        nbf: now.timestamp(),
+        jti: uuid::Uuid::new_v4().to_string(),
+        role: velismail_common::UserRole::User,
+        mfa_verified: false,
+        device_id: device_id.clone(),
+        security_level: velismail_common::SecurityLevel::Standard,
+        firebase_uid: None,
+    };
+    let access_token = match encode(
+        &jsonwebtoken::Header::default(),
+        &claims,
+        &EncodingKey::from_secret(jwt_secret.as_bytes()),
+    ) {
+        Ok(value) => value,
+        Err(_) => {
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "success": false, "message": "Unable to sign the session." })),
+            ))
+        }
+    };
+    let refresh_token = match velismail_crypto::random::random_token(64) {
+        Ok(value) => value,
+        Err(_) => {
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "success": false, "message": "Unable to create the session." })),
+            ))
+        }
+    };
+    let refresh_hash = hash_refresh_token(&refresh_token);
+    let refresh_days: i64 = std::env::var("REFRESH_TOKEN_EXPIRY_DAYS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(30);
+    let refresh_expiry = now + chrono::Duration::days(refresh_days);
+    let ip = gateway_request_ip(headers);
+    let _ = sqlx::query(
+        r#"INSERT INTO refresh_tokens
+           (user_id, token_hash, device_id, device_fingerprint, expires_at, ip_address, mfa_verified)
+           VALUES ($1, $2, $3, $4, $5, $6::inet, false)"#,
+    )
+    .bind(user_id)
+    .bind(&refresh_hash)
+    .bind(&device_id)
+    .bind(&device_id)
+    .bind(refresh_expiry)
+    .bind(&ip)
+    .execute(match state.db.as_ref() {
+        Some(db) => db,
+        None => {
+            return Err((
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(
+                    json!({ "success": false, "message": "The account database is not connected." }),
+                ),
+            ))
+        }
+    })
+    .await;
+
+    Ok((access_token, refresh_token, expiry_seconds))
+}
+
+/// Record a failed password attempt from an invitation key.
+async fn record_invite_login_failure(
+    db: &sqlx::PgPool,
+    user_id: uuid::Uuid,
+    email: &str,
+    ip: &str,
+) {
+    let _ = sqlx::query(
+        "INSERT INTO failed_login_attempts (id, user_id, email, ip_address, attempted_at)
+         VALUES ($1, $2, $3, $4, NOW())",
+    )
+    .bind(uuid::Uuid::new_v4())
+    .bind(user_id)
+    .bind(email)
+    .bind(ip)
+    .execute(db)
+    .await;
+}
+
+/// Accept a control-plane invitation.
+///
+/// The key proves the address and the password proves the person, exactly like
+/// a workspace invitation. Acceptance activates the `platform_admins` row; no
+/// workspace membership is created, so control-plane access never hands out
+/// access to somebody else's company.
+async fn complete_platform_invite(
+    state: &AppState,
+    headers: &HeaderMap,
+    invite: &TeamInviteRecord,
+    email: String,
+    password: String,
+    db: &sqlx::PgPool,
+) -> (StatusCode, Json<Value>) {
+    let role = invite.role.trim().to_lowercase();
+    let role_row =
+        sqlx::query("SELECT permissions FROM platform_roles WHERE key = $1 AND key <> 'owner'")
+            .bind(&role)
+            .fetch_optional(db)
+            .await
+            .ok()
+            .flatten();
+    let Some(role_row) = role_row else {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({
+                "success": false,
+                "message": "This invitation carries an unknown platform role. Ask the owner to send a fresh invitation."
+            })),
+        );
+    };
+    let permissions: Value = role_row
+        .try_get("permissions")
+        .unwrap_or_else(|_| json!([]));
+
+    // The endpoint is a password login oracle for the invited address, so it
+    // is throttled exactly like the workspace invitation flow.
+    let recent_failures: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*)::bigint FROM failed_login_attempts
+         WHERE email = $1 AND attempted_at > NOW() - INTERVAL '15 minutes'",
+    )
+    .bind(&email)
+    .fetch_one(db)
+    .await
+    .unwrap_or(0);
+    if recent_failures >= 5 {
+        return (
+            StatusCode::TOO_MANY_REQUESTS,
+            Json(
+                json!({ "success": false, "message": "Too many sign-in attempts. Try again later." }),
+            ),
+        );
+    }
+
+    let existing = sqlx::query(
+        "SELECT id, password_hash, tenant_id, display_name
+         FROM users WHERE email = $1 AND status = 'active' LIMIT 1",
+    )
+    .bind(&email)
+    .fetch_optional(db)
+    .await;
+    let (user_id, tenant_id, display_name) = match existing {
+        Ok(Some(row)) => {
+            let uid: uuid::Uuid = match row.try_get("id") {
+                Ok(value) => value,
+                Err(_) => {
+                    return (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        Json(json!({ "success": false, "message": "Unable to load the account." })),
+                    )
+                }
+            };
+            let stored: String = match row
+                .try_get::<Option<String>, _>("password_hash")
+                .ok()
+                .flatten()
+            {
+                Some(value) => value,
+                None => {
+                    return (
+                        StatusCode::UNAUTHORIZED,
+                        Json(json!({
+                            "success": false,
+                            "message": "This email has no password set. Use Forgot Password first."
+                        })),
+                    )
+                }
+            };
+            if !verify_team_password(&password, &stored) {
+                record_invite_login_failure(db, uid, &email, &gateway_request_ip(headers)).await;
+                return (
+                    StatusCode::UNAUTHORIZED,
+                    Json(
+                        json!({ "success": false, "message": "Incorrect password for this email." }),
+                    ),
+                );
+            }
+            let tenant: Option<uuid::Uuid> = row.try_get("tenant_id").ok();
+            let tenant = match tenant {
+                Some(value) if value != uuid::Uuid::nil() => value,
+                _ => match crate::admin::resolve_tenant_for_email(db, &email, "free").await {
+                    Ok(value) => value,
+                    Err(err) => {
+                        tracing::error!("platform invite tenant resolution failed: {err}");
+                        return (
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            Json(
+                                json!({ "success": false, "message": "Unable to prepare the account." }),
+                            ),
+                        );
+                    }
+                },
+            };
+            let name: String = row
+                .try_get("display_name")
+                .unwrap_or_else(|_| invite.name.clone());
+            (uid, tenant, name)
+        }
+        Ok(None) => {
+            let tenant_id = match crate::admin::resolve_tenant_for_email(db, &email, "free").await {
+                Ok(value) => value,
+                Err(err) => {
+                    tracing::error!("platform invite tenant creation failed: {err}");
+                    return (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        Json(
+                            json!({ "success": false, "message": "Unable to prepare the account." }),
+                        ),
+                    );
+                }
+            };
+            let hash = match hash_team_password(&password) {
+                Ok(value) => value,
+                Err(status) => {
+                    return (
+                        status,
+                        Json(
+                            json!({ "success": false, "message": "Unable to prepare the account." }),
+                        ),
+                    )
+                }
+            };
+            let inserted: Result<uuid::Uuid, _> = sqlx::query_scalar(
+                "INSERT INTO users (tenant_id, email, display_name, password_hash, status)
+                 VALUES ($1, $2, $3, $4, 'active')
+                 RETURNING id",
+            )
+            .bind(tenant_id)
+            .bind(&email)
+            .bind(&invite.name)
+            .bind(&hash)
+            .fetch_one(db)
+            .await;
+            match inserted {
+                Ok(uid) => (uid, tenant_id, invite.name.clone()),
+                Err(err) => {
+                    tracing::warn!("platform invite user create failed for {email}: {err}");
+                    return (
+                        StatusCode::CONFLICT,
+                        Json(json!({
+                            "success": false,
+                            "message": "Unable to create the account. It may already exist with a different status."
+                        })),
+                    );
+                }
+            }
+        }
+        Err(err) => {
+            tracing::warn!("platform invite user lookup failed for {email}: {err}");
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "success": false, "message": "Unable to load the account." })),
+            );
+        }
+    };
+
+    let _ = sqlx::query("DELETE FROM failed_login_attempts WHERE email = $1")
+        .bind(&email)
+        .execute(db)
+        .await;
+
+    let upsert = sqlx::query(
+        "INSERT INTO platform_admins (email, display_name, role, status, permissions, last_seen_at)
+         VALUES ($1, $2, $3, 'active', $4, NOW())
+         ON CONFLICT (email) DO UPDATE SET
+             display_name = EXCLUDED.display_name,
+             role = EXCLUDED.role,
+             permissions = EXCLUDED.permissions,
+             status = 'active',
+             updated_at = NOW()",
+    )
+    .bind(&email)
+    .bind(&display_name)
+    .bind(&role)
+    .bind(&permissions)
+    .execute(db)
+    .await;
+    if let Err(err) = upsert {
+        tracing::error!("platform invitation acceptance failed: {err}");
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({ "success": false, "message": "Unable to activate platform access." })),
+        );
+    }
+
+    // Any other pending key for this address is now obsolete.
+    let _ = sqlx::query(
+        "UPDATE team_invites
+            SET revoked = TRUE,
+                data = data || '{\"status\":\"revoked\"}'::jsonb
+          WHERE revoked = FALSE
+            AND data->>'status' = 'pending'
+            AND data->>'scope' = 'platform'
+            AND LOWER(data->>'email') = LOWER($1)
+            AND code <> $2",
+    )
+    .bind(&email)
+    .bind(&invite.token)
+    .execute(db)
+    .await;
+
+    let (access_token, refresh_token, expiry_seconds) =
+        match issue_invite_session(state, headers, user_id, tenant_id, &email, None).await {
+            Ok(value) => value,
+            Err((status, body)) => return (status, body),
+        };
+
+    if !set_team_invite_status(state, &invite.token, "accepted").await {
+        tracing::warn!(
+            "platform invite {} could not be marked accepted",
+            invite.token
+        );
+    }
+    let mut accepted_invite = invite.clone();
+    accepted_invite.status = "accepted".to_string();
+    accepted_invite.accepted_at = Some(chrono::Utc::now().to_rfc3339());
+
+    (
+        StatusCode::OK,
+        Json(json!({
+            "success": true,
+            "accessToken": access_token,
+            "refreshToken": refresh_token,
+            "expiresIn": expiry_seconds,
+            "tokenType": "Bearer",
+            "invite": public_team_invite(&accepted_invite),
+            "user": {
+                "id": user_id.to_string(),
+                "email": email,
+                "displayName": display_name,
+                "role": "admin",
+                "tenantId": tenant_id.to_string(),
+                "isPlatformAdmin": true,
+            }
+        })),
+    )
+}
+
 /// Complete a team-access sign-in with an email + password.
 ///
 /// The invited member is created (or verified) inside the inviter's workspace
@@ -3908,6 +4384,13 @@ pub async fn complete_team_invite(
             )
         }
     };
+
+    // A control-plane invitation carries no workspace. It is accepted on the
+    // same Team Access screen, but activates platform staff instead of adding
+    // a company membership.
+    if invite.scope.as_deref() == Some("platform") {
+        return complete_platform_invite(&state, &headers, &invite, email, password, db).await;
+    }
 
     let admin_tenant = match invite
         .workspace
@@ -4187,81 +4670,19 @@ pub async fn complete_team_invite(
     accepted_invite.status = "accepted".to_string();
     accepted_invite.accepted_at = Some(chrono::Utc::now().to_rfc3339());
 
-    let jwt_secret = state.config.jwt_secret.as_deref().unwrap_or_default();
-    if jwt_secret.is_empty() {
-        return (
-            StatusCode::SERVICE_UNAVAILABLE,
-            Json(json!({ "success": false, "message": "Session signing is not configured." })),
-        );
-    }
-    let expiry_seconds: i64 = std::env::var("JWT_EXPIRY_SECONDS")
-        .ok()
-        .and_then(|v| v.parse().ok())
-        .unwrap_or(3_600)
-        .clamp(300, 86_400);
-    let now = chrono::Utc::now();
-    let device_id = payload
-        .device_id
-        .map(|value| value.trim().to_string())
-        .filter(|value| !value.is_empty())
-        .unwrap_or_else(|| "team-access".to_string());
-    let claims = velismail_common::Claims {
-        sub: velismail_common::types::UserId(user_id),
-        tenant_id: admin_tenant.to_string(),
-        email: email.clone(),
-        iat: now.timestamp(),
-        exp: (now + chrono::Duration::seconds(expiry_seconds)).timestamp(),
-        nbf: now.timestamp(),
-        jti: uuid::Uuid::new_v4().to_string(),
-        role: velismail_common::UserRole::User,
-        mfa_verified: false,
-        device_id: device_id.clone(),
-        security_level: velismail_common::SecurityLevel::Standard,
-        firebase_uid: None,
-    };
-    let access_token = match encode(
-        &jsonwebtoken::Header::default(),
-        &claims,
-        &EncodingKey::from_secret(jwt_secret.as_bytes()),
-    ) {
-        Ok(value) => value,
-        Err(_) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({ "success": false, "message": "Unable to sign the session." })),
-            )
-        }
-    };
-
-    let refresh_token = match velismail_crypto::random::random_token(64) {
-        Ok(value) => value,
-        Err(_) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({ "success": false, "message": "Unable to create the session." })),
-            )
-        }
-    };
-    let refresh_hash = hash_refresh_token(&refresh_token);
-    let refresh_days: i64 = std::env::var("REFRESH_TOKEN_EXPIRY_DAYS")
-        .ok()
-        .and_then(|v| v.parse().ok())
-        .unwrap_or(30);
-    let refresh_expiry = now + chrono::Duration::days(refresh_days);
-    let ip = gateway_request_ip(&headers);
-    let _ = sqlx::query(
-        r#"INSERT INTO refresh_tokens
-           (user_id, token_hash, device_id, device_fingerprint, expires_at, ip_address, mfa_verified)
-           VALUES ($1, $2, $3, $4, $5, $6::inet, false)"#,
+    let (access_token, refresh_token, expiry_seconds) = match issue_invite_session(
+        &state,
+        &headers,
+        user_id,
+        admin_tenant,
+        &email,
+        payload.device_id.clone(),
     )
-    .bind(user_id)
-    .bind(&refresh_hash)
-    .bind(&device_id)
-    .bind(&device_id)
-    .bind(refresh_expiry)
-    .bind(&ip)
-    .execute(db)
-    .await;
+    .await
+    {
+        Ok(value) => value,
+        Err((status, body)) => return (status, body),
+    };
 
     if !set_team_invite_status(&state, token, "accepted").await {
         tracing::warn!("team invite {token} could not be marked accepted after sign-in");
@@ -5707,7 +6128,7 @@ async fn ensure_inbound_routes_table(pool: &PgPool) -> Result<(), String> {
     Ok(())
 }
 
-async fn register_inbound_route(
+pub(crate) async fn register_inbound_route(
     state: &AppState,
     domain: &str,
     db_url: &str,
@@ -5829,6 +6250,73 @@ async fn lookup_inbound_route(state: &AppState, domain: &str) -> Option<(String,
     let db_url = row.try_get::<String, _>(0).ok()?;
     let api_key = row.try_get::<String, _>(1).ok()?;
     let webhook_secret = row.try_get::<String, _>(2).ok()?;
+    Some((db_url, api_key, webhook_secret))
+}
+
+/// Resolve the inbound route from the workspace configuration.
+///
+/// The `inbound_mail_routes` table is filled by the domain-verification flow.
+/// Domains that were connected before that flow existed have no row, so their
+/// inbound mail was rejected even though the domain itself was verified. The
+/// tenant configuration is authoritative: the domain must belong to an active
+/// workspace, and the database, provider key and signing secret come from that
+/// workspace's owner settings.
+async fn resolve_inbound_route_from_settings(
+    state: &AppState,
+    domain: &str,
+) -> Option<(String, String, String)> {
+    let db = state.db.as_ref()?;
+
+    let tenant_id: Uuid = sqlx::query_scalar(
+        "SELECT cd.tenant_id
+         FROM custom_domains cd
+         JOIN tenants t ON t.id = cd.tenant_id
+              AND t.deleted_at IS NULL
+              AND t.status = 'active'
+         WHERE LOWER(cd.domain_name) = LOWER($1)
+         ORDER BY cd.created_at ASC
+         LIMIT 1",
+    )
+    .bind(domain)
+    .fetch_optional(db)
+    .await
+    .ok()
+    .flatten()?;
+
+    let settings: Value = sqlx::query_scalar(
+        "SELECT u.settings
+         FROM users u
+         JOIN company_members cm ON cm.user_id = u.id
+              AND cm.tenant_id = $1
+              AND cm.status = 'active'
+         ORDER BY (cm.role = 'owner') DESC, cm.created_at ASC
+         LIMIT 1",
+    )
+    .bind(tenant_id)
+    .fetch_optional(db)
+    .await
+    .ok()
+    .flatten()?;
+
+    let db_url = settings
+        .get("businessDbUrl")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())?
+        .to_string();
+    let api_key = settings
+        .get("businessApiKey")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())?
+        .to_string();
+    let webhook_secret = settings
+        .get("businessMailWebhookSecret")
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .trim()
+        .to_string();
+
     Some((db_url, api_key, webhook_secret))
 }
 
@@ -5988,7 +6476,11 @@ pub async fn receive_resend_inbound(
 
     let mut route = None;
     for domain in &recipient_domains {
-        if let Some(found) = lookup_inbound_route(&state, domain).await {
+        let found = match lookup_inbound_route(&state, domain).await {
+            Some(route) => Some(route),
+            None => resolve_inbound_route_from_settings(&state, domain).await,
+        };
+        if let Some(found) = found {
             route = Some(found);
             break;
         }
@@ -5998,7 +6490,7 @@ pub async fn receive_resend_inbound(
             StatusCode::NOT_FOUND,
             Json(json!({
                 "success": false,
-                "error": "No VelisMail BYO inbound route is registered for this recipient domain.",
+                "error": "No active VelisMail workspace owns this recipient domain.",
                 "domains": recipient_domains
             })),
         );

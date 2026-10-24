@@ -235,6 +235,26 @@ fn log_request(
     );
 }
 
+/// Routes that a signed-in user (or key) may call before the workspace setup
+/// is complete. Everything else waits for a verified domain, stored database
+/// and provider credentials. This is enforced server-side so a stale or
+/// modified browser cannot use an unfinished workspace.
+fn setup_exempt(path: &str) -> bool {
+    matches!(
+        path,
+        "/verify"
+            | "/verify/providers"
+            | "/config/public"
+            | "/tenants/verify-domain"
+            | "/company/businesses"
+            | "/company/businesses/switch"
+            | "/company/domains"
+    ) || path.starts_with("/company/domains/")
+        || path.starts_with("/payments/")
+        || path.starts_with("/admin/platform/")
+        || path.starts_with("/auth/")
+}
+
 /// Authentication middleware for gateway-owned API routes.
 ///
 /// Public endpoints (auth proxy, signed webhooks, invite acceptance, pricing
@@ -367,6 +387,29 @@ pub async fn require_auth(
                                 );
                             }
                         }
+                        if !setup_exempt(path) {
+                            if let Some(tenant) = current_tenant {
+                                match crate::company_api::workspace_setup_state(db, tenant).await {
+                                    Ok(setup) if setup.is_complete() => {}
+                                    Ok(_) => return error_response(
+                                        StatusCode::FORBIDDEN,
+                                        "WORKSPACE_SETUP_INCOMPLETE",
+                                        "Finish the workspace setup before using the dashboard.",
+                                    ),
+                                    Err(err) => {
+                                        tracing::error!(
+                                            "workspace setup lookup failed during auth: {}",
+                                            err
+                                        );
+                                        return error_response(
+                                            StatusCode::SERVICE_UNAVAILABLE,
+                                            "SERVICE_UNAVAILABLE",
+                                            "Unable to verify the workspace setup right now.",
+                                        );
+                                    }
+                                }
+                            }
+                        }
                     }
                     Ok(None) => {
                         return error_response(
@@ -458,6 +501,29 @@ async fn authorize_api_key(
                 "FORBIDDEN",
                 "This API key cannot call this endpoint.",
             );
+        }
+    }
+
+    if !setup_exempt(path) {
+        if let Some(db) = state.db.as_ref() {
+            match crate::company_api::workspace_setup_state(db, context.tenant_id).await {
+                Ok(setup) if setup.is_complete() => {}
+                Ok(_) => {
+                    return error_response(
+                        StatusCode::FORBIDDEN,
+                        "WORKSPACE_SETUP_INCOMPLETE",
+                        "Finish the workspace setup before using this API key.",
+                    )
+                }
+                Err(err) => {
+                    tracing::error!("workspace setup lookup failed for API key: {}", err);
+                    return error_response(
+                        StatusCode::SERVICE_UNAVAILABLE,
+                        "SERVICE_UNAVAILABLE",
+                        "Unable to verify the workspace setup right now.",
+                    );
+                }
+            }
         }
     }
 

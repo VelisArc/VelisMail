@@ -305,11 +305,11 @@ export default function SetupRequired({
     if (apiProvider === 'amazonses' && !/^[a-z0-9-]{3,32}$/.test(customApiUrl.trim())) {
       return 'Enter a valid AWS region, for example us-east-1 or eu-west-1.';
     }
-    if (apiProvider === 'resend' && !webhookSecret.trim()) {
-      return 'Resend receiving needs the webhook signing secret.';
-    }
     if (apiProvider === 'resend' && hasUnsafeCredentialPlaceholder(webhookSecret)) {
-      return 'The Resend webhook secret looks like a placeholder. Paste the real whsec_ secret.';
+      return 'The Resend webhook secret looks like a placeholder. Paste the real whsec_ secret or leave it empty.';
+    }
+    if (apiProvider === 'resend' && webhookSecret.trim() && !webhookSecret.trim().startsWith('whsec_')) {
+      return 'The webhook signing secret must start with whsec_. Leave it empty to create it automatically.';
     }
     return null;
   };
@@ -346,14 +346,14 @@ export default function SetupRequired({
         apiKey: apiKey.trim(),
         mailProvider: apiProvider,
         mailProviderEndpoint: endpoint,
-        mailWebhookSecret: apiProvider === 'resend' ? webhookSecret.trim() : undefined,
+        mailWebhookSecret: apiProvider === 'resend' && webhookSecret.trim() ? webhookSecret.trim() : undefined,
       };
       await persistAccountSettings({
         businessDbUrl: customDbUrl.trim(),
         businessApiKey: apiKey.trim(),
         businessMailProvider: apiProvider,
         businessMailProviderEndpoint: endpoint,
-        businessMailWebhookSecret: apiProvider === 'resend' ? webhookSecret.trim() : undefined,
+        businessMailWebhookSecret: apiProvider === 'resend' && webhookSecret.trim() ? webhookSecret.trim() : undefined,
         businessProfile: nextProfile,
       });
       setEditingInfra(false);
@@ -429,6 +429,14 @@ export default function SetupRequired({
         setMessage({ type: 'success', text: `${primary.domain} is verified. All DNS records are live.` });
         setHasUserSelected(false);
       } else {
+        const webhookFailed = result.webhook && result.webhook.status !== 'verified';
+        if (missing.length === 0 && webhookFailed) {
+          setMessage({
+            type: 'error',
+            text: result.webhook?.detail || 'The Resend receiving webhook could not be verified.',
+          });
+          return;
+        }
         const firstProblem = missing[0];
         setMessage({
           type: 'error',
@@ -840,7 +848,7 @@ export default function SetupRequired({
                                 </button>
                               </div>
                               <small>
-                                Resend → Webhooks → add <code>https://api.velismail.online/api/v1/mail/inbound</code>
+                                Leave empty to let VelisMail create the Resend webhook automatically on Verify. Manual setup: Resend → Webhooks → <code>https://api.velismail.online/api/v1/mail/inbound</code> with event <code>email.received</code>.
                               </small>
                             </div>
                           )}

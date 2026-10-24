@@ -169,19 +169,21 @@ export type TeamAccessInvite = {
   token: string;
   email: string;
   name: string;
-  role: 'owner' | 'admin' | 'member' | 'viewer' | 'user';
+  role: string;
   status: 'pending' | 'accepted' | 'expired' | 'revoked';
   createdAt: string;
   expiresAt: string | null;
   acceptedAt?: string;
   issuerEmail: string;
-  workspace: Pick<User,
+  /** A workspace key joins a company; a platform key opens the control plane. */
+  scope?: 'workspace' | 'platform';
+  workspace?: Partial<Pick<User,
     'tenantId' |
     'displayName' |
     'businessDomain' |
     'businessDomainVerified' |
     'isBusinessSetupComplete'
-  >;
+  >>;
 };
 
 export type BusinessTemplate = {

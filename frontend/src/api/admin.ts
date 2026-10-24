@@ -378,6 +378,18 @@ export type PlatformTeam = {
     lastSeenAt?: string | null;
     createdAt: string;
   }>;
+  /** Control-plane invitations that have not been accepted yet. */
+  invitations: Array<{
+    id: string;
+    email: string;
+    name: string;
+    role: string;
+    status: string;
+    invitedBy: string;
+    accessKey: string;
+    expiresAt?: string | null;
+    createdAt?: string | null;
+  }>;
   roles: Array<{
     key: string;
     name: string;
@@ -645,6 +657,29 @@ export const platformAdminApi = {
 
   addAdmin: (payload: { email: string; role?: string; displayName?: string }) =>
     call<{ success: boolean }>('/admin/platform/team', jsonBody(payload)),
+
+  /** Invite somebody into the control plane with an expiring access key. */
+  inviteAdmin: (payload: { email: string; role?: string; displayName?: string; expiresInHours?: number }) =>
+    call<{
+      success: boolean;
+      invite: {
+        id: string;
+        token: string;
+        email: string;
+        name: string;
+        role: string;
+        status: string;
+        createdAt: string;
+        expiresAt?: string | null;
+        issuerEmail: string;
+      };
+    }>('/admin/platform/team/invitations', jsonBody(payload)),
+
+  revokeAdminInvitation: (id: string) =>
+    call<{ success: boolean }>(
+      `/admin/platform/team/invitations/${encodeURIComponent(id)}/revoke`,
+      jsonBody({}),
+    ),
 
   updateAdmin: (email: string, payload: { role?: string; status?: string; displayName?: string }) =>
     call<{ success: boolean }>(

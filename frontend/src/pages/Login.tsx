@@ -306,7 +306,9 @@ export default function Login() {
       setTeamInvite(validation.invite);
       setTeamEmail(validation.invite.email || '');
       setTeamPassword('');
-      setTeamHint(`Key accepted for ${validation.invite.role} access. Enter the assigned email and a password to open the company dashboard.`);
+      setTeamHint(validation.invite.scope === 'platform'
+        ? `Key accepted for platform ${validation.invite.role} access. Enter the assigned email and a password to open the control plane.`
+        : `Key accepted for ${validation.invite.role} access. Enter the assigned email and a password to open the company dashboard.`);
       setTeamStep('signin');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Invalid team access key.');
