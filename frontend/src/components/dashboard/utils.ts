@@ -339,3 +339,28 @@ export function buildReplyQuote(email: Email): string {
   const senderName = email.fromName || email.from;
   return `\n\nOn ${replyDate}, ${senderName} <${email.from}> wrote:\n${quotedText}`;
 }
+
+/**
+ * Build the collapsed block used when forwarding.
+ *
+ * Forwarding used to copy the whole message straight into the editor, so the
+ * cursor landed below a wall of quoted text and the original logo/signature
+ * looked like it belonged to the new mail. The composer now keeps this block
+ * behind the same trimmed-content toggle it uses for replies.
+ */
+export function buildForwardQuote(email: Email): string {
+  const cleanBody = stripHtmlTags(getPrimaryConversationText(email.body));
+  const forwardedDate = new Date(email.date).toLocaleString(undefined, {
+    dateStyle: 'long', timeStyle: 'short',
+  });
+  const senderName = email.fromName || email.from;
+  const recipients = Array.isArray(email.to) ? email.to.join(', ') : email.to;
+  const header = [
+    '---------- Forwarded message ----------',
+    `From: ${senderName} <${email.from}>`,
+    `Date: ${forwardedDate}`,
+    `Subject: ${email.subject || '(No subject)'}`,
+    recipients ? `To: ${recipients}` : '',
+  ].filter(Boolean).join('\n');
+  return `\n\n${header}\n\n${cleanBody}`;
+}

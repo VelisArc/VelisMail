@@ -1,9 +1,9 @@
 import { useState, useEffect, useMemo, useDeferredValue, memo, useCallback, type FC } from 'react';
 import {
   Mail, Star, Archive, Trash2, Search, Paperclip, ArrowLeft,
-  Reply, Forward, RefreshCcw,
+  Reply, ReplyAll, Forward, RefreshCcw,
   ArrowUpDown, Menu, CheckSquare, Square,
-  Eye, EyeOff, Shield, AlertTriangle, X,
+  Eye, EyeOff, Shield, ShieldCheck, AlertTriangle, X, Printer,
   ChevronDown, ChevronUp, Lock, Info,
 } from 'lucide-react';
 import type { Email } from '../../api/client';
@@ -21,9 +21,19 @@ interface EmailInboxProps {
   onTrash: (ids: string[]) => void;
   onReply: (email: Email) => void;
   onForward: (email: Email) => void;
+  onReplyAll?: (email: Email) => void;
   onToggleRead?: (id: string, currentlyUnread: boolean) => void;
   onMarkSpam?: (id: string) => void;
+  onMarkSafe?: (id: string) => void;
   onTogglePriority?: (id: string) => void;
+  onMoveFolder?: (id: string, folder: string) => void;
+  onDeleteForever?: (id: string) => void;
+  onBulkDeleteForever?: (ids: string[]) => void;
+  onBulkRead?: (ids: string[], read: boolean) => void;
+  onBulkStar?: (ids: string[]) => void;
+  onBulkSpam?: (ids: string[]) => void;
+  onMarkAllRead?: (folder: string) => void;
+  onEmptyFolder?: (ids: string[]) => void;
 }
 
 const AVATAR_COLORS = ['#0d9488','#0891b2','#2563eb','#7c3aed','#db2777','#dc2626','#ea580c','#ca8a04','#16a34a','#059669'];
@@ -184,8 +194,10 @@ const EmailRow = memo(({ email, state, onOpen, onToggleStar }: {
 
 const EmailInbox: FC<EmailInboxProps> = ({
   emails, isLoading, state, onRefresh, onToggleStar,
-  onArchive, onTrash, onReply, onForward,
-  onToggleRead, onMarkSpam, onTogglePriority,
+  onArchive, onTrash, onReply, onForward, onReplyAll,
+  onToggleRead, onMarkSpam, onMarkSafe, onTogglePriority,
+  onMoveFolder, onDeleteForever, onBulkDeleteForever, onBulkRead, onBulkStar, onBulkSpam,
+  onMarkAllRead, onEmptyFolder,
 }) => {
   const [focusedEmail, setFocusedEmail] = useState<Email | null>(null);
   const [searchExpanded, setSearchExpanded] = useState(false);
@@ -238,6 +250,33 @@ const EmailInbox: FC<EmailInboxProps> = ({
     }
   }, [onToggleRead]);
   const closeReader = useCallback(() => setFocusedEmail(null), []);
+
+  // Print through a clean, script-free window. The message is written with
+  // textContent so HTML inside a mail can never execute in the print view.
+  const printEmail = useCallback((email: Email) => {
+    const win = window.open('', '_blank', 'width=820,height=900');
+    if (!win) {
+      state.showToast('Allow pop-ups in your browser to print this message.', 'error');
+      return;
+    }
+    const doc = win.document;
+    doc.title = email.subject || 'Email';
+    const style = doc.createElement('style');
+    style.textContent = 'body{font-family:system-ui,-apple-system,Segoe UI,sans-serif;padding:32px;color:#111}h1{font-size:18px;margin:0 0 12px}.meta{font-size:12px;color:#555;white-space:pre-wrap;line-height:1.6}hr{border:0;border-top:1px solid #ddd;margin:16px 0}.body{white-space:pre-wrap;word-break:break-word;font-size:14px;line-height:1.65}';
+    doc.head.appendChild(style);
+    const title = doc.createElement('h1');
+    title.textContent = email.subject || '(No subject)';
+    const meta = doc.createElement('div');
+    meta.className = 'meta';
+    meta.textContent = `From: ${email.fromName || ''} <${email.from}>\nTo: ${Array.isArray(email.to) ? email.to.join(', ') : email.to}\nDate: ${new Date(email.date).toLocaleString()}`;
+    const rule = doc.createElement('hr');
+    const message = doc.createElement('div');
+    message.className = 'body';
+    message.textContent = email.body;
+    doc.body.append(title, meta, rule, message);
+    win.focus();
+    win.print();
+  }, [state]);
 
   const conversation = useMemo(() => focusedEmail ? parseEmailConversation(focusedEmail.body) : [], [focusedEmail]);
 
@@ -318,6 +357,16 @@ const EmailInbox: FC<EmailInboxProps> = ({
         <button type="button" className="toolbar-icon" onClick={() => state.setSortOrder(state.sortOrder === 'desc' ? 'asc' : 'desc')} aria-label="Toggle sort" title={state.sortOrder === 'desc' ? 'Oldest first' : 'Newest first'}>
           <ArrowUpDown size={14} />
         </button>
+        {onMarkAllRead && filtered.some(({ email }) => email.unread) && (
+          <button type="button" className="toolbar-icon" onClick={() => onMarkAllRead(state.activeFolder)} aria-label="Mark all read" title="Mark all read">
+            <Eye size={14} />
+          </button>
+        )}
+        {isTrash && onEmptyFolder && filtered.length > 0 && (
+          <button type="button" className="toolbar-icon toolbar-icon-danger" onClick={() => onEmptyFolder(filtered.map(({ email }) => email.id))} aria-label="Empty trash" title="Empty trash">
+            <Trash2 size={14} />
+          </button>
+        )}
       </div>
 
       {/* ── Compact Filter Pills ── */}
@@ -343,7 +392,21 @@ const EmailInbox: FC<EmailInboxProps> = ({
           <button className="toolbar-icon" onClick={() => state.setSelectedEmails(new Set())} aria-label="Clear selection" title="Clear"><Square size={13} /></button>
           <button className="toolbar-icon" onClick={() => { onArchive([...state.selectedEmails]); state.setSelectedEmails(new Set()); }} aria-label="Archive selected" title="Archive"><Archive size={13} /></button>
           <button className="toolbar-icon" onClick={() => { onTrash([...state.selectedEmails]); state.setSelectedEmails(new Set()); }} aria-label="Trash selected" title="Trash"><Trash2 size={13} /></button>
-
+          {onBulkRead && (
+            <>
+              <button className="toolbar-icon" onClick={() => { onBulkRead([...state.selectedEmails], true); state.setSelectedEmails(new Set()); }} aria-label="Mark selected read" title="Mark read"><Eye size={13} /></button>
+              <button className="toolbar-icon" onClick={() => { onBulkRead([...state.selectedEmails], false); state.setSelectedEmails(new Set()); }} aria-label="Mark selected unread" title="Mark unread"><EyeOff size={13} /></button>
+            </>
+          )}
+          {onBulkStar && (
+            <button className="toolbar-icon" onClick={() => { onBulkStar([...state.selectedEmails]); state.setSelectedEmails(new Set()); }} aria-label="Star selected" title="Star"><Star size={13} /></button>
+          )}
+          {onBulkSpam && state.activeFolder !== 'spam' && state.activeFolder !== 'trash' && (
+            <button className="toolbar-icon" onClick={() => { onBulkSpam([...state.selectedEmails]); state.setSelectedEmails(new Set()); }} aria-label="Mark selected as spam" title="Spam"><AlertTriangle size={13} /></button>
+          )}
+          {isTrash && onBulkDeleteForever && (
+            <button className="toolbar-icon toolbar-icon-danger" onClick={() => { onBulkDeleteForever([...state.selectedEmails]); state.setSelectedEmails(new Set()); }} aria-label="Delete selected forever" title="Delete forever"><Trash2 size={13} /></button>
+          )}
         </div>
       )}
 
@@ -354,6 +417,9 @@ const EmailInbox: FC<EmailInboxProps> = ({
             <div className="reader-toolbar">
               <button type="button" className="toolbar-icon" onClick={closeReader} aria-label="Back"><ArrowLeft size={15} /></button>
               <button type="button" className="toolbar-icon" onClick={() => onReply(focusedEmail)} aria-label="Reply" title="Reply"><Reply size={14} /></button>
+              {onReplyAll && (
+                <button type="button" className="toolbar-icon" onClick={() => onReplyAll(focusedEmail)} aria-label="Reply all" title="Reply all"><ReplyAll size={14} /></button>
+              )}
               <button type="button" className="toolbar-icon" onClick={() => onForward(focusedEmail)} aria-label="Forward" title="Forward"><Forward size={14} /></button>
               <button type="button" className={`toolbar-icon ${focusedEmail.starred ? 'toolbar-icon-active' : ''}`} onClick={() => { onToggleStar(focusedEmail.id); setFocusedEmail({ ...focusedEmail, starred: !focusedEmail.starred }); }} aria-label="Star" title="Star"><Star size={14} /></button>
               {onToggleRead && (
@@ -366,12 +432,38 @@ const EmailInbox: FC<EmailInboxProps> = ({
                   <AlertTriangle size={14} />
                 </button>
               )}
+              {onMarkSafe && state.activeFolder === 'spam' && (
+                <button type="button" className="toolbar-icon" onClick={() => { onMarkSafe(focusedEmail.id); closeReader(); }} aria-label="Not spam" title="Not spam">
+                  <ShieldCheck size={14} />
+                </button>
+              )}
               {onTogglePriority && (
                 <button type="button" className="toolbar-icon" onClick={() => { onTogglePriority(focusedEmail.id); }} aria-label="Toggle priority" title="Priority">
                   <Shield size={14} />
                 </button>
               )}
+              {onMoveFolder && !isTrash && (
+                <select
+                  className="input input-auto move-folder-select"
+                  value=""
+                  aria-label="Move message to folder"
+                  title="Move to folder"
+                  onClick={e => e.stopPropagation()}
+                  onChange={e => {
+                    const folder = e.target.value;
+                    if (!folder) return;
+                    onMoveFolder(focusedEmail.id, folder);
+                    closeReader();
+                  }}
+                >
+                  <option value="">Move to…</option>
+                  <option value="inbox">Inbox</option>
+                  <option value="archive">Archive</option>
+                  <option value="spam">Spam</option>
+                </select>
+              )}
               <div className="toolbar-spacer" />
+              <button type="button" className="toolbar-icon" onClick={() => printEmail(focusedEmail)} aria-label="Print" title="Print"><Printer size={14} /></button>
               {!isTrash && (
                 <button type="button" className="toolbar-icon" onClick={() => { onArchive([focusedEmail.id]); closeReader(); }} aria-label="Archive" title="Archive">
                   <Archive size={14} />
@@ -384,6 +476,11 @@ const EmailInbox: FC<EmailInboxProps> = ({
               ) : (
                 <button type="button" className="toolbar-icon" onClick={() => { onArchive([focusedEmail.id]); closeReader(); }} aria-label="Restore" title="Restore">
                   <Archive size={14} />
+                </button>
+              )}
+              {isTrash && onDeleteForever && (
+                <button type="button" className="toolbar-icon toolbar-icon-danger" onClick={() => { onDeleteForever(focusedEmail.id); closeReader(); }} aria-label="Delete forever" title="Delete forever">
+                  <Trash2 size={14} />
                 </button>
               )}
             </div>
@@ -439,7 +536,8 @@ const EmailInbox: FC<EmailInboxProps> = ({
                       <span className="meta-label">security:</span>
                       <span className="meta-value meta-security">
                         <Lock size={12} style={{ display: 'inline', verticalAlign: 'middle', marginRight: '4px' }} />
-                        Standard encryption (TLS) <a href="https://support.google.com/mail/answer/6330403" target="_blank" rel="noreferrer" className="meta-link" style={{ color: 'var(--text-muted)', textDecoration: 'underline', marginLeft: '4px' }}>Learn more</a>
+                        TLS encryption in transit
+                        <a href="/security#email-transport" className="meta-link" style={{ color: 'var(--text-muted)', textDecoration: 'underline', marginLeft: '4px' }}>VelisMail security policy</a>
                       </span>
                     </div>
                     {focusedEmail.labels?.includes('important') && (

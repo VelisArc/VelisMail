@@ -32,7 +32,8 @@ function ComposeModal({ state }: { state: DashboardState }) {
           onSend={(to, subject, body, attachments, scheduledAt) => {
             state.setComposeTo(to);
             state.setComposeSubject(subject);
-            state.setComposeBody(body);
+            // Never copy the final body (with the optional logo/quote) back
+            // into the open editor: the composer re-renders it as initialBody.
             state.handleSendEmail(to, subject, body, attachments, scheduledAt);
           }}
           onClose={() => state.setComposeOpen(false)}

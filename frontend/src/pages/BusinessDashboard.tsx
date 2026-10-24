@@ -7,7 +7,7 @@ import Sidebar from '../components/dashboard/Sidebar';
 import { PLANS, ROLE_ALLOWED_TABS, type BizTab } from '../components/dashboard/constants';
 import EmailInbox from '../components/dashboard/EmailInbox';
 import ErrorBoundary from '../components/ErrorBoundary';
-import { copyToClipboard, loadRazorpayCheckout, buildReplyQuote, fileToBase64 } from '../components/dashboard/utils';
+import { copyToClipboard, loadRazorpayCheckout, buildReplyQuote, buildForwardQuote, fileToBase64 } from '../components/dashboard/utils';
 import type { DashboardState, DomainRecord, DomainHealth, MailQueueItem } from '../components/dashboard/types';
 import DomainsPanel from '../components/dashboard/panels/DomainsPanel';
 import MailboxesPanel from '../components/dashboard/panels/MailboxesPanel';
@@ -798,9 +798,114 @@ const [feedbackOpen, setFeedbackOpen] = useState(false);
     openComposeWith(replyToAddress, replySubject, '', replyQuote);
   };
 
+  const handleReplyAll = (email: Email) => {
+    const myAddresses = new Set((domainMailboxes || []).map(m => m.address.toLowerCase()));
+    if (user?.email) myAddresses.add(user.email.toLowerCase());
+    const originalTo = Array.isArray(email.to) ? email.to : [email.to];
+    const recipients = [
+      ...(myAddresses.has(email.from.toLowerCase()) ? [] : [email.from]),
+      ...originalTo,
+    ]
+      .map(address => (address || '').trim())
+      .filter(address => address && !myAddresses.has(address.toLowerCase()));
+    const unique = [...new Map(recipients.map(address => [address.toLowerCase(), address])).values()];
+    const replySubject = email.subject?.startsWith('Re:') ? email.subject : `Re: ${email.subject}`;
+    openComposeWith(unique.join(', '), replySubject, '', buildReplyQuote(email));
+  };
+
   const handleForward = (email: Email) => {
-    const fwdBody = `\n\n---------- Forwarded message ----------\nFrom: ${email.fromName || email.from}\nDate: ${new Date(email.date).toLocaleString()}\nSubject: ${email.subject || ''}\n\n${email.body}`;
-    openComposeWith('', `Fwd: ${email.subject || ''}`, fwdBody);
+    // The forwarded body is kept collapsed, so the new message starts with an
+    // empty editor instead of a wall of copied text and logos.
+    openComposeWith('', `Fwd: ${email.subject || ''}`, '', buildForwardQuote(email));
+  };
+
+  const handleMarkSafe = async (id: string) => {
+    try {
+      await mail.markSafe(id);
+      refetch();
+      showToast('Moved back to Inbox');
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : 'Unable to move the message', 'error');
+    }
+  };
+
+  const handleMoveFolder = async (id: string, folder: string) => {
+    try {
+      await mail.moveFolder(id, folder);
+      refetch();
+      showToast(`Moved to ${folder}`);
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : 'Unable to move the message', 'error');
+    }
+  };
+
+  const handleDeleteForever = (ids: string[]) => {
+    if (!ids.length) return;
+    setConfirmAction({
+      title: 'Delete forever',
+      message: `Permanently delete ${ids.length === 1 ? 'this message' : `these ${ids.length} messages`}? This cannot be undone.`,
+      onConfirm: async () => {
+        try {
+          await Promise.all(ids.map(id => mail.deletePermanently(id)));
+          refetch();
+          showToast('Deleted permanently');
+        } catch (e) {
+          showToast(e instanceof Error ? e.message : 'Delete failed', 'error');
+        }
+      },
+    });
+  };
+
+  const handleBulkRead = async (ids: string[], read: boolean) => {
+    try {
+      await Promise.all(ids.map(id => read ? mail.markRead(id) : mail.markUnread(id)));
+      refetch();
+      showToast(read ? 'Marked as read' : 'Marked as unread');
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : 'Update failed', 'error');
+    }
+  };
+
+  const handleBulkStar = async (ids: string[]) => {
+    try {
+      await Promise.all(ids.map(id => mail.toggleStar(id)));
+      refetch();
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : 'Update failed', 'error');
+    }
+  };
+
+  const handleBulkSpam = async (ids: string[]) => {
+    try {
+      await Promise.all(ids.map(id => mail.markSpam(activeDomainName, id)));
+      refetch();
+      showToast('Moved to Spam');
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : 'Update failed', 'error');
+    }
+  };
+
+  const handleMarkAllRead = (folder: string) => {
+    mail.markAllRead(folder);
+    refetch();
+    showToast('Folder marked as read');
+  };
+
+  const handleEmptyFolder = (ids: string[]) => {
+    if (!ids.length) return;
+    setConfirmAction({
+      title: 'Empty folder',
+      message: `Permanently delete all ${ids.length} messages in this folder? This cannot be undone.`,
+      onConfirm: async () => {
+        try {
+          await Promise.all(ids.map(id => mail.deletePermanently(id)));
+          refetch();
+          showToast('Folder emptied');
+        } catch (e) {
+          showToast(e instanceof Error ? e.message : 'Delete failed', 'error');
+        }
+      },
+    });
   };
 
   const handleVerifyDomain = async (domainId: string) => {
@@ -1188,10 +1293,19 @@ const [feedbackOpen, setFeedbackOpen] = useState(false);
             onToggleStar={async (id) => { await mail.toggleStar(id); refetch(); }}
             onArchive={(ids) => handleBulkAction('archive', ids)}
             onTrash={(ids) => handleBulkAction('trash', ids)}
-            onReply={handleReply} onForward={handleForward}
+            onReply={handleReply} onForward={handleForward} onReplyAll={handleReplyAll}
             onToggleRead={async (id, currentlyUnread) => { if (currentlyUnread) { await mail.markRead(id); } else { await mail.markUnread(id); } refetch(); }}
             onMarkSpam={async (id) => { await mail.markSpam(activeDomainName, id); refetch(); }}
+            onMarkSafe={handleMarkSafe}
             onTogglePriority={async (id) => { await mail.togglePriority(id); refetch(); }}
+            onMoveFolder={handleMoveFolder}
+            onDeleteForever={(id) => handleDeleteForever([id])}
+            onBulkDeleteForever={handleDeleteForever}
+            onBulkRead={handleBulkRead}
+            onBulkStar={handleBulkStar}
+            onBulkSpam={handleBulkSpam}
+            onMarkAllRead={handleMarkAllRead}
+            onEmptyFolder={handleEmptyFolder}
           />
           </ErrorBoundary>
         )}

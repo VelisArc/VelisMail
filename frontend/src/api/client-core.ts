@@ -1485,6 +1485,10 @@ export async function fetchAuthenticatedProfile(): Promise<Partial<User>> {
       businessProfile: settings.businessProfile || settings.business_profile || raw.business_profile || raw.businessProfile,
       profileImageUrl: settings.profileImageUrl || settings.profile_image_url || raw.profile_image_url || raw.profileImageUrl || undefined,
       emailLogoUrl: settings.emailLogoUrl || settings.email_logo_url || raw.email_logo_url || raw.emailLogoUrl || undefined,
+      appendEmailLogo: Boolean(
+        settings.appendEmailLogo ?? settings.append_email_logo
+          ?? raw.append_email_logo ?? raw.appendEmailLogo ?? false,
+      ),
       // Platform staff identity. The backend is authoritative, the client
       // only uses it to decide whether the control plane switch is visible.
       firebaseUid: settings.firebaseUid || settings.firebase_uid || raw.firebase_uid || raw.firebaseUid || undefined,

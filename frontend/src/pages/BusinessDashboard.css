@@ -670,6 +670,14 @@
   border-color: var(--danger);
 }
 
+/* Compact folder picker inside the reader toolbar. */
+.move-folder-select {
+  max-width: 118px;
+  height: 28px;
+  padding: 0 6px;
+  font-size: 11px;
+}
+
 .inbox-filters {
   display: flex;
   align-items: center;
@@ -883,6 +891,7 @@
 .reader-toolbar {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   padding: var(--space-2) var(--space-4);
   background: var(--bg-surface-2);
   border-bottom: 1px solid var(--border-primary);

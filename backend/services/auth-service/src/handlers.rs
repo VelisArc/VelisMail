@@ -2539,6 +2539,7 @@ const WRITABLE_SETTINGS: &[&str] = &[
     "displayName",
     "profileImageUrl",
     "emailLogoUrl",
+    "appendEmailLogo",
     // Recovery-address changes need an OTP round trip against the new address.
     // They are handled by the auth service, never through this generic merge;
     // accepting them here let a browser mark any address as verified.

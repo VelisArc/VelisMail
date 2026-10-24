@@ -33,6 +33,8 @@ export type User = {
   businessMailboxAddress?: string;
   profileImageUrl?: string;
   emailLogoUrl?: string;
+  /** Append the uploaded brand logo to outgoing messages (opt-in). */
+  appendEmailLogo?: boolean;
   role?: 'admin' | 'member' | 'viewer' | 'user';
   isPlatformAdmin?: boolean;
   firebaseUid?: string;

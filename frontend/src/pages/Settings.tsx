@@ -20,6 +20,7 @@ export default function SettingsPage() {
   const [profileName, setProfileName] = useState(user?.displayName || '');
   const [profileImage, setProfileImage] = useState<string | null>(user?.profileImageUrl || null);
   const [emailLogo, setEmailLogo] = useState<string | null>(user?.emailLogoUrl || null);
+  const [appendEmailLogo, setAppendEmailLogo] = useState(Boolean(user?.appendEmailLogo));
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const logoInputRef = useRef<HTMLInputElement | null>(null);
   const [profileSaving, setProfileSaving] = useState(false);
@@ -60,6 +61,7 @@ export default function SettingsPage() {
     setProfileName(session.displayName || '');
     setRecoveryEmailDraft(session.recoveryEmail || '');
     setEmailLogo(session.emailLogoUrl || null);
+    setAppendEmailLogo(Boolean(session.appendEmailLogo));
   }, [navigate]);
 
   useEffect(() => {
@@ -166,6 +168,17 @@ export default function SettingsPage() {
       showToast('Email private logo removed');
     } else {
       showToast('Failed to remove email logo', 'error');
+    }
+  };
+
+  const handleAppendEmailLogo = (value: boolean) => {
+    const result = auth.updateSettings({ appendEmailLogo: value });
+    if (result.success && result.user) {
+      setUser(result.user);
+      setAppendEmailLogo(value);
+      showToast(value ? 'Logo will be appended to outgoing mail' : 'Automatic logo disabled');
+    } else {
+      showToast('Failed to save the logo preference', 'error');
     }
   };
 
@@ -433,12 +446,16 @@ export default function SettingsPage() {
                     </div>
                     <div>
                       <h4 style={{ textTransform: 'uppercase', fontSize: 'var(--text-xs)', fontWeight: 'bold', margin: '0 0 4px 0' }}>Email Private Logo</h4>
-                      <p style={{ fontSize: '10px', color: 'var(--text-muted)', margin: '0 0 8px 0', lineHeight: '1.3' }}>This logo will be automatically appended as your professional brand logo in outgoing emails.</p>
+                      <p style={{ fontSize: '10px', color: 'var(--text-muted)', margin: '0 0 8px 0', lineHeight: '1.3' }}>Upload a brand logo. It is never appended automatically until you enable the option below.</p>
                       <div>
                         <input ref={logoInputRef} type="file" accept="image/*" hidden onChange={handleLogoChange} />
                         <button type="button" className="btn btn-secondary btn-sm" onClick={() => logoInputRef.current?.click()}>Upload Logo</button>
                         {emailLogo && <button type="button" className="btn btn-sm btn-ghost settings-ml-xs" onClick={handleRemoveLogo}>Remove</button>}
                       </div>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '10px', fontSize: '11px', color: 'var(--text-secondary)' }}>
+                        <input type="checkbox" checked={appendEmailLogo} onChange={e => handleAppendEmailLogo(e.target.checked)} />
+                        Append logo to outgoing mail
+                      </label>
                     </div>
                   </div>
 

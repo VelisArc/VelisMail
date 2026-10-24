@@ -297,7 +297,22 @@ export default function SettingsPanel({ state }: SettingsPanelProps) {
   
   // Email Private Logo states and handlers
   const [emailLogo, setEmailLogo] = useState<string | null>(state.user?.emailLogoUrl || null);
+  const [appendEmailLogo, setAppendEmailLogo] = useState(Boolean(state.user?.appendEmailLogo));
   const logoInputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    setAppendEmailLogo(Boolean(state.user?.appendEmailLogo));
+  }, [state.user?.appendEmailLogo]);
+
+  const handleAppendLogoChange = (value: boolean) => {
+    const result = auth.updateSettings({ appendEmailLogo: value });
+    if (result.success) {
+      setAppendEmailLogo(value);
+      state.showToast(value ? 'Logo will be appended to outgoing mail' : 'Automatic logo disabled');
+    } else {
+      state.showToast('Failed to save the logo preference', 'error');
+    }
+  };
 
   const handleLogoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files && e.target.files[0];
@@ -517,7 +532,7 @@ export default function SettingsPanel({ state }: SettingsPanelProps) {
 
               <div className="mt-6 max-w-md">
                 <h5 className="text-sm font-semibold text-primary mb-2">Email Private Logo</h5>
-                <p className="text-xs text-muted mb-4">This logo will be automatically appended as your professional brand logo in outgoing emails.</p>
+                <p className="text-xs text-muted mb-4">Upload a brand logo. You control whether it is appended to outgoing mail; it is never added automatically until you enable it below.</p>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginTop: '12px' }}>
                   <div className="email-logo-preview">
                     {emailLogo ? <img src={emailLogo} alt="email logo" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} /> : <span style={{ fontSize: '10px', color: 'var(--text-muted)', textAlign: 'center', fontWeight: 'bold' }}>NO LOGO</span>}
@@ -527,6 +542,14 @@ export default function SettingsPanel({ state }: SettingsPanelProps) {
                     <button type="button" className="btn btn-secondary btn-sm" onClick={() => logoInputRef.current?.click()}>Upload Logo</button>
                     {emailLogo && <button type="button" className="btn btn-sm btn-ghost settings-ml-xs" onClick={handleRemoveLogo}>Remove</button>}
                   </div>
+                </div>
+                <div className="mt-4">
+                  <ToggleSwitch
+                    checked={appendEmailLogo}
+                    onChange={handleAppendLogoChange}
+                    label="Append logo to outgoing mail"
+                    sublabel="Off by default. When enabled, the uploaded logo is added to new messages, replies and forwards."
+                  />
                 </div>
               </div>
             </div>

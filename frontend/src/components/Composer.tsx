@@ -333,9 +333,10 @@ export default function Composer({
     if (!to || !subject) return;
     let finalBody = bodyHtml;
     
-    // Auto-append user email signature logo if configured
+    // The brand logo is opt-in. Appending it by default surprised customers,
+    // so it is only added when the account explicitly enabled it.
     const session = auth.getSession();
-    if (session && session.emailLogoUrl) {
+    if (session?.appendEmailLogo && session.emailLogoUrl) {
       const logoHtml = emailLogoMarkup(session.emailLogoUrl);
       if (logoHtml && !finalBody.includes('class="email-brand-logo"')) {
         finalBody = finalBody + logoHtml;

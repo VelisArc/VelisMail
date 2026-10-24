@@ -83,7 +83,7 @@ export default function SecurityPolicy() {
         </ul>
       </section>
 
-      <section>
+      <section id="email-transport">
         <h2>6. Email Security Standards</h2>
         <p>VelisMail supports comprehensive email authentication and security standards:</p>
         <ul>
@@ -93,6 +93,16 @@ export default function SecurityPolicy() {
           <li><strong>Anti-Abuse Controls:</strong> Workspace quotas, scoped API keys and rate limits reduce abuse.</li>
           <li><strong>Secure Transport:</strong> Mail and API traffic use encrypted channels wherever supported.</li>
         </ul>
+        <p>
+          <strong>VelisMail transport encryption policy:</strong> every dashboard, API and webhook connection is served over TLS 1.2 or newer.
+          Outgoing mail is submitted to the configured provider over an encrypted channel, and SMTP delivery uses STARTTLS/TLS when the receiving
+          server advertises it. A recipient server that does not support TLS can still receive mail in plain text, because SMTP does not guarantee
+          end-to-end transport encryption unless both sides require it. VelisMail does not silently downgrade API traffic to HTTP.
+        </p>
+        <p>
+          This policy is maintained by VelisMail and applies to this service; it is not a copy of another provider's policy. For questions or a
+          machine-readable summary, contact <a href="mailto:security@velismail.online">security@velismail.online</a>.
+        </p>
       </section>
 
       <section>
