@@ -14,11 +14,11 @@ import {
   ShieldCheck,
   AlertCircle,
   CheckCircle2,
-  HelpCircle,
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { auth, isBusinessSetupReady, teamAccess, type TeamAccessInvite, type User } from '../api/client';
 import LoadingSpinner from '../components/LoadingSpinner';
+import SignupGuide from '../components/SignupGuide';
 import './Login.css';
 
 type Mode = 'login' | 'register';
@@ -644,7 +644,9 @@ export default function Login() {
           </ul>
         </section>
 
-        {/* Auth card */}
+        {/* Auth card. The quick-start guide is a modal, so the card is hidden
+            while it is open instead of leaving an empty panel behind. */}
+        {!(mode === 'register' && registerStep === 'intro') && (
         <div className="login-card animate-scale">
           {mode === 'login' && (
             <>
@@ -1123,38 +1125,6 @@ export default function Login() {
             </>
           )}
 
-          {mode === 'register' && registerStep === 'intro' && (
-            <>
-              <div className="login-card-header">
-                <div className="login-icon-wrap"><HelpCircle size={21} /></div>
-                <h2>Welcome to VelisMail</h2>
-                <p className="login-card-desc">
-                  Before you create your account, here's what you need to know:
-                </p>
-              </div>
-
-              <div className="login-form" style={{ textAlign: 'left' }}>
-                <div className="form-group" style={{ marginBottom: '16px', padding: '16px', background: 'var(--bg-elevated)', borderRadius: '8px', border: '1px solid var(--border-primary)' }}>
-                  <h3 style={{ marginTop: 0, marginBottom: '12px', fontSize: '14px' }}>How VelisMail Works</h3>
-                  <ul style={{ margin: 0, paddingLeft: '20px', fontSize: '13px', lineHeight: '1.8', color: 'var(--text-secondary)' }}>
-                    <li><strong>Bring your own domain:</strong> VelisMail does not sell domains. You can use a domain you already own, or buy one from any registrar (Namecheap, GoDaddy, Cloudflare, Porkbun, etc.).</li>
-                    <li><strong>DNS setup is guided:</strong> After adding your domain, we'll show you the exact DNS records to add (MX for mail delivery, SPF/DKIM/DMARC for authentication, and a TXT record for ownership verification).</li>
-                    <li><strong>No separate mail server needed:</strong> VelisMail handles all mail infrastructure. Once DNS is verified, you can create mailboxes like <code>you@yourdomain.com</code> and send/receive immediately.</li>
-                    <li><strong>Optional phone for recovery:</strong> Add a mobile number with country code for future account recovery via SMS (optional).</li>
-                  </ul>
-                </div>
-                <button
-                  type="button"
-                  className="btn btn-primary w-full login-submit"
-                  onClick={() => setRegisterStep('form')}
-                  style={{ marginTop: '20px' }}
-                >
-                  <CheckCircle2 size={16} /> I understand, continue to setup
-                </button>
-              </div>
-            </>
-          )}
-
           {mode === 'register' && registerStep === 'form' && (
             <>
               <div className="login-card-header">
@@ -1367,6 +1337,7 @@ export default function Login() {
             </>
           )}
         </div>
+        )}
       </main>
 
       {/* ─── Footer ─── */}
@@ -1377,6 +1348,19 @@ export default function Login() {
         <span aria-hidden="true">•</span>
         <Link to="/security">Security</Link>
       </footer>
+
+      {mode === 'register' && registerStep === 'intro' && (
+        <SignupGuide
+          onComplete={() => {
+            setError('');
+            setRegisterStep('form');
+          }}
+          onSkip={() => {
+            setError('');
+            setRegisterStep('form');
+          }}
+        />
+      )}
     </div>
   );
 }
