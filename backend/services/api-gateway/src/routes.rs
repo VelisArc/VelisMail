@@ -3444,10 +3444,12 @@ fn valid_team_role(value: &str) -> bool {
 /// the safe answer.
 async fn load_team_invite(state: &AppState, token: &str) -> Option<TeamInviteRecord> {
     let db = state.db.as_ref()?;
-    let row = match sqlx::query("SELECT data FROM team_invites WHERE code = $1")
-        .bind(token)
-        .fetch_optional(db)
-        .await
+    let row = match sqlx::query(
+        "SELECT data, revoked, expires_at FROM team_invites WHERE code = $1",
+    )
+    .bind(token)
+    .fetch_optional(db)
+    .await
     {
         Ok(Some(row)) => row,
         Ok(None) => return None,
@@ -3457,7 +3459,22 @@ async fn load_team_invite(state: &AppState, token: &str) -> Option<TeamInviteRec
         }
     };
     let data: Value = row.try_get("data").ok()?;
-    serde_json::from_value(data).ok()
+    let mut invite: TeamInviteRecord = serde_json::from_value(data).ok()?;
+
+    // The columns are authoritative. A sweep or an older writer can set
+    // `revoked`/`expires_at` without rewriting the JSON document, and a key
+    // must never stay usable because the two copies disagree.
+    if row.try_get::<bool, _>("revoked").unwrap_or(false) {
+        invite.status = "revoked".to_string();
+    } else if row
+        .try_get::<Option<chrono::DateTime<chrono::Utc>>, _>("expires_at")
+        .ok()
+        .flatten()
+        .is_some_and(|expires| expires < chrono::Utc::now())
+    {
+        invite.status = "expired".to_string();
+    }
+    Some(invite)
 }
 
 /// Write the new state of an invitation back to the database.
@@ -3858,6 +3875,16 @@ pub async fn validate_team_invite(
             })),
         );
     }
+    if invite.status == "expired" || team_invite_expired(&invite) {
+        let _ = set_team_invite_status(&state, token, "expired").await;
+        return (
+            StatusCode::GONE,
+            Json(json!({
+                "success": false,
+                "message": "This team access key has expired."
+            })),
+        );
+    }
     if invite.status != "pending"
         && !team_invite_can_sign_in(&invite.status, invite.scope.as_deref())
     {
@@ -3865,8 +3892,6 @@ pub async fn validate_team_invite(
             && invite.scope.as_deref() == Some("platform")
         {
             "This platform invitation was already accepted. Sign in with your email and password."
-        } else if invite.status == "expired" {
-            "This team access key has expired."
         } else {
             "This team access key was already used."
         };
@@ -3875,16 +3900,6 @@ pub async fn validate_team_invite(
             Json(json!({
                 "success": false,
                 "message": message
-            })),
-        );
-    }
-    if team_invite_expired(&invite) {
-        let _ = set_team_invite_status(&state, token, "expired").await;
-        return (
-            StatusCode::GONE,
-            Json(json!({
-                "success": false,
-                "message": "This team access key has expired."
             })),
         );
     }
@@ -4442,6 +4457,13 @@ pub async fn complete_team_invite(
             Json(json!({ "success": false, "message": "This team access key was revoked." })),
         );
     }
+    if invite.status == "expired" || team_invite_expired(&invite) {
+        let _ = set_team_invite_status(&state, token, "expired").await;
+        return (
+            StatusCode::GONE,
+            Json(json!({ "success": false, "message": "This team access key has expired." })),
+        );
+    }
     if invite.status != "pending"
         && !team_invite_can_sign_in(&invite.status, invite.scope.as_deref())
     {
@@ -4449,21 +4471,12 @@ pub async fn complete_team_invite(
             && invite.scope.as_deref() == Some("platform")
         {
             "This platform invitation was already accepted. Sign in with your email and password."
-        } else if invite.status == "expired" {
-            "This team access key has expired."
         } else {
             "This team access key was already used."
         };
         return (
             StatusCode::CONFLICT,
             Json(json!({ "success": false, "message": message })),
-        );
-    }
-    if team_invite_expired(&invite) {
-        let _ = set_team_invite_status(&state, token, "expired").await;
-        return (
-            StatusCode::GONE,
-            Json(json!({ "success": false, "message": "This team access key has expired." })),
         );
     }
     if email != invite.email {
