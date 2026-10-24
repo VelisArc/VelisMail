@@ -348,36 +348,8 @@ pub async fn create_business(
     })?;
     let domain_id = domain_row.try_get::<Uuid, _>("id").ok();
 
-    // The sending mailboxes of the business.
-    for (address, display_name, kind) in [
-        (format!("admin@{domain}"), name.to_string(), "primary"),
-        (
-            format!("postmaster@{domain}"),
-            "Postmaster".to_string(),
-            "user",
-        ),
-    ] {
-        let mailbox_id = format!("mbx_{}", Uuid::new_v4().simple());
-        sqlx::query(
-            "INSERT INTO business_mailboxes
-             (id, tenant_id, domain, address, display_name, kind, aliases, active, source, created_at)
-             VALUES ($1, $2, $3, $4, $5, $6, '[]', TRUE, 'custom', $7)
-             ON CONFLICT (domain, address) DO NOTHING",
-        )
-        .bind(&mailbox_id)
-        .bind(tenant_id)
-        .bind(&domain)
-        .bind(&address)
-        .bind(&display_name)
-        .bind(kind)
-        .bind(crate::business_mailboxes::now_string())
-        .execute(&mut *tx)
-        .await
-        .map_err(|err| {
-            tracing::error!("mailbox {address} could not be created: {}", err);
-            internal_error("Unable to create the business mailboxes.")
-        })?;
-    }
+    // The business starts without mailboxes. An address that the owner did not
+    // create is not a real mailbox, and sending from it would fail.
 
     // The creator owns the new business.
     sqlx::query(

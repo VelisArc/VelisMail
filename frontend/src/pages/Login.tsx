@@ -168,7 +168,6 @@ export default function Login() {
     }
   }, [searchParams]);
   const businessDomainValue = normalizeDomain(regDomain);
-  const defaultBusinessMailboxAddress = businessDomainValue ? `admin@${businessDomainValue}` : '';
   const otpTargetEmail = regRecoveryEmail.trim().toLowerCase();
   const teamStepNumber = TEAM_STEP_ORDER.indexOf(teamStep) + 1;
 
@@ -1203,9 +1202,9 @@ export default function Login() {
                     onChange={e => setRegDomain(e.target.value)}
                   />
                   <span className="form-hint">
-                    {defaultBusinessMailboxAddress
-                      ? <>Mailbox <strong>{defaultBusinessMailboxAddress}</strong> activates after DNS verification.</>
-                      : 'Your mailbox is created after DNS verification succeeds.'}
+                    {businessDomainValue
+                      ? <>After DNS verification, create the mailbox addresses you use in the dashboard.</>
+                      : 'Mailboxes are created by you after this step.'}
                   </span>
                 </div>
 

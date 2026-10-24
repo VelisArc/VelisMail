@@ -1002,7 +1002,7 @@ export function maskDatabaseSecret(value: string): string {
 
 export function normalizeBusinessMailboxEntry(entry: Partial<BusinessMailbox>, domain: string): BusinessMailbox {
   const normalizedDomain = normalizeDomainInput(domain);
-  const address = normalizeMailbox(entry.address || `admin@${normalizedDomain}`);
+  const address = normalizeMailbox(entry.address || '');
   return {
     id: entry.id || `mbx_${safeRandomUUID().split('-').join('').slice(0, 8)}`,
     domain: normalizedDomain,
@@ -1031,34 +1031,14 @@ export function normalizeBusinessGroupEntry(entry: Partial<BusinessGroup>, domai
   };
 }
 
-export function getSystemBusinessMailbox(domain: string): BusinessMailbox {
-  const session = getSessionSafe();
-  const normalizedDomain = normalizeDomainInput(domain);
-  const preferredAddress = normalizeMailbox(
-    session?.businessMailboxAddress && session.businessMailboxAddress.endsWith(`@${normalizedDomain}`)
-      ? session.businessMailboxAddress
-      : `admin@${normalizedDomain}`,
-  );
-  return {
-    id: `sys_${hashString(normalizedDomain)}`,
-    domain: normalizedDomain,
-    address: preferredAddress,
-    displayName: session?.displayName?.trim() || 'Administrator',
-    kind: 'primary',
-    aliases: [],
-    active: true,
-    source: 'system',
-    createdAt: session?.createdAt || new Date().toISOString(),
-    lastUsedAt: undefined,
-  };
-}
-
 export function loadBusinessMailboxes(domain?: string): BusinessMailbox[] {
   const stored = loadUserDB<BusinessMailbox[]>(STORAGE_KEYS.businessMailboxes, []);
   const normalizedDomain = normalizeDomainInput(domain || '');
   const normalized = stored
     .map((entry) => normalizeBusinessMailboxEntry(entry, entry.domain || normalizedDomain))
-    .filter((entry) => entry.domain);
+    // An entry without an address is not a mailbox. Never invent one.
+    .filter((entry) => entry.domain)
+    .filter((entry) => entry.address.includes('@'));
   const deduped = Array.from(new Map(normalized.map(m => [m.address, m])).values());
   const byDomain = normalizedDomain
     ? deduped.filter((entry) => entry.domain === normalizedDomain)
@@ -1518,7 +1498,7 @@ export function buildSessionUser(params: {
   // (or the one already on the session). A personal email domain such as
   // gmail.com must never become the workspace mail domain.
   const domain = normalizeDomainInput(params.customDomain || params.existing?.businessDomain || '');
-  const businessMailboxAddress = domain ? `admin@${domain}` : email;
+  const businessMailboxAddress = email;
   return normalizeSessionUser({
     ...params.existing,
     ...profile,

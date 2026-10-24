@@ -2029,46 +2029,8 @@ pub async fn verify_domain(
     .execute(db)
     .await;
 
-    // A verified domain gets its sending mailboxes, in the central index and
-    // in the business database, so the first mail is accepted.
-    if report.complete {
-        for (address, kind, display_name) in [
-            (format!("admin@{domain}"), "primary", "VelisMail"),
-            (format!("postmaster@{domain}"), "user", "Postmaster"),
-        ] {
-            let mailbox_id = format!("mbx_{}", Uuid::new_v4().simple());
-            let mailbox = crate::business_mailboxes::MailboxValues {
-                id: &mailbox_id,
-                domain: &domain,
-                address: &address,
-                display_name,
-                kind,
-                aliases: "[]",
-                active: true,
-                source: "system",
-            };
-            if let Err(err) =
-                crate::business_mailboxes::upsert_central(db, context.tenant_id, &mailbox).await
-            {
-                tracing::warn!("mailbox {address} was not indexed: {err}");
-            }
-            if let Some(business_db) = tenant_business_db_url(db, context.tenant_id).await {
-                match crate::routes::business_mailbox_pool(&business_db).await {
-                    Ok(pool) => {
-                        if let Err(err) = crate::business_mailboxes::upsert(&pool, &mailbox).await {
-                            tracing::warn!(
-                                "mailbox {address} was not written to the business database: {err}"
-                            );
-                        }
-                    }
-                    Err(err) => {
-                        tracing::warn!("business database unreachable for {address}: {err}");
-                    }
-                }
-            }
-        }
-    }
-
+    // Verifying a domain only proves ownership. Mailboxes are never invented
+    // here: the console shows exactly the addresses the customer created.
     audit(
         db,
         &context.email,

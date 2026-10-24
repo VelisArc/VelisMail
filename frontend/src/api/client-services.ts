@@ -24,7 +24,6 @@ import {
   loadAutoReply, saveAutoReply,
   loadLabels, saveLabels,
   loadRules, saveRules,
-  getSystemBusinessMailbox,
   normalizeBusinessMailboxEntry, normalizeBusinessGroupEntry,
   buildConnectionUsage,
   assertLocalOtpLimit, recordLocalOtpSend,
@@ -923,28 +922,11 @@ export const businessMailboxes = {
     const remoteEntries = await fetchBusinessMailboxesFromDb(normalizedDomain);
     if (!remoteEntries) return localEntries;
 
-    const remoteByAddress = new Map(remoteEntries.map((entry) => [entry.address.toLowerCase(), entry]));
-
-    // Any local entry (including custom mailboxes) that is not in the remote database should be seeded
-    const unsyncedLocal = localEntries.filter((entry) => !remoteByAddress.has(entry.address.toLowerCase()));
-
-    const entriesToSeed = [...unsyncedLocal];
-
-    if (entriesToSeed.length > 0) {
-      await Promise.all(entriesToSeed.map((entry) => upsertBusinessMailboxToDb(entry)));
-    }
-
-    const mergedEntries = Array.from(
-      new Map(
-        [...remoteEntries, ...entriesToSeed].map((entry) => [entry.address.toLowerCase(), entry])
-      ).values(),
-    );
-    saveBusinessMailboxes(normalizedDomain, mergedEntries);
-    return loadBusinessMailboxes(normalizedDomain);
-  },
-
-  getPrimary(domain: string): BusinessMailbox {
-    return this.getByDomain(domain).find((entry) => entry.active) || this.getByDomain(domain)[0] || getSystemBusinessMailbox(domain);
+    // The database is authoritative. A stale local entry must never be pushed
+    // back, otherwise a deleted mailbox reappears on the next login and every
+    // browser keeps its own copy.
+    saveBusinessMailboxes(normalizedDomain, remoteEntries);
+    return remoteEntries;
   },
 
   async create(domain: string, data: {
@@ -1559,7 +1541,7 @@ export const mail = {
     const requestedFromAddress = normalizeMailbox(fromAddress || '');
     const selectedMailbox = requestedFromAddress
       ? availableMailboxes.find((mailbox) => mailbox.address === requestedFromAddress)
-      : availableMailboxes.find((mailbox) => mailbox.active) || availableMailboxes[0] || getSystemBusinessMailbox(normalizedDomain);
+      : availableMailboxes.find((mailbox) => mailbox.active) || availableMailboxes[0];
     if (requestedFromAddress && !selectedMailbox) {
       throw new Error(`${requestedFromAddress} is not connected to ${normalizedDomain}. Create or refresh the mailbox before sending.`);
     }

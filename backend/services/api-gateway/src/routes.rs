@@ -2797,24 +2797,12 @@ pub async fn verify_domain(
         runtime_checks.push(verify_resend_inbound_webhook(&state.http_client, api_key).await);
     }
 
-    // A verified domain always gets its sending mailbox so the first mail
-    // does not fail with "sender mailbox is not registered".
+    // A successful verification does not add mailboxes. The owner creates the
+    // addresses they actually use; anything else would be a phantom sender.
     let initial_dns_passed = checks.iter().all(|check| check.status == "verified");
     let initial_runtime_passed = runtime_checks
         .iter()
         .all(|check| check.status == "verified");
-    let mut registered_mailboxes: Vec<String> = Vec::new();
-    if initial_dns_passed && initial_runtime_passed {
-        for (address, kind) in [
-            (format!("admin@{domain}"), "primary"),
-            (format!("postmaster@{domain}"), "user"),
-        ] {
-            match ensure_business_mailbox(db_url, &domain, &address, "VelisMail", kind).await {
-                Ok(()) => registered_mailboxes.push(address),
-                Err(err) => tracing::warn!("could not register mailbox {address}: {err}"),
-            }
-        }
-    }
     if initial_dns_passed && initial_runtime_passed && provider.eq_ignore_ascii_case("resend") {
         let route_check = register_inbound_route(
             &state,
@@ -2863,7 +2851,7 @@ pub async fn verify_domain(
             "checks": checks,
             "runtimeChecks": runtime_checks,
             "providerRecords": provider_records,
-            "registeredMailboxes": registered_mailboxes,
+            "registeredMailboxes": Vec::<String>::new(),
             "provider": provider,
         })),
     )
