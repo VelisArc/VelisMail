@@ -2938,19 +2938,46 @@ pub async fn feedback(
 
     let subject = format!("[Feedback] {} from {}", kind, name);
 
+    // Store the note before notifying support. The home form is public, so
+    // there is no workspace or account to attach it to; the control plane
+    // reads these rows from the platform feedback inbox.
+    let category = match kind {
+        "bug" | "feature" | "suggestion" | "praise" => kind,
+        _ => "general",
+    };
+    let priority = if category == "bug" { "high" } else { "medium" };
+    let stored = sqlx::query(
+        "INSERT INTO feedback
+            (tenant_id, user_id, user_email, subject, body, category, priority, status)
+         VALUES (NULL, NULL, $1, $2, $3, $4, $5, 'open')",
+    )
+    .bind(&email)
+    .bind(format!("[{}] {}", kind, name))
+    .bind(body)
+    .bind(category)
+    .bind(priority)
+    .execute(&state.db)
+    .await;
+    if let Err(err) = stored {
+        tracing::error!("feedback could not be stored: {}", err);
+        return Err(velismail_common::AppError::Internal);
+    }
+
     let message = EmailMessage {
         from: state.config.otp_from_email.clone(),
         from_name: Some(state.config.otp_from_name.clone()),
         to: vec![support_email.to_string()],
+        reply_to: Some(email.clone()),
         subject,
         text: text_body,
         ..EmailMessage::default()
     };
 
-    state.email_client.send(&message).await.map_err(|err| {
-        tracing::error!("feedback delivery failed: {}", err);
-        velismail_common::AppError::MailDelivery(err.to_string())
-    })?;
+    // The note is already durable, so a mail failure must not make the
+    // visitor resubmit it.
+    if let Err(err) = state.email_client.send(&message).await {
+        tracing::warn!("feedback notification email failed: {}", err);
+    }
 
     Ok(Json(json!({
         "success": true,
