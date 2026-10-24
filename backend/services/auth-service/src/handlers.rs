@@ -2620,10 +2620,11 @@ pub async fn update_account(
         .and_then(|value| value.as_str())
         .filter(|value| !value.trim().is_empty())
     {
-        normalized_business_db_url =
-            Some(velismail_common::traffic::validate_external_db_url(raw)
+        normalized_business_db_url = Some(
+            velismail_common::traffic::validate_external_db_url(raw)
                 .await
-                .map_err(|_| StatusCode::BAD_REQUEST)?);
+                .map_err(|_| StatusCode::BAD_REQUEST)?,
+        );
     }
 
     // A recovery address is only accepted together with proof that the caller
@@ -2690,14 +2691,14 @@ pub async fn update_account(
     let allowed = request_object
         .iter()
         .filter(|(key, _)| WRITABLE_SETTINGS.contains(&key.as_str()))
-        .map(|(key, value)| {
-            if key == "businessDbUrl" {
-                if let Some(ref normalized) = normalized_business_db_url {
-                    return (key.clone(), serde_json::Value::String(normalized.clone()));
+        .map(
+            |(key, value)| match (key.as_str(), normalized_business_db_url.as_ref()) {
+                ("businessDbUrl", Some(normalized)) => {
+                    (key.clone(), serde_json::Value::String(normalized.clone()))
                 }
-            }
-            (key.clone(), value.clone())
-        })
+                _ => (key.clone(), value.clone()),
+            },
+        )
         .collect::<serde_json::Map<String, serde_json::Value>>();
     if allowed.is_empty() {
         return Ok(Json(json!({

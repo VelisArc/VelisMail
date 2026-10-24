@@ -3521,20 +3521,19 @@ fn valid_team_role(value: &str) -> bool {
 /// the safe answer.
 async fn load_team_invite(state: &AppState, token: &str) -> Option<TeamInviteRecord> {
     let db = state.db.as_ref()?;
-    let row = match sqlx::query(
-        "SELECT data, revoked, expires_at FROM team_invites WHERE code = $1",
-    )
-    .bind(token)
-    .fetch_optional(db)
-    .await
-    {
-        Ok(Some(row)) => row,
-        Ok(None) => return None,
-        Err(err) => {
-            tracing::error!("team invite lookup failed: {err}");
-            return None;
-        }
-    };
+    let row =
+        match sqlx::query("SELECT data, revoked, expires_at FROM team_invites WHERE code = $1")
+            .bind(token)
+            .fetch_optional(db)
+            .await
+        {
+            Ok(Some(row)) => row,
+            Ok(None) => return None,
+            Err(err) => {
+                tracing::error!("team invite lookup failed: {err}");
+                return None;
+            }
+        };
     let data: Value = row.try_get("data").ok()?;
     let mut invite: TeamInviteRecord = serde_json::from_value(data).ok()?;
 
@@ -3965,8 +3964,7 @@ pub async fn validate_team_invite(
     if invite.status != "pending"
         && !team_invite_can_sign_in(&invite.status, invite.scope.as_deref())
     {
-        let message = if invite.status == "accepted"
-            && invite.scope.as_deref() == Some("platform")
+        let message = if invite.status == "accepted" && invite.scope.as_deref() == Some("platform")
         {
             "This platform invitation was already accepted. Sign in with your email and password."
         } else {
@@ -4542,8 +4540,7 @@ pub async fn complete_team_invite(
     if invite.status != "pending"
         && !team_invite_can_sign_in(&invite.status, invite.scope.as_deref())
     {
-        let message = if invite.status == "accepted"
-            && invite.scope.as_deref() == Some("platform")
+        let message = if invite.status == "accepted" && invite.scope.as_deref() == Some("platform")
         {
             "This platform invitation was already accepted. Sign in with your email and password."
         } else {
