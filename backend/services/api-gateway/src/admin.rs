@@ -34,6 +34,14 @@ type ApiResult = (StatusCode, Json<Value>);
 /// members or escalates to full platform operations is an owner decision.
 const OWNER_ONLY_ROLES: &[&str] = &["owner", "superadmin", "member_manager"];
 
+/// Upper bound on outstanding control-plane invitations. A real team never
+/// has more than a handful in flight; the cap keeps a compromised staff
+/// session from minting an unbounded number of keys.
+const MAX_PENDING_PLATFORM_INVITES: i64 = 100;
+
+/// How long terminal control-plane invitation rows are kept for audit.
+const PLATFORM_INVITE_RETENTION_DAYS: i64 = 90;
+
 /// True when the role may only be assigned by the platform owner.
 fn is_owner_only_role(role: &str) -> bool {
     OWNER_ONLY_ROLES.contains(&role)
@@ -704,7 +712,7 @@ fn require_permission(actor: &PlatformActor, permission: &str) -> Result<(), Api
 }
 
 #[allow(clippy::too_many_arguments)]
-async fn audit(
+pub(crate) async fn audit(
     db: &PgPool,
     actor_email: &str,
     actor_role: &str,
@@ -3139,34 +3147,61 @@ pub async fn list_platform_team(State(state): State<AppState>, headers: HeaderMa
         .collect();
 
     // Control-plane invitations use the same key store as workspace
-    // invitations. Only pending, unexpired keys are shown; the key itself is
-    // returned so the console can hand it to the invitee exactly once more.
+    // invitations. The recent history is returned so an owner can see what
+    // happened to every key; the key itself is only exposed while the
+    // invitation can still be accepted.
     let invitation_rows = sqlx::query(
-        "SELECT data FROM team_invites
-         WHERE revoked = FALSE
-           AND data->>'status' = 'pending'
-           AND data->>'scope' = 'platform'
-           AND (expires_at IS NULL OR expires_at > NOW())
+        "SELECT data, expires_at FROM team_invites
+         WHERE data->>'scope' = 'platform'
          ORDER BY created_at DESC LIMIT 100",
     )
     .fetch_all(db)
     .await
     .unwrap_or_default();
+    let now = Utc::now();
+    // A read-only staff role may see that an invitation exists, but the key
+    // itself can create an account for the invited address. Only staff that
+    // may issue invitations receive it.
+    let can_manage = actor.can("team.write");
     let invitations: Vec<Value> = invitation_rows
         .iter()
-        .filter_map(|row| row.try_get::<Value, _>("data").ok())
-        .map(|data| {
-            json!({
+        .filter_map(|row| {
+            let data = row.try_get::<Value, _>("data").ok()?;
+            let stored = data
+                .get("status")
+                .and_then(Value::as_str)
+                .unwrap_or("pending")
+                .to_string();
+            let expires_at: Option<DateTime<Utc>> = row
+                .try_get::<Option<DateTime<Utc>>, _>("expires_at")
+                .ok()
+                .flatten();
+            let expired =
+                stored == "pending" && expires_at.map(|value| value <= now).unwrap_or(false);
+            let status = if expired {
+                "expired".to_string()
+            } else {
+                stored
+            };
+            let access_key = if status == "pending" && can_manage {
+                data.get("token")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default()
+            } else {
+                ""
+            };
+            Some(json!({
                 "id": data.get("id").and_then(Value::as_str).unwrap_or_default(),
                 "email": data.get("email").and_then(Value::as_str).unwrap_or_default(),
                 "name": data.get("name").and_then(Value::as_str).unwrap_or_default(),
                 "role": data.get("role").and_then(Value::as_str).unwrap_or_default(),
-                "status": data.get("status").and_then(Value::as_str).unwrap_or("pending"),
+                "status": status,
                 "invitedBy": data.get("issuerEmail").and_then(Value::as_str).unwrap_or_default(),
-                "accessKey": data.get("token").and_then(Value::as_str).unwrap_or_default(),
+                "accessKey": access_key,
                 "expiresAt": data.get("expiresAt").cloned().unwrap_or(Value::Null),
+                "acceptedAt": data.get("acceptedAt").cloned().unwrap_or(Value::Null),
                 "createdAt": data.get("createdAt").cloned().unwrap_or(Value::Null),
-            })
+            }))
         })
         .collect();
 
@@ -3520,13 +3555,18 @@ pub async fn invite_platform_admin(
         }
     }
 
-    let display_name = payload.display_name.unwrap_or_else(|| {
-        email
-            .split('@')
-            .next()
-            .unwrap_or("Platform Admin")
-            .to_string()
-    });
+    let display_name: String = payload
+        .display_name
+        .unwrap_or_else(|| {
+            email
+                .split('@')
+                .next()
+                .unwrap_or("Platform Admin")
+                .to_string()
+        })
+        .chars()
+        .take(120)
+        .collect();
     let now = Utc::now();
     let expires_at =
         now + chrono::Duration::hours(payload.expires_in_hours.unwrap_or(48).clamp(1, 720));
@@ -3534,21 +3574,54 @@ pub async fn invite_platform_admin(
     let invitation_id = Uuid::new_v4();
     let record = json!({
         "id": invitation_id.to_string(),
-        "token": token,
-        "email": email,
+        "token": token.clone(),
+        "email": email.clone(),
         "name": display_name,
-        "role": role,
+        "role": role.clone(),
         "status": "pending",
         "createdAt": now.to_rfc3339(),
         "expiresAt": expires_at.to_rfc3339(),
         "acceptedAt": null,
-        "issuerEmail": actor.email,
+        "issuerEmail": actor.email.clone(),
         "scope": "platform",
         "workspace": {},
     });
 
-    // A fresh key replaces the earlier pending key for the same address, so an
-    // old link cannot be used after an administrator re-issued access.
+    // One transaction per address: the advisory lock serialises two staff
+    // members inviting the same person, and the cap keeps the key table
+    // bounded. The fresh key then replaces every earlier pending key.
+    let lock_key = format!("platform-invite:{email}");
+    let mut tx = match db.begin().await {
+        Ok(tx) => tx,
+        Err(err) => {
+            tracing::error!("platform invitation transaction failed: {}", err);
+            return fail(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Unable to create the platform invitation.",
+            );
+        }
+    };
+    let _ = sqlx::query("SELECT pg_advisory_xact_lock(hashtext($1))")
+        .bind(&lock_key)
+        .execute(&mut *tx)
+        .await;
+    let pending: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*)::bigint FROM team_invites
+         WHERE revoked = FALSE
+           AND data->>'status' = 'pending'
+           AND data->>'scope' = 'platform'
+           AND (expires_at IS NULL OR expires_at > NOW())",
+    )
+    .fetch_one(&mut *tx)
+    .await
+    .unwrap_or(0);
+    if pending >= MAX_PENDING_PLATFORM_INVITES {
+        let _ = tx.rollback().await;
+        return fail(
+            StatusCode::TOO_MANY_REQUESTS,
+            "Too many pending control-plane invitations. Revoke unused keys first.",
+        );
+    }
     let _ = sqlx::query(
         "UPDATE team_invites
             SET revoked = TRUE,
@@ -3559,9 +3632,8 @@ pub async fn invite_platform_admin(
             AND LOWER(data->>'email') = LOWER($1)",
     )
     .bind(&email)
-    .execute(db)
+    .execute(&mut *tx)
     .await;
-
     let stored = sqlx::query(
         "INSERT INTO team_invites (code, data, expires_at, revoked)
          VALUES ($1, $2, $3, false)",
@@ -3569,15 +3641,57 @@ pub async fn invite_platform_admin(
     .bind(&token)
     .bind(record.clone())
     .bind(expires_at)
-    .execute(db)
+    .execute(&mut *tx)
     .await;
     if let Err(err) = stored {
+        let _ = tx.rollback().await;
         tracing::error!("platform invitation insert failed: {}", err);
         return fail(
             StatusCode::INTERNAL_SERVER_ERROR,
             "Unable to create the platform invitation.",
         );
     }
+    if let Err(err) = tx.commit().await {
+        tracing::error!("platform invitation commit failed: {}", err);
+        return fail(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Unable to create the platform invitation.",
+        );
+    }
+
+    // Keep the history bounded. Terminal rows older than the retention window
+    // are removed; this is best effort and never blocks a new invitation.
+    let _ = sqlx::query(
+        "DELETE FROM team_invites
+          WHERE data->>'scope' = 'platform'
+            AND created_at < NOW() - ($1::text || ' days')::interval
+            AND (revoked = TRUE
+                 OR data->>'status' <> 'pending'
+                 OR (expires_at IS NOT NULL AND expires_at < NOW()))",
+    )
+    .bind(PLATFORM_INVITE_RETENTION_DAYS)
+    .execute(db)
+    .await;
+
+    // Delivering the key is a convenience: a mail outage must never discard a
+    // valid invitation, so the failure is reported and the key stays shareable.
+    let (email_sent, email_error) = match send_platform_invite_email(
+        &state,
+        &headers,
+        &email,
+        &role,
+        &token,
+        expires_at,
+        &actor.email,
+    )
+    .await
+    {
+        Ok(()) => (true, Value::Null),
+        Err(err) => {
+            tracing::warn!("platform invitation email failed for {email}: {err}");
+            (false, json!(err.chars().take(160).collect::<String>()))
+        }
+    };
 
     audit(
         db,
@@ -3588,11 +3702,59 @@ pub async fn invite_platform_admin(
         "platform_invitation",
         Some(&invitation_id.to_string()),
         None,
-        json!({ "email": email, "role": role, "expiresAt": expires_at.to_rfc3339() }),
+        json!({
+            "email": email,
+            "role": role,
+            "expiresAt": expires_at.to_rfc3339(),
+            "emailed": email_sent,
+        }),
         "warning",
     )
     .await;
-    ok(json!({ "success": true, "invite": record }))
+    ok(json!({
+        "success": true,
+        "invite": record,
+        "emailSent": email_sent,
+        "emailError": email_error,
+    }))
+}
+
+/// Email a control-plane invitation key to the invited address.
+///
+/// The message contains the key, the assigned address and the expiry. It is
+/// sent from the configured platform sender, which is a real mailbox, and the
+/// invitee still has to accept the key on the Team Access screen.
+async fn send_platform_invite_email(
+    state: &AppState,
+    headers: &HeaderMap,
+    to: &str,
+    role: &str,
+    token: &str,
+    expires_at: DateTime<Utc>,
+    invited_by: &str,
+) -> Result<(), String> {
+    let login_url = format!("{}/login", state.config.frontend_url.trim_end_matches('/'));
+    let body = format!(
+        "You have been invited to the VelisMail platform control plane as {role}.\n\n\
+Team Access Key: {token}\n\
+Invited address: {to}\n\
+Expires: {expiry}\n\n\
+Open {login_url} and choose the Team Access tab. Enter the key, this email address and a password. \
+The role becomes active only after that step.\n\n\
+If you were not expecting this invitation, ignore this message.\n\n\
+VelisMail Platform Operations\nInvited by {invited_by}",
+        expiry = expires_at.to_rfc3339(),
+    );
+    deliver_broadcast(
+        state,
+        headers,
+        to,
+        "Your VelisMail control-plane invitation",
+        &body,
+        None,
+        None,
+    )
+    .await
 }
 
 pub async fn revoke_platform_invitation(

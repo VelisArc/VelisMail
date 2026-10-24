@@ -307,6 +307,8 @@ export default function PlatformAdminPanel({ section, state }: PlatformAdminPane
     role: string;
     token: string;
     expiresAt?: string | null;
+    emailSent?: boolean;
+    emailError?: string | null;
   } | null>(null);
   const [newCase, setNewCase] = useState({ title: '', severity: 'medium', tenantId: '' });
   const [caseNote, setCaseNote] = useState('');
@@ -702,6 +704,22 @@ export default function PlatformAdminPanel({ section, state }: PlatformAdminPane
     navigator.clipboard.writeText(key).then(
       () => notify('Team Access Key copied'),
       () => notify('Unable to copy the access key', 'error'),
+    );
+  };
+
+  // A ready-to-send message keeps the key, the assigned address and the login
+  // steps together, so an owner can hand it over through any channel.
+  const copyInviteMessage = (invite: { email: string; role: string; token: string; expiresAt?: string | null }) => {
+    const message = [
+      `You have been invited to the VelisMail control plane as ${invite.role}.`,
+      `Team Access Key: ${invite.token}`,
+      `Email: ${invite.email}`,
+      invite.expiresAt ? `Expires: ${dateTime(invite.expiresAt)}` : '',
+      `Open ${window.location.origin}/login, choose the Team Access tab, and enter the key, this email address and a password.`,
+    ].filter(Boolean).join('\n');
+    navigator.clipboard.writeText(message).then(
+      () => notify('Invitation message copied'),
+      () => notify('Unable to copy the invitation message', 'error'),
     );
   };
 
@@ -1497,9 +1515,16 @@ export default function PlatformAdminPanel({ section, state }: PlatformAdminPane
                           role: result.invite.role,
                           token: result.invite.token,
                           expiresAt: result.invite.expiresAt,
+                          emailSent: result.emailSent,
+                          emailError: result.emailError,
                         });
                         setNewAdmin({ email: '', role: 'admin', expiresInHours: 48 });
-                        notify('Invitation created');
+                        notify(
+                          result.emailSent
+                            ? `Invitation emailed to ${result.invite.email}`
+                            : 'Invitation created. Email delivery failed, so share the key manually.',
+                          result.emailSent ? 'success' : 'error',
+                        );
                         void load();
                       } catch (error) {
                         notify(error instanceof Error ? error.message : 'Unable to create the invitation', 'error');
@@ -1525,8 +1550,8 @@ export default function PlatformAdminPanel({ section, state }: PlatformAdminPane
                   <div>
                     <h4>Invitation ready for {issuedAdminInvite.email}</h4>
                     <p>
-                      Share this Team Access Key. They open Login → Team Access, enter the key,
-                      their email and a password. The {issuedAdminInvite.role} role activates only then.
+                      They open Login → Team Access, enter the key, their email and a password.
+                      The {issuedAdminInvite.role} role activates only then.
                     </p>
                   </div>
                   <button type="button" className="btn btn-ghost btn-icon" aria-label="Dismiss invitation" onClick={() => setIssuedAdminInvite(null)}>
@@ -1540,11 +1565,19 @@ export default function PlatformAdminPanel({ section, state }: PlatformAdminPane
                   <button type="button" className="btn btn-ghost btn-sm" onClick={() => copyAdminKey(issuedAdminInvite.token)}>
                     <Copy size={13} /> Copy key
                   </button>
+                  <button type="button" className="btn btn-ghost btn-sm" onClick={() => copyInviteMessage(issuedAdminInvite)}>
+                    <Copy size={13} /> Copy message
+                  </button>
                   <div className="toolbar-spacer" />
                   <span className="text-xs text-muted">
                     Valid until {issuedAdminInvite.expiresAt ? dateTime(issuedAdminInvite.expiresAt) : 'the expiry you chose'}
                   </span>
                 </div>
+                <p className="text-xs text-muted" style={{ marginTop: 8 }}>
+                  {issuedAdminInvite.emailSent
+                    ? `The key was also emailed to ${issuedAdminInvite.email} from the platform sender.`
+                    : `Email delivery failed${issuedAdminInvite.emailError ? ` (${issuedAdminInvite.emailError})` : ''}. Share the key manually.`}
+                </p>
               </section>
             )}
 
@@ -1552,55 +1585,123 @@ export default function PlatformAdminPanel({ section, state }: PlatformAdminPane
               <section className="glass-card mt-16">
                 <div className="admin-card-head">
                   <div>
-                    <h4>Pending invitations</h4>
-                    <p>These people get control-plane access only after they accept their key.</p>
+                    <h4>Invitations</h4>
+                    <p>
+                      Pending keys expire automatically. Accepted access appears in the
+                      administrator list below; terminal rows stay here for the audit trail.
+                    </p>
                   </div>
                 </div>
-                {(team?.invitations || []).map((invitation) => (
+                {(team?.invitations || []).map((invitation) => {
+                  const pending = invitation.status === 'pending';
+                  const expired = invitation.status === 'expired';
+                  const statusLine = pending
+                    ? `expires ${dateTime(invitation.expiresAt)}`
+                    : expired
+                      ? `expired ${dateTime(invitation.expiresAt)}`
+                      : invitation.status === 'accepted'
+                        ? `accepted ${dateTime(invitation.acceptedAt)}`
+                        : invitation.status;
+                  return (
                   <div key={invitation.id} className="admin-user-row">
                     <div className="admin-user-info">
                       <strong>{invitation.email}</strong>
                       <span>
-                        invited by {invitation.invitedBy || 'unknown'} · expires {dateTime(invitation.expiresAt)}
+                        {invitation.role} · invited by {invitation.invitedBy || 'unknown'}
+                        {invitation.createdAt ? ` · ${dateTime(invitation.createdAt)}` : ''}
+                        {' · '}
+                        {statusLine}
                       </span>
                     </div>
                     <div className="admin-user-metrics">
-                      <Badge value={invitation.role}>{invitation.role}</Badge>
-                      <Badge value="pending">pending</Badge>
+                      <Badge value={invitation.status}>{invitation.status}</Badge>
                     </div>
                     <div className="admin-row-actions">
-                      <button type="button" className="btn btn-ghost btn-sm" onClick={() => copyAdminKey(invitation.accessKey)}>
-                        <Copy size={13} /> Copy key
-                      </button>
-                      {canManageTeam && (
-                      <button
-                        type="button"
-                        className="btn btn-ghost btn-sm btn-danger"
-                        onClick={() => {
-                          confirm({
-                            title: 'Revoke invitation',
-                            message: `The invitation for ${invitation.email} is cancelled and its Team Access Key stops working immediately.`,
-                            confirmLabel: 'Revoke invitation',
-                            tone: 'danger',
-                            onConfirm: async () => {
-                              try {
-                                await platformAdminApi.revokeAdminInvitation(invitation.id);
-                                if (issuedAdminInvite?.id === invitation.id) setIssuedAdminInvite(null);
-                                notify(`Invitation for ${invitation.email} revoked`);
-                                void load();
-                              } catch (error) {
-                                notify(error instanceof Error ? error.message : 'Unable to revoke the invitation', 'error');
-                              }
-                            },
-                          });
-                        }}
-                      >
-                        <X size={13} /> Revoke
-                      </button>
+                      {canManageTeam && pending && (
+                        <>
+                          <button type="button" className="btn btn-ghost btn-sm" onClick={() => copyAdminKey(invitation.accessKey)}>
+                            <Copy size={13} /> Copy key
+                          </button>
+                          <button type="button" className="btn btn-ghost btn-sm" onClick={() => copyInviteMessage({ email: invitation.email, role: invitation.role, token: invitation.accessKey, expiresAt: invitation.expiresAt })}>
+                            <Copy size={13} /> Copy message
+                          </button>
+                        </>
+                      )}
+                      {canManageTeam && (pending || expired) && (
+                        <>
+                          {expired && (
+                            <button
+                              type="button"
+                              className="btn btn-ghost btn-sm"
+                              onClick={() => {
+                                confirm({
+                                  title: 'Send a fresh invitation',
+                                  message: `${invitation.email} receives a new Team Access Key for the ${invitation.role} role. The expired key stops working.`,
+                                  confirmLabel: 'Resend invitation',
+                                  tone: 'primary',
+                                  onConfirm: async () => {
+                                    try {
+                                      const result = await platformAdminApi.inviteAdmin({
+                                        email: invitation.email,
+                                        role: invitation.role,
+                                        expiresInHours: 48,
+                                      });
+                                      setIssuedAdminInvite({
+                                        id: result.invite.id,
+                                        email: result.invite.email,
+                                        role: result.invite.role,
+                                        token: result.invite.token,
+                                        expiresAt: result.invite.expiresAt,
+                                        emailSent: result.emailSent,
+                                        emailError: result.emailError,
+                                      });
+                                      notify(
+                                        result.emailSent
+                                          ? `Fresh invitation emailed to ${result.invite.email}`
+                                          : 'Fresh invitation created. Email delivery failed, so share the key manually.',
+                                        result.emailSent ? 'success' : 'error',
+                                      );
+                                      void load();
+                                    } catch (error) {
+                                      notify(error instanceof Error ? error.message : 'Unable to resend the invitation', 'error');
+                                    }
+                                  },
+                                });
+                              }}
+                            >
+                              Resend
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            className="btn btn-ghost btn-sm btn-danger"
+                            onClick={() => {
+                              confirm({
+                                title: 'Revoke invitation',
+                                message: `The invitation for ${invitation.email} is cancelled and its Team Access Key stops working immediately.`,
+                                confirmLabel: 'Revoke invitation',
+                                tone: 'danger',
+                                onConfirm: async () => {
+                                  try {
+                                    await platformAdminApi.revokeAdminInvitation(invitation.id);
+                                    if (issuedAdminInvite?.id === invitation.id) setIssuedAdminInvite(null);
+                                    notify(`Invitation for ${invitation.email} revoked`);
+                                    void load();
+                                  } catch (error) {
+                                    notify(error instanceof Error ? error.message : 'Unable to revoke the invitation', 'error');
+                                  }
+                                },
+                              });
+                            }}
+                          >
+                            <X size={13} /> Revoke
+                          </button>
+                        </>
                       )}
                     </div>
                   </div>
-                ))}
+                  );
+                })}
               </section>
             )}
 

@@ -388,6 +388,7 @@ export type PlatformTeam = {
     invitedBy: string;
     accessKey: string;
     expiresAt?: string | null;
+    acceptedAt?: string | null;
     createdAt?: string | null;
   }>;
   roles: Array<{
@@ -662,6 +663,8 @@ export const platformAdminApi = {
   inviteAdmin: (payload: { email: string; role?: string; displayName?: string; expiresInHours?: number }) =>
     call<{
       success: boolean;
+      emailSent: boolean;
+      emailError?: string | null;
       invite: {
         id: string;
         token: string;

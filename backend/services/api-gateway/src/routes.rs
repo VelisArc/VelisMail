@@ -4066,6 +4066,56 @@ async fn complete_platform_invite(
     password: String,
     db: &sqlx::PgPool,
 ) -> (StatusCode, Json<Value>) {
+    // Claim the key before doing any work, so two concurrent acceptances can
+    // never both create a session. A failure below hands the key back, which
+    // keeps a typo in the password from burning the invitation.
+    let claimed = sqlx::query(
+        "UPDATE team_invites
+            SET data = data || '{\"status\":\"accepted\"}'::jsonb
+          WHERE code = $1
+            AND revoked = FALSE
+            AND data->>'status' = 'pending'
+            AND (expires_at IS NULL OR expires_at > NOW())
+          RETURNING data",
+    )
+    .bind(&invite.token)
+    .fetch_optional(db)
+    .await;
+    match claimed {
+        Ok(Some(_)) => {}
+        Ok(None) => {
+            return (
+                StatusCode::CONFLICT,
+                Json(json!({
+                    "success": false,
+                    "message": "This team access key was already used or has expired."
+                })),
+            )
+        }
+        Err(err) => {
+            tracing::error!("platform invite claim failed: {err}");
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "success": false, "message": "Unable to accept the invitation." })),
+            );
+        }
+    }
+
+    let response = activate_platform_invite(state, headers, invite, email, password, db).await;
+    if response.0 != StatusCode::OK {
+        let _ = set_team_invite_status(state, &invite.token, "pending").await;
+    }
+    response
+}
+
+async fn activate_platform_invite(
+    state: &AppState,
+    headers: &HeaderMap,
+    invite: &TeamInviteRecord,
+    email: String,
+    password: String,
+    db: &sqlx::PgPool,
+) -> (StatusCode, Json<Value>) {
     let role = invite.role.trim().to_lowercase();
     let role_row =
         sqlx::query("SELECT permissions FROM platform_roles WHERE key = $1 AND key <> 'owner'")
@@ -4256,6 +4306,19 @@ async fn complete_platform_invite(
             Json(json!({ "success": false, "message": "Unable to activate platform access." })),
         );
     }
+    crate::admin::audit(
+        db,
+        &email,
+        &role,
+        "platform_admin.activated",
+        "team",
+        "platform_admin",
+        Some(&email),
+        None,
+        json!({ "role": role, "invitedBy": invite.issuer_email }),
+        "critical",
+    )
+    .await;
 
     // Any other pending key for this address is now obsolete.
     let _ = sqlx::query(
