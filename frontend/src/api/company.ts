@@ -200,6 +200,20 @@ export const workspaceApi = {
   domains: () =>
     request<{ success: boolean; domains: WorkspaceDomain[] }>('/company/domains'),
 
+  /**
+   * The setup state the server enforces. Members see the workspace they work
+   * in, not their own account settings, so the dashboard uses this instead of
+   * trusting local flags.
+   */
+  setupState: () =>
+    request<{
+      success: boolean;
+      complete: boolean;
+      verifiedDomain: boolean;
+      webhookVerified: boolean;
+      provider: string;
+    }>('/company/setup-state'),
+
   createDomain: (payload: { domain: string }) =>
     request<{ success: boolean; id: string; domain: string; verificationToken: string; existing?: boolean }>(
       '/company/domains',

@@ -202,7 +202,6 @@ export default function useWorkspaceReadiness(user: User | null): WorkspaceReadi
     // receiving webhook pass. Trust that status instead of DNS alone, so a
     // broken webhook keeps the setup gate closed.
     const domainReady = Boolean(primary) && primary.status === 'verified' && primary.webhookVerified;
-    const domainVerified = domainReady;
 
     return [
       {
@@ -234,13 +233,18 @@ export default function useWorkspaceReadiness(user: User | null): WorkspaceReadi
         label: 'Inbound webhook',
         description: 'The provider posts incoming mail to the platform, without it nothing arrives.',
         icon: Webhook,
-        done: provider.toLowerCase() === 'resend' ? Boolean(webhookSecret) || domainVerified : true,
+        done:
+          provider.toLowerCase() === 'resend'
+            ? Boolean(primary?.webhookVerified) || (!primary && Boolean(webhookSecret))
+            : true,
         detail:
           provider.toLowerCase() === 'resend'
-            ? webhookSecret
-              ? 'Configured'
-              : domainVerified
-                ? 'Created automatically and verified'
+            ? primary
+              ? primary.webhookVerified
+                ? 'Verified by the provider'
+                : 'Not verified yet — verify the domain to create it automatically'
+              : webhookSecret
+                ? 'Secret saved — verified together with the domain'
                 : 'Created automatically when you verify the domain'
             : 'Not needed for this provider',
       },

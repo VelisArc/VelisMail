@@ -39,6 +39,23 @@ pub async fn run_service() -> anyhow::Result<()> {
         });
     }
 
+    // The setup gate trusts the stored webhook marker. Re-check the provider
+    // webhook in the background so a deleted or disabled webhook closes the
+    // gate instead of leaving a broken inbox open after setup.
+    if let Some(db) = state.db.clone() {
+        let client = state.http_client.clone();
+        tokio::spawn(async move {
+            let mut ticker = tokio::time::interval(Duration::from_secs(600));
+            ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+            loop {
+                ticker.tick().await;
+                if let Err(err) = company_api::audit_inbound_webhooks(&db, &client).await {
+                    tracing::warn!("inbound webhook audit failed: {}", err);
+                }
+            }
+        });
+    }
+
     let cors = build_cors_layer(&config.frontend_url);
 
     let api_routes = routes::api_v1_routes(&state).layer(axum::middleware::from_fn_with_state(

@@ -206,4 +206,32 @@ describe('setup gate', () => {
     fireEvent.click(openButtons[0]);
     expect(await screen.findByRole('heading', { name: 'DNS records active' })).toBeTruthy();
   });
+
+  it('shows the receiving webhook endpoint, event and status in its own step', async () => {
+    const resendChecks = checks.map((check) =>
+      check.key === 'webhook'
+        ? { ...check, done: false, detail: 'Not verified yet' }
+        : check,
+    );
+
+    render(
+      <SetupRequired
+        user={{ ...user, businessMailProvider: 'resend' }}
+        readiness={{
+          ...readiness,
+          checks: resendChecks,
+          primaryDomain: readiness.primaryDomain
+            ? { ...readiness.primaryDomain, webhookVerified: false }
+            : null,
+        }}
+      />,
+    );
+
+    expect(await screen.findByRole('heading', { name: 'Inbound webhook' })).toBeTruthy();
+    expect(
+      screen.getAllByText('https://api.velismail.online/api/v1/mail/inbound').length,
+    ).toBeGreaterThan(0);
+    expect(screen.getAllByText('email.received').length).toBeGreaterThan(0);
+    expect(screen.getByText('Not verified')).toBeTruthy();
+  });
 });

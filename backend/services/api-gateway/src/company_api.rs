@@ -2422,6 +2422,134 @@ pub(crate) async fn workspace_setup_state(
     })
 }
 
+/// The authoritative setup state of the caller's workspace.
+///
+/// It is readable before the setup is complete so the client can show the same
+/// gate the server enforces. Only booleans and the provider name leave the
+/// server; the stored credentials never do.
+pub async fn setup_state(State(state): State<AppState>, headers: HeaderMap) -> ApiResult {
+    let context = workspace_context(&state, &headers).await?;
+    let db = db_pool(&state)?;
+    let setup = workspace_setup_state(db, context.tenant_id)
+        .await
+        .map_err(|err| {
+            tracing::error!("workspace setup state lookup failed: {}", err);
+            fail(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "Unable to read the workspace setup right now.",
+            )
+        })?;
+    let provider = setup
+        .settings
+        .get("businessMailProvider")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .unwrap_or("")
+        .to_string();
+    ok(json!({
+        "success": true,
+        "complete": setup.is_complete(),
+        "verifiedDomain": setup.verified_domain,
+        "webhookVerified": setup.webhook_verified_domain,
+        "provider": provider,
+    }))
+}
+
+/// Re-check the provider webhook of every live workspace.
+///
+/// The gate trusts the stored marker, so a webhook that was deleted, disabled
+/// or rebound to another key after setup must clear it. A network or rate-limit
+/// failure keeps the last known state: a provider blip must not lock a working
+/// workspace out, while a real configuration error closes the gate.
+pub(crate) async fn audit_inbound_webhooks(
+    db: &PgPool,
+    client: &reqwest::Client,
+) -> Result<(), sqlx::Error> {
+    let tenants: Vec<Uuid> = sqlx::query_scalar(
+        "SELECT DISTINCT cd.tenant_id
+         FROM custom_domains cd
+         JOIN tenants t ON t.id = cd.tenant_id
+              AND t.deleted_at IS NULL
+              AND t.status = 'active'
+         WHERE cd.inbound_webhook_verified_at IS NOT NULL",
+    )
+    .fetch_all(db)
+    .await?;
+
+    for tenant in tenants {
+        let setup = match workspace_setup_state(db, tenant).await {
+            Ok(setup) => setup,
+            Err(err) => {
+                tracing::warn!(tenant = %tenant, error = %err, "webhook audit could not read the workspace");
+                continue;
+            }
+        };
+        let setting = |key: &str| {
+            setup
+                .settings
+                .get(key)
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .unwrap_or("")
+                .to_string()
+        };
+        let provider = setting("businessMailProvider");
+        if !provider.eq_ignore_ascii_case("resend") {
+            continue;
+        }
+        let api_key = setting("businessApiKey");
+        if api_key.is_empty() {
+            continue;
+        }
+
+        if let Ok(Some(secret)) =
+            crate::routes::ensure_resend_inbound_webhook(client, &api_key).await
+        {
+            if let Err(err) = store_workspace_webhook_secret(db, tenant, &secret).await {
+                tracing::warn!(tenant = %tenant, error = %err, "webhook audit could not store the new signing secret");
+            }
+        }
+
+        let check = crate::routes::verify_resend_inbound_webhook(client, &api_key).await;
+        match (check.status, check.category) {
+            ("verified", _) => {
+                sqlx::query(
+                    "UPDATE custom_domains
+                     SET inbound_webhook_verified_at = NOW()
+                     WHERE tenant_id = $1 AND inbound_webhook_verified_at IS NOT NULL",
+                )
+                .bind(tenant)
+                .execute(db)
+                .await?;
+            }
+            (_, "config") => {
+                sqlx::query(
+                    "UPDATE custom_domains
+                     SET inbound_webhook_verified_at = NULL
+                     WHERE tenant_id = $1",
+                )
+                .bind(tenant)
+                .execute(db)
+                .await?;
+                tracing::warn!(
+                    tenant = %tenant,
+                    detail = %check.detail,
+                    "inbound webhook check failed; the workspace setup gate is closed"
+                );
+            }
+            _ => {
+                tracing::warn!(
+                    tenant = %tenant,
+                    detail = %check.detail,
+                    "inbound webhook check was inconclusive; keeping the last verified state"
+                );
+            }
+        }
+    }
+
+    Ok(())
+}
+
 /// Store a signing secret that the gateway obtained from the provider. The
 /// owner settings are the authoritative credential store used by the inbound
 /// webhook, so the browser never has to copy the secret by hand.

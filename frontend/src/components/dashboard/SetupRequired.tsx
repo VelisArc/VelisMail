@@ -75,6 +75,10 @@ const STEP_ORDER: SetupCheckKey[] = [
 
 const INFRA_KEYS: SetupCheckKey[] = ['database', 'apiKey', 'provider', 'webhook'];
 
+/** The receiving endpoint every Resend workspace posts incoming mail to. */
+const INBOUND_WEBHOOK_URL = 'https://api.velismail.online/api/v1/mail/inbound';
+const INBOUND_WEBHOOK_EVENT = 'email.received';
+
 const RECORD_LABELS: Record<string, string> = {
   verified: 'Active',
   missing: 'Missing',
@@ -148,7 +152,8 @@ export default function SetupRequired({
   const displayedRecords = records.length > 0 ? records : lastResult;
   const dnsCheck = checks.find((check) => check.key === 'dns');
   const pendingRecords = displayedRecords.filter((record) => record.status !== 'verified');
-  const isInfraStep = INFRA_KEYS.includes(activeKey);
+  const isInfraStep = INFRA_KEYS.includes(activeKey) && activeKey !== 'webhook';
+  const isWebhookStep = activeKey === 'webhook';
   const infraDone = INFRA_KEYS.every(
     (key) => checks.find((check) => check.key === key)?.done,
   );
@@ -486,9 +491,87 @@ export default function SetupRequired({
     }
   };
 
+  /**
+   * Save the webhook secret (when one was pasted) and check the provider
+   * webhook. The server creates the webhook automatically when it is missing,
+   * so an empty field is a valid choice - the check still has to pass before
+   * the setup opens.
+   */
+  const saveAndVerifyWebhook = async () => {
+    if (apiProvider !== 'resend') {
+      selectStep('dns');
+      return;
+    }
+    const secret = webhookSecret.trim();
+    if (secret && !secret.startsWith('whsec_')) {
+      setMessage({
+        type: 'error',
+        text: 'The signing secret must start with whsec_. Leave it empty to let VelisMail create the webhook.',
+      });
+      return;
+    }
+    if (hasUnsafeCredentialPlaceholder(secret)) {
+      setMessage({
+        type: 'error',
+        text: 'The secret looks like a placeholder. Paste the real whsec_ secret or leave it empty.',
+      });
+      return;
+    }
+
+    setBusy(true);
+    setMessage(null);
+    try {
+      if (secret && secret !== (user?.businessMailWebhookSecret || '').trim()) {
+        await persistAccountSettings({ businessMailWebhookSecret: secret });
+      }
+      if (!primary) {
+        setMessage({
+          type: 'success',
+          text: 'Webhook settings saved. Add your domain; it is created and verified together with the domain.',
+        });
+        selectStep('domain');
+        return;
+      }
+      const result = await workspaceApi.verifyDomain(primary.id);
+      setLastResult(result.records);
+      await reload();
+      const webhook = result.webhook;
+      if (webhook?.status === 'verified' || (!webhook && result.complete)) {
+        setMessage({
+          type: 'success',
+          text: webhook?.detail || 'The receiving webhook is verified.',
+        });
+        selectStep(records.length > 0 ? 'dns' : 'domain');
+      } else {
+        setMessage({
+          type: 'error',
+          text:
+            webhook?.detail ||
+            'The receiving webhook could not be verified. Fix the DNS records and try again.',
+        });
+      }
+    } catch (err) {
+      setMessage({ type: 'error', text: friendlyError(err) });
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const runPrimaryAction = () => {
     if (allDone) {
       window.location.reload();
+      return;
+    }
+    if (isWebhookStep) {
+      if (apiProvider !== 'resend') {
+        selectStep('dns');
+        return;
+      }
+      if (primary?.webhookVerified) {
+        selectStep(records.length > 0 ? 'dns' : 'domain');
+        return;
+      }
+      void saveAndVerifyWebhook();
       return;
     }
     if (isInfraStep) {
@@ -523,6 +606,15 @@ export default function SetupRequired({
 
   const actionLabel = (() => {
     if (allDone) return 'Open dashboard';
+    if (isWebhookStep) {
+      if (apiProvider !== 'resend') return 'Continue';
+      if (primary?.webhookVerified) return 'Continue';
+      return primary
+        ? 'Verify webhook'
+        : webhookSecret.trim()
+          ? 'Save and continue'
+          : 'Continue to domain';
+    }
     if (isInfraStep) return infraDone && !editingInfra ? 'Continue' : 'Verify & continue';
     if (activeKey === 'domain') {
       if (!primary) return 'Add domain';
@@ -696,12 +788,22 @@ export default function SetupRequired({
                             <span><Webhook size={14} /> Inbound webhook</span>
                             <strong>
                               {apiProvider === 'resend'
-                                ? showSecrets
-                                  ? webhookSecret
-                                  : maskSecret(webhookSecret)
+                                ? webhookSecret
+                                  ? showSecrets
+                                    ? webhookSecret
+                                    : maskSecret(webhookSecret)
+                                  : primary?.webhookVerified
+                                    ? 'Managed by VelisMail'
+                                    : 'Not set'
                                 : 'Not required'}
                             </strong>
-                            <small>{apiProvider === 'resend' ? 'Receiving enabled' : 'Provider managed'}</small>
+                            <small>
+                              {apiProvider === 'resend'
+                                ? primary?.webhookVerified
+                                  ? 'Verified by the provider'
+                                  : 'Verified with the domain'
+                                : 'Provider managed'}
+                            </small>
                           </div>
                         </div>
                         <div className="setup-inline-actions">
@@ -866,6 +968,104 @@ export default function SetupRequired({
                           </button>
                         </div>
                       </form>
+                    )}
+                  </div>
+                )}
+
+                {isWebhookStep && (
+                  <div className="setup-panel">
+                    {apiProvider !== 'resend' ? (
+                      <div className="setup-guidance">
+                        <Webhook size={15} />
+                        <p>
+                          {getMailProvider(apiProvider).label} manages its own inbound
+                          webhooks, so there is nothing to configure here. Continue to
+                          publish the DNS records.
+                        </p>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="setup-guidance">
+                          <Webhook size={15} />
+                          <p>
+                            VelisMail creates this webhook in Resend automatically when you
+                            verify the domain. Paste a signing secret only when you created
+                            the webhook yourself.
+                          </p>
+                        </div>
+
+                        <div className="setup-summary-grid">
+                          <div className="setup-summary-card">
+                            <span><Webhook size={14} /> Endpoint</span>
+                            <strong><code>{INBOUND_WEBHOOK_URL}</code></strong>
+                            <small>
+                              <button
+                                type="button"
+                                className="btn btn-ghost btn-sm"
+                                onClick={() => copy(INBOUND_WEBHOOK_URL, 'webhook-url')}
+                              >
+                                {copied === 'webhook-url' ? <Check size={12} /> : <Copy size={12} />}
+                                {copied === 'webhook-url' ? 'Copied' : 'Copy URL'}
+                              </button>
+                            </small>
+                          </div>
+                          <div className="setup-summary-card">
+                            <span><Mail size={14} /> Event</span>
+                            <strong><code>{INBOUND_WEBHOOK_EVENT}</code></strong>
+                            <small>
+                              <button
+                                type="button"
+                                className="btn btn-ghost btn-sm"
+                                onClick={() => copy(INBOUND_WEBHOOK_EVENT, 'webhook-event')}
+                              >
+                                {copied === 'webhook-event' ? <Check size={12} /> : <Copy size={12} />}
+                                {copied === 'webhook-event' ? 'Copied' : 'Copy event'}
+                              </button>
+                            </small>
+                          </div>
+                          <div className="setup-summary-card">
+                            <span><ShieldCheck size={14} /> Status</span>
+                            <strong>
+                              {primary?.webhookVerified
+                                ? 'Verified'
+                                : primary
+                                  ? 'Not verified'
+                                  : 'Waiting for the domain'}
+                            </strong>
+                            <small>{primary ? primary.domain : 'Add the domain first'}</small>
+                          </div>
+                        </div>
+
+                        <div className="form-group">
+                          <label htmlFor="setup-webhook-secret">Signing secret</label>
+                          <div className="setup-secret-field">
+                            <input
+                              id="setup-webhook-secret"
+                              className="input"
+                              type={showSecrets ? 'text' : 'password'}
+                              autoComplete="new-password"
+                              spellCheck={false}
+                              placeholder="whsec_..."
+                              value={webhookSecret}
+                              onChange={(event) => setWebhookSecret(event.target.value)}
+                            />
+                            <button
+                              type="button"
+                              className="setup-secret-toggle"
+                              onClick={() => setShowSecrets((value) => !value)}
+                              aria-label={showSecrets ? 'Hide webhook secret' : 'Show webhook secret'}
+                            >
+                              {showSecrets ? <EyeOff size={14} /> : <Eye size={14} />}
+                            </button>
+                          </div>
+                          <small>
+                            Leave empty to let VelisMail create the webhook and store its
+                            secret. Manual setup: Resend → Webhooks → endpoint above with
+                            event <code>{INBOUND_WEBHOOK_EVENT}</code>, then paste the
+                            whsec_ secret here.
+                          </small>
+                        </div>
+                      </>
                     )}
                   </div>
                 )}

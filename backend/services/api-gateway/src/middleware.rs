@@ -248,6 +248,7 @@ fn setup_exempt(path: &str) -> bool {
             | "/tenants/verify-domain"
             | "/company/businesses"
             | "/company/businesses/switch"
+            | "/company/setup-state"
             | "/company/domains"
     ) || path.starts_with("/company/domains/")
         || path.starts_with("/payments/")

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef, type Dispatch, type SetStateAction } from 'react';
 import { Navigate, useNavigate, useLocation } from 'react-router-dom';
-import { Building2, Check, ChevronDown, ChevronUp, Crown, Menu, MessageSquare, Plus, X } from 'lucide-react';
+import { Building2, Check, ChevronDown, ChevronUp, Crown, Loader2, LockKeyhole, LogOut, Menu, MessageSquare, Plus, ShieldCheck, X } from 'lucide-react';
 import { auth, businessGroups, connections, contacts, fetchAPI, fetchAuthenticatedProfile, isBusinessSetupReady, mail, refreshBackendSession, saveDB, signatures, STORAGE_KEYS, type BusinessAuditEntry, type BusinessGroup, type BusinessMailbox, type BusinessTeamMember, type BusinessTemplate, type ConnectionUsage, type Email, type PlatformAdminUserRecord, type Signature, type Contact, type ActiveSession, type User } from '../api/client';
 import { platformAdminApi } from '../api/admin';
 import Sidebar from '../components/dashboard/Sidebar';
@@ -42,6 +42,30 @@ export default function BusinessDashboard() {
   // The live state of the setup. The dashboard only opens when every step of
   // the setup is done.
   const readiness = useWorkspaceReadiness(user);
+  const invitedMember = Boolean(user?.teamAccessRole);
+  // A member works in the workspace the owner configured, so the member's own
+  // account has no setup fields. The server gate is the source of truth for
+  // that workspace: it stays closed until the owner finishes every step.
+  const [memberGate, setMemberGate] = useState<{ loaded: boolean; complete: boolean }>({
+    loaded: false,
+    complete: false,
+  });
+
+  useEffect(() => {
+    if (!invitedMember) return;
+    let cancelled = false;
+    void workspaceApi
+      .setupState()
+      .then((state) => {
+        if (!cancelled) setMemberGate({ loaded: true, complete: state.complete });
+      })
+      .catch(() => {
+        if (!cancelled) setMemberGate({ loaded: true, complete: false });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [invitedMember]);
 
   // Once every live check passes, the session is updated as well so the rest of
   // the app (settings, contacts, refresh) agrees with the gate. This never
@@ -110,8 +134,87 @@ export default function BusinessDashboard() {
   // gate: a workspace that is not ready has no console at all.
   //
   // A member that signed in with a workspace API key works in the workspace
-  // the owner configured, so the setup does not belong to them.
-  const invitedMember = Boolean(user.teamAccessRole);
+  // the owner configured, so the setup does not belong to them. The server
+  // still enforces the gate; the console waits for that same answer instead of
+  // trusting a local flag.
+  if (invitedMember) {
+    if (!memberGate.loaded) {
+      return (
+        <div className="setup-gate">
+          <section className="setup-wizard" role="status" aria-live="polite">
+            <div className="setup-wizard-body">
+              <div className="setup-wizard-main">
+                <div className="setup-loading-card">
+                  <Loader2 size={22} className="spin" />
+                  <div>
+                    <strong>Checking the workspace setup</strong>
+                    <p>The console opens when the workspace owner finishes every step.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+        </div>
+      );
+    }
+    if (!memberGate.complete) {
+      return (
+        <div className="setup-gate">
+          <section
+            className="setup-wizard"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="workspace-locked-title"
+          >
+            <header className="setup-wizard-head">
+              <div className="setup-wizard-brand">
+                <span className="setup-wizard-mark"><ShieldCheck size={18} /></span>
+                <div>
+                  <span className="setup-wizard-eyebrow">Workspace locked</span>
+                  <h1 id="workspace-locked-title">Setup is not complete</h1>
+                </div>
+              </div>
+            </header>
+            <div className="setup-wizard-body">
+              <div className="setup-wizard-main">
+                <div className="setup-panel">
+                  <div className="setup-content-head">
+                    <span className="setup-content-icon"><LockKeyhole size={18} /></span>
+                    <div>
+                      <h2>The workspace owner has to finish setup</h2>
+                      <p>
+                        The database, mail provider, primary domain and inbound webhook
+                        have to be verified before this console opens.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="setup-inline-actions">
+                    <p>
+                      Ask a workspace owner to complete the setup. This page unlocks
+                      automatically afterwards.
+                    </p>
+                    <div>
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-sm"
+                        onClick={() => {
+                          auth.logout();
+                          navigate('/login');
+                        }}
+                      >
+                        <LogOut size={13} /> <span>Sign out</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+        </div>
+      );
+    }
+  }
+
   if (!invitedMember && !readiness.ready) {
     return (
       <SetupRequired
