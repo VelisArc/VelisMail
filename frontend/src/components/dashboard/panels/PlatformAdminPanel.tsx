@@ -687,6 +687,10 @@ export default function PlatformAdminPanel({ section, state }: PlatformAdminPane
     () => assignableRoles.find((role) => role.key === newAdmin.role)?.description || '',
     [assignableRoles, newAdmin.role],
   );
+  // The gateway requires the team.write permission for invitations. Showing
+  // the form to a role that cannot use it would only produce a 403.
+  const canManageTeam = Boolean(team?.isOwner)
+    || ['owner', 'superadmin'].includes(team?.viewerRole || '');
 
   // The Team Access Key is the only thing the invitee needs besides their
   // email and password, so copying it is a first-class action.
@@ -1442,6 +1446,7 @@ export default function PlatformAdminPanel({ section, state }: PlatformAdminPane
 
         {section === 'team' && (
           <>
+            {canManageTeam ? (
             <div className="admin-controls-bar">
               <input
                 className="input input-max-250"
@@ -1508,6 +1513,11 @@ export default function PlatformAdminPanel({ section, state }: PlatformAdminPane
               <div className="toolbar-spacer" />
               <span className="text-sm text-muted">{team?.admins.length || 0} platform administrators</span>
             </div>
+            ) : (
+              <p className="text-xs text-muted">
+                Your platform role can view the team, but invitations require the team.write permission (owner or super admin).
+              </p>
+            )}
 
             {issuedAdminInvite && (
               <section className="glass-card mt-16">
@@ -1562,6 +1572,7 @@ export default function PlatformAdminPanel({ section, state }: PlatformAdminPane
                       <button type="button" className="btn btn-ghost btn-sm" onClick={() => copyAdminKey(invitation.accessKey)}>
                         <Copy size={13} /> Copy key
                       </button>
+                      {canManageTeam && (
                       <button
                         type="button"
                         className="btn btn-ghost btn-sm btn-danger"
@@ -1586,6 +1597,7 @@ export default function PlatformAdminPanel({ section, state }: PlatformAdminPane
                       >
                         <X size={13} /> Revoke
                       </button>
+                      )}
                     </div>
                   </div>
                 ))}
@@ -1603,6 +1615,7 @@ export default function PlatformAdminPanel({ section, state }: PlatformAdminPane
                   <Badge value={admin.status}>{admin.status}</Badge>
                   <span>{admin.permissions?.length || 0} permissions</span>
                 </div>
+                {canManageTeam ? (
                 <div className="admin-row-actions">
                   <AdminConfirmSelect
                     value={admin.role}
@@ -1655,6 +1668,9 @@ export default function PlatformAdminPanel({ section, state }: PlatformAdminPane
                     </button>
                   )}
                 </div>
+                ) : (
+                  <span className="text-xs text-muted">View only</span>
+                )}
               </div>
             ))}
           </>
