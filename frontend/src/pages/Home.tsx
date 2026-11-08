@@ -16,7 +16,7 @@ import './Home.css';
 // Feature data with semantic structure for better SEO
 const features = [
   { icon: Lock, title: 'Encrypted Transport', desc: 'Every connection uses TLS. Mail is stored in an encrypted database with per-workspace access rules.', category: 'security' },
-  { icon: Fingerprint, title: 'Controlled Sign-In', desc: 'Password, Google sign-in and email codes, with sessions you can revoke from the dashboard at any time.', category: 'security' },
+  { icon: Fingerprint, title: 'Controlled Sign-In', desc: 'Passwords, email codes, and sessions you can revoke from the dashboard at any time.', category: 'security' },
   { icon: Globe, title: 'Smart DNS Management', desc: 'Automated SPF, DKIM, and DMARC verification. Guided domain setup with live DNS diagnostics.', category: 'infrastructure' },
   { icon: BarChart3, title: 'Delivery Analytics', desc: 'Track queue health, delivery rates, and audit trails with real-time operational dashboards.', category: 'analytics' },
   { icon: Users, title: 'Team Collaboration', desc: 'Role-based access for admins, members, and viewers. Shared inboxes and distribution groups.', category: 'collaboration' },

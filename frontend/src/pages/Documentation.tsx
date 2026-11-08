@@ -70,7 +70,7 @@ export default function Documentation() {
                     <span className="docs-step-number">01</span>
                     <div>
                       <h3>Create your account</h3>
-                      <p>Sign in with Google or an email code. No password is stored on the client.</p>
+                      <p>Sign in with your email code. No password is stored on the client.</p>
                     </div>
                   </div>
                   <div className="docs-step">
