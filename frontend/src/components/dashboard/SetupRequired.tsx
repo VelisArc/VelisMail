@@ -75,6 +75,9 @@ const STEP_ORDER: SetupCheckKey[] = [
 
 const INFRA_KEYS: SetupCheckKey[] = ['database', 'apiKey', 'provider', 'webhook'];
 
+/** Steps visible when VelisMail manages the database and delivery. */
+const MANAGED_STEP_ORDER: SetupCheckKey[] = STEP_ORDER.filter((key) => !INFRA_KEYS.includes(key));
+
 /** The receiving endpoint every Resend workspace posts incoming mail to. */
 const INBOUND_WEBHOOK_URL = 'https://api.velismail.online/api/v1/mail/inbound';
 const INBOUND_WEBHOOK_EVENT = 'email.received';
@@ -87,8 +90,8 @@ const RECORD_LABELS: Record<string, string> = {
   pending: 'Pending',
 };
 
-function firstIncomplete(checks: SetupCheck[]): SetupCheck | undefined {
-  return STEP_ORDER.map((key) => checks.find((check) => check.key === key)).find(
+function firstIncomplete(checks: SetupCheck[], order: SetupCheckKey[] = STEP_ORDER): SetupCheck | undefined {
+  return order.map((key) => checks.find((check) => check.key === key)).find(
     (check): check is SetupCheck => Boolean(check && !check.done),
   );
 }
@@ -118,7 +121,9 @@ export default function SetupRequired({
   onLogout,
 }: SetupRequiredProps) {
   const { checks, loaded, records, error, loading, refreshing, reload } = readiness;
-  const [activeKey, setActiveKey] = useState<SetupCheckKey>('database');
+  const managed = Boolean(user?.managedInfrastructure);
+  const visibleStepOrder = managed ? MANAGED_STEP_ORDER : STEP_ORDER;
+  const [activeKey, setActiveKey] = useState<SetupCheckKey>(managed ? 'domain' : 'database');
   const [hasUserSelected, setHasUserSelected] = useState(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -145,7 +150,7 @@ export default function SetupRequired({
   const allDone = checks.length > 0 && checks.every((check) => check.done);
   const current = checks.find((check) => check.key === activeKey) || checks[0];
 
-  const firstBlocked = useMemo(() => firstIncomplete(checks), [checks]);
+  const firstBlocked = useMemo(() => firstIncomplete(checks, visibleStepOrder), [checks, visibleStepOrder]);
   const primary = readiness.primaryDomain;
   // The live requirements from the hook are always the source of truth; the
   // last verify response is only a fallback while the refresh is in flight.
@@ -275,7 +280,7 @@ export default function SetupRequired({
     // must never be locked behind the domain's verification flag.
     if ((key === 'dns' || key === 'receiving') && primary && infraDone) return true;
     if (!firstBlocked) return true;
-    return STEP_ORDER.indexOf(key) <= STEP_ORDER.indexOf(firstBlocked.key);
+    return visibleStepOrder.indexOf(key) <= visibleStepOrder.indexOf(firstBlocked.key);
   };
 
   const handleApiKeyChange = (value: string) => {
@@ -626,8 +631,8 @@ export default function SetupRequired({
   })();
 
   const previousStep = () => {
-    const index = STEP_ORDER.indexOf(activeKey);
-    const previous = STEP_ORDER
+    const index = visibleStepOrder.indexOf(activeKey);
+    const previous = visibleStepOrder
       .slice(0, Math.max(0, index))
       .reverse()
       .map((key) => checks.find((check) => check.key === key))
@@ -636,7 +641,7 @@ export default function SetupRequired({
   };
 
   const displayName = user?.displayName || user?.email || 'your workspace';
-  const activeIndex = STEP_ORDER.indexOf(activeKey);
+  const activeIndex = visibleStepOrder.indexOf(activeKey);
 
   return (
     <div className="setup-gate">
@@ -686,7 +691,7 @@ export default function SetupRequired({
 
         <div className="setup-wizard-body">
           <nav className="setup-wizard-rail" aria-label="Setup steps">
-            {STEP_ORDER.map((key, index) => {
+            {visibleStepOrder.map((key, index) => {
               const check = checks.find((entry) => entry.key === key);
               if (!check) return null;
               const Icon = check.icon;
@@ -711,7 +716,7 @@ export default function SetupRequired({
                   <span className="setup-step-marker" aria-hidden="true">
                     {check.done ? <CheckCircle2 size={15} /> : <Circle size={15} />}
                   </span>
-                  {index < STEP_ORDER.length - 1 && <span className="setup-step-line" aria-hidden="true" />}
+                  {index < visibleStepOrder.length - 1 && <span className="setup-step-line" aria-hidden="true" />}
                 </button>
               );
             })}
@@ -733,7 +738,7 @@ export default function SetupRequired({
                 <Loader2 size={22} className="spin" />
                 <div>
                   <strong>Reading the live state of {displayName}</strong>
-                  <p>Checking the database, provider, domain and DNS records.</p>
+                  <p>{managed ? 'Checking the domain and DNS records.' : 'Checking the database, provider, domain and DNS records.'}</p>
                 </div>
               </div>
             ) : (

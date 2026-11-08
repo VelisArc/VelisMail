@@ -443,10 +443,12 @@ const [feedbackOpen, setFeedbackOpen] = useState(false);
           ...current,
           firebaseUid: profile.firebaseUid || current.firebaseUid,
           isPlatformAdmin: Boolean(profile.isPlatformAdmin ?? current.isPlatformAdmin),
+          managedInfrastructure: profile.managedInfrastructure ?? current.managedInfrastructure,
           ...(profile.role ? { role: profile.role } : {}),
         };
         if (next.firebaseUid === current.firebaseUid
           && next.isPlatformAdmin === current.isPlatformAdmin
+          && next.managedInfrastructure === current.managedInfrastructure
           && next.role === current.role) {
           return current;
         }

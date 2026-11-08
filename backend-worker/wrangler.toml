@@ -1,0 +1,53 @@
+# VelisMail API — Cloudflare Worker + D1
+#
+# Create the database once:
+#   npx wrangler d1 create velismail-db
+# paste the returned database_id below, then:
+#   npx wrangler d1 execute velismail-db --remote --file=./schema.sql
+#
+# Secrets:
+#   npx wrangler secret put JWT_SECRET
+#   npx wrangler secret put RESEND_API_KEY
+#   npx wrangler secret put RAZORPAY_KEY_ID
+#   npx wrangler secret put RAZORPAY_KEY_SECRET
+#   npx wrangler secret put FEEDBACK_EMAIL_TO
+
+name = "velismail-api"
+main = "src/index.ts"
+compatibility_date = "2024-11-01"
+compatibility_flags = ["nodejs_compat"]
+workers_dev = true
+
+routes = [
+  { pattern = "api.velismail.online", custom_domain = true }
+]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "velismail-db"
+database_id = "c0a881b5-fac5-4bd4-8fd4-1550fb18f0b3"
+
+[vars]
+ENVIRONMENT = "production"
+FRONTEND_URL = "https://velismail.online,https://www.velismail.online"
+PLATFORM_FROM_EMAIL = "noreply@velismail.online"
+PLATFORM_FROM_NAME = "VelisMail"
+FEEDBACK_EMAIL_TO = "support@velismail.online"
+ALERT_EMAIL_TO = "support@velismail.online"
+# OTP is delivered only through Resend. No dev code is returned in the API.
+AUTH_DEV_OTP = "false"
+# Public Firebase web config served by GET /config/public (Google sign-in).
+FIREBASE_PROJECT_ID = "velismaillatest"
+FIREBASE_API_KEY = "AIzaSyAYqtHZUKAocRNVYp2olC3cA1wdA4L-a8g"
+FIREBASE_AUTH_DOMAIN = "velismaillatest.firebaseapp.com"
+FIREBASE_APP_ID = "1:227130096308:web:ec035b3e63a42e10daf5e1"
+FIREBASE_MESSAGING_SENDER_ID = "227130096308"
+FIREBASE_STORAGE_BUCKET = "velismaillatest.firebasestorage.app"
+FIREBASE_MEASUREMENT_ID = "G-W97ZQYYLYZ"
+# No external business database / mail infrastructure to configure: database is
+# D1 and delivery uses the platform Resend account. The frontend hides the
+# legacy infra steps when this is true (via /auth/me).
+MANAGED_INFRASTRUCTURE = "true"
+
+[observability]
+enabled = true

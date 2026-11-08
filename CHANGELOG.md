@@ -1,6 +1,33 @@
-# Changelog
+﻿# Changelog
 
-## Unreleased
+## v5.3.0 - Cloudflare Worker + D1 Production Runtime - 2026-11-08
+
+### Added
+- **`backend-worker/`** — production backend is now a TypeScript Cloudflare
+  Worker served by `https://api.velismail.online` (custom domain), with D1
+  (`velismail-db`) as the primary store. Feature parity with the API surface
+  the frontend consumes: auth (register, login, OTP, TOTP MFA, sessions,
+  refresh), mail save/query, send, domains + DNS verification, mailboxes,
+  contacts, signatures, templates, queue, audit trail, businesses, team
+  invites, Razorpay payments (incl. order verification and webhook), the
+  platform and company admin control planes, and public config.
+- **`POST /api/v1/payments/webhook`** — Razorpay webhook, HMAC-SHA256 verified;
+  activates the same plan the client-side flow applies (`payment.captured`,
+  `order.paid`), and marks `failed` / `refunded` appropriately. Plan
+  activation is idempotent and reflected on the tenant and the user.
+- **`POST /api/v1/mail/inbound`** — Resend Receiving webhook, verified by
+  Svix signature (`RESEND_WEBHOOK_SECRET`). Receiving API bodies are fetched
+  via `RESEND_API_KEY` and stored in D1 as inbound mail; test end-to-end.
+- **Managed-infrastructure mode**: the frontend detects `managedInfrastructure`
+  in `/auth/me` and hides the legacy database / mail provider setup steps
+  (managed database on D1; delivery through the platform Resend account).
+- This repository now versions the Worker: `backend-worker/package.json`
+  reports 5.3.0, matching the rest of the repo.
+
+### Security
+- The legacy unauthenticated `/mail/inbound` path is now signature verified.
+- Platform API keys require `is_platform_admin`, not any authenticated user.
+- `/mail/emails` route added for API completeness.
 
 ### Changed
 - The dashboard now opens only when the setup is really complete. The live DNS is read on every start: the database, the mail key, the provider, the inbound webhook, the domain and every record - SPF, DKIM, DMARC and the receiving MX - have to be published and active. Anything missing keeps the dashboard closed and names the step that is not done yet.
@@ -36,7 +63,7 @@
 - Every browser now has its own device identifier. Revoking one session also revokes that device's refresh token, the "sign out other devices" action really signs them out, and the per-account session limit closes the tokens of the sessions it trims.
 - Login no longer reveals whether an account exists through response timing, and OTP verification compares the signed hash in constant time.
 - The unused legacy domain store no longer fabricates a verified domain from client-side session flags, and the stray `Login.tsx.bak` file was removed.
-- README, RELEASE, `package.json` and `package-lock.json` now all report v5.2.0.
+- README, RELEASE, `package.json` and `package-lock.json` now all report v5.3.0.
 
 ---
 
@@ -159,12 +186,12 @@
 
 ### Added
 - **Mail Service**: Complete `send_email()` with HTML multipart (text + HTML via RFC 5322), CC/BCC support, threading (In-Reply-To, References, Message-ID), and platform DB storage.
-- **Mail Service**: 7 new endpoints — `GET/PATCH/DELETE /emails/:id`, `POST /emails/:id/move`, `GET /threads/:id`, `GET /folders`, `POST /search`.
+- **Mail Service**: 7 new endpoints â€” `GET/PATCH/DELETE /emails/:id`, `POST /emails/:id/move`, `GET /threads/:id`, `GET /folders`, `POST /search`.
 - **Mail Service**: Platform emails migration with full-text search indexes.
 - **Delivery Engine**: DKIM signing & verification using ED25519 via ring with relaxed/relaxed canonicalization (RFC 6376).
 - **Delivery Engine**: SPF record parsing and IP authorization checking with CIDR matching (RFC 7208).
 - **Delivery Engine**: DMARC policy evaluation with strict/relaxed alignment (RFC 7489).
-- **Delivery Engine**: Postgres-backed delivery queue with status lifecycle (pending → processing → delivered / failed / dead_letter), priority ordering, and exponential backoff retry.
+- **Delivery Engine**: Postgres-backed delivery queue with status lifecycle (pending â†’ processing â†’ delivered / failed / dead_letter), priority ordering, and exponential backoff retry.
 - **Delivery Engine**: Bounce handling with hard/soft classification via SMTP enhanced status codes (RFC 3463), automatic suppression list, and domain-level bounce rate statistics.
 - **Delivery Engine**: Deliverability score endpoint combining DKIM/SPF/DMARC config status and bounce rate.
 - **Delivery Engine**: Background queue worker polling every 5 seconds with per-item async processing.
@@ -182,7 +209,7 @@
 
 ### Changed
 - **Workspace**: Version bumped from 3.5.1 to 4.0.0.
-- **Workspace**: Centralized all dependency versions in workspace Cargo.toml — individual services now use workspace references instead of inline versions.
+- **Workspace**: Centralized all dependency versions in workspace Cargo.toml â€” individual services now use workspace references instead of inline versions.
 - **Workspace**: Added `multipart` feature to axum, `timeout` feature to tower-http.
 - **Workspace**: Release profile optimized with `opt-level = "s"` for smaller binaries.
 - **Mail Service**: `send_email()` rewritten from stub to production-grade SMTP delivery with structured error handling.
@@ -198,7 +225,7 @@
 
 ### Known Limitations
 - Full WebAuthn/passkey cryptographic verification is still disabled and returns `501`.
-- API Gateway routes.rs is still a monolith (3,800+ lines) — modular split deferred to v4.1.
+- API Gateway routes.rs is still a monolith (3,800+ lines) â€” modular split deferred to v4.1.
 - Delivery queue worker currently marks items as delivered (SMTP integration placeholder for production).
 - SPF `a`, `mx`, and `include` mechanisms require async DNS resolution (not yet implemented).
 

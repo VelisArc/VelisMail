@@ -95,10 +95,11 @@ function readableCheckError(error: unknown): string {
  * record becomes active - no manual reload, no sign-out.
  */
 export default function useWorkspaceReadiness(user: User | null): WorkspaceReadiness {
-  const dbUrl = user?.businessDbUrl?.trim() || '';
-  const apiKey = user?.businessApiKey?.trim() || '';
-  const provider = user?.businessMailProvider?.trim() || '';
-  const webhookSecret = user?.businessMailWebhookSecret?.trim() || '';
+  const managed = Boolean(user?.managedInfrastructure);
+  const dbUrl = managed ? 'managed' : user?.businessDbUrl?.trim() || '';
+  const apiKey = managed ? 'managed' : user?.businessApiKey?.trim() || '';
+  const provider = managed ? user?.businessMailProvider?.trim() || 'velismail' : user?.businessMailProvider?.trim() || '';
+  const webhookSecret = managed ? 'managed' : user?.businessMailWebhookSecret?.trim() || '';
 
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -207,38 +208,48 @@ export default function useWorkspaceReadiness(user: User | null): WorkspaceReadi
       {
         key: 'database',
         label: 'Business database',
-        description: 'The PostgreSQL database that stores your mail, domains and team.',
+        description: managed
+          ? 'Managed by VelisMail on Cloudflare D1. Nothing to connect.'
+          : 'The PostgreSQL database that stores your mail, domains and team.',
         icon: Database,
         done: Boolean(dbUrl),
-        detail: dbUrl ? 'Connected' : 'No database connected yet',
+        detail: managed ? 'Managed by VelisMail' : dbUrl ? 'Connected' : 'No database connected yet',
       },
       {
         key: 'apiKey',
         label: 'Mail API key',
-        description: 'Your sending credential. Every plan starts with a free trial allowance.',
+        description: managed
+          ? 'Managed by VelisMail through the platform delivery account.'
+          : 'Your sending credential. Every plan starts with a free trial allowance.',
         icon: KeyRound,
         done: Boolean(apiKey),
-        detail: apiKey ? 'Configured' : 'No mail API key yet',
+        detail: managed ? 'Managed by VelisMail' : apiKey ? 'Configured' : 'No mail API key yet',
       },
       {
         key: 'provider',
         label: 'Mail provider',
-        description: 'VelisMail delivery or your own provider for transactional mail.',
+        description: managed
+          ? 'VelisMail delivery is active for this workspace.'
+          : 'VelisMail delivery or your own provider for transactional mail.',
         icon: Mail,
         done: Boolean(provider),
-        detail: provider ? provider : 'No mail provider selected yet',
+        detail: managed ? 'VelisMail managed delivery' : provider ? provider : 'No mail provider selected yet',
       },
       {
         key: 'webhook',
         label: 'Inbound webhook',
-        description: 'The provider posts incoming mail to the platform, without it nothing arrives.',
+        description: managed
+          ? 'Cloudflare Email Routing posts incoming mail straight to the workspace inbox.'
+          : 'The provider posts incoming mail to the platform, without it nothing arrives.',
         icon: Webhook,
-        done:
-          provider.toLowerCase() === 'resend'
+        done: managed
+          ? true
+          : provider.toLowerCase() === 'resend'
             ? Boolean(primary?.webhookVerified) || (!primary && Boolean(webhookSecret))
             : true,
-        detail:
-          provider.toLowerCase() === 'resend'
+        detail: managed
+          ? 'Managed by Cloudflare Email Routing'
+          : provider.toLowerCase() === 'resend'
             ? primary
               ? primary.webhookVerified
                 ? 'Verified by the provider'
@@ -295,7 +306,7 @@ export default function useWorkspaceReadiness(user: User | null): WorkspaceReadi
           : 'Add the inbound MX record to enable receiving',
       },
     ];
-  }, [apiKey, checked, complete, dbUrl, domains, loading, pending.length, provider, records.length, receiving, webhookSecret]);
+  }, [apiKey, checked, complete, dbUrl, domains, loading, managed, pending.length, provider, records.length, receiving, webhookSecret]);
 
   const ready = useMemo(
     () => !loading && !error && checks.length > 0 && checks.every((check) => check.done),

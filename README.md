@@ -1,20 +1,53 @@
-# VelisMail
+﻿# VelisMail
 
-Current release: **v5.2.0**
+Current release: **v5.3.0**
 
-VelisMail uses a clean split deployment:
+VelisMail deploys as:
 
 - `frontend/` deploys to Cloudflare Pages
-- the Rust backend in `backend/` deploys as native systemd services
+- **`backend-worker/` is the production backend** — a TypeScript Cloudflare Worker backed by Cloudflare D1 (`velismail-api` / `velismail-db`), serving `https://api.velismail.online`
+- `backend/` (Rust) is the legacy backend, kept for self-hosted installs
 
-## Env files you need
+## Backend deploy (production — Cloudflare Worker + D1)
+
+Production runs entirely inside the Cloudflare account; there is no VM to manage.
+
+```bash
+cd backend-worker
+npm install
+npx wrangler d1 create velismail-db
+# paste the returned database_id into wrangler.toml ([[d1_databases]])
+npx wrangler d1 execute velismail-db --remote --file=./schema.sql
+
+# Secrets (type the value once prompted — they are encrypted at rest):
+npx wrangler secret put JWT_SECRET
+npx wrangler secret put RESEND_API_KEY
+npx wrangler secret put RAZORPAY_KEY_ID
+npx wrangler secret put RAZORPAY_KEY_SECRET
+npx wrangler secret put RAZORPAY_WEBHOOK_SECRET
+npx wrangler secret put RESEND_WEBHOOK_SECRET
+
+npx wrangler deploy   # deploys to https://api.velismail.online (custom domain)
+```
+
+Service bindings, vars and secrets live in `backend-worker/wrangler.toml`.
+Inbound mail is received through Resend's Receiving webhook
+(`POST /api/v1/mail/inbound`, verified by the Svix signature derived from
+`RESEND_WEBHOOK_SECRET`). The frontend talks to the same API surface it
+always did — only the runtime changed.
+
+## Env files you need (legacy — VM self-host only)
+
+Production configuration lives in `backend-worker/wrangler.toml` and Cloudflare
+Worker secrets; no `.env` files are needed. The files below are only for the
+legacy Rust services.
 
 - Backend template: [`.env.example`](.env.example)
 - Frontend template: [`frontend/.env.example`](frontend/.env.example)
 - Local backend file: `.env` (not committed)
 - Local frontend file: `frontend/.env` (not committed)
 
-Only these two env files are required now.
+Only these two env files are needed to self-host the legacy backend.
 
 Important:
 
@@ -23,11 +56,12 @@ Important:
 - Platform email (OTP, password reset, feedback, and the backend relay) uses **Resend** through `PLATFORM_RESEND_API_KEY`. SMTP/Brevo is no longer used.
 - Live BYO mail-provider validation and direct outbound delivery supports `sendgrid`, `resend`, `postmark`, `amazonses`, and `custom_webhook`.
 
-## Backend deploy
+## Backend deploy (legacy — Rust VM, self-host only)
 
-The backend is deployed natively (no containers). Every service runs as a
-sandboxed systemd unit behind Caddy, which terminates TLS and load-balances
-across gateway instances.
+The legacy Rust backend deploys as a set of native services. Every service
+runs as a sandboxed systemd unit behind Caddy, which terminates TLS and
+load-balances across gateway instances. Production does not use this path;
+use it only when self-hosting the Rust backend instead of the Worker.
 
 1. Copy `.env.example` to `.env`.
 2. Fill the required values in `.env`.
@@ -69,8 +103,8 @@ curl -H "Authorization: Bearer $METRICS_TOKEN" http://127.0.0.1:3000/metrics
 curl https://api.velismail.online/health   # after the DNS A record exists
 ```
 
-The health response includes the running service version. A production v5.2.0
-deploy should report `"version":"5.2.0"` on all Rust services.
+The health response includes the running service version. A production v5.3.0
+deploy should report `"version":"5.3.0"` on all Rust services.
 
 ### Database migrations
 Migrations live in `backend/crates/database/migrations` and are applied by

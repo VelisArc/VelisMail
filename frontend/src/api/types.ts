@@ -46,6 +46,8 @@ export type User = {
   businessMailProviderEndpoint?: string;
   businessMailWebhookSecret?: string;
   businessDomainVerified?: boolean;
+  /** True when the backend provides the database and mail delivery (no customer infra to configure). */
+  managedInfrastructure?: boolean;
   teamAccessRole?: 'admin' | 'member' | 'viewer' | 'user';
   teamAccessInviteId?: string;
   teamAccessOwnerEmail?: string;

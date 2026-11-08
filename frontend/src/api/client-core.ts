@@ -1463,6 +1463,9 @@ export async function fetchAuthenticatedProfile(): Promise<Partial<User>> {
       businessDomain: settings.businessDomain || settings.business_domain || raw.business_domain || raw.businessDomain,
       isBusinessSetupComplete: settings.isBusinessSetupComplete ?? settings.is_business_setup_complete ?? raw.is_business_setup_complete ?? raw.isBusinessSetupComplete,
       businessDomainVerified: settings.businessDomainVerified ?? settings.business_domain_verified ?? raw.business_domain_verified ?? raw.businessDomainVerified,
+      managedInfrastructure: Boolean(
+        settings.managedInfrastructure ?? settings.managed_infrastructure ?? raw.managed_infrastructure ?? raw.managedInfrastructure ?? false,
+      ),
       businessProfile: settings.businessProfile || settings.business_profile || raw.business_profile || raw.businessProfile,
       profileImageUrl: settings.profileImageUrl || settings.profile_image_url || raw.profile_image_url || raw.profileImageUrl || undefined,
       emailLogoUrl: settings.emailLogoUrl || settings.email_logo_url || raw.email_logo_url || raw.emailLogoUrl || undefined,
@@ -1532,6 +1535,7 @@ export function buildSessionUser(params: {
     businessMailProviderEndpoint: profile.businessMailProviderEndpoint || params.existing?.businessMailProviderEndpoint,
     businessMailWebhookSecret: profile.businessMailWebhookSecret || params.existing?.businessMailWebhookSecret,
     businessMailboxAddress: profile.businessMailboxAddress || params.existing?.businessMailboxAddress || businessMailboxAddress,
+    managedInfrastructure: profile.managedInfrastructure ?? params.existing?.managedInfrastructure,
     businessDomainVerified: profile.businessDomainVerified ?? params.existing?.businessDomainVerified ?? false,
     businessProfile: profile.businessProfile || params.existing?.businessProfile,
     dkimStatus: params.existing?.dkimStatus || 'pending',
