@@ -1,0 +1,38 @@
+# Build context hygiene — keep secrets and build junk out of the image
+
+# Secrets must never be copied into the image
+.env
+.env.*
+*.env
+
+# VCS and tooling
+.git
+.gitignore
+.github
+.vscode
+.idea
+
+# Node / frontend artifacts
+node_modules
+**/node_modules
+frontend/node_modules
+frontend/dist
+frontend/.vite
+frontend/coverage
+frontend/test-results
+frontend/playwright-report
+
+# Rust build output
+target
+
+# Cloudflare Worker (legacy deploy path)
+backend-worker/node_modules
+backend-worker/build
+backend-worker/.wrangler
+
+# Logs and OS junk
+*.log
+.DS_Store
+Thumbs.db
+*.bak
+*.tmp

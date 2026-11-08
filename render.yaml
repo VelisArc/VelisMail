@@ -1,0 +1,160 @@
+# VelisMail — Render blueprint (optional, one-click deploy)
+#
+# The production database is intentionally NOT provisioned here yet. Either:
+#   a) add a `databases:` section below when you are ready to deploy
+#      (Render managed PostgreSQL — free 90 days, then paid), or
+#   b) create your own managed Postgres (Neon, Supabase, …) and paste its
+#      connection string into the DATABASE_URL env var in the dashboard.
+#
+# Usage:
+#   1. Push this repo to GitHub (main).
+#   2. Render dashboard → Blueprints → New Blueprint Instance → pick the repo.
+#   3. Fill in the sync:false values in the Render dashboard.
+#   4. Health check path /health reports ready status.
+
+services:
+  - type: web
+    name: velismail-api
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: .
+    plan: free            # upgrade to "starter" for a persistent disk
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: RUST_LOG
+        value: info
+      - key: FRONTEND_URL
+        value: https://velismail.online
+      - key: PUBLIC_API_URL
+        value: https://api.velismail.online
+
+      - key: AUTH_SERVICE_URL
+        value: http://127.0.0.1:3001
+      - key: MAIL_SERVICE_URL
+        value: http://127.0.0.1:3002
+      - key: STORAGE_SERVICE_URL
+        value: http://127.0.0.1:3003
+      - key: TENANT_SERVICE_URL
+        value: http://127.0.0.1:3004
+      - key: DELIVERY_SERVICE_URL
+        value: http://127.0.0.1:3005
+
+      - key: RATE_LIMIT_PER_MINUTE
+        value: "120"
+      - key: AUTH_RATE_LIMIT_PER_MINUTE
+        value: "20"
+      - key: GATEWAY_MAX_BODY_MB
+        value: "32"
+      - key: REQUEST_TIMEOUT_SECONDS
+        value: "60"
+      - key: MAX_CONCURRENT_REQUESTS
+        value: "256"
+      - key: METRICS_TOKEN
+        sync: false
+      - key: ALLOW_PRIVATE_BUSINESS_DB
+        value: "false"
+
+      - key: DATABASE_URL
+        sync: false        # REQUIRED — postgresql://... URL from Neon/Render/Supabase
+      - key: REDIS_URL
+        sync: false        # optional Redis for rate limiting; falls back to Postgres
+
+      - key: JWT_SECRET
+        sync: false
+      - key: JWT_EXPIRY_SECONDS
+        value: "900"
+      - key: REFRESH_TOKEN_EXPIRY_DAYS
+        value: "30"
+      - key: OTP_SIGNING_SECRET
+        sync: false
+      - key: OTP_TTL_SECONDS
+        value: "600"
+
+      - key: PLATFORM_RESEND_API_KEY
+        sync: false
+      - key: PLATFORM_FROM_EMAIL
+        value: noreply@velismail.online
+      - key: PLATFORM_FROM_NAME
+        value: VelisMail
+      - key: OTP_FROM_EMAIL
+        value: noreply@velismail.online
+      - key: OTP_FROM_NAME
+        value: VelisMail
+      - key: RESEND_WEBHOOK_SECRET
+        sync: false
+
+      - key: BASE_DOMAIN
+        value: velismail.online
+      - key: INBOUND_ROUTING_DB_URL
+        value: ""
+
+      - key: QUEUE_CONCURRENCY
+        value: "16"
+      - key: QUEUE_POLL_SECONDS
+        value: "5"
+      - key: QUEUE_RETRY_MAX
+        value: "5"
+      - key: QUEUE_RETRY_BACKOFF_SECS
+        value: "60"
+
+      - key: STORAGE_ROOT
+        value: /tmp/velismail-storage
+      - key: ENCRYPTION_KEY
+        sync: false
+      - key: MAX_FILE_SIZE_MB
+        value: "50"
+      - key: DEFAULT_QUOTA_BYTES
+        value: "5368709120"
+      - key: MAX_ATTACHMENT_SIZE_MB
+        value: "25"
+      - key: UNDO_SEND_WINDOW
+        value: "30"
+
+      - key: MAX_SESSIONS_PER_USER
+        value: "5"
+      - key: REQUIRE_MFA
+        value: "false"
+      - key: MAX_FAILED_ATTEMPTS
+        value: "5"
+      - key: LOCKOUT_DURATION_MINUTES
+        value: "15"
+      - key: FAILED_ATTEMPT_WINDOW_MINUTES
+        value: "15"
+
+      - key: DKIM_PRIVATE_KEY
+        value: ""
+      - key: DKIM_SELECTOR
+        value: velismail
+      - key: SPF_RECORD
+        value: v=spf1 include:amazonses.com ~all
+      - key: DMARC_DOMAIN
+        value: velismail.online
+
+      - key: RAZORPAY_KEY_ID
+        sync: false
+      - key: RAZORPAY_KEY_SECRET
+        sync: false
+      - key: RAZORPAY_WEBHOOK_SECRET
+        sync: false
+
+      - key: FIREBASE_WEB_API_KEY
+        sync: false
+      - key: FIREBASE_PROJECT_ID
+        value: velismaillatest
+      - key: FIREBASE_APP_ID
+        sync: false
+      - key: FIREBASE_AUTH_DOMAIN
+        value: velismaillatest.firebaseapp.com
+      - key: FIREBASE_STORAGE_BUCKET
+        value: velismaillatest.firebasestorage.app
+      - key: FIREBASE_MESSAGING_SENDER_ID
+        value: "227130096308"
+      - key: FIREBASE_MEASUREMENT_ID
+        value: "G-W97ZQYYLYZ"
+      - key: PLATFORM_OWNER_UIDS
+        value: ""
+      - key: PLATFORM_OWNER_EMAILS
+        value: velisarcofficial@gmail.com
