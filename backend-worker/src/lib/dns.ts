@@ -71,7 +71,7 @@ export async function checkDns(domainInput: string, verificationToken: string): 
     },
     {
       key: 'mx',
-      label: 'Inbound MX',
+      label: 'Receiving MX',
       status: mxOk ? 'verified' : mxValues.length ? 'failed' : 'pending',
       expected: 'Inbound MX record from your mail provider',
       actual: mxValues[0],

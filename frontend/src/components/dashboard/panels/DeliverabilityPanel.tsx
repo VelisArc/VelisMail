@@ -58,9 +58,7 @@ export default function DeliverabilityPanel({ state }: DeliverabilityPanelProps)
     const liveSpf = live('spf');
     const liveDkim = live('exists');
     const liveDmarc = live('prefix');
-    const liveMx = dns.records.find(
-      (record) => record.recordType === 'MX' && record.purpose.toLowerCase().includes('receiv'),
-    );
+    const liveMx = dns.records.find((record) => record.recordType === 'MX');
     const useLive = dns.records.length > 0;
 
     const spfVerified = useLive ? liveSpf?.status === 'verified' : Boolean(activeDomain.spfVerified);

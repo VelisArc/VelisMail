@@ -184,11 +184,7 @@ export default function useWorkspaceReadiness(user: User | null): WorkspaceReadi
   }, [dbUrl, apiKey, provider, webhookSecret]);
 
   const receiving = useMemo(
-    () =>
-      records.find(
-        (record) =>
-          record.recordType === 'MX' && record.purpose.toLowerCase().includes('receiv'),
-      ),
+    () => records.find((record) => record.recordType === 'MX'),
     [records],
   );
   const pending = useMemo(

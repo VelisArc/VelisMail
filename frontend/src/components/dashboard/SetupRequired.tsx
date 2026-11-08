@@ -476,10 +476,7 @@ export default function SetupRequired({
       const result = await workspaceApi.verifyDomain(primary.id);
       setLastResult(result.records);
       await reload();
-      const mx = result.records.find(
-        (record) =>
-          record.recordType === 'MX' && record.purpose.toLowerCase().includes('receiv'),
-      );
+      const mx = result.records.find((record) => record.recordType === 'MX');
       if (mx?.status === 'verified') {
         setMessage({ type: 'success', text: 'Inbound mail is enabled for this domain.' });
         setHasUserSelected(false);
