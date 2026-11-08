@@ -31,6 +31,13 @@ const MIGRATION_LOCK_ID: i64 = 876352459;
 /// Safe to call concurrently and repeatedly: a global advisory lock makes the
 /// whole run sequential; SQLx skips migrations already recorded.
 pub async fn run_migrations(pool: &PgPool) -> Result<()> {
+    // The monolith applies migrations once up front. If this process already
+    // did that, skip so the per-service boot races disappear.
+    if std::env::var("VELISMAIL_MIGRATIONS_DONE").map(|v| v == "1").unwrap_or(false) {
+        info!("Skipping auto migrations (VELISMAIL_MIGRATIONS_DONE=1)");
+        return Ok(());
+    }
+
     info!("Applying database migrations...");
 
     let mut conn = pool.acquire().await.context("failed to acquire a database connection for migrations")?;

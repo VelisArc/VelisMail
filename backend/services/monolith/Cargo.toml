@@ -20,3 +20,5 @@ velismail-storage-service = { path = "../storage-service" }
 velismail-tenant-service = { path = "../tenant-service" }
 velismail-delivery-engine = { path = "../delivery-engine" }
 velismail-common = { path = "../../crates/common" }
+velismail-database = { path = "../../crates/database" }
+sqlx.workspace = true

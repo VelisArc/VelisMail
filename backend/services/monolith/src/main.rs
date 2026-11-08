@@ -13,6 +13,17 @@ async fn main() -> anyhow::Result<()> {
 
     velismail_common::init_crypto_provider();
 
+    // Apply every migration once, up front, before the per-service boot
+    // races begin. On serverless Postgres (Neon) several services calling
+    // run_migrations() at the same time raced on composite-type catalog rows
+    // and crashed the boot loop.
+    let db_url = std::env::var("DATABASE_URL")
+        .expect("missing required environment variable DATABASE_URL");
+    let pool = sqlx::PgPool::connect(&db_url).await?;
+    velismail_database::migrations::run_migrations(&pool).await?;
+    drop(pool);
+    std::env::set_var("VELISMAIL_MIGRATIONS_DONE", "1");
+
     tokio::try_join!(
         velismail_api_gateway::run_service(),
         velismail_auth_service::run_service(),
