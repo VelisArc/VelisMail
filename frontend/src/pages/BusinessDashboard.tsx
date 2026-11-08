@@ -20,6 +20,7 @@ import CompanyAdminPanel from '../components/dashboard/panels/CompanyAdminPanel'
 import SetupRequired from '../components/dashboard/SetupRequired';
 import useWorkspaceReadiness from '../components/dashboard/useWorkspaceReadiness';
 import PlatformAdminPanel, { type PlatformSection } from '../components/dashboard/panels/PlatformAdminPanel';
+import AdminVerificationRequired from '../components/dashboard/panels/AdminVerificationRequired';
 import { platformOwnerUids, platformOwnerEmails } from '../lib/firebase';
 import { toAuditEntry, toQueueItem, toTeamMember, toTemplate, workspaceApi, type WorkspaceBusiness, type WorkspaceInvitation } from '../api/company';
 import { companyAdminApi } from '../api/admin';
@@ -252,6 +253,7 @@ function WorkspaceDashboard({ user, setUser, reloadReadiness }: WorkspaceDashboa
   );
   const [platformSection, setPlatformSection] = useState<PlatformSection>('overview');
   const [isPlatformOwner, setIsPlatformOwner] = useState(false);
+  const [adminGateOpen, setAdminGateOpen] = useState(false);
   // Business switcher
   const [businesses, setBusinesses] = useState<WorkspaceBusiness[]>([]);
   const [activeBusinessId, setActiveBusinessId] = useState('');
@@ -407,14 +409,20 @@ const [feedbackOpen, setFeedbackOpen] = useState(false);
     setComposeTo(to); setComposeSubject(subject); setComposeBody(body); setComposeReplyQuote(replyQuote); setComposeOpen(true);
   };
 
-  // Platform staff are the accounts configured as owners (Firebase UID or
-  // email) plus the accounts that were explicitly invited into the control
-  // plane. The gateway stays authoritative; this only decides what to render.
-  const canAccessPlatformAdmin = Boolean(
+  // Platform staff basics: the accounts flagged by the gateway as platform
+  // admins (or the configured owner emails). Verification is enforced below.
+  const platformAdminBasic = Boolean(
     user?.isPlatformAdmin
     || (user?.firebaseUid && platformOwnerUids().includes(user.firebaseUid))
     || (user?.email && platformOwnerEmails().includes(user.email.toLowerCase())),
   );
+  // A platform admin is only allowed in after the complete verification
+  // process has been finished: recovery email verified and authenticator 2FA.
+  // If any item is later removed (2FA disabled, recovery email goes stale),
+  // access drops automatically until verification is complete again.
+  const adminVerifiedLocal = Boolean(user?.totpEnabled && user?.recoveryEmailVerified);
+  const [adminServerVerified, setAdminServerVerified] = useState(false);
+  const canAccessPlatformAdmin = platformAdminBasic && adminVerifiedLocal && adminServerVerified;
   const effectiveRole = user?.role || 'user';
   const hasRoleAccess = useCallback(
     (tab: BizTab) => (ROLE_ALLOWED_TABS[effectiveRole] || ROLE_ALLOWED_TABS.user).includes(tab),
@@ -461,16 +469,34 @@ const [feedbackOpen, setFeedbackOpen] = useState(false);
 
   // The configured platform owner is the only account that may broadcast to
   // every user, so the console asks the gateway who it is dealing with.
+  // Re-probe whenever the verification state flips: if any item is missing,
+  // the gateway rejects every admin route until it is verified again.
   useEffect(() => {
-    if (!canAccessPlatformAdmin) {
+    if (!platformAdminBasic) {
       setIsPlatformOwner(false);
+      setAdminServerVerified(false);
       return;
     }
     let cancelled = false;
     void platformAdminApi.me()
-      .then((result) => { if (!cancelled) setIsPlatformOwner(Boolean(result.owner)); })
-      .catch(() => { if (!cancelled) setIsPlatformOwner(false); });
+      .then((result) => {
+        if (cancelled) return;
+        setAdminServerVerified(true);
+        setIsPlatformOwner(Boolean(result.owner));
+      })
+      .catch(() => {
+        if (cancelled) return;
+        // Lock until the gateway confirms verification. Any failure (including
+        // a generic 401/403) keeps the admin panel closed.
+        setAdminServerVerified(false);
+        setIsPlatformOwner(false);
+      });
     return () => { cancelled = true; };
+  }, [platformAdminBasic, user?.totpEnabled, user?.recoveryEmailVerified]);
+
+  // Once the account becomes verified (recovery email + 2FA), close the gate.
+  useEffect(() => {
+    if (canAccessPlatformAdmin) setAdminGateOpen(false);
   }, [canAccessPlatformAdmin]);
 
   // The control plane is only for platform staff. Without the access the
@@ -1229,16 +1255,26 @@ const [feedbackOpen, setFeedbackOpen] = useState(false);
             >
               <Menu size={18} />
             </button>
-            {canAccessPlatformAdmin && (
+            {platformAdminBasic && (
               <button
                 type="button"
                 className="dash-view-toggle"
-                onClick={() => switchView(viewMode === 'workspace' ? 'control-plane' : 'workspace')}
-                title={viewMode === 'workspace' ? 'Open the platform control plane' : 'Back to your workspace'}
+                onClick={() => {
+                  if (canAccessPlatformAdmin) {
+                    switchView(viewMode === 'workspace' ? 'control-plane' : 'workspace');
+                  } else {
+                    setAdminGateOpen(true);
+                  }
+                }}
+                title={canAccessPlatformAdmin
+                  ? (viewMode === 'workspace' ? 'Open the platform control plane' : 'Back to your workspace')
+                  : 'Admin access locked — finish verification first'}
               >
-                {viewMode === 'workspace'
-                  ? (<><Crown size={15} /> Control Plane</>)
-                  : (<><Building2 size={15} /> Workspace</>)}
+                {canAccessPlatformAdmin
+                  ? (viewMode === 'workspace'
+                      ? (<><Crown size={15} /> Control Plane</>)
+                      : (<><Building2 size={15} /> Workspace</>))
+                  : (<><LockKeyhole size={15} /> Verify Admin</>)}
               </button>
             )}
           </div>
@@ -1440,6 +1476,17 @@ const [feedbackOpen, setFeedbackOpen] = useState(false);
         {viewMode === 'workspace' && activeBizTab === 'deliverability' && <ErrorBoundary><DeliverabilityPanel state={dashboardState} /></ErrorBoundary>}
 
       </main>
+
+      {adminGateOpen && (
+        <AdminVerificationRequired
+          user={user}
+          onClose={() => setAdminGateOpen(false)}
+          onGoToSettings={() => {
+            setAdminGateOpen(false);
+            setActiveBizTab('settings');
+          }}
+        />
+      )}
 
       <Modals
         state={dashboardState}
