@@ -1,4 +1,4 @@
-# VelisMail — Rust monolith service (all internal services in one process)
+﻿# VelisMail — Rust monolith service (all internal services in one process)
 #
 # Build:   docker build -f backend/Dockerfile -t velismail-monolith .
 # Run:     docker run -p 3000:3000 --env-file .env.production velismail-monolith
@@ -11,9 +11,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         cmake perl pkg-config \
     && rm -rf /var/lib/apt/lists/*
 
-# Build the release binary. `--locked` uses the checked-in Cargo.lock.
 COPY . .
-RUN cargo build --release --locked --bin velismail-monolith
+RUN cargo build --release --bin velismail-monolith
 
 # ---------------------------------------------------------------------------
 # Runtime
