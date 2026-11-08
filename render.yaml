@@ -31,6 +31,16 @@ services:
       - key: PUBLIC_API_URL
         value: https://api.velismail.online
 
+      - key: AUTH_PORT
+        value: "3001"
+      - key: MAIL_PORT
+        value: "3002"
+      - key: STORAGE_PORT
+        value: "3003"
+      - key: TENANT_PORT
+        value: "3004"
+      - key: DELIVERY_PORT
+        value: "3005"
       - key: AUTH_SERVICE_URL
         value: http://127.0.0.1:3001
       - key: MAIL_SERVICE_URL

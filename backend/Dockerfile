@@ -30,7 +30,6 @@ USER velismail
 WORKDIR /app
 
 ENV RUST_LOG=info \
-    PORT=3000 \
     APP_ENV=production
 
 EXPOSE 3000
