@@ -1,4 +1,4 @@
-﻿# Changelog
+# Changelog
 
 ## v5.3.0 - Cloudflare Worker + D1 Production Runtime - 2026-11-08
 

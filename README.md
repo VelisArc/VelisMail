@@ -1,4 +1,4 @@
-﻿# VelisMail
+# VelisMail
 
 Current release: **v5.3.0**
 
