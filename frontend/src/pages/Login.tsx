@@ -1188,7 +1188,7 @@ export default function Login() {
                     className="input"
                     placeholder="you@example.com"
                     name="velismail-new-account-recovery-contact"
-                    autoComplete="email"
+                    autoComplete="username"
                     required
                     value={regRecoveryEmail}
                     onChange={e => setRegRecoveryEmail(e.target.value)}

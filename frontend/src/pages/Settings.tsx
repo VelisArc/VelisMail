@@ -521,9 +521,19 @@ export default function SettingsPage() {
                 <p>Change your account password.</p>
                 <form onSubmit={handlePasswordUpdate}>
                   <div className="security-fields">
-                    <input className="input" type="password" placeholder="Current password" value={currentPassword} onChange={e => setCurrentPassword(e.target.value)} />
-                    <input className="input" type="password" placeholder="New password" value={newPassword} onChange={e => setNewPassword(e.target.value)} />
-                    <input className="input" type="password" placeholder="Confirm new password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} />
+                    <input
+                      type="text"
+                      autoComplete="username"
+                      name="username"
+                      value={user.email}
+                      readOnly
+                      tabIndex={-1}
+                      aria-hidden="true"
+                      style={{ position: 'absolute', width: 1, height: 1, opacity: 0, pointerEvents: 'none' }}
+                    />
+                    <input className="input" type="password" placeholder="Current password" autoComplete="current-password" value={currentPassword} onChange={e => setCurrentPassword(e.target.value)} />
+                    <input className="input" type="password" placeholder="New password" autoComplete="new-password" value={newPassword} onChange={e => setNewPassword(e.target.value)} />
+                    <input className="input" type="password" placeholder="Confirm new password" autoComplete="new-password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} />
                   </div>
                   {securityError && <div className="form-error settings-spacer-sm">{securityError}</div>}
                   <button className="btn btn-primary btn-sm settings-spacer-sm" type="submit" disabled={passwordSaving}>
@@ -678,6 +688,7 @@ export default function SettingsPage() {
                     className="input"
                     type="email"
                     placeholder="you@gmail.com"
+                    autoComplete="email"
                     value={recoveryEmailDraft}
                     onChange={(e) => setRecoveryEmailDraft(e.target.value)}
                   />
@@ -693,6 +704,8 @@ export default function SettingsPage() {
                       className="input"
                       type="text"
                       placeholder="Enter verification code"
+                      inputMode="numeric"
+                      autoComplete="one-time-code"
                       value={recoveryOtp}
                       onChange={(e) => setRecoveryOtp(e.target.value)}
                     />
@@ -747,7 +760,7 @@ export default function SettingsPage() {
                     <div key={session.id} className="session-row">
                       <div>
                         <strong>{session.current ? 'Current session' : 'Signed-in device'}</strong>
-                        <p>{session.userAgent || 'Unknown browser'} · {session.ipAddress}</p>
+                        <p>{session.userAgent || 'Unknown browser'} Â· {session.ipAddress}</p>
                         <p>Last active {new Date(session.lastActive).toLocaleString()}</p>
                       </div>
                       <button className="btn btn-danger btn-sm" onClick={() => handleRevokeSession(session.id, session.current)}>
