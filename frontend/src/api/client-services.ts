@@ -160,7 +160,10 @@ export const auth = {
     }
 
     // The phone is stored in E.164 so a later recovery message reaches the
-    // right number. A number that is too short is simply left out.
+    // right number. A number that is too short is simply left out. The
+    // country select always has a value, so only transmit it together with a
+    // real phone — otherwise the backend has nothing to pair it with and
+    // rejects the signup.
     const phoneDigits = (data.phoneNumber || '').replace(/\D/g, '');
     const phoneE164 = data.phoneCountryCode && phoneDigits.length >= 6
       ? `${data.phoneCountryCode}${phoneDigits}`
@@ -176,7 +179,7 @@ export const auth = {
           password: data.password,
           customDomain: data.customDomain || undefined,
           recoveryEmail: normalizedRecoveryEmail || undefined,
-          phoneCountryCode: data.phoneCountryCode || undefined,
+          phoneCountryCode: phoneE164 ? data.phoneCountryCode : undefined,
           phoneNumber: phoneE164 || undefined,
           verificationToken: data.verificationToken || undefined,
         }),

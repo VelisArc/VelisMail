@@ -588,10 +588,14 @@ pub async fn register(
         .map(|v| v.trim())
         .filter(|v| !v.is_empty());
 
-    // Validate phone fields: both must be provided together
-    if phone_country_code.is_some() ^ phone_number.is_some() {
-        return Err(StatusCode::BAD_REQUEST);
-    }
+    // Validate phone fields. A country code without a number comes from a
+    // client-side default on the phone select; it is not an actual phone, so
+    // it is dropped instead of failing the signup.
+    let (phone_country_code, phone_number) = if phone_country_code.is_some() ^ phone_number.is_some() {
+        (None, None)
+    } else {
+        (phone_country_code, phone_number)
+    };
 
     // Normalize phone number to E.164 format
     let phone_e164 = match (phone_country_code, phone_number) {
