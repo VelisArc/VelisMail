@@ -231,6 +231,10 @@ export function inferRuntimeApiOrigins(): string[] {
     hostname.endsWith('.pages.dev')
   ) {
     pushOrigin('https://api.velismail.online');
+    // Fallback that survives the loss of the primary zone's DNS.
+    // When the API gateway hostname is dead, the frontend can reach the
+    // Render-hosted instance independently.
+    pushOrigin('https://velismail-api.onrender.com');
   }
   return runtimeOrigins;
 }
