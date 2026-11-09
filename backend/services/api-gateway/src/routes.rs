@@ -6299,19 +6299,11 @@ fn sender_display_name(from: &str) -> String {
     }
 }
 
-/// Pool for the gateway's own route database. This URL is operator-provided,
-/// so it is trusted (it may legitimately point at localhost PostgreSQL) and is
-/// not passed through the public business-database validator.
-async fn gateway_route_pool() -> Option<PgPool> {
-    let db_url = std::env::var("INBOUND_ROUTING_DB_URL")
-        .or_else(|_| std::env::var("DATABASE_URL"))
-        .ok()?;
-    PgPoolOptions::new()
-        .max_connections(5)
-        .acquire_timeout(std::time::Duration::from_secs(30))
-        .connect(&db_url)
-        .await
-        .ok()
+/// Pool for the gateway's own route database. This is the same connection the
+/// gateway kept alive for persistence (DATABASE_URL); reusing it means Neon
+/// resume behaviour is inherited from the already-healthy pool.
+async fn gateway_route_pool(state: &AppState) -> Option<PgPool> {
+    state.db.clone()
 }
 
 async fn ensure_inbound_routes_table(pool: &PgPool) -> Result<(), String> {
@@ -6372,7 +6364,7 @@ pub(crate) async fn register_inbound_route(
         }),
     );
 
-    let Some(pool) = gateway_route_pool().await else {
+    let Some(pool) = gateway_route_pool(state).await else {
         return RuntimeCheckResult {
             key: "inboundRoute",
             label: "Inbound Route Registration",
@@ -6449,7 +6441,7 @@ async fn lookup_inbound_route(state: &AppState, domain: &str) -> Option<(String,
         return Some(route);
     }
 
-    let pool = gateway_route_pool().await?;
+    let pool = gateway_route_pool(state).await?;
     ensure_inbound_routes_table(&pool).await.ok()?;
     let row = sqlx::query(
         "SELECT db_url, api_key, webhook_secret FROM inbound_mail_routes WHERE domain = $1",
