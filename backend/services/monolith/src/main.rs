@@ -17,8 +17,8 @@ async fn main() -> anyhow::Result<()> {
     // races begin. On serverless Postgres (Neon) several services calling
     // run_migrations() at the same time raced on composite-type catalog rows
     // and crashed the boot loop.
-    let db_url = std::env::var("DATABASE_URL")
-        .expect("missing required environment variable DATABASE_URL");
+    let db_url =
+        std::env::var("DATABASE_URL").expect("missing required environment variable DATABASE_URL");
     let pool = sqlx::PgPool::connect(&db_url).await?;
     velismail_database::migrations::run_migrations(&pool).await?;
     drop(pool);
