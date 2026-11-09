@@ -6308,7 +6308,7 @@ async fn gateway_route_pool() -> Option<PgPool> {
         .ok()?;
     PgPoolOptions::new()
         .max_connections(5)
-        .acquire_timeout(std::time::Duration::from_secs(5))
+        .acquire_timeout(std::time::Duration::from_secs(30))
         .connect(&db_url)
         .await
         .ok()

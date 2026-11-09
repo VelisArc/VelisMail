@@ -54,7 +54,7 @@ impl AppState {
             match PgPoolOptions::new()
                 .max_connections(10)
                 .min_connections(1)
-                .acquire_timeout(Duration::from_secs(5))
+                .acquire_timeout(Duration::from_secs(30))
                 .idle_timeout(Duration::from_secs(300))
                 .max_lifetime(Duration::from_secs(1800))
                 .connect(url)
